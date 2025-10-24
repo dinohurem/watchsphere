@@ -1,0 +1,23 @@
+{
+  "name": "@watchsphere/shared",
+  "version": "0.1.0",
+  "description": "Shared code between WatchSphere web and mobile apps",
+  "main": "index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "typescript": "^5.3.3"
+  },
+  "keywords": [
+    "watchsphere",
+    "shared",
+    "stores",
+    "utilities"
+  ],
+  "private": true
+}
