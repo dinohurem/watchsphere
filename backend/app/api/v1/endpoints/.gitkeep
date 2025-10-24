@@ -1,0 +1,9 @@
+# Endpoint modules will be created here
+# - auth.py
+# - market.py
+# - inventory.py
+# - orders.py
+# - chat.py
+# - ai_assistant.py
+# - checks.py
+# - news.py
