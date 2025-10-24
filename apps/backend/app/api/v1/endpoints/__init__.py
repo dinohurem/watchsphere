@@ -1,2 +1,2 @@
-# Auth endpoints
-from . import auth
+# Endpoints
+from . import auth, market, inventory, chat, profile
