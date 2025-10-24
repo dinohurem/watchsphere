@@ -1,226 +1,353 @@
-# WatchSphere Mobile
+# WatchSphere Mobile (React Native + Expo)
 
-Flutter mobile application for the WatchSphere watch trading platform.
+React Native mobile application for the WatchSphere watch trading platform.
 
-## Features
+## Why React Native + Expo?
 
-- **Cross-Platform**: Single codebase for iOS and Android
-- **Modern UI**: Material Design 3 with custom theming
-- **State Management**: Riverpod for reactive state management
-- **Navigation**: GoRouter for declarative routing
-- **Real-time Updates**: WebSocket integration for live data
-- **Offline Support**: Local caching with Hive
+- **Code Sharing**: 60-80% code reuse with the React web app
+- **Single Language**: TypeScript across web, mobile, and backend
+- **Fast Development**: Expo provides instant setup and OTA updates
+- **Perfect Fit**: Ideal for business/trading apps with forms, lists, and real-time data
+- **Modern Routing**: Expo Router provides file-based routing (like Next.js)
+
+## Tech Stack
+
+- **React Native** - Cross-platform mobile framework
+- **Expo** - Development platform and tooling
+- **Expo Router** - File-based navigation
+- **TypeScript** - Type safety
+- **TanStack Query** - Server state management
+- **Zustand** - Client state management
+- **Axios** - HTTP client
+- **Socket.io** - Real-time communication
+- **AsyncStorage** - Local storage
+- **React Native SVG** - Vector graphics for icons
 
 ## Project Structure
 
 ```
 mobile/
-├── lib/
-│   ├── core/
-│   │   ├── config/          # App configuration
-│   │   ├── constants/       # App constants
-│   │   ├── theme/           # Theme and styling
-│   │   ├── utils/           # Utility functions
-│   │   └── router/          # Navigation setup
-│   ├── features/
-│   │   ├── home/            # Home screen with quick access
-│   │   ├── market/          # Market listings and search
-│   │   ├── dashboard/       # User dashboard & inventory
-│   │   ├── chat/            # Messaging system
-│   │   ├── profile/         # User profile
-│   │   └── auth/            # Authentication
-│   └── shared/
-│       ├── models/          # Shared data models
-│       ├── services/        # API and business logic
-│       └── widgets/         # Reusable UI components
-├── assets/
-│   ├── images/              # Image assets
-│   ├── icons/               # Icon assets
-│   └── fonts/               # Custom fonts
-└── test/                    # Unit and widget tests
-```
-
-## Feature Structure (per feature)
-
-Each feature follows clean architecture:
-```
-feature_name/
-├── data/
-│   ├── models/              # Data models
-│   ├── repositories/        # Data repositories
-│   └── sources/             # Remote/local data sources
-├── domain/
-│   ├── entities/            # Business entities
-│   ├── repositories/        # Repository interfaces
-│   └── usecases/            # Business use cases
-└── presentation/
-    ├── providers/           # Riverpod providers
-    ├── widgets/             # Feature-specific widgets
-    └── screens/             # Feature screens
+├── app/                      # Expo Router screens (file-based routing)
+│   ├── (tabs)/              # Tab navigation group
+│   │   ├── index.tsx        # Home tab
+│   │   ├── market.tsx       # Market tab
+│   │   ├── dashboard.tsx    # Dashboard tab
+│   │   ├── chat.tsx         # Chat tab
+│   │   └── profile.tsx      # Profile tab
+│   └── _layout.tsx          # Root layout
+├── src/
+│   ├── components/          # Reusable UI components
+│   ├── features/            # Feature-specific code
+│   ├── shared/              # Shared utilities (can be synced with web)
+│   ├── hooks/               # Custom React hooks
+│   ├── services/            # API and business logic
+│   ├── utils/               # Utility functions
+│   ├── types/               # TypeScript types
+│   ├── constants/           # App constants
+│   └── assets/              # Images, fonts, etc.
+├── app.json                 # Expo configuration
+├── package.json             # Dependencies
+└── tsconfig.json            # TypeScript config
 ```
 
 ## Setup
 
 ### Prerequisites
-- Flutter SDK (>=3.2.0)
-- Dart SDK (>=3.2.0)
-- Android Studio / Xcode
-- VS Code with Flutter extension (optional)
+- Node.js (>=18.x)
+- npm, yarn, or pnpm
+- For iOS: macOS with Xcode (for simulator or building)
+- For Android: Android Studio (for emulator or building)
 
-### Installation
+### Quick Start (Recommended)
 
-1. **Install Flutter**:
-   - Follow [official Flutter installation guide](https://flutter.dev/docs/get-started/install)
-
-2. **Install dependencies**:
+1. **Install dependencies**:
    ```bash
    cd mobile
-   flutter pub get
+   npm install
    ```
 
-3. **Generate code** (for Riverpod and JSON serialization):
+2. **Start development server**:
    ```bash
-   flutter pub run build_runner build --delete-conflicting-outputs
+   npm start
    ```
 
-4. **Run the app**:
-   ```bash
-   # Run on connected device
-   flutter run
+3. **Run on device or simulator**:
+   - Scan QR code with **Expo Go** app (iOS/Android)
+   - Press `i` for iOS simulator
+   - Press `a` for Android emulator
+   - Press `w` for web preview
 
-   # Run on specific device
-   flutter devices  # List available devices
-   flutter run -d <device-id>
+### Alternative: Direct Platform Launch
 
-   # Run with hot reload
-   flutter run --hot
-   ```
+```bash
+# iOS
+npm run ios
 
-## Key Screens to Implement
+# Android
+npm run android
 
-### 1. Home Screen
-- Personalized greeting (time-based)
-- Quick access buttons grid
-- Customizable layout
-- Market news feed
+# Web
+npm run web
+```
 
-### 2. Market Screen
-- Live market listings
-- Smart search with filters
-- Order book view
-- Auction section
+## Development
 
-### 3. My Dashboard
-- Inventory management
-- Order tracking
-- Analytics and insights
-- Quick actions
+### File-Based Routing (Expo Router)
 
-### 4. Chats
-- Direct dealer messages
-- Group chats
-- AI assistant chat
-- Unread badge notifications
+Expo Router uses the file system for navigation:
+- `app/(tabs)/index.tsx` → Home tab
+- `app/(tabs)/market.tsx` → Market tab
+- `app/details/[id].tsx` → Dynamic route
 
-### 5. Profile
-- Account settings
-- Verification status
-- Billing & subscriptions
-- Preferences
+### Key Features Implemented
+
+#### 1. Home Screen (`app/(tabs)/index.tsx`)
+- ✅ Time-based greeting
+- ✅ Quick access buttons:
+  - Activity Center
+  - Smart Search
+  - Buy/Sell
+  - AI Assistant
+  - My Inventory
+  - My Orders
+  - Checks
+  - All Tools
+- ✅ Customizable layout section
+- ✅ Market news feed
+
+#### 2. Bottom Tab Navigation
+- ✅ 5 tabs: Home, Market, Dashboard, Chats, Profile
+- ✅ Custom icons
+- ✅ Active/inactive states
+
+### Shared Code with Web
+
+The following can be shared between web and mobile:
+- `src/types/` - TypeScript types
+- `src/services/api.ts` - API client
+- `src/constants/api.ts` - API endpoints
+- Business logic and utilities
+
+To share code, consider creating a shared package or using a monorepo tool like Turborepo.
 
 ## State Management
 
-Using Riverpod for:
-- API calls and data fetching
-- Global state management
-- Dependency injection
-- Async data handling
+### Server State (TanStack Query)
+```typescript
+import { useQuery } from '@tanstack/react-query';
 
-Example:
-```dart
-final watchListProvider = FutureProvider<List<Watch>>((ref) async {
-  final api = ref.watch(apiServiceProvider);
-  return api.getWatchList();
+const { data, isLoading } = useQuery({
+  queryKey: ['watches'],
+  queryFn: () => api.get('/market'),
 });
+```
+
+### Client State (Zustand)
+```typescript
+import { create } from 'zustand';
+
+interface AppState {
+  user: User | null;
+  setUser: (user: User) => void;
+}
+
+export const useAppStore = create<AppState>((set) => ({
+  user: null,
+  setUser: (user) => set({ user }),
+}));
 ```
 
 ## API Integration
 
-Configure the API base URL in `lib/core/config/app_config.dart`:
-```dart
-static const String apiBaseUrl = 'http://your-api-url/api/v1';
+Configure the API in `.env`:
+```
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+EXPO_PUBLIC_WS_BASE_URL=ws://localhost:8000/ws
 ```
 
-## Theming
+**Note**: Use `EXPO_PUBLIC_` prefix for environment variables that should be accessible in the app.
 
-Customize the app theme in `lib/core/theme/app_theme.dart`:
-- Brand colors
-- Typography
-- Component themes
-- Light/dark mode
+## Styling
 
-## Development
+React Native uses StyleSheet API:
+```tsx
+import { StyleSheet } from 'react-native';
 
-- **Hot Reload**: Press `r` in terminal
-- **Hot Restart**: Press `R` in terminal
-- **Debug**: Use VS Code debugger or `flutter run --debug`
-
-### Code Generation
-When you modify:
-- Riverpod providers
-- JSON models
-- API clients
-
-Run:
-```bash
-flutter pub run build_runner watch
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+});
 ```
 
-### Testing
+### Design System
+- Primary Color: `#1A1A1A`
+- Accent Color: `#D4AF37` (Gold)
+- Background: `#F5F5F5`
+
+## Icons
+
+Using custom SVG icons in `src/components/icons.tsx`. Icons are:
+- Scalable
+- Customizable (size, color, fill)
+- Lightweight
+
+## Real-time Features
+
+WebSocket support via Socket.io:
+```typescript
+import io from 'socket.io-client';
+
+const socket = io('ws://localhost:8000');
+socket.on('price_update', (data) => {
+  // Handle real-time price updates
+});
+```
+
+## Testing on Device
+
+### With Expo Go (Fastest)
+1. Install **Expo Go** from App Store/Play Store
+2. Run `npm start`
+3. Scan QR code with:
+   - **iOS**: Camera app
+   - **Android**: Expo Go app
+
+### Development Build (Custom Native Code)
 ```bash
-# Run all tests
-flutter test
-
-# Run with coverage
-flutter test --coverage
-
-# Run specific test file
-flutter test test/features/home/home_test.dart
+# Create development build
+eas build --profile development --platform ios
+eas build --profile development --platform android
 ```
 
 ## Building for Production
 
-### Android
+### EAS Build (Recommended)
 ```bash
-flutter build apk --release
-# or
-flutter build appbundle --release
+# Install EAS CLI
+npm install -g eas-cli
+
+# Configure project
+eas build:configure
+
+# Build for iOS
+eas build --platform ios
+
+# Build for Android
+eas build --platform android
 ```
 
-### iOS
+### Local Build
 ```bash
-flutter build ios --release
+# iOS (requires macOS)
+npm run ios --configuration Release
+
+# Android
+npm run android --variant=release
 ```
 
-## Architecture
+## Over-the-Air (OTA) Updates
 
-Following **Clean Architecture** principles:
-- **Presentation Layer**: UI and state management
-- **Domain Layer**: Business logic and use cases
-- **Data Layer**: API integration and data sources
+Expo allows you to push updates without app store review:
+```bash
+eas update --branch production
+```
 
-Benefits:
-- Testable
-- Maintainable
-- Scalable
-- Independent of frameworks and UI
+Users get updates automatically on next app launch!
 
-## Dependencies Overview
+## TypeScript
 
-- **flutter_riverpod**: State management
-- **go_router**: Declarative routing
-- **dio**: HTTP client
-- **hive**: Local storage
-- **socket_io_client**: WebSocket for real-time
-- **cached_network_image**: Image caching
-- **google_fonts**: Typography
+The app is fully typed:
+- Path aliases configured (`@/`, `@components/`, etc.)
+- Strict mode enabled
+- Type checking: `npm run type-check`
+
+## Debugging
+
+- **React DevTools**: Installed by default with Expo
+- **Console logs**: Visible in terminal
+- **Network**: Use React Native Debugger or Flipper
+- **Errors**: Red box shows errors in development
+
+## Performance
+
+- Use `React.memo` for expensive components
+- Use `useMemo` and `useCallback` for optimization
+- Use `FlatList` for long lists (virtualized)
+- Optimize images with `expo-optimize`
+
+## Code Sharing Strategy
+
+### Option 1: Shared Folder (Simple)
+```
+shared/
+├── types/
+├── api/
+└── utils/
+
+# Symlink or copy to web/src/shared and mobile/src/shared
+```
+
+### Option 2: Monorepo (Advanced)
+Use Turborepo or Nx:
+```
+packages/
+├── shared/       # Shared code
+├── web/          # Web app
+└── mobile/       # Mobile app
+```
+
+## Next Steps
+
+1. **Implement Authentication**:
+   - Login/Register screens
+   - Secure token storage (expo-secure-store)
+   - Auth context
+
+2. **Market Screen**:
+   - Watch listings
+   - Search and filters
+   - Real-time price updates
+
+3. **Chat Feature**:
+   - WebSocket integration
+   - Message list
+   - Direct and group chats
+
+4. **AI Assistant**:
+   - Chat interface
+   - Voice input (optional)
+   - Suggestions
+
+## Common Commands
+
+```bash
+npm start              # Start development server
+npm run ios            # Run on iOS simulator
+npm run android        # Run on Android emulator
+npm run web            # Run on web
+npm run lint           # Lint code
+npm run type-check     # Check TypeScript types
+```
+
+## Resources
+
+- [Expo Docs](https://docs.expo.dev/)
+- [Expo Router Docs](https://docs.expo.dev/router/introduction/)
+- [React Native Docs](https://reactnative.dev/)
+- [TanStack Query Docs](https://tanstack.com/query/latest)
+
+## Advantages Over Flutter
+
+✅ Code sharing with React web app
+✅ Same language (TypeScript) everywhere
+✅ Faster development with Expo tooling
+✅ OTA updates without app store
+✅ Larger ecosystem (npm)
+✅ Easier to find React developers
+✅ Web preview built-in
+
+---
+
+Built with ❤️ for watch enthusiasts and dealers worldwide.
