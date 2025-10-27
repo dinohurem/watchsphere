@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { getStorage } from '../lib/storage';
 
 export interface User {
   id: string;
@@ -46,9 +47,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      // Storage will be configured differently in web vs mobile
-      // Web: localStorage
-      // Mobile: AsyncStorage
+      storage: createJSONStorage(() => getStorage()),
     }
   )
 );

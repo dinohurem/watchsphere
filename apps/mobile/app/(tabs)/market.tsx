@@ -1,50 +1,61 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
-import { api } from '@/services/api';
+import { useState } from 'react';
+import { router } from 'expo-router';
+import { SearchBar } from '@/components/SearchBar';
+import { FilterPills } from '@/components/FilterPills';
+import { WatchListItem } from '@/components/WatchListItem';
+
+// Mock data matching the design
+const mockWatches = [
+  { id: '1', brand: 'Rolex', model: 'Explorer', reference: '224270', price: 8149, priceChange: 3.9 },
+  { id: '2', brand: 'Rolex', model: 'Submariner Date', reference: '126610LN', price: 12352, priceChange: -0.7 },
+  { id: '3', brand: 'Cartier', model: 'Santos', reference: 'WSSA0018', price: 7244, priceChange: 5.9 },
+  { id: '4', brand: 'Patek Philippe', model: 'Nautilus', reference: '5712/1A', price: 97467, priceChange: 1.2 },
+  { id: '5', brand: 'Audemars Piguet', model: 'Royal Oak', reference: '15510ST.OO.1320ST.01', price: 57594, priceChange: 6.2 },
+];
 
 export default function MarketScreen() {
-  const [watches, setWatches] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
 
-  useEffect(() => {
-    loadWatches();
-  }, []);
+  const filters = ['All', 'Rolex', 'Omega', 'Audemars Piguet', 'Patek Philippe'];
 
-  const loadWatches = async () => {
-    try {
-      const response = await api.get('/market');
-      setWatches(response.data);
-    } catch (error) {
-      console.error('Failed to load watches:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleWatchPress = (watchId: string) => {
+    router.push(`/watch/${watchId}`);
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <Text style={styles.title}>Market</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search watches..."
+        />
+      </View>
 
-        {loading ? (
-          <Text style={styles.subtitle}>Loading...</Text>
-        ) : watches.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.subtitle}>No watches listed yet</Text>
-          </View>
-        ) : (
-          <View style={styles.list}>
-            {watches.map((watch) => (
-              <TouchableOpacity key={watch.id} style={styles.card}>
-                <Text style={styles.watchTitle}>{watch.brand} {watch.model}</Text>
-                <Text style={styles.price}>${watch.price.toLocaleString()}</Text>
-                <Text style={styles.details}>Condition: {watch.condition}</Text>
-                {watch.year && <Text style={styles.details}>Year: {watch.year}</Text>}
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+      <View style={styles.filterSection}>
+        <FilterPills
+          filters={filters}
+          activeFilter={activeFilter}
+          onFilterPress={setActiveFilter}
+          onFilterIconPress={() => console.log('Open filter modal')}
+        />
+      </View>
+
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {mockWatches.map((watch) => (
+          <WatchListItem
+            key={watch.id}
+            brand={watch.brand}
+            model={watch.model}
+            referenceNumber={watch.reference}
+            price={watch.price}
+            priceChange={watch.priceChange}
+            onPress={() => handleWatchPress(watch.id)}
+          />
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -53,51 +64,17 @@ export default function MarketScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  filterSection: {
+    marginBottom: 4,
   },
   scrollView: {
     flex: 1,
-    padding: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 32,
-  },
-  emptyState: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  list: {
-    gap: 12,
-  },
-  card: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  watchTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  price: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginTop: 8,
-  },
-  details: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
   },
 });

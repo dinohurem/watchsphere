@@ -1,24 +1,39 @@
-from sqlalchemy import Boolean, Column, String, DateTime, Enum
-from sqlalchemy.sql import func
-import enum
-from app.db.base import Base
+from beanie import Document
+from pydantic import Field, EmailStr
+from datetime import datetime
+from enum import Enum
+from typing import Optional
 
 
-class UserRole(str, enum.Enum):
+class UserRole(str, Enum):
     DEALER = "dealer"
     COLLECTOR = "collector"
     ADMIN = "admin"
 
 
-class User(Base):
-    __tablename__ = "users"
+class User(Document):
+    email: EmailStr = Field(..., unique=True)
+    hashed_password: str
+    name: str
+    role: UserRole = UserRole.COLLECTOR
+    verified: bool = False
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
 
-    id = Column(String, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    name = Column(String, nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.COLLECTOR, nullable=False)
-    verified = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    class Settings:
+        name = "users"
+        indexes = [
+            "email",
+        ]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "email": "dealer@watchsphere.com",
+                "name": "John Doe",
+                "role": "dealer",
+                "verified": True,
+                "is_active": True
+            }
+        }
