@@ -1,0 +1,191 @@
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { X } from './icons';
+
+interface OrderBookEntry {
+  date: string;
+  condition: string;
+  price: string;
+}
+
+interface OrderBookModalProps {
+  visible: boolean;
+  onClose: () => void;
+  buyOrders?: OrderBookEntry[];
+  sellOrders?: OrderBookEntry[];
+}
+
+export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = [] }: OrderBookModalProps) {
+  const [activeTab, setActiveTab] = React.useState<'buy' | 'sell'>('buy');
+  const orders = activeTab === 'buy' ? buyOrders : sellOrders;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {/* Handle */}
+        <View style={styles.handleContainer}>
+          <View style={styles.handle} />
+        </View>
+
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <X size={20} color="#000000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Order Book</Text>
+          <View style={styles.headerRight} />
+        </View>
+
+        {/* Segmented Control */}
+        <View style={styles.segmentedControl}>
+          <TouchableOpacity
+            style={[styles.segment, activeTab === 'buy' && styles.segmentActive]}
+            onPress={() => setActiveTab('buy')}
+          >
+            <Text style={[styles.segmentText, activeTab === 'buy' && styles.segmentTextActive]}>
+              Buy
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.segment, activeTab === 'sell' && styles.segmentActive]}
+            onPress={() => setActiveTab('sell')}
+          >
+            <Text style={[styles.segmentText, activeTab === 'sell' && styles.segmentTextActive]}>
+              Sell
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Table Header */}
+        <View style={styles.tableHeader}>
+          <Text style={[styles.headerCell, { flex: 1 }]}>Date</Text>
+          <Text style={[styles.headerCell, { flex: 2 }]}>Condition</Text>
+          <Text style={[styles.headerCell, { flex: 1, textAlign: 'right' }]}>Price</Text>
+        </View>
+
+        {/* Table Content */}
+        <ScrollView style={styles.tableContent}>
+          {orders.map((order, index) => (
+            <View
+              key={index}
+              style={[styles.tableRow, index % 2 === 1 && styles.tableRowEven]}
+            >
+              <Text style={[styles.cell, { flex: 1 }]}>{order.date}</Text>
+              <Text style={[styles.cell, { flex: 2 }]}>{order.condition}</Text>
+              <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{order.price}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// Add React import at the top
+import React from 'react';
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  handleContainer: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  handle: {
+    width: 36,
+    height: 5,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2.5,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  headerRight: {
+    width: 32,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    padding: 2,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  segmentActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  segmentTextActive: {
+    color: '#000000',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  headerCell: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  tableContent: {
+    flex: 1,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  tableRowEven: {
+    backgroundColor: '#F9F9F9',
+  },
+  cell: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: '#000000',
+  },
+});

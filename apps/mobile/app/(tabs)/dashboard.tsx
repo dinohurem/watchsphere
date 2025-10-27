@@ -1,31 +1,23 @@
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
-import { api } from '@/services/api';
+import { useState } from 'react';
+
+// Mock data for now until backend is ready
+const mockInventory = [
+  { id: '1', brand: 'Rolex', model: 'Submariner Date', price: 12500, condition: 'Excellent' },
+  { id: '2', brand: 'Omega', model: 'Speedmaster Professional', price: 6800, condition: 'New' },
+  { id: '3', brand: 'Patek Philippe', model: 'Calatrava', price: 28000, condition: 'Excellent' },
+];
+
+const mockStats = {
+  total_watches: 3,
+  total_value: 47300,
+};
 
 export default function DashboardScreen() {
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      const [inventoryRes, statsRes] = await Promise.all([
-        api.get('/inventory'),
-        api.get('/inventory/stats'),
-      ]);
-      setInventory(inventoryRes.data);
-      setStats(statsRes.data);
-    } catch (error) {
-      console.error('Failed to load inventory:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [inventory] = useState<any[]>(mockInventory);
+  const [stats] = useState<any>(mockStats);
+  const loading = false;
 
   return (
     <SafeAreaView style={styles.container}>

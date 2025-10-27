@@ -1,44 +1,62 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Enum, Text
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
-import enum
-from app.db.base import Base
+from beanie import Document
+from pydantic import Field
+from datetime import datetime
+from enum import Enum
+from typing import Optional
 
 
-class MessageType(str, enum.Enum):
+class MessageType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
     FILE = "file"
 
 
-class ConversationType(str, enum.Enum):
+class ConversationType(str, Enum):
     DIRECT = "direct"
     GROUP = "group"
     AI = "ai"
 
 
-class Conversation(Base):
-    __tablename__ = "conversations"
+class Conversation(Document):
+    type: ConversationType
+    name: Optional[str] = None  # For group chats
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
 
-    id = Column(String, primary_key=True, index=True)
-    type = Column(Enum(ConversationType), nullable=False)
-    name = Column(String)  # For group chats
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    class Settings:
+        name = "conversations"
 
-    messages = relationship("Message", back_populates="conversation")
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "type": "direct",
+                "name": "Chat with John"
+            }
+        }
 
 
-class Message(Base):
-    __tablename__ = "messages"
+class Message(Document):
+    conversation_id: str = Field(..., index=True)
+    sender_id: str = Field(..., index=True)
+    content: str
+    type: MessageType = MessageType.TEXT
+    read: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    id = Column(String, primary_key=True, index=True)
-    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
-    sender_id = Column(String, ForeignKey("users.id"), nullable=False)
-    content = Column(Text, nullable=False)
-    type = Column(Enum(MessageType), default=MessageType.TEXT)
-    read = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    class Settings:
+        name = "messages"
+        indexes = [
+            "conversation_id",
+            "sender_id",
+        ]
 
-    conversation = relationship("Conversation", back_populates="messages")
-    sender = relationship("User")
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "conversation_id": "123abc",
+                "sender_id": "456def",
+                "content": "Hello, I'm interested in your Rolex",
+                "type": "text",
+                "read": False
+            }
+        }
