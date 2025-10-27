@@ -2,12 +2,10 @@ from datetime import timedelta
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-import uuid
 
 from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash, verify_password
-from app.core.deps import get_db, get_current_active_user
+from app.core.deps import get_current_active_user
 from app.models.user import User, UserRole
 from pydantic import BaseModel, EmailStr
 
@@ -45,11 +43,11 @@ class TokenData(BaseModel):
 
 
 @router.post("/register", response_model=TokenData, status_code=status.HTTP_201_CREATED)
-def register(user_in: UserCreate, db: Session = Depends(get_db)) -> Any:
+async def register(user_in: UserCreate) -> Any:
     """Register a new user"""
     # Check if user exists
-    user = db.query(User).filter(User.email == user_in.email).first()
-    if user:
+    existing_user = await User.find_one(User.email == user_in.email)
+    if existing_user:
         raise HTTPException(
             status_code=400,
             detail="A user with this email already exists",
@@ -57,36 +55,36 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> Any:
 
     # Create new user
     user = User(
-        id=str(uuid.uuid4()),
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
         name=user_in.name,
         role=user_in.role,
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    await user.insert()
 
     # Create access token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        subject=user.id, expires_delta=access_token_expires
+        subject=str(user.id), expires_delta=access_token_expires
     )
 
     return {
-        "user": user,
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "verified": user.verified,
+        },
         "access_token": access_token,
         "token_type": "bearer",
     }
 
 
 @router.post("/login", response_model=TokenData)
-def login(
-    db: Session = Depends(get_db),
-    form_data: OAuth2PasswordRequestForm = Depends()
-) -> Any:
+async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
     """Login with email and password"""
-    user = db.query(User).filter(User.email == form_data.username).first()
+    user = await User.find_one(User.email == form_data.username)
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -100,18 +98,24 @@ def login(
     # Create access token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        subject=user.id, expires_delta=access_token_expires
+        subject=str(user.id), expires_delta=access_token_expires
     )
 
     return {
-        "user": user,
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "verified": user.verified,
+        },
         "access_token": access_token,
         "token_type": "bearer",
     }
 
 
 @router.get("/me", response_model=UserResponse)
-def get_current_user_info(
+async def get_current_user_info(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Get current user info"""

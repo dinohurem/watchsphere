@@ -1,24 +1,29 @@
 import { Tabs } from 'expo-router';
-import { Home, Store, LayoutDashboard, MessageSquare, User } from '@/components/icons';
+import { Platform } from 'react-native';
+import { Home, Store, Watch, MessageSquare, User } from '@/components/icons';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#1A1A1A',
-        tabBarInactiveTintColor: '#999',
+        tabBarActiveTintColor: '#007AFF',
+        tabBarInactiveTintColor: '#8E8E93',
         tabBarStyle: {
-          backgroundColor: '#fff',
+          backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: '#E5E5E5',
-          height: 60,
-          paddingBottom: 8,
+          borderTopColor: '#E5E5EA',
+          height: Platform.OS === 'ios' ? 85 : 65,
+          paddingBottom: Platform.OS === 'ios' ? 30 : 8,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '500',
+          marginTop: -4,
+        },
+        tabBarIconStyle: {
+          marginTop: 4,
         },
       }}
     >
@@ -43,16 +48,16 @@ export default function TabLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: 'My Dashboard',
+          title: 'Inventory',
           tabBarIcon: ({ color, focused }) => (
-            <LayoutDashboard size={24} color={color} fill={focused ? color : 'none'} />
+            <Watch size={24} color={color} fill={focused ? color : 'none'} />
           ),
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'Chats',
+          title: 'Chat',
           tabBarIcon: ({ color, focused }) => (
             <MessageSquare size={24} color={color} fill={focused ? color : 'none'} />
           ),

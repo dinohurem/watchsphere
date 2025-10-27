@@ -22,18 +22,19 @@ watchsphere/
 
 ### Backend
 - **FastAPI** - Modern Python web framework
-- **PostgreSQL** - Primary database
+- **MongoDB** - Primary database
 - **Redis** - Caching and real-time features
-- **SQLAlchemy** - ORM
+- **Beanie** - Async MongoDB ODM
 - **WebSocket** - Real-time communication
 - **AI Integration** - OpenAI & Anthropic for AI assistant
 
 ### Mobile
-- **Flutter** - Cross-platform framework (iOS & Android)
-- **Riverpod** - State management
-- **GoRouter** - Navigation
-- **Dio** - HTTP client
-- **Hive** - Local storage
+- **React Native (Expo)** - Cross-platform framework (iOS & Android)
+- **Expo Router** - File-based navigation
+- **Zustand** - State management
+- **TanStack Query** - Server state management
+- **Axios** - HTTP client
+- **AsyncStorage** - Local storage
 
 ### Web
 - **React 18** - UI library
@@ -123,9 +124,9 @@ Each directory has its own README with detailed setup instructions:
 
 3. **Mobile**:
    ```bash
-   cd mobile
-   flutter pub get
-   flutter run
+   cd apps/mobile
+   npm install
+   npx expo start
    ```
 
 ## Architecture
@@ -169,7 +170,8 @@ Full API documentation available at: `http://localhost:8000/docs`
 
 ### Backend (.env)
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/watchsphere
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DB_NAME=watchsphere
 REDIS_URL=redis://localhost:6379/0
 SECRET_KEY=your-secret-key
 OPENAI_API_KEY=your-openai-key
@@ -240,7 +242,7 @@ Configure in `lib/core/config/app_config.dart`
 - HTTPS/WSS for all communication
 - Input validation and sanitization
 - Rate limiting
-- SQL injection prevention via ORM
+- NoSQL injection prevention via ODM
 
 ## Roadmap
 
@@ -266,4 +268,34 @@ For issues and questions:
 
 ---
 
-Built with ❤️ for watch enthusiasts and dealers worldwide.
+Install dependencies:
+npm install  # Root
+
+Set up MongoDB:
+# Install MongoDB or use MongoDB Atlas
+# Update apps/backend/.env:
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DB_NAME=watchsphere
+Start developing:
+# Backend
+cd apps/backend && uvicorn app.main:app --reload
+
+# Web
+cd apps/web && npm run dev
+
+# Mobile
+cd apps/mobile && npx expo start
+
+
+
+📧 Email:    admin@watchsphere.com
+🔑 Password: Admin123!
+
+
+DEALER:
+  Email: dealer@watchsphere.com
+  Password: Dealer123!
+
+COLLECTOR:
+  Email: collector@watchsphere.com
+  Password: Collector123!

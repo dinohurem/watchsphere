@@ -3,6 +3,10 @@ import { Stack, router } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@watchsphere/shared/stores';
+import { initializeStorage } from '@/lib/storage';
+
+// Initialize storage for Zustand persist
+initializeStorage();
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,35 +1,49 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Enum
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
-import enum
-from app.db.base import Base
+from beanie import Document, Link
+from pydantic import Field
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+from app.models.user import User
 
 
-class WatchCondition(str, enum.Enum):
+class WatchCondition(str, Enum):
     NEW = "new"
     EXCELLENT = "excellent"
     GOOD = "good"
     FAIR = "fair"
 
 
-class Watch(Base):
-    __tablename__ = "watches"
+class Watch(Document):
+    brand: str = Field(..., index=True)
+    model: str
+    price: float
+    currency: str = "USD"
+    condition: WatchCondition
+    year: Optional[int] = None
+    serial_number: Optional[str] = Field(None, unique=True)
+    description: Optional[str] = None
+    dealer_id: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
 
-    id = Column(String, primary_key=True, index=True)
-    brand = Column(String, nullable=False, index=True)
-    model = Column(String, nullable=False)
-    price = Column(Float, nullable=False)
-    currency = Column(String, default="USD")
-    condition = Column(Enum(WatchCondition), nullable=False)
-    year = Column(Integer)
-    serial_number = Column(String, unique=True)
-    description = Column(String)
+    class Settings:
+        name = "watches"
+        indexes = [
+            "brand",
+            "dealer_id",
+            "serial_number",
+        ]
 
-    # Foreign key to user
-    dealer_id = Column(String, ForeignKey("users.id"), nullable=False)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # Relationship
-    dealer = relationship("User", backref="watches")
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "brand": "Rolex",
+                "model": "Submariner",
+                "price": 12500.00,
+                "currency": "USD",
+                "condition": "excellent",
+                "year": 2020,
+                "serial_number": "12345ABC",
+                "description": "Beautiful Rolex Submariner in excellent condition"
+            }
+        }
