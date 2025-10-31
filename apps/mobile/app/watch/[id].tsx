@@ -5,29 +5,28 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft, ChevronRight, Heart } from '@/components/icons';
 import { StatsCard } from '@/components/StatsCard';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
-import { WatchImageCard } from '@/components/WatchImageCard';
 import { OrderBookModal } from '@/components/OrderBookModal';
 
 // Mock order book data
 const mockBuyOrders = [
-  { date: '10.10.25', condition: 'Pristine', price: '€12,852' },
-  { date: '10.18.25', condition: 'Restored', price: '€12,852' },
-  { date: '10.10.25', condition: 'Mint Condition', price: '€12,852' },
-  { date: '10.10.25', condition: 'Lightly Worn', price: '€12,852' },
-  { date: '10.10.25', condition: 'Like New', price: '€12,852' },
-  { date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
-  { date: '10.10.25', condition: 'Showcase Model', price: '€12,852' },
-  { date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
-  { date: '10.10.25', condition: 'Lightly Used', price: '€12,852' },
-  { date: '10.10.25', condition: 'Gently Worn', price: '€12,852' },
-  { date: '10.10.25', condition: 'Well Maintained', price: '€12,852' },
-  { date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
-  { date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
-  { date: '10.10.25', condition: 'Limited Edition', price: '€12,852' },
-  { date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
-  { date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
-  { date: '10.10.25', condition: 'Refurbished', price: '€12,852' },
-  { date: '10.10.25', condition: 'Damaged', price: '€12,852' },
+  { country: 'US' as const, date: '10.10.25', condition: 'Pristine', price: '€12,852' },
+  { country: 'EU' as const, date: '10.18.25', condition: 'Restored', price: '€12,852' },
+  { country: 'UAE' as const, date: '10.10.25', condition: 'Mint Condition', price: '€12,852' },
+  { country: 'HK' as const, date: '10.10.25', condition: 'Lightly Worn', price: '€12,852' },
+  { country: 'US' as const, date: '10.10.25', condition: 'Like New', price: '€12,852' },
+  { country: 'EU' as const, date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
+  { country: 'UAE' as const, date: '10.10.25', condition: 'Showcase Model', price: '€12,852' },
+  { country: 'HK' as const, date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
+  { country: 'US' as const, date: '10.10.25', condition: 'Lightly Used', price: '€12,852' },
+  { country: 'EU' as const, date: '10.10.25', condition: 'Gently Worn', price: '€12,852' },
+  { country: 'UAE' as const, date: '10.10.25', condition: 'Well Maintained', price: '€12,852' },
+  { country: 'HK' as const, date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
+  { country: 'US' as const, date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
+  { country: 'EU' as const, date: '10.10.25', condition: 'Limited Edition', price: '€12,852' },
+  { country: 'UAE' as const, date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
+  { country: 'HK' as const, date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
+  { country: 'US' as const, date: '10.10.25', condition: 'Refurbished', price: '€12,852' },
+  { country: 'EU' as const, date: '10.10.25', condition: 'Damaged', price: '€12,852' },
 ];
 
 export default function WatchDetailScreen() {
@@ -57,12 +56,6 @@ export default function WatchDetailScreen() {
     { label: 'Listings', value: watchData.listings },
   ];
 
-  const mockListings = [
-    { id: '1', title: 'Rolex Submariner Date', subtitle: '126610LN, New Unworn 41...', price: '€12,352' },
-    { id: '2', title: 'Rolex Submariner Date', subtitle: '126610LN, New Unworn 41...', price: '€12,352' },
-    { id: '3', title: 'Rolex Submariner Date', subtitle: '126610LN, New Unworn 41...', price: '€12,352' },
-    { id: '4', title: 'Rolex Submariner Date', subtitle: '126610LN, New Unworn 41...', price: '€12,352' },
-  ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -133,22 +126,6 @@ export default function WatchDetailScreen() {
           />
         </View>
 
-        {/* Listings Section */}
-        <View style={styles.listingsSection}>
-          <Text style={styles.sectionTitle}>Listings</Text>
-          <View style={styles.listingsGrid}>
-            {mockListings.map((listing) => (
-              <WatchImageCard
-                key={listing.id}
-                title={listing.title}
-                subtitle={listing.subtitle}
-                price={listing.price}
-                onPress={() => {}}
-                onFavoritePress={() => {}}
-              />
-            ))}
-          </View>
-        </View>
       </ScrollView>
 
       {/* Order Book Modal */}
@@ -286,15 +263,5 @@ const styles = StyleSheet.create({
     height: 200,
     backgroundColor: '#F5F5F5',
     borderRadius: 12,
-  },
-  listingsSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: 32,
-  },
-  listingsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
   },
 });

@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   Home,
   Store,
-  LayoutDashboard,
+  Heart,
   MessageSquare,
   User
 } from 'lucide-react'
@@ -10,8 +10,8 @@ import {
 const navigation = [
   { name: 'Home', to: '/', icon: Home },
   { name: 'Market', to: '/market', icon: Store },
-  { name: 'My Dashboard', to: '/dashboard', icon: LayoutDashboard },
-  { name: 'Chats', to: '/chat', icon: MessageSquare },
+  { name: 'My Watchlist', to: '/watchlist', icon: Heart },
+  { name: 'Chat', to: '/chat', icon: MessageSquare },
   { name: 'Profile', to: '/profile', icon: User },
 ]
 

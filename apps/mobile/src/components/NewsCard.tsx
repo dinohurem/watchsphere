@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface NewsCardProps {
   icon: string;
@@ -7,6 +8,36 @@ interface NewsCardProps {
 }
 
 export function NewsCard({ icon, text, source }: NewsCardProps) {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      alignItems: 'center',
+    },
+    icon: {
+      fontSize: 24,
+      marginRight: 12,
+    },
+    textContainer: {
+      flex: 1,
+    },
+    text: {
+      fontSize: 15,
+      color: colors.text,
+      fontWeight: '500',
+      marginBottom: 2,
+    },
+    source: {
+      fontSize: 13,
+      color: colors.textSecondary,
+    },
+  });
+
   return (
     <TouchableOpacity style={styles.container}>
       <Text style={styles.icon}>{icon}</Text>
@@ -17,31 +48,3 @@ export function NewsCard({ icon, text, source }: NewsCardProps) {
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  icon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  textContainer: {
-    flex: 1,
-  },
-  text: {
-    fontSize: 15,
-    color: '#1A1A1A',
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  source: {
-    fontSize: 13,
-    color: '#666',
-  },
-});

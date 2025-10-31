@@ -3,10 +3,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { X } from './icons';
 
 interface OrderBookEntry {
+  country: 'US' | 'EU' | 'UAE' | 'HK';
   date: string;
   condition: string;
   price: string;
 }
+
+const countryData: Record<string, { emoji: string; initials: string }> = {
+  US: { emoji: '🇺🇸', initials: 'US' },
+  EU: { emoji: '🇪🇺', initials: 'EU' },
+  UAE: { emoji: '🇦🇪', initials: 'UAE' },
+  HK: { emoji: '🇭🇰', initials: 'HK' },
+};
 
 interface OrderBookModalProps {
   visible: boolean;
@@ -63,23 +71,34 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
 
         {/* Table Header */}
         <View style={styles.tableHeader}>
+          <Text style={[styles.headerCell, { flex: 0.6 }]}>Flag</Text>
+          <Text style={[styles.headerCell, { flex: 0.8 }]}>Loc</Text>
           <Text style={[styles.headerCell, { flex: 1 }]}>Date</Text>
-          <Text style={[styles.headerCell, { flex: 2 }]}>Condition</Text>
+          <Text style={[styles.headerCell, { flex: 1.5 }]}>Condition</Text>
           <Text style={[styles.headerCell, { flex: 1, textAlign: 'right' }]}>Price</Text>
         </View>
 
         {/* Table Content */}
         <ScrollView style={styles.tableContent}>
-          {orders.map((order, index) => (
-            <View
-              key={index}
-              style={[styles.tableRow, index % 2 === 1 && styles.tableRowEven]}
-            >
-              <Text style={[styles.cell, { flex: 1 }]}>{order.date}</Text>
-              <Text style={[styles.cell, { flex: 2 }]}>{order.condition}</Text>
-              <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{order.price}</Text>
-            </View>
-          ))}
+          {orders.map((order, index) => {
+            const { emoji, initials } = countryData[order.country];
+            return (
+              <View
+                key={index}
+                style={[styles.tableRow, index % 2 === 1 && styles.tableRowEven]}
+              >
+                <View style={[styles.cell, { flex: 0.6 }]}>
+                  <View style={styles.flagContainer}>
+                    <Text style={styles.flagEmoji}>{emoji}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.cell, { flex: 0.8 }]}>{initials}</Text>
+                <Text style={[styles.cell, { flex: 1 }]}>{order.date}</Text>
+                <Text style={[styles.cell, { flex: 1.5 }]}>{order.condition}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{order.price}</Text>
+              </View>
+            );
+          })}
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -187,5 +206,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '400',
     color: '#000000',
+  },
+  flagContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  flagEmoji: {
+    fontSize: 18,
   },
 });

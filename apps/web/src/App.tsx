@@ -5,7 +5,7 @@ import { RegisterPage } from './features/auth/pages/RegisterPage'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 import { HomePage } from './features/home/pages/HomePage'
 import { MarketPage } from './features/market/pages/MarketPage'
-import { DashboardPage } from './features/dashboard/pages/DashboardPage'
+import { WatchlistPage } from './features/watchlist/pages/WatchlistPage'
 import { ChatPage } from './features/chat/pages/ChatPage'
 import { ProfilePage } from './features/profile/pages/ProfilePage'
 
@@ -27,7 +27,7 @@ function App() {
       >
         <Route index element={<HomePage />} />
         <Route path="market" element={<MarketPage />} />
-        <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="watchlist" element={<WatchlistPage />} />
         <Route path="chat" element={<ChatPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
