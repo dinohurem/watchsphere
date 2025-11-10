@@ -382,3 +382,72 @@ export function ChevronLeft({ size = 24, color = '#000', fill = 'none' }: IconPr
     </Svg>
   );
 }
+
+export function Zap({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </Svg>
+  );
+}
+
+export function Pin({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+    </Svg>
+  );
+}
+
+export function Trash2({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />
+    </Svg>
+  );
+}
+
+export function MoreHorizontal({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
+    </Svg>
+  );
+}
+
+export function BarChart({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M12 20V10M18 20V4M6 20v-4" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function MessageCircle({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function UserCircle({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 2a10 10 0 1 0 10 10" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 22c3.87 0 7-1.79 7-4" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function WristWatch({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M9 18H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M15 18h3a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+      <Path d="M9 6V3h6v3M9 18v3h6v-3" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}

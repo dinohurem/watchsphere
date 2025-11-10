@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Activity, Search, ShoppingCart, Tag, Bot, Package, ClipboardList, ShieldCheck, Grid, X } from './icons';
+import { Activity, Search, ShoppingCart, Tag, Zap, Package, ClipboardList, ShieldCheck, Grid, X } from './icons';
 
 interface QuickAccessButtonProps {
   title: string;
@@ -18,7 +18,7 @@ const iconMap: Record<string, React.ComponentType<{ size: number; color: string 
   search: Search,
   'shopping-cart': ShoppingCart,
   tag: Tag,
-  bot: Bot,
+  bot: Zap,
   package: Package,
   'clipboard-list': ClipboardList,
   'shield-check': ShieldCheck,

@@ -8,7 +8,7 @@ import { useChat } from '@/contexts/ChatContext';
 import { ChatBubble } from '@/components/ChatBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { TypingIndicator } from '@/components/TypingIndicator';
-import { ChevronLeft, Phone, Video, MoreVertical } from '@/components/icons';
+import { ChevronLeft, Phone, Video, MoreVertical, ChevronRight } from '@/components/icons';
 import { Message } from '@/services/chatService';
 
 export default function ChatDetailScreen() {
@@ -102,6 +102,7 @@ export default function ChatDetailScreen() {
 
   const renderMessage = ({ item }: { item: Message & { showSender: boolean } }) => {
     const isUser = item.senderId === 'current_user';
+    const isAI = item.senderId === 'ai_assistant' || id.startsWith('ai');
 
     return (
       <ChatBubble
@@ -111,6 +112,7 @@ export default function ChatDetailScreen() {
         status={item.status}
         senderName={item.senderName}
         showSender={item.showSender}
+        isAI={isAI}
       />
     );
   };

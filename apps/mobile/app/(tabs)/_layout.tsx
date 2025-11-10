@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Platform, View, Text, StyleSheet } from 'react-native';
 import { useState, useContext } from 'react';
-import { Home, Store, Watch, MessageSquare, User } from '@/components/icons';
+import { Home, BarChart, WristWatch, MessageCircle, User } from '@/components/icons';
 import { FloatingAIButtonV2 } from '@/components/FloatingAIButtonV2';
 import { AIChatModal } from '@/components/AIChatModal';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -48,8 +48,8 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <Home size={24} color={color} fill={focused ? color : 'none'} />
+          tabBarIcon: ({ color }) => (
+            <Home size={24} color={color} fill="none" />
           ),
         }}
       />
@@ -57,8 +57,8 @@ export default function TabLayout() {
         name="market"
         options={{
           title: 'Market',
-          tabBarIcon: ({ color, focused }) => (
-            <Store size={24} color={color} fill={focused ? color : 'none'} />
+          tabBarIcon: ({ color }) => (
+            <BarChart size={24} color={color} fill="none" />
           ),
         }}
       />
@@ -66,8 +66,8 @@ export default function TabLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color, focused }) => (
-            <Watch size={24} color={color} fill={focused ? color : 'none'} />
+          tabBarIcon: ({ color }) => (
+            <WristWatch size={24} color={color} fill="none" />
           ),
         }}
       />
@@ -75,8 +75,8 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: 'Chat',
-          tabBarIcon: ({ color, focused }) => (
-            <MessageSquare size={24} color={color} fill={focused ? color : 'none'} />
+          tabBarIcon: ({ color }) => (
+            <MessageCircle size={24} color={color} fill="none" />
           ),
         }}
       />
@@ -84,8 +84,8 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <User size={24} color={color} fill={focused ? color : 'none'} />
+          tabBarIcon: ({ color }) => (
+            <User size={24} color={color} fill="none" />
           ),
         }}
       />

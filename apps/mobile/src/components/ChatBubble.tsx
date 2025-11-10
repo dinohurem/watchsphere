@@ -10,9 +10,10 @@ interface ChatBubbleProps {
   status?: 'sending' | 'sent' | 'delivered' | 'read';
   senderName?: string;
   showSender?: boolean;
+  isAI?: boolean;
 }
 
-export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender }: ChatBubbleProps) {
+export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender, isAI = false }: ChatBubbleProps) {
   const { colors } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -54,21 +55,21 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
     },
     bubble: {
       maxWidth: '75%',
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 18,
-      shadowColor: '#000',
+      paddingHorizontal: isAI && !isUser ? 0 : 16,
+      paddingVertical: isAI && !isUser ? 0 : 10,
+      borderRadius: isAI && !isUser ? 0 : 18,
+      shadowColor: isAI && !isUser ? 'transparent' : '#000',
       shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
+      shadowOpacity: isAI && !isUser ? 0 : 0.05,
       shadowRadius: 2,
-      elevation: 1,
+      elevation: isAI && !isUser ? 0 : 1,
     },
     userBubble: {
       backgroundColor: colors.primary,
       borderBottomRightRadius: 4,
     },
     otherBubble: {
-      backgroundColor: colors.backgroundSecondary,
+      backgroundColor: isAI ? 'transparent' : colors.backgroundSecondary,
       borderBottomLeftRadius: 4,
     },
     text: {

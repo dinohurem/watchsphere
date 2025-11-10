@@ -1,9 +1,11 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/contexts/ThemeContext';
-import { MessageSquare, Users, Sparkles } from '@/components/icons';
+import { MessageSquare, Users, Zap } from '@/components/icons';
 import { AIChatModal } from '@/components/AIChatModal';
+import { SwipeableChatItem } from '@/components/SwipeableChatItem';
 import { router } from 'expo-router';
 
 type TabType = 'conversations' | 'groups' | 'ai';
@@ -95,33 +97,71 @@ export default function ChatScreen() {
   ];
 
   const renderConversationItem = ({ item }: { item: Conversation }) => (
-    <TouchableOpacity style={styles.conversationItem}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
-      </View>
-      <View style={styles.conversationContent}>
-        <View style={styles.conversationHeader}>
-          <Text style={styles.conversationName}>{item.name}</Text>
-          <Text style={styles.timestamp}>{item.timestamp}</Text>
+    <SwipeableChatItem
+      onMore={() => console.log('More:', item.id)}
+      onPin={() => console.log('Pin:', item.id)}
+      onDelete={() => console.log('Delete:', item.id)}
+      isGroup={false}
+    >
+      <TouchableOpacity style={styles.conversationItem} onPress={() => router.push(`/chat/${item.id}` as any)}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
         </View>
-        <View style={styles.conversationFooter}>
-          <Text style={styles.lastMessage} numberOfLines={1}>
-            {item.lastMessage}
-          </Text>
-          {item.unread > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unread}</Text>
-            </View>
-          )}
+        <View style={styles.conversationContent}>
+          <View style={styles.conversationHeader}>
+            <Text style={styles.conversationName}>{item.name}</Text>
+            <Text style={styles.timestamp}>{item.timestamp}</Text>
+          </View>
+          <View style={styles.conversationFooter}>
+            <Text style={styles.lastMessage} numberOfLines={1}>
+              {item.lastMessage}
+            </Text>
+            {item.unread > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{item.unread}</Text>
+              </View>
+            )}
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </SwipeableChatItem>
+  );
+
+  const renderGroupItem = ({ item }: { item: Conversation }) => (
+    <SwipeableChatItem
+      onMore={() => console.log('More:', item.id)}
+      onPin={() => console.log('Pin:', item.id)}
+      onDelete={() => console.log('Delete:', item.id)}
+      isGroup={true}
+    >
+      <TouchableOpacity style={styles.conversationItem} onPress={() => router.push(`/chat/${item.id}` as any)}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+        </View>
+        <View style={styles.conversationContent}>
+          <View style={styles.conversationHeader}>
+            <Text style={styles.conversationName}>{item.name}</Text>
+            <Text style={styles.timestamp}>{item.timestamp}</Text>
+          </View>
+          <View style={styles.conversationFooter}>
+            <Text style={styles.lastMessage} numberOfLines={1}>
+              {item.lastMessage}
+            </Text>
+            {item.unread > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{item.unread}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </SwipeableChatItem>
   );
 
   const renderAIChatItem = ({ item }: { item: AIChat }) => (
-    <TouchableOpacity style={styles.conversationItem}>
+    <TouchableOpacity style={styles.conversationItem} onPress={() => router.push(`/chat/${item.id}` as any)}>
       <View style={[styles.avatar, styles.aiAvatar]}>
-        <Sparkles size={20} color="#007AFF" />
+        <Zap size={20} color={colors.primary} />
       </View>
       <View style={styles.conversationContent}>
         <View style={styles.conversationHeader}>
@@ -159,7 +199,7 @@ export default function ChatScreen() {
         return (
           <FlatList
             data={groups}
-            renderItem={renderConversationItem}
+            renderItem={renderGroupItem}
             keyExtractor={(item) => item.id}
             style={styles.list}
             ListEmptyComponent={
@@ -189,7 +229,7 @@ export default function ChatScreen() {
               style={styles.list}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Sparkles size={48} color={colors.border} />
+                  <Zap size={48} color={colors.border} />
                   <Text style={styles.emptyText}>No AI chat history</Text>
                   <Text style={styles.emptySubtext}>
                     Start a conversation with our AI assistant
@@ -227,14 +267,11 @@ export default function ChatScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 10,
-      borderRadius: 8,
+      borderRadius: 20,
       backgroundColor: colors.backgroundSecondary,
-      borderWidth: 1,
-      borderColor: colors.border,
     },
     activeTab: {
       backgroundColor: colors.text,
-      borderColor: colors.text,
     },
     tabText: {
       fontSize: 14,
@@ -264,8 +301,6 @@ export default function ChatScreen() {
     conversationItem: {
       flexDirection: 'row',
       padding: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
     },
     avatar: {
       width: 48,
@@ -290,7 +325,7 @@ export default function ChatScreen() {
     conversationHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginBottom: 4,
+      marginBottom: 2,
     },
     conversationName: {
       fontSize: 16,
@@ -351,44 +386,46 @@ export default function ChatScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header with Tabs */}
-      <View style={styles.header}>
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'conversations' && styles.activeTab]}
-            onPress={() => setActiveTab('conversations')}
-          >
-            <Text
-              style={[styles.tabText, activeTab === 'conversations' && styles.activeTabText]}
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {/* Header with Tabs */}
+        <View style={styles.header}>
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'conversations' && styles.activeTab]}
+              onPress={() => setActiveTab('conversations')}
             >
-              Conversations
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[styles.tabText, activeTab === 'conversations' && styles.activeTabText]}
+              >
+                Conversations
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'groups' && styles.activeTab]}
-            onPress={() => setActiveTab('groups')}
-          >
-            <Text style={[styles.tabText, activeTab === 'groups' && styles.activeTabText]}>
-              Groups
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'groups' && styles.activeTab]}
+              onPress={() => setActiveTab('groups')}
+            >
+              <Text style={[styles.tabText, activeTab === 'groups' && styles.activeTabText]}>
+                Groups
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'ai' && styles.activeTab]}
-            onPress={() => setActiveTab('ai')}
-          >
-            <Text style={[styles.tabText, activeTab === 'ai' && styles.activeTabText]}>AI</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'ai' && styles.activeTab]}
+              onPress={() => setActiveTab('ai')}
+            >
+              <Text style={[styles.tabText, activeTab === 'ai' && styles.activeTabText]}>AI</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
-      {/* Tab Content */}
-      {renderTabContent()}
+        {/* Tab Content */}
+        {renderTabContent()}
 
-      {/* AI Chat Modal */}
-      <AIChatModal visible={showAIChat} onClose={() => setShowAIChat(false)} />
-    </SafeAreaView>
+        {/* AI Chat Modal */}
+        <AIChatModal visible={showAIChat} onClose={() => setShowAIChat(false)} />
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }

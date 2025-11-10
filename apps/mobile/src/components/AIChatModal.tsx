@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,11 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
-import { X, Send, Sparkles } from './icons';
+import { X, Send, Image, Zap } from './icons';
 
 interface Message {
   id: string;
@@ -28,15 +29,27 @@ interface AIChatModalProps {
 
 export function AIChatModal({ visible, onClose }: AIChatModalProps) {
   const { colors } = useTheme();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: 'Hello! I\'m your AI assistant. How can I help you today?',
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+  const sendButtonScale = useRef(new Animated.Value(0)).current;
+  const imageButtonWidth = useRef(new Animated.Value(44)).current;
+
+  useEffect(() => {
+    // Animate send button and image button
+    Animated.parallel([
+      Animated.spring(sendButtonScale, {
+        toValue: inputText.trim().length > 0 ? 1 : 0,
+        tension: 100,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(imageButtonWidth, {
+        toValue: inputText.trim().length > 0 ? 0 : 44,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [inputText]);
 
   const handleSend = () => {
     if (inputText.trim()) {
@@ -70,25 +83,25 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
       animationType="slide"
       presentationStyle="formSheet"
     >
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoid}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.headerLeft}>
-              <View style={styles.aiIconContainer}>
-                <Sparkles size={20} color="#007AFF" />
+              <View style={[styles.aiIconContainer, { backgroundColor: colors.primaryLight }]}>
+                <Zap size={20} color={colors.primary} />
               </View>
               <View>
-                <Text style={styles.headerTitle}>AI Assistant</Text>
-                <Text style={styles.headerSubtitle}>Always here to help</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Ask AI</Text>
+                <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Always here to help</Text>
               </View>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color="#000000" />
+              <X size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
 
@@ -98,51 +111,73 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.messagesContent}
           >
-            {messages.map((message) => (
-              <View
-                key={message.id}
-                style={[
-                  styles.messageContainer,
-                  message.isUser ? styles.userMessageContainer : styles.aiMessageContainer,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.messageBubble,
-                    message.isUser ? styles.userBubble : styles.aiBubble,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.messageText,
-                      message.isUser ? styles.userMessageText : styles.aiMessageText,
-                    ]}
-                  >
-                    {message.text}
+            {messages.length === 0 ? (
+              <View style={styles.emptyState}>
+                <View style={[styles.emptyCard, { backgroundColor: colors.backgroundSecondary }]}>
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>Start the conversation</Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                    Ask about pricing, availability, or condition.
                   </Text>
                 </View>
               </View>
-            ))}
+            ) : (
+              messages.map((message) => (
+                <View
+                  key={message.id}
+                  style={[
+                    styles.messageContainer,
+                    message.isUser ? styles.userMessageContainer : styles.aiMessageContainer,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.messageBubble,
+                      message.isUser ? [styles.userBubble, { backgroundColor: colors.primary }] : [styles.aiBubble, { backgroundColor: colors.backgroundSecondary }],
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.messageText,
+                        message.isUser ? styles.userMessageText : [styles.aiMessageText, { color: colors.text }],
+                      ]}
+                    >
+                      {message.text}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            )}
           </ScrollView>
 
           {/* Input */}
-          <View style={styles.inputContainer}>
+          <View style={[styles.inputContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+            <Animated.View style={{ width: imageButtonWidth, overflow: 'hidden' }}>
+              <TouchableOpacity style={styles.imageButton}>
+                <Image size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </Animated.View>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
               value={inputText}
               onChangeText={setInputText}
-              placeholder="Ask me anything..."
-              placeholderTextColor="#8E8E93"
+              placeholder="Send message..."
+              placeholderTextColor={colors.textTertiary}
               multiline
               maxLength={500}
             />
-            <TouchableOpacity
-              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-              onPress={handleSend}
-              disabled={!inputText.trim()}
+            <Animated.View
+              style={{
+                transform: [{ scale: sendButtonScale }],
+              }}
             >
-              <Send size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sendButton, { backgroundColor: colors.primary }]}
+                onPress={handleSend}
+                disabled={!inputText.trim()}
+              >
+                <Send size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </Animated.View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -153,7 +188,6 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   keyboardAvoid: {
     flex: 1,
@@ -165,7 +199,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -176,19 +209,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E3F2FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000000',
   },
   headerSubtitle: {
     fontSize: 13,
     fontWeight: '400',
-    color: '#8E8E93',
   },
   closeButton: {
     padding: 8,
@@ -199,6 +229,29 @@ const styles = StyleSheet.create({
   messagesContent: {
     padding: 16,
     flexGrow: 1,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyCard: {
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontWeight: '400',
+    textAlign: 'center',
   },
   messageContainer: {
     marginBottom: 12,
@@ -216,10 +269,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   userBubble: {
-    backgroundColor: '#007AFF',
+    borderBottomRightRadius: 4,
   },
   aiBubble: {
-    backgroundColor: '#F5F5F5',
+    borderBottomLeftRadius: 4,
   },
   messageText: {
     fontSize: 15,
@@ -229,38 +282,36 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   aiMessageText: {
-    color: '#000000',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 8,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
     gap: 8,
-    backgroundColor: '#FFFFFF',
   },
-  input: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-    maxHeight: 100,
-    color: '#000000',
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#007AFF',
+  imageButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonDisabled: {
-    opacity: 0.5,
+  input: {
+    flex: 1,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    maxHeight: 100,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

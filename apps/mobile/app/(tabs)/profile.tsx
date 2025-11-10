@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
@@ -23,12 +23,14 @@ export default function ProfileScreen() {
       name: 'Rolex Submariner Date',
       reference: '126610LN, New Unworn 41...',
       price: '€12,352',
+      image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=300&fit=crop',
     },
     {
       id: '2',
-      name: 'Rolex Submariner Date',
-      reference: '126610LN, New Unworn 41...',
-      price: '€12,352',
+      name: 'Patek Philippe Nautilus',
+      reference: '5711/1A-010, Full Set 40mm',
+      price: '€97,467',
+      image: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=400&h=300&fit=crop',
     },
   ];
 
@@ -190,7 +192,10 @@ export default function ProfileScreen() {
             <View style={styles.profileImage}>
               <User size={48} color={colors.textSecondary} />
             </View>
-            <TouchableOpacity style={styles.editButton}>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => router.push('/profile-settings' as any)}
+            >
               <Edit2 size={18} color={colors.background} />
             </TouchableOpacity>
           </View>
@@ -217,6 +222,13 @@ export default function ProfileScreen() {
                   onPress={() => router.push(`/watch/${watch.id}` as any)}
                 >
                   <View style={styles.favoriteImage}>
+                    {watch.image ? (
+                      <Image
+                        source={{ uri: watch.image }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                      />
+                    ) : null}
                     <View style={styles.favoriteHeart}>
                       <Heart size={20} color="#FF3B30" fill="#FF3B30" />
                     </View>

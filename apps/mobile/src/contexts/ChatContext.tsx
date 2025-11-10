@@ -337,8 +337,143 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // const response = await api.get(`/conversations/${conversationId}/messages`);
       // setMessages(prev => new Map(prev).set(conversationId, response.data));
 
-      // Mock data for now
-      const mockMessages: Message[] = [];
+      // Mock data for now - different messages for different conversation types
+      let mockMessages: Message[] = [];
+
+      if (conversationId === '1') {
+        // Direct chat with user - messages with bubbles
+        mockMessages = [
+          {
+            id: 'm1',
+            conversationId: '1',
+            senderId: '1',
+            senderName: 'John Dealer',
+            content: 'Hi! I saw your Rolex Submariner listing. Is it still available?',
+            type: 'text',
+            timestamp: new Date(Date.now() - 3600000),
+            status: 'read',
+          },
+          {
+            id: 'm2',
+            conversationId: '1',
+            senderId: 'current_user',
+            senderName: 'You',
+            content: 'Yes, it is! It\'s in excellent condition with all original papers and box.',
+            type: 'text',
+            timestamp: new Date(Date.now() - 3500000),
+            status: 'read',
+          },
+          {
+            id: 'm3',
+            conversationId: '1',
+            senderId: '1',
+            senderName: 'John Dealer',
+            content: 'Great! What\'s your best price on it? I\'m a serious buyer.',
+            type: 'text',
+            timestamp: new Date(Date.now() - 3400000),
+            status: 'read',
+          },
+          {
+            id: 'm4',
+            conversationId: '1',
+            senderId: 'current_user',
+            senderName: 'You',
+            content: 'I can do €12,000. That\'s already a great deal for this condition.',
+            type: 'text',
+            timestamp: new Date(Date.now() - 3300000),
+            status: 'read',
+          },
+          {
+            id: 'm5',
+            conversationId: '1',
+            senderId: '1',
+            senderName: 'John Dealer',
+            content: 'Deal. How can I make the payment?',
+            type: 'text',
+            timestamp: new Date(Date.now() - 600000),
+            status: 'delivered',
+          },
+        ];
+      } else if (conversationId === '2' || conversationId === 'g1') {
+        // Group chat - messages with bubbles and sender names
+        mockMessages = [
+          {
+            id: 'g1',
+            conversationId: '2',
+            senderId: 'user_1',
+            senderName: 'Mike Johnson',
+            content: 'Hey everyone! Just picked up a new Submariner Date. The quality is incredible!',
+            type: 'text',
+            timestamp: new Date(Date.now() - 7200000),
+            status: 'read',
+          },
+          {
+            id: 'g2',
+            conversationId: '2',
+            senderId: 'user_2',
+            senderName: 'Sarah Chen',
+            content: 'Congrats Mike! Which reference did you get?',
+            type: 'text',
+            timestamp: new Date(Date.now() - 7100000),
+            status: 'read',
+          },
+          {
+            id: 'g3',
+            conversationId: '2',
+            senderId: 'user_1',
+            senderName: 'Mike Johnson',
+            content: 'The 126610LN. Been waiting for this for months!',
+            type: 'text',
+            timestamp: new Date(Date.now() - 7000000),
+            status: 'read',
+          },
+          {
+            id: 'g4',
+            conversationId: '2',
+            senderId: 'current_user',
+            senderName: 'You',
+            content: 'That\'s awesome! How\'s the build quality compared to previous models?',
+            type: 'text',
+            timestamp: new Date(Date.now() - 6900000),
+            status: 'read',
+          },
+          {
+            id: 'g5',
+            conversationId: '2',
+            senderId: 'user_3',
+            senderName: 'David Smith',
+            content: 'Great discussion about the new releases!',
+            type: 'text',
+            timestamp: new Date(Date.now() - 900000),
+            status: 'delivered',
+          },
+        ];
+      } else if (conversationId.startsWith('ai')) {
+        // AI chat - messages without bubbles for AI responses
+        mockMessages = [
+          {
+            id: 'ai1',
+            conversationId: conversationId,
+            senderId: 'current_user',
+            senderName: 'You',
+            content: 'What\'s the reason for the price spike of Nautilus 5711?',
+            type: 'text',
+            timestamp: new Date(Date.now() - 1800000),
+            status: 'read',
+          },
+          {
+            id: 'ai2',
+            conversationId: conversationId,
+            senderId: 'ai_assistant',
+            senderName: 'AI Assistant',
+            content: 'Here\'s the short version:\n\nWhy the Patek Philippe Nautilus 5711 spiked in price\n\n1. Discontinuation: Patek officially stopped producing the steel 5711 in 2021, making existing pieces instantly rarer.\n\n2. Extreme scarcity: Even before that, demand far exceeded supply — long waitlists and limited production.\n\n3. Hype & status: Celebrity ownership, social media buzz, and its reputation as the luxury steel sports watch fueled desire.\n\n4. Speculation: Collectors and investors treated it like an asset, driving up resale values.\n\n5. Brand strategy: Patek replaced it with the costlier gold 5811, reinforcing the 5711\'s exclusivity.\n\nIn short: limited supply + massive hype + discontinuation = price explosion.',
+            type: 'text',
+            timestamp: new Date(Date.now() - 1780000),
+            status: 'read',
+          },
+        ];
+      }
+
       setMessages(prev => new Map(prev).set(conversationId, mockMessages));
 
       // Join conversation room
