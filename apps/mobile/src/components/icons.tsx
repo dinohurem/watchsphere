@@ -9,9 +9,8 @@ interface IconProps {
 
 export function Home({ size = 24, color = '#000', fill = 'none' }: IconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
-      <Path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <Path d="M9 22V12h6v10" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M12 2L3 10V21H10V15H14V21H21V10L12 2Z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -47,9 +46,10 @@ export function MessageSquare({ size = 24, color = '#000', fill = 'none' }: Icon
 
 export function User({ size = 24, color = '#000', fill = 'none' }: IconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
-      <Path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <Path d="M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M12 12C13.3807 12 14.5 10.8807 14.5 9.5C14.5 8.11929 13.3807 7 12 7C10.6193 7 9.5 8.11929 9.5 9.5C9.5 10.8807 10.6193 12 12 12Z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M17.917 20.048C17.46 17.188 14.989 15 12 15C9.01101 15 6.54001 17.188 6.08301 20.048" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -187,6 +187,18 @@ export function Bell({ size = 24, color = '#000', fill = 'none' }: IconProps) {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
       <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <Path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </Svg>
+  );
+}
+
+export function BellNotification({ size = 24, color = '#000', fill = 'none', hasNotification = false }: IconProps & { hasNotification?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M10.27 21H13.73" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M3 2H21V17H3V2Z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      {hasNotification && (
+        <Path d="M21 8C22.6569 8 24 6.65685 24 5C24 3.34315 22.6569 2 21 2C19.3431 2 18 3.34315 18 5C18 6.65685 19.3431 8 21 8Z" fill="#FF383C" stroke="#FF383C" strokeWidth={2} />
+      )}
     </Svg>
   );
 }
@@ -417,16 +429,20 @@ export function MoreHorizontal({ size = 24, color = '#000', fill = 'none' }: Ico
 
 export function BarChart({ size = 24, color = '#000', fill = 'none' }: IconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
-      <Path d="M12 20V10M18 20V4M6 20v-4" strokeLinecap="round" strokeLinejoin="round" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M10 3H14V21H10V3Z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <Path d="M18 9H22V21H18V9Z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <Path d="M2 15H6V21H2V15Z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
     </Svg>
   );
 }
 
 export function MessageCircle({ size = 24, color = '#000', fill = 'none' }: IconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
-      <Path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" strokeLinecap="round" strokeLinejoin="round" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M8 10H16" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M8 14H13" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 3C6.477 3 2 7.029 2 12C2 13.843 2.618 15.556 3.675 16.983L2.451 21.549L7.738 20.132C9.032 20.683 10.473 21 12 21C17.523 21 22 16.971 22 12C22 7.029 17.523 3 12 3Z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -443,11 +459,38 @@ export function UserCircle({ size = 24, color = '#000', fill = 'none' }: IconPro
 
 export function WristWatch({ size = 24, color = '#000', fill = 'none' }: IconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
-      <Path d="M9 18H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3" strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M15 18h3a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3" strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
-      <Path d="M9 6V3h6v3M9 18v3h6v-3" strokeLinecap="round" strokeLinejoin="round" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M7.5 6L8.5 1H15.5L16.5 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M7.5 18L8.5 23H15.5L16.5 18" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M4.5 12C4.5 16.1421 7.85786 19.5 12 19.5C16.1421 19.5 19.5 16.1421 19.5 12C19.5 7.85786 16.1421 4.5 12 4.5C7.85786 4.5 4.5 7.85786 4.5 12Z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M15.6984 12.0565L13.7244 11.2756L12.9435 9.30164C12.8716 9.11964 12.6954 9 12.5 9C12.3046 9 12.1284 9.11964 12.0565 9.30164L11.2756 11.2756L9.30164 12.0565C9.11964 12.1284 9 12.3046 9 12.5C9 12.6954 9.11964 12.8716 9.30164 12.9435L11.2756 13.7244L12.0565 15.6984C12.1284 15.8804 12.3046 16 12.5 16C12.6954 16 12.8716 15.8804 12.9435 15.6984L13.7244 13.7244L15.6984 12.9435C15.8804 12.8716 16 12.6954 16 12.5C16 12.3046 15.8804 12.1284 15.6984 12.0565Z" fill={color} />
+      <Path d="M10.7951 9.20234L10.0379 8.94841L9.78495 8.18501C9.70331 7.93833 9.29749 7.93833 9.21585 8.18501L8.96291 8.94841L8.20571 9.20234C8.08324 9.24345 8 9.35873 8 9.48932C8 9.61991 8.08324 9.73519 8.20571 9.7763L8.96291 10.0302L9.21585 10.7936C9.25667 10.917 9.37113 11 9.5 11C9.62887 11 9.74413 10.9162 9.78415 10.7936L10.0371 10.0302L10.7943 9.7763C10.9168 9.73519 11 9.61991 11 9.48932C11 9.35873 10.9168 9.24345 10.7943 9.20234H10.7951Z" fill={color} />
+    </Svg>
+  );
+}
+
+export function AISparkle({ size = 20, color = '#9747FF' }: IconProps) {
+  const scale = size / 20;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path d="M18.3615 6.72556L14.717 5.28445L13.2748 1.6389C13.0226 1.00334 11.977 1.00334 11.7248 1.6389L10.2826 5.28445L6.63813 6.72556C6.32035 6.85112 6.11035 7.1589 6.11035 7.50001C6.11035 7.84112 6.31924 8.1489 6.63813 8.27445L10.2826 9.71556L11.7248 13.3611C11.8504 13.6789 12.1581 13.8878 12.4993 13.8878C12.8404 13.8878 13.1481 13.6789 13.2737 13.3611L14.7159 9.71556L18.3604 8.27445C18.6781 8.1489 18.8881 7.84112 18.8881 7.50001C18.8881 7.1589 18.6804 6.85112 18.3615 6.72556Z" fill={color} />
+      <Path fillRule="evenodd" clipRule="evenodd" d="M5.27799 10.5555C5.66038 10.5555 5.99371 10.8158 6.08645 11.1868L6.63185 13.3683L8.81344 13.9138C9.18442 14.0065 9.44466 14.3398 9.44466 14.7222C9.44466 15.1047 9.18442 15.4379 8.81344 15.5307L6.63185 16.0761L6.08645 18.2577C5.99371 18.6287 5.66038 18.8889 5.27799 18.8889C4.89561 18.8889 4.56228 18.6287 4.46954 18.2577L3.92414 16.0761L1.74255 15.5307C1.37157 15.4379 1.11133 15.1047 1.11133 14.7222C1.11133 14.3398 1.37157 14.0065 1.74255 13.9138L3.92414 13.3683L4.46954 11.1868C4.56228 10.8158 4.89561 10.5555 5.27799 10.5555Z" fill={color} />
+    </Svg>
+  );
+}
+
+export function TriangleUp({ size = 12, color = '#4AA078' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 12 12" fill="none">
+      <Path d="M6 3L9 9H3L6 3Z" fill={color} />
+    </Svg>
+  );
+}
+
+export function TriangleDown({ size = 12, color = '#CC6045' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 12 12" fill="none">
+      <Path d="M6 9L3 3H9L6 9Z" fill={color} />
     </Svg>
   );
 }

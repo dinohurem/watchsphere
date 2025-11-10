@@ -65,7 +65,7 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
       elevation: isAI && !isUser ? 0 : 1,
     },
     userBubble: {
-      backgroundColor: colors.primary,
+      backgroundColor: '#212121',
       borderBottomRightRadius: 4,
     },
     otherBubble: {

@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/contexts/ThemeContext';
-import { MessageSquare, Users, Zap } from '@/components/icons';
+import { MessageSquare, Users, AISparkle } from '@/components/icons';
 import { AIChatModal } from '@/components/AIChatModal';
 import { SwipeableChatItem } from '@/components/SwipeableChatItem';
 import { router } from 'expo-router';
@@ -108,20 +108,18 @@ export default function ChatScreen() {
           <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
         </View>
         <View style={styles.conversationContent}>
-          <View style={styles.conversationHeader}>
-            <Text style={styles.conversationName}>{item.name}</Text>
-            <Text style={styles.timestamp}>{item.timestamp}</Text>
-          </View>
-          <View style={styles.conversationFooter}>
-            <Text style={styles.lastMessage} numberOfLines={1}>
-              {item.lastMessage}
-            </Text>
-            {item.unread > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{item.unread}</Text>
-              </View>
-            )}
-          </View>
+          <Text style={styles.conversationName}>{item.name}</Text>
+          <Text style={styles.lastMessage} numberOfLines={1}>
+            {item.lastMessage}
+          </Text>
+        </View>
+        <View style={styles.rightSection}>
+          {item.unread > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>{item.unread}</Text>
+            </View>
+          )}
+          <Text style={styles.timestamp}>{item.timestamp}</Text>
         </View>
       </TouchableOpacity>
     </SwipeableChatItem>
@@ -139,20 +137,18 @@ export default function ChatScreen() {
           <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
         </View>
         <View style={styles.conversationContent}>
-          <View style={styles.conversationHeader}>
-            <Text style={styles.conversationName}>{item.name}</Text>
-            <Text style={styles.timestamp}>{item.timestamp}</Text>
-          </View>
-          <View style={styles.conversationFooter}>
-            <Text style={styles.lastMessage} numberOfLines={1}>
-              {item.lastMessage}
-            </Text>
-            {item.unread > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{item.unread}</Text>
-              </View>
-            )}
-          </View>
+          <Text style={styles.conversationName}>{item.name}</Text>
+          <Text style={styles.lastMessage} numberOfLines={1}>
+            {item.lastMessage}
+          </Text>
+        </View>
+        <View style={styles.rightSection}>
+          {item.unread > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>{item.unread}</Text>
+            </View>
+          )}
+          <Text style={styles.timestamp}>{item.timestamp}</Text>
         </View>
       </TouchableOpacity>
     </SwipeableChatItem>
@@ -161,16 +157,16 @@ export default function ChatScreen() {
   const renderAIChatItem = ({ item }: { item: AIChat }) => (
     <TouchableOpacity style={styles.conversationItem} onPress={() => router.push(`/chat/${item.id}` as any)}>
       <View style={[styles.avatar, styles.aiAvatar]}>
-        <Zap size={20} color={colors.primary} />
+        <AISparkle size={20} color="#9747FF" />
       </View>
       <View style={styles.conversationContent}>
-        <View style={styles.conversationHeader}>
-          <Text style={styles.conversationName}>{item.title}</Text>
-          <Text style={styles.timestamp}>{item.timestamp}</Text>
-        </View>
+        <Text style={styles.conversationName}>{item.title}</Text>
         <Text style={styles.lastMessage} numberOfLines={1}>
           {item.preview}
         </Text>
+      </View>
+      <View style={styles.rightSection}>
+        <Text style={styles.timestamp}>{item.timestamp}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -229,7 +225,7 @@ export default function ChatScreen() {
               style={styles.list}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Zap size={48} color={colors.border} />
+                  <AISparkle size={48} color="#9747FF" />
                   <Text style={styles.emptyText}>No AI chat history</Text>
                   <Text style={styles.emptySubtext}>
                     Start a conversation with our AI assistant
@@ -245,12 +241,12 @@ export default function ChatScreen() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: '#FFFFFF',
     },
     header: {
       paddingHorizontal: 16,
       paddingTop: 12,
-      paddingBottom: 12,
+      paddingBottom: 20,
     },
     headerTitle: {
       fontSize: 28,
@@ -263,26 +259,30 @@ export default function ChatScreen() {
       gap: 8,
     },
     tab: {
-      flex: 1,
-      alignItems: 'center',
+      flexDirection: 'row',
       justifyContent: 'center',
-      paddingVertical: 10,
-      borderRadius: 20,
-      backgroundColor: colors.backgroundSecondary,
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 11,
+      paddingHorizontal: 20,
+      borderRadius: 99,
+      backgroundColor: 'rgba(33, 33, 33, 0.05)',
     },
     activeTab: {
-      backgroundColor: colors.text,
+      backgroundColor: '#212121',
     },
     tabText: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: colors.text,
+      fontSize: 15,
+      fontWeight: '400',
+      color: '#212121',
+      letterSpacing: 0.075,
     },
     activeTabText: {
-      color: colors.background,
+      color: '#FFFFFF',
     },
     list: {
       flex: 1,
+      paddingHorizontal: 16,
     },
     newChatButton: {
       flexDirection: 'row',
@@ -300,53 +300,57 @@ export default function ChatScreen() {
     },
     conversationItem: {
       flexDirection: 'row',
-      padding: 16,
+      paddingVertical: 12,
+      paddingHorizontal: 0,
     },
     avatar: {
-      width: 48,
-      height: 48,
+      width: 44,
+      height: 44,
       borderRadius: 8,
-      backgroundColor: colors.primary,
+      backgroundColor: '#F4F4F4',
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
+      marginRight: 10,
     },
     aiAvatar: {
-      backgroundColor: colors.primaryLight,
+      backgroundColor: '#F4F4F4',
     },
     avatarText: {
       fontSize: 18,
       fontWeight: '600',
-      color: '#FFFFFF',
+      color: '#212121',
     },
     conversationContent: {
       flex: 1,
-    },
-    conversationHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 2,
+      paddingLeft: 10,
+      justifyContent: 'center',
     },
     conversationName: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    timestamp: {
       fontSize: 13,
       fontWeight: '400',
-      color: colors.textSecondary,
+      color: '#212121',
+      letterSpacing: 0.065,
+      marginBottom: 4,
     },
-    conversationFooter: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+    rightSection: {
       alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+    },
+    timestamp: {
+      fontSize: 11,
+      fontWeight: '400',
+      color: '#212121',
+      opacity: 0.5,
+      letterSpacing: 0.055,
     },
     lastMessage: {
       flex: 1,
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: '400',
-      color: colors.textSecondary,
+      color: '#212121',
+      opacity: 0.5,
+      letterSpacing: 0.065,
     },
     unreadBadge: {
       minWidth: 20,

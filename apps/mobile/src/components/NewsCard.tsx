@@ -13,9 +13,9 @@ export function NewsCard({ icon, text, source }: NewsCardProps) {
   const styles = StyleSheet.create({
     container: {
       flexDirection: 'row',
-      backgroundColor: colors.card,
-      borderRadius: 12,
+      backgroundColor: 'transparent',
       padding: 16,
+      paddingLeft: 0,
       marginBottom: 12,
       alignItems: 'center',
     },

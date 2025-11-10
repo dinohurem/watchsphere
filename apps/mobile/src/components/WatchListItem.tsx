@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MiniPriceChart } from './MiniPriceChart';
+import { TriangleUp, TriangleDown } from './icons';
 
 interface WatchListItemProps {
   brand: string;
@@ -30,11 +31,11 @@ export function WatchListItem({
 
   const styles = StyleSheet.create({
     container: {
-      backgroundColor: colors.card,
-      paddingVertical: 16,
-      paddingHorizontal: 16,
+      backgroundColor: 'transparent',
+      paddingVertical: 12,
+      paddingHorizontal: 0,
       borderBottomWidth: 1,
-      borderBottomColor: colors.borderLight,
+      borderBottomColor: 'rgba(33, 33, 33, 0.05)',
     },
     content: {
       flexDirection: 'row',
@@ -43,53 +44,67 @@ export function WatchListItem({
     },
     leftSection: {
       flex: 1,
+      marginRight: 8,
     },
     centerSection: {
-      marginHorizontal: 12,
+      marginLeft: 16,
+      marginRight: 12,
       justifyContent: 'center',
     },
     rightSection: {
       alignItems: 'flex-end',
+      justifyContent: 'center',
     },
     title: {
-      fontSize: 16,
-      fontWeight: '400',
-      color: colors.text,
-      marginBottom: 2,
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#212121',
+      letterSpacing: 0.065,
     },
     subtitle: {
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '400',
-      color: colors.textTertiary,
+      color: '#212121',
+      opacity: 0.5,
+      letterSpacing: 0.065,
     },
     priceRow: {
       flexDirection: 'row',
-      alignItems: 'baseline',
+      alignItems: 'center',
+      gap: 4,
       marginBottom: 2,
     },
-    fromText: {
-      fontSize: 12,
+    fromLabel: {
+      fontSize: 11,
       fontWeight: '400',
-      color: colors.textTertiary,
+      color: '#212121',
+      opacity: 0.5,
+      letterSpacing: 0.055,
     },
     price: {
-      fontSize: 16,
+      fontSize: 13,
       fontWeight: '600',
-      color: colors.text,
+      color: '#212121',
+      letterSpacing: 0.065,
     },
     priceChangeRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      gap: 4,
+    },
+    priceChangeIcon: {
+      width: 12,
+      height: 12,
     },
     priceChangeUp: {
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: '400',
-      color: colors.success,
+      color: '#4AA078',
     },
     priceChangeDown: {
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: '400',
-      color: colors.error,
+      color: '#CC6045',
     },
   });
 
@@ -110,13 +125,18 @@ export function WatchListItem({
 
         <View style={styles.rightSection}>
           <View style={styles.priceRow}>
-            <Text style={styles.fromText}>from </Text>
+            <Text style={styles.fromLabel}>from</Text>
             <Text style={styles.price}>€{price.toLocaleString()}</Text>
           </View>
           {priceChange !== undefined && (
             <View style={styles.priceChangeRow}>
+              {hasPositiveChange ? (
+                <TriangleUp size={8} color="#4AA078" />
+              ) : (
+                <TriangleDown size={8} color="#CC6045" />
+              )}
               <Text style={hasPositiveChange ? styles.priceChangeUp : styles.priceChangeDown}>
-                {hasPositiveChange ? '▲' : '▼'} {Math.abs(priceChange).toFixed(1)}%
+                {Math.abs(priceChange).toFixed(1)}%
               </Text>
             </View>
           )}

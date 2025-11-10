@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { X } from './icons';
 
@@ -29,6 +30,12 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = React.useState<'buy' | 'sell'>('buy');
   const orders = activeTab === 'buy' ? buyOrders : sellOrders;
+
+  const handleOrderPress = (index: number) => {
+    onClose();
+    // Navigate to watch details page with the order index as ID
+    router.push(`/watch-details/${index}`);
+  };
 
   return (
     <Modal
@@ -86,9 +93,10 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
           {orders.map((order, index) => {
             const { emoji, initials } = countryData[order.country];
             return (
-              <View
+              <TouchableOpacity
                 key={index}
                 style={[styles.tableRow, index % 2 === 1 && styles.tableRowEven]}
+                onPress={() => handleOrderPress(index)}
               >
                 <View style={[styles.cell, { flex: 0.6 }]}>
                   <View style={styles.flagContainer}>
@@ -99,7 +107,7 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
                 <Text style={[styles.cell, { flex: 1 }]}>{order.date}</Text>
                 <Text style={[styles.cell, { flex: 1.5 }]}>{order.condition}</Text>
                 <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{order.price}</Text>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </ScrollView>

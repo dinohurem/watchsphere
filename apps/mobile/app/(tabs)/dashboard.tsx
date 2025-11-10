@@ -2,47 +2,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, Tex
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Plus, X, Package, ChevronRight } from '@/components/icons';
-
-// Mock data for now until backend is ready
-const mockInventory = [
-  {
-    id: '1',
-    brand: 'Rolex',
-    model: 'Submariner Date',
-    reference: '126610LN, New Unworn 41mm',
-    price: 12352,
-    condition: 'Excellent',
-    image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=300&fit=crop'
-  },
-  {
-    id: '2',
-    brand: 'Rolex',
-    model: 'Submariner Date',
-    reference: '126610LN, New Unworn 41mm',
-    price: 12352,
-    condition: 'New',
-    image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=300&fit=crop'
-  },
-  {
-    id: '3',
-    brand: 'Rolex',
-    model: 'Submariner Date',
-    reference: '126610LN, New Unworn 41mm',
-    price: 12352,
-    condition: 'Excellent',
-    image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=300&fit=crop'
-  },
-  {
-    id: '4',
-    brand: 'Rolex',
-    model: 'Submariner Date',
-    reference: '126610LN, New Unworn 41mm',
-    price: 12352,
-    condition: 'Excellent',
-    image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=300&fit=crop'
-  },
-];
+import { Plus, X, Package } from '@/components/icons';
+import { WatchlistCard } from '@/components/WatchlistCard';
 
 interface ListingStep {
   id: number;
@@ -52,10 +13,37 @@ interface ListingStep {
 
 export default function DashboardScreen() {
   const { colors } = useTheme();
-  const [inventory, setInventory] = useState<any[]>([]);
+  const [inventory] = useState<any[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
-  const loading = false;
+
+  // Mock watchlist data
+  const watchlist = [
+    {
+      id: '1',
+      name: 'Rolex Submariner',
+      code: '126610LN',
+      price: 12352,
+      priceChange: -0.7,
+      priceHistory: [12500, 12450, 12400, 12380, 12370, 12352],
+    },
+    {
+      id: '2',
+      name: 'Patek Philippe Nautilus',
+      code: '5712/1A',
+      price: 97467,
+      priceChange: 1.2,
+      priceHistory: [95000, 95500, 96000, 96500, 97000, 97467],
+    },
+    {
+      id: '3',
+      name: 'Audemars Piguet Royal Oak',
+      code: '15500ST',
+      price: 65000,
+      priceChange: 0.5,
+      priceHistory: [64000, 64200, 64500, 64700, 64900, 65000],
+    },
+  ];
 
   const steps: ListingStep[] = [
     { id: 1, title: 'Basic information', completed: currentStep > 1 },
@@ -76,12 +64,15 @@ export default function DashboardScreen() {
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 16,
-      paddingVertical: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(33, 33, 33, 0.05)',
     },
     headerTitle: {
-      fontSize: 28,
-      fontWeight: '700',
+      fontSize: 18,
+      fontWeight: '600',
       color: colors.text,
+      letterSpacing: 0.5,
     },
     addButton: {
       padding: 4,
@@ -92,7 +83,32 @@ export default function DashboardScreen() {
       flex: 1,
     },
     scrollContent: {
-      padding: 16,
+      paddingBottom: 16,
+    },
+    section: {
+      marginBottom: 0,
+    },
+    sectionHeaderContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+    },
+    sectionTitleText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#212121',
+      lineHeight: 20,
+      letterSpacing: 0.08,
+    },
+    sectionContent: {
+      paddingHorizontal: 16,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: 'rgba(33, 33, 33, 0.05)',
+      marginVertical: 16,
     },
     emptyState: {
       flex: 1,
@@ -102,36 +118,41 @@ export default function DashboardScreen() {
       paddingTop: 100,
     },
     emptyIconContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: colors.backgroundSecondary,
+      width: 64,
+      height: 64,
+      borderRadius: 80,
+      backgroundColor: '#F7F7F7',
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: 16,
+      marginBottom: 24,
     },
     emptyTitle: {
       fontSize: 20,
       fontWeight: '600',
-      color: colors.text,
-      marginBottom: 8,
+      color: '#1D1D1F',
+      marginBottom: 12,
+      textAlign: 'center',
     },
     emptySubtitle: {
       fontSize: 15,
-      color: colors.textSecondary,
+      fontWeight: '400',
+      color: '#1D1D1F',
       textAlign: 'center',
       marginBottom: 24,
+      opacity: 0.6,
+      lineHeight: 20,
     },
     createButton: {
-      backgroundColor: colors.text,
-      paddingHorizontal: 32,
+      backgroundColor: '#212121',
+      paddingHorizontal: 20,
       paddingVertical: 14,
-      borderRadius: 8,
+      borderRadius: 12,
     },
     createButtonText: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: '600',
-      color: colors.background,
+      color: '#FFFFFF',
+      letterSpacing: 0.5,
     },
     grid: {
       flexDirection: 'row',
@@ -346,31 +367,55 @@ export default function DashboardScreen() {
 
         {/* Content */}
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {inventory.length === 0 ? (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <Package size={40} color={colors.textSecondary} />
-              </View>
-              <Text style={styles.emptyTitle}>Create new listings here</Text>
-              <Text style={styles.emptySubtitle}>Listing currently empty, list your watches and manage them all in one place.</Text>
-              <TouchableOpacity style={styles.createButton} onPress={() => setShowCreateModal(true)}>
-                <Text style={styles.createButtonText}>Create Listing</Text>
-              </TouchableOpacity>
+          {/* Listings Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderContainer}>
+              <Text style={styles.sectionTitleText}>My Listings</Text>
             </View>
-          ) : (
-            <View style={styles.grid}>
-              {inventory.map((item) => (
-                <TouchableOpacity key={item.id} style={styles.inventoryCard}>
-                  <Image source={{ uri: item.image }} style={styles.inventoryImage} resizeMode="cover" />
-                  <View style={styles.inventoryInfo}>
-                    <Text style={styles.inventoryBrand}>{item.brand} {item.model}</Text>
-                    <Text style={styles.inventoryReference}>{item.reference}</Text>
-                    <Text style={styles.inventoryPrice}>€{item.price.toLocaleString()}</Text>
-                  </View>
+            {inventory.length === 0 ? (
+              <View style={[styles.emptyState, { paddingTop: 40 }]}>
+                <View style={styles.emptyIconContainer}>
+                  <Package size={32} color="#212121" />
+                </View>
+                <Text style={styles.emptyTitle}>Create new listings here</Text>
+                <Text style={styles.emptySubtitle}>Listing currently empty, list your watches and manage them all in one place.</Text>
+                <TouchableOpacity style={styles.createButton} onPress={() => setShowCreateModal(true)}>
+                  <Text style={styles.createButtonText}>Create new listing</Text>
                 </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={[styles.grid, styles.sectionContent]}>
+                {inventory.map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.inventoryCard}>
+                    <Image source={{ uri: item.image }} style={styles.inventoryImage} resizeMode="cover" />
+                    <View style={styles.inventoryInfo}>
+                      <Text style={styles.inventoryBrand}>{item.brand} {item.model}</Text>
+                      <Text style={styles.inventoryReference}>{item.reference}</Text>
+                      <Text style={styles.inventoryPrice}>€{item.price.toLocaleString()}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* Watchlist Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderContainer}>
+              <Text style={styles.sectionTitleText}>My Watchlist</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              {watchlist.map((watch) => (
+                <WatchlistCard
+                  key={watch.id}
+                  watch={watch}
+                  onPress={() => console.log('Watch pressed:', watch.id)}
+                />
               ))}
             </View>
-          )}
+          </View>
         </ScrollView>
       </SafeAreaView>
 

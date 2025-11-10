@@ -131,7 +131,7 @@ export default function MarketScreen() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: '#FFFFFF',
     },
     searchContainer: {
       paddingHorizontal: 16,
@@ -157,6 +157,7 @@ export default function MarketScreen() {
     },
     scrollView: {
       flex: 1,
+      paddingHorizontal: 16,
     },
   });
 

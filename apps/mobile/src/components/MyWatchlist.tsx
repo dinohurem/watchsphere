@@ -22,7 +22,7 @@ export function MyWatchlist({ watches, onViewAll, onWatchPress }: MyWatchlistPro
     container: {
       paddingHorizontal: 16,
       paddingVertical: 20,
-      backgroundColor: colors.backgroundSecondary,
+      backgroundColor: '#FFFFFF',
     },
     header: {
       flexDirection: 'row',
@@ -31,9 +31,11 @@ export function MyWatchlist({ watches, onViewAll, onWatchPress }: MyWatchlistPro
       marginBottom: 16,
     },
     title: {
-      fontSize: 20,
+      fontSize: 16,
       fontWeight: '600',
-      color: colors.text,
+      color: '#212121',
+      lineHeight: 20,
+      letterSpacing: 0.08,
     },
     viewAllButton: {
       flexDirection: 'row',

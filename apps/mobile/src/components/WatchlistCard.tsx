@@ -26,24 +26,23 @@ export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
     container: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
+      justifyContent: 'space-between',
+      backgroundColor: 'transparent',
+      paddingVertical: 16,
+      paddingHorizontal: 0,
     },
     leftSection: {
       flex: 1,
       marginRight: 12,
     },
     name: {
-      fontSize: 15,
+      fontSize: 13,
       fontWeight: '600',
       color: colors.text,
       marginBottom: 2,
     },
     code: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: '400',
       color: colors.textTertiary,
     },
@@ -53,11 +52,21 @@ export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
     rightSection: {
       alignItems: 'flex-end',
     },
+    priceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginBottom: 2,
+    },
+    fromLabel: {
+      fontSize: 11,
+      fontWeight: '400',
+      color: colors.textTertiary,
+    },
     price: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 2,
     },
     priceChange: {
       fontSize: 12,
@@ -94,7 +103,10 @@ export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
       </View>
 
       <View style={styles.rightSection}>
-        <Text style={styles.price}>{formattedPrice}</Text>
+        <View style={styles.priceRow}>
+          <Text style={styles.fromLabel}>from</Text>
+          <Text style={styles.price}>{formattedPrice}</Text>
+        </View>
         <Text style={[styles.priceChange, hasPositiveChange ? styles.priceUp : styles.priceDown]}>
           {hasPositiveChange ? '▲' : '▼'} {Math.abs(watch.priceChange).toFixed(1)}%
         </Text>

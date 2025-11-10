@@ -223,7 +223,7 @@ export default function HomeScreen() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: '#FFFFFF',
     },
     scrollView: {
       flex: 1,
@@ -231,7 +231,7 @@ export default function HomeScreen() {
     quickAccessContainer: {
       paddingHorizontal: 16,
       paddingVertical: 20,
-      backgroundColor: colors.backgroundSecondary,
+      backgroundColor: '#FFFFFF',
     },
     sectionHeader: {
       flexDirection: 'row',
@@ -240,9 +240,11 @@ export default function HomeScreen() {
       marginBottom: 16,
     },
     sectionTitle: {
-      fontSize: 20,
+      fontSize: 16,
       fontWeight: '600',
-      color: colors.text,
+      color: '#212121',
+      lineHeight: 20,
+      letterSpacing: 0.08,
     },
     reorganizeButton: {
       flexDirection: 'row',
@@ -360,19 +362,18 @@ export default function HomeScreen() {
       paddingHorizontal: 16,
     },
     newsTitle: {
-      fontSize: 20,
+      fontSize: 16,
       fontWeight: '600',
-      color: colors.text,
+      color: '#212121',
+      lineHeight: 20,
+      letterSpacing: 0.08,
       marginBottom: 16,
     },
     viewAllButton: {
       marginTop: 12,
       padding: 16,
-      backgroundColor: colors.card,
-      borderRadius: 12,
+      backgroundColor: 'transparent',
       alignItems: 'center',
-      borderWidth: 1,
-      borderColor: colors.border,
     },
     viewAllText: {
       fontSize: 16,
@@ -435,7 +436,7 @@ export default function HomeScreen() {
 
           {/* Market News */}
           <View style={styles.newsSection}>
-            <Text style={styles.newsTitle}>Latest from the Market</Text>
+            <Text style={styles.newsTitle}>Latest News</Text>
             {newsItems.map((item) => (
               <NewsCard
                 key={item.id}

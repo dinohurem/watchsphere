@@ -24,23 +24,23 @@ export default function TabLayout() {
         <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textTertiary,
+          tabBarActiveTintColor: '#0088FF',
+          tabBarInactiveTintColor: '#212121',
           tabBarStyle: {
-            backgroundColor: colors.card,
+            backgroundColor: '#FFFFFF',
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: 'rgba(33, 33, 33, 0.05)',
             height: Platform.OS === 'ios' ? 85 : 65,
             paddingBottom: Platform.OS === 'ios' ? 30 : 8,
             paddingTop: 8,
           },
           tabBarLabelStyle: {
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: '500',
-            marginTop: -4,
+            marginTop: 4,
           },
           tabBarIconStyle: {
-            marginTop: 4,
+            marginTop: 0,
           },
         }}
       >
@@ -48,8 +48,10 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <Home size={24} color={color} fill="none" />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ opacity: focused ? 1 : 0.7 }}>
+              <Home size={24} color={color} fill="none" />
+            </View>
           ),
         }}
       />
@@ -57,8 +59,10 @@ export default function TabLayout() {
         name="market"
         options={{
           title: 'Market',
-          tabBarIcon: ({ color }) => (
-            <BarChart size={24} color={color} fill="none" />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ opacity: focused ? 1 : 0.7 }}>
+              <BarChart size={24} color={color} fill="none" />
+            </View>
           ),
         }}
       />
@@ -66,8 +70,10 @@ export default function TabLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color }) => (
-            <WristWatch size={24} color={color} fill="none" />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ opacity: focused ? 1 : 1 }}>
+              <WristWatch size={24} color={color} fill="none" />
+            </View>
           ),
         }}
       />
@@ -75,8 +81,10 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: 'Chat',
-          tabBarIcon: ({ color }) => (
-            <MessageCircle size={24} color={color} fill="none" />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ opacity: focused ? 1 : 0.7 }}>
+              <MessageCircle size={24} color={color} fill="none" />
+            </View>
           ),
         }}
       />
@@ -84,8 +92,10 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <User size={24} color={color} fill="none" />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ opacity: focused ? 1 : 0.7 }}>
+              <User size={24} color={color} fill="none" />
+            </View>
           ),
         }}
       />
