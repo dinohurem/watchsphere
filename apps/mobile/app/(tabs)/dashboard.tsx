@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 // Mock data for now until backend is ready
 const mockInventory = [
@@ -15,9 +16,83 @@ const mockStats = {
 };
 
 export default function DashboardScreen() {
+  const { colors } = useTheme();
   const [inventory] = useState<any[]>(mockInventory);
   const [stats] = useState<any>(mockStats);
   const loading = false;
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollView: {
+      flex: 1,
+      padding: 16,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 16,
+    },
+    subtitle: {
+      fontSize: 16,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: 32,
+    },
+    statsGrid: {
+      flexDirection: 'row',
+      gap: 12,
+      marginBottom: 16,
+    },
+    statCard: {
+      flex: 1,
+      backgroundColor: colors.card,
+      padding: 16,
+      borderRadius: 12,
+    },
+    statLabel: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    statValue: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: colors.text,
+      marginTop: 4,
+    },
+    emptyState: {
+      padding: 32,
+      alignItems: 'center',
+    },
+    list: {
+      gap: 12,
+    },
+    card: {
+      backgroundColor: colors.card,
+      padding: 16,
+      borderRadius: 12,
+      marginBottom: 12,
+    },
+    watchTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    price: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.text,
+      marginTop: 8,
+    },
+    details: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginTop: 4,
+    },
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -62,76 +137,3 @@ export default function DashboardScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  scrollView: {
-    flex: 1,
-    padding: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 32,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginTop: 4,
-  },
-  emptyState: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  list: {
-    gap: 12,
-  },
-  card: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  watchTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  price: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginTop: 8,
-  },
-  details: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-});

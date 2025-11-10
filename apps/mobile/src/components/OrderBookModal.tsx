@@ -1,5 +1,7 @@
+import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '@/contexts/ThemeContext';
 import { X } from './icons';
 
 interface OrderBookEntry {
@@ -24,6 +26,7 @@ interface OrderBookModalProps {
 }
 
 export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = [] }: OrderBookModalProps) {
+  const { colors } = useTheme();
   const [activeTab, setActiveTab] = React.useState<'buy' | 'sell'>('buy');
   const orders = activeTab === 'buy' ? buyOrders : sellOrders;
 
@@ -104,9 +107,6 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
     </Modal>
   );
 }
-
-// Add React import at the top
-import React from 'react';
 
 const styles = StyleSheet.create({
   container: {

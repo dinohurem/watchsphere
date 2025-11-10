@@ -1,5 +1,7 @@
+import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '@/contexts/ThemeContext';
 import { X } from './icons';
 import { LocationFilter, Location } from './LocationFilter';
 import { YearMonthFilter, YearMonthSelection } from './YearMonthFilter';
@@ -31,6 +33,7 @@ const AVAILABLE_BRANDS = [
 ];
 
 export function FilterModal({ visible, onClose, filters, onApplyFilters }: FilterModalProps) {
+  const { colors } = useTheme();
   const [tempFilters, setTempFilters] = React.useState<MarketFilters>(filters);
 
   React.useEffect(() => {
@@ -95,6 +98,110 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
     setTempFilters(resetFilters);
   };
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      position: 'relative',
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    closeButton: {
+      position: 'absolute',
+      right: 16,
+      top: 12,
+      padding: 8,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    section: {
+      paddingHorizontal: 16,
+      paddingVertical: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 12,
+    },
+    brandGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    brandButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: colors.backgroundSecondary,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    brandButtonActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    brandText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.text,
+    },
+    brandTextActive: {
+      color: '#FFFFFF',
+    },
+    footer: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+      gap: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    resetButton: {
+      flex: 1,
+      paddingVertical: 16,
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    resetButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    applyButton: {
+      flex: 2,
+      paddingVertical: 16,
+      borderRadius: 12,
+      backgroundColor: colors.text,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    applyButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.background,
+    },
+  });
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -102,7 +209,7 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Filters</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <X size={24} color="#000000" />
+            <X size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -170,110 +277,3 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
     </Modal>
   );
 }
-
-// Add React import
-import React from 'react';
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-    position: 'relative',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  closeButton: {
-    position: 'absolute',
-    right: 16,
-    top: 12,
-    padding: 8,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  section: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 12,
-  },
-  brandGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  brandButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#F5F5F5',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  brandButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  brandText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000000',
-  },
-  brandTextActive: {
-    color: '#FFFFFF',
-  },
-  footer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
-  },
-  resetButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  resetButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  applyButton: {
-    flex: 2,
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  applyButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-});

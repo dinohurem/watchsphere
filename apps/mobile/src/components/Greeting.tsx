@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useMemo } from 'react';
+import { router } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Bell } from './icons';
@@ -50,7 +51,10 @@ export function Greeting() {
       <Text style={styles.greetingText}>
         {greeting} {firstName}.
       </Text>
-      <TouchableOpacity style={styles.notificationButton}>
+      <TouchableOpacity
+        style={styles.notificationButton}
+        onPress={() => router.push('/(tabs)/notifications' as any)}
+      >
         <Bell size={20} color={colors.text} />
       </TouchableOpacity>
     </View>

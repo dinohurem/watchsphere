@@ -1,275 +1,236 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
-import { useContext } from 'react';
-import { AIButtonContext } from './_layout';
-import { useTheme, Theme } from '@/contexts/ThemeContext';
-import { User, Clock, Star, Bell, Languages, FileText, Lock, Database, ChevronRight } from '@/components/icons';
+import { useTheme } from '@/contexts/ThemeContext';
+import { User, Settings, Edit2, Heart, ChevronRight } from '@/components/icons';
+
+interface FavoriteWatch {
+  id: string;
+  name: string;
+  reference: string;
+  price: string;
+  image?: string;
+}
 
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
-  const { showAIButton, setShowAIButton } = useContext(AIButtonContext);
-  const { theme, setTheme, colors } = useTheme();
+  const { colors } = useTheme();
 
-  const handleLogout = () => {
-    logout();
-    router.replace('/(auth)/login');
-  };
-
-  const getThemeLabel = (themeValue: Theme) => {
-    switch (themeValue) {
-      case 'light':
-        return 'Light';
-      case 'dark':
-        return 'Dark';
-      case 'system':
-        return 'System';
-    }
-  };
+  const favoriteWatches: FavoriteWatch[] = [
+    {
+      id: '1',
+      name: 'Rolex Submariner Date',
+      reference: '126610LN, New Unworn 41...',
+      price: '€12,352',
+    },
+    {
+      id: '2',
+      name: 'Rolex Submariner Date',
+      reference: '126610LN, New Unworn 41...',
+      price: '€12,352',
+    },
+  ];
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.backgroundSecondary,
+      backgroundColor: colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    headerButton: {
+      padding: 4,
     },
     scrollView: {
       flex: 1,
-      padding: 16,
     },
-    title: {
-      fontSize: 28,
-      fontWeight: '700',
-      color: colors.text,
-      marginBottom: 24,
+    profileSection: {
+      alignItems: 'center',
+      paddingVertical: 24,
+      paddingHorizontal: 16,
     },
     profileImageContainer: {
-      alignItems: 'center',
-      marginBottom: 24,
+      position: 'relative',
+      marginBottom: 16,
     },
     profileImage: {
-      width: 80,
-      height: 80,
-      borderRadius: 12,
-      backgroundColor: colors.backgroundTertiary,
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      backgroundColor: colors.backgroundSecondary,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: 12,
+    },
+    editButton: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.text,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 3,
+      borderColor: colors.background,
     },
     userName: {
-      fontSize: 20,
+      fontSize: 24,
       fontWeight: '600',
       color: colors.text,
       marginBottom: 4,
     },
-    userEmail: {
-      fontSize: 14,
+    userCustomerId: {
+      fontSize: 15,
+      fontWeight: '400',
       color: colors.textSecondary,
     },
-    card: {
-      backgroundColor: colors.card,
-      padding: 16,
-      borderRadius: 12,
+    favoritesSection: {
+      paddingHorizontal: 16,
+      paddingVertical: 20,
+    },
+    favoritesHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
       marginBottom: 16,
     },
-    cardTitle: {
-      fontSize: 16,
+    favoritesTitle: {
+      fontSize: 20,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 12,
     },
-    menuItem: {
+    seeAllButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderLight,
+      gap: 4,
     },
-    menuIconContainer: {
+    seeAllText: {
+      fontSize: 15,
+      fontWeight: '400',
+      color: colors.textSecondary,
+    },
+    favoritesList: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    favoriteCard: {
+      width: 200,
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: colors.backgroundSecondary,
+    },
+    favoriteImage: {
+      width: '100%',
+      height: 150,
+      backgroundColor: colors.background,
+      position: 'relative',
+    },
+    favoriteHeart: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
       width: 32,
       height: 32,
-      borderRadius: 8,
-      backgroundColor: colors.backgroundTertiary,
+      borderRadius: 16,
+      backgroundColor: colors.card,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
     },
-    menuText: {
-      flex: 1,
+    favoriteInfo: {
+      padding: 12,
+    },
+    favoriteName: {
       fontSize: 15,
+      fontWeight: '600',
       color: colors.text,
+      marginBottom: 4,
     },
-    menuTextContainer: {
-      flex: 1,
-    },
-    themeButtons: {
-      flexDirection: 'row',
-      gap: 8,
-      marginTop: 8,
-    },
-    themeButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 8,
-      backgroundColor: colors.backgroundTertiary,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    themeButtonActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    themeButtonText: {
+    favoriteReference: {
       fontSize: 13,
-      fontWeight: '500',
-      color: colors.text,
+      fontWeight: '400',
+      color: colors.textSecondary,
+      marginBottom: 8,
     },
-    themeButtonTextActive: {
-      color: '#FFFFFF',
-    },
-    logoutButton: {
-      backgroundColor: colors.error,
-      padding: 16,
-      borderRadius: 12,
-      alignItems: 'center',
-      marginTop: 8,
-      marginBottom: 32,
-    },
-    logoutText: {
-      color: '#FFFFFF',
+    favoritePrice: {
       fontSize: 16,
       fontWeight: '600',
+      color: colors.text,
     },
   });
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <Text style={styles.title}>Profile</Text>
-
-        {/* Profile Image */}
-        <View style={styles.profileImageContainer}>
-          <View style={styles.profileImage}>
-            <User size={48} color={colors.primary} />
-          </View>
-          <Text style={styles.userName}>{user?.name}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
-        </View>
-
-        {/* Account Section */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Account</Text>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <User size={20} color={colors.text} />
-            </View>
-            <Text style={styles.menuText}>Profile</Text>
-            <ChevronRight size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Clock size={20} color={colors.text} />
-            </View>
-            <Text style={styles.menuText}>History</Text>
-            <ChevronRight size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Star size={20} color={colors.text} />
-            </View>
-            <Text style={styles.menuText}>Reviews</Text>
-            <ChevronRight size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Settings Section */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Settings</Text>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Bell size={20} color={colors.text} />
-            </View>
-            <Text style={styles.menuText}>Notifications</Text>
-            <ChevronRight size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-
-          <View style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <FileText size={20} color={colors.text} />
-            </View>
-            <View style={styles.menuTextContainer}>
-              <Text style={styles.menuText}>Theme</Text>
-              <View style={styles.themeButtons}>
-                {(['light', 'dark', 'system'] as Theme[]).map((themeOption) => (
-                  <TouchableOpacity
-                    key={themeOption}
-                    style={[
-                      styles.themeButton,
-                      theme === themeOption && styles.themeButtonActive,
-                    ]}
-                    onPress={() => setTheme(themeOption)}
-                  >
-                    <Text
-                      style={[
-                        styles.themeButtonText,
-                        theme === themeOption && styles.themeButtonTextActive,
-                      ]}
-                    >
-                      {getThemeLabel(themeOption)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Languages size={20} color={colors.text} />
-            </View>
-            <Text style={styles.menuText}>Language</Text>
-            <ChevronRight size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Privacy Section */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Privacy</Text>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <FileText size={20} color={colors.text} />
-            </View>
-            <Text style={styles.menuText}>Privacy Policy</Text>
-            <ChevronRight size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Lock size={20} color={colors.text} />
-            </View>
-            <Text style={styles.menuText}>Terms and Conditions</Text>
-            <ChevronRight size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Database size={20} color={colors.text} />
-            </View>
-            <Text style={styles.menuText}>Data</Text>
-            <ChevronRight size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>My Profile</Text>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => router.push('/settings' as any)}
+        >
+          <Settings size={24} color={colors.text} />
         </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Profile Section */}
+        <View style={styles.profileSection}>
+          <View style={styles.profileImageContainer}>
+            <View style={styles.profileImage}>
+              <User size={48} color={colors.textSecondary} />
+            </View>
+            <TouchableOpacity style={styles.editButton}>
+              <Edit2 size={18} color={colors.background} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.userName}>{user?.name || 'Fabian Wirtz'}</Text>
+          <Text style={styles.userCustomerId}>Customer ID: 009 978 333</Text>
+        </View>
+
+        {/* Favorites Section */}
+        <View style={styles.favoritesSection}>
+          <View style={styles.favoritesHeader}>
+            <Text style={styles.favoritesTitle}>Favorites</Text>
+            <TouchableOpacity style={styles.seeAllButton}>
+              <Text style={styles.seeAllText}>See All</Text>
+              <ChevronRight size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.favoritesList}>
+              {favoriteWatches.map((watch) => (
+                <TouchableOpacity
+                  key={watch.id}
+                  style={styles.favoriteCard}
+                  onPress={() => router.push(`/watch/${watch.id}` as any)}
+                >
+                  <View style={styles.favoriteImage}>
+                    <View style={styles.favoriteHeart}>
+                      <Heart size={20} color="#FF3B30" fill="#FF3B30" />
+                    </View>
+                  </View>
+                  <View style={styles.favoriteInfo}>
+                    <Text style={styles.favoriteName}>{watch.name}</Text>
+                    <Text style={styles.favoriteReference}>{watch.reference}</Text>
+                    <Text style={styles.favoritePrice}>{watch.price}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

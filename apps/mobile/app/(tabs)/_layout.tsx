@@ -1,19 +1,16 @@
 import { Tabs } from 'expo-router';
 import { Platform, View, Text, StyleSheet } from 'react-native';
-import { useState, createContext } from 'react';
+import { useState, useContext } from 'react';
 import { Home, Store, Watch, MessageSquare, User } from '@/components/icons';
 import { FloatingAIButtonV2 } from '@/components/FloatingAIButtonV2';
 import { AIChatModal } from '@/components/AIChatModal';
-
-// Create context for AI button visibility
-export const AIButtonContext = createContext({
-  showAIButton: true,
-  setShowAIButton: (show: boolean) => {},
-});
+import { useTheme } from '@/contexts/ThemeContext';
+import { AIButtonContext } from '@/contexts/AIButtonContext';
 
 export default function TabLayout() {
+  const { colors, colorScheme } = useTheme();
   const [showAIChat, setShowAIChat] = useState(false);
-  const [showAIButton, setShowAIButton] = useState(true);
+  const { showAIButton, setShowAIButton } = useContext(AIButtonContext);
   const [showToast, setShowToast] = useState(false);
 
   const handleHideButton = () => {
@@ -23,17 +20,16 @@ export default function TabLayout() {
   };
 
   return (
-    <AIButtonContext.Provider value={{ showAIButton, setShowAIButton }}>
-      <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
         <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#007AFF',
-          tabBarInactiveTintColor: '#8E8E93',
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.textTertiary,
           tabBarStyle: {
-            backgroundColor: '#FFFFFF',
+            backgroundColor: colors.card,
             borderTopWidth: 1,
-            borderTopColor: '#E5E5EA',
+            borderTopColor: colors.border,
             height: Platform.OS === 'ios' ? 85 : 65,
             paddingBottom: Platform.OS === 'ios' ? 30 : 8,
             paddingTop: 8,
@@ -93,6 +89,12 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null, // Hide from tab bar but keep as tab route
+        }}
+      />
     </Tabs>
 
         {/* Floating AI Chat Button - visible on all screens */}
@@ -115,7 +117,6 @@ export default function TabLayout() {
           </View>
         )}
       </View>
-    </AIButtonContext.Provider>
   );
 }
 

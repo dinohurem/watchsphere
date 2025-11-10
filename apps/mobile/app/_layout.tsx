@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { initializeStorage } from '@/lib/storage';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
+import { ChatProvider } from '@/contexts/ChatContext';
+import { AIButtonProvider } from '@/contexts/AIButtonContext';
 import { AnimatedSplashScreen } from '@/components/AnimatedSplashScreen';
 
 // Initialize storage for Zustand persist
@@ -60,7 +62,11 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <RootLayoutNav />
+        <AIButtonProvider>
+          <ChatProvider>
+            <RootLayoutNav />
+          </ChatProvider>
+        </AIButtonProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '@/contexts/ThemeContext';
 import { X, Send, Sparkles } from './icons';
 
 interface Message {
@@ -26,6 +27,7 @@ interface AIChatModalProps {
 }
 
 export function AIChatModal({ visible, onClose }: AIChatModalProps) {
+  const { colors } = useTheme();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -62,13 +64,6 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
     }
   };
 
-  const suggestedQuestions = [
-    'What\'s the current market price for Rolex Submariner?',
-    'Show me trending watches this week',
-    'How do I sell my watch?',
-    'What are the authentication steps?',
-  ];
-
   return (
     <Modal
       visible={visible}
@@ -79,6 +74,7 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoid}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
         >
           {/* Header */}
           <View style={styles.header}>
@@ -102,23 +98,6 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.messagesContent}
           >
-            {messages.length === 1 && (
-              <View style={styles.suggestionsContainer}>
-                <Text style={styles.suggestionsTitle}>
-                  Here are some things you can ask me:
-                </Text>
-                {suggestedQuestions.map((question, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.suggestionButton}
-                    onPress={() => setInputText(question)}
-                  >
-                    <Text style={styles.suggestionText}>{question}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
             {messages.map((message) => (
               <View
                 key={message.id}
@@ -219,27 +198,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 16,
-  },
-  suggestionsContainer: {
-    marginBottom: 20,
-  },
-  suggestionsTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#8E8E93',
-    marginBottom: 12,
-  },
-  suggestionButton: {
-    backgroundColor: '#F5F5F5',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  suggestionText: {
-    fontSize: 14,
-    color: '#000000',
+    flexGrow: 1,
   },
   messageContainer: {
     marginBottom: 12,
@@ -276,10 +235,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
     borderTopWidth: 1,
     borderTopColor: '#E5E5EA',
     gap: 8,
+    backgroundColor: '#FFFFFF',
   },
   input: {
     flex: 1,

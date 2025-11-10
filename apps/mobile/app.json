@@ -32,10 +32,24 @@
     "scheme": "watchsphere",
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#000000",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "New message"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "notification": {
+      "color": "#000000",
+      "androidMode": "default",
+      "androidCollapsedTitle": "{{unread_count}} new messages"
     }
   }
 }

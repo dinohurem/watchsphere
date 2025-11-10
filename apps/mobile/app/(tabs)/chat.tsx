@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessageSquare, Users, Sparkles } from '@/components/icons';
+import { AIChatModal } from '@/components/AIChatModal';
 import { router } from 'expo-router';
 
 type TabType = 'conversations' | 'groups' | 'ai';
@@ -26,6 +27,7 @@ interface AIChat {
 export default function ChatScreen() {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('conversations');
+  const [showAIChat, setShowAIChat] = useState(false);
 
   // Mock conversations data
   const conversations: Conversation[] = [
@@ -144,7 +146,7 @@ export default function ChatScreen() {
             style={styles.list}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <MessageSquare size={48} color="#E5E5EA" />
+                <MessageSquare size={48} color={colors.border} />
                 <Text style={styles.emptyText}>No conversations yet</Text>
                 <Text style={styles.emptySubtext}>
                   Start chatting with other users about watches
@@ -162,7 +164,7 @@ export default function ChatScreen() {
             style={styles.list}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <Users size={48} color="#E5E5EA" />
+                <Users size={48} color={colors.border} />
                 <Text style={styles.emptyText}>No groups yet</Text>
                 <Text style={styles.emptySubtext}>
                   You'll see groups here when admin adds you
@@ -176,10 +178,9 @@ export default function ChatScreen() {
           <>
             <TouchableOpacity
               style={styles.newChatButton}
-              onPress={() => console.log('Start new AI chat')}
+              onPress={() => setShowAIChat(true)}
             >
-              <Sparkles size={20} color="#FFFFFF" />
-              <Text style={styles.newChatButtonText}>New AI Chat</Text>
+              <Text style={styles.newChatButtonText}>New Chat</Text>
             </TouchableOpacity>
             <FlatList
               data={aiChats}
@@ -188,7 +189,7 @@ export default function ChatScreen() {
               style={styles.list}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Sparkles size={48} color="#E5E5EA" />
+                  <Sparkles size={48} color={colors.border} />
                   <Text style={styles.emptyText}>No AI chat history</Text>
                   <Text style={styles.emptySubtext}>
                     Start a conversation with our AI assistant
@@ -200,6 +201,154 @@ export default function ChatScreen() {
         );
     }
   };
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 12,
+    },
+    headerTitle: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: colors.text,
+      paddingBottom: 12,
+    },
+    tabBar: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    tab: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: colors.backgroundSecondary,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    activeTab: {
+      backgroundColor: colors.text,
+      borderColor: colors.text,
+    },
+    tabText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    activeTabText: {
+      color: colors.background,
+    },
+    list: {
+      flex: 1,
+    },
+    newChatButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      margin: 16,
+      paddingVertical: 16,
+      backgroundColor: colors.text,
+      borderRadius: 12,
+    },
+    newChatButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.background,
+    },
+    conversationItem: {
+      flexDirection: 'row',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    avatar: {
+      width: 48,
+      height: 48,
+      borderRadius: 8,
+      backgroundColor: colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    aiAvatar: {
+      backgroundColor: colors.primaryLight,
+    },
+    avatarText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    conversationContent: {
+      flex: 1,
+    },
+    conversationHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    conversationName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    timestamp: {
+      fontSize: 13,
+      fontWeight: '400',
+      color: colors.textSecondary,
+    },
+    conversationFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    lastMessage: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '400',
+      color: colors.textSecondary,
+    },
+    unreadBadge: {
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+      marginLeft: 8,
+    },
+    unreadText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    emptyState: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingTop: 100,
+      paddingHorizontal: 32,
+    },
+    emptyText: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: colors.text,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 15,
+      fontWeight: '400',
+      color: colors.textSecondary,
+      textAlign: 'center',
+    },
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -237,154 +386,9 @@ export default function ChatScreen() {
 
       {/* Tab Content */}
       {renderTabContent()}
+
+      {/* AI Chat Modal */}
+      <AIChatModal visible={showAIChat} onClose={() => setShowAIChat(false)} />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#000000',
-    paddingBottom: 12,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 12,
-    padding: 4,
-    gap: 6,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  activeTab: {
-    backgroundColor: '#000000',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  activeTabText: {
-    color: '#FFFFFF',
-  },
-  list: {
-    flex: 1,
-  },
-  newChatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    margin: 16,
-    paddingVertical: 14,
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-  },
-  newChatButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  conversationItem: {
-    flexDirection: 'row',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  aiAvatar: {
-    backgroundColor: '#E3F2FF',
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  conversationContent: {
-    flex: 1,
-  },
-  conversationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  conversationName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  timestamp: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: '#8E8E93',
-  },
-  conversationFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  lastMessage: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#8E8E93',
-  },
-  unreadBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    marginLeft: 8,
-  },
-  unreadText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 100,
-    paddingHorizontal: 32,
-  },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#000000',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 15,
-    fontWeight: '400',
-    color: '#8E8E93',
-    textAlign: 'center',
-  },
-});
