@@ -5,7 +5,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ArrowLeft, ChevronRight } from '@/components/icons';
 
 export default function AccountDetailsScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
 
   const styles = StyleSheet.create({
     container: {
@@ -24,7 +24,7 @@ export default function AccountDetailsScreen() {
     },
     headerTitle: {
       fontSize: 17,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     scrollView: {
@@ -37,13 +37,13 @@ export default function AccountDetailsScreen() {
     },
     title: {
       fontSize: 28,
-      fontWeight: '700',
+      fontFamily: fonts.bold,
       color: colors.text,
       marginBottom: 8,
     },
     subtitle: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
       lineHeight: 22,
     },
@@ -57,7 +57,7 @@ export default function AccountDetailsScreen() {
     },
     fieldLabel: {
       fontSize: 13,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
       marginBottom: 8,
     },
@@ -68,12 +68,12 @@ export default function AccountDetailsScreen() {
     },
     fieldValue: {
       fontSize: 17,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
     },
     sectionTitle: {
       fontSize: 20,
-      fontWeight: '700',
+      fontFamily: fonts.bold,
       color: colors.text,
       paddingHorizontal: 16,
       paddingTop: 32,
@@ -103,7 +103,7 @@ export default function AccountDetailsScreen() {
     socialText: {
       flex: 1,
       fontSize: 17,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
     },
   });

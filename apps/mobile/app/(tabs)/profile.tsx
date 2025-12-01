@@ -15,7 +15,7 @@ interface FavoriteWatch {
 
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
 
   const favoriteWatches: FavoriteWatch[] = [
     {
@@ -48,7 +48,7 @@ export default function ProfileScreen() {
     },
     headerTitle: {
       fontSize: 17,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     headerButton: {
@@ -89,13 +89,13 @@ export default function ProfileScreen() {
     },
     userName: {
       fontSize: 24,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 4,
     },
     userCustomerId: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
     },
     favoritesSection: {
@@ -110,7 +110,7 @@ export default function ProfileScreen() {
     },
     favoritesTitle: {
       fontSize: 20,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     seeAllButton: {
@@ -120,7 +120,7 @@ export default function ProfileScreen() {
     },
     seeAllText: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
     },
     favoritesList: {
@@ -155,19 +155,19 @@ export default function ProfileScreen() {
     },
     favoriteName: {
       fontSize: 15,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 4,
     },
     favoriteReference: {
       fontSize: 13,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
       marginBottom: 8,
     },
     favoritePrice: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
   });

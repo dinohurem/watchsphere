@@ -17,7 +17,7 @@ interface WatchlistCardProps {
 }
 
 export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const hasPositiveChange = watch.priceChange > 0;
   const chartColor = hasPositiveChange ? colors.success : colors.error;
   const formattedPrice = `€${watch.price.toLocaleString()}`;
@@ -37,13 +37,13 @@ export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
     },
     name: {
       fontSize: 13,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 2,
     },
     code: {
       fontSize: 11,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textTertiary,
     },
     chartContainer: {
@@ -60,17 +60,17 @@ export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
     },
     fromLabel: {
       fontSize: 11,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textTertiary,
     },
     price: {
       fontSize: 14,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     priceChange: {
       fontSize: 12,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
     },
     priceUp: {
       color: colors.success,

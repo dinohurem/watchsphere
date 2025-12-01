@@ -8,7 +8,7 @@ interface TypingIndicatorProps {
 }
 
 export function TypingIndicator({ names, isGroup }: TypingIndicatorProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
@@ -78,7 +78,7 @@ export function TypingIndicator({ names, isGroup }: TypingIndicatorProps) {
     },
     text: {
       fontSize: 13,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: colors.textSecondary,
       marginLeft: 8,
     },

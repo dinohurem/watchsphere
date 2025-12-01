@@ -8,7 +8,7 @@ import { useTheme, Theme } from '@/contexts/ThemeContext';
 import { ArrowLeft, ChevronRight, User, Clock, Star, Bell, Languages, FileText, Lock, Database } from '@/components/icons';
 
 export default function SettingsScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const logout = useAuthStore((state) => state.logout);
   const { showAIButton, setShowAIButton } = useContext(AIButtonContext);
   const { theme, setTheme } = useTheme();
@@ -46,7 +46,7 @@ export default function SettingsScreen() {
     },
     headerTitle: {
       fontSize: 17,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     scrollView: {
@@ -61,7 +61,7 @@ export default function SettingsScreen() {
     },
     cardTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 12,
     },
@@ -108,7 +108,7 @@ export default function SettingsScreen() {
     },
     themeButtonText: {
       fontSize: 13,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: colors.text,
     },
     themeButtonTextActive: {
@@ -126,7 +126,7 @@ export default function SettingsScreen() {
     logoutText: {
       color: '#FFFFFF',
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
     },
   });
 

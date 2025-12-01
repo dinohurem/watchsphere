@@ -8,9 +8,38 @@ interface AIFloatingButtonProps {
 }
 
 export function AIFloatingButton({ onPress }: AIFloatingButtonProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const widthAnim = useRef(new Animated.Value(120)).current;
   const textOpacity = useRef(new Animated.Value(1)).current;
+
+  const styles = StyleSheet.create({
+    container: {
+      position: 'absolute',
+      bottom: 80,
+      right: 16,
+      height: 56,
+      borderRadius: 28,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 8,
+      overflow: 'hidden',
+    },
+    button: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      gap: 8,
+    },
+    text: {
+      fontSize: 16,
+      fontFamily: fonts.semiBold,
+      color: '#FFFFFF',
+    },
+  });
 
   useEffect(() => {
     // Start expanded, then collapse after 3 seconds
@@ -62,32 +91,3 @@ export function AIFloatingButton({ onPress }: AIFloatingButtonProps) {
     </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    bottom: 80,
-    right: 16,
-    height: 56,
-    borderRadius: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  button: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  text: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-});

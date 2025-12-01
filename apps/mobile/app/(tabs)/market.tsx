@@ -6,8 +6,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { SearchBar } from '@/components/SearchBar';
 import { WatchListItem } from '@/components/WatchListItem';
 import { FilterModal, MarketFilters } from '@/components/FilterModal';
+import { BrandFilterModal } from '@/components/BrandFilterModal';
 import { ActiveFilters } from '@/components/ActiveFilters';
-import { Filter } from '@/components/icons';
+import { Filter, Tag } from '@/components/icons';
 import { Location } from '@/components/LocationFilter';
 import { WareCondition } from '@/components/WareConditionFilter';
 import { YearMonthSelection } from '@/components/YearMonthFilter';
@@ -62,9 +63,10 @@ const mockWatches = [
 ];
 
 export default function MarketScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showBrandModal, setShowBrandModal] = useState(false);
   const [filters, setFilters] = useState<MarketFilters>({
     locations: [],
     brands: [],
@@ -79,6 +81,10 @@ export default function MarketScreen() {
   const handleApplyFilters = (newFilters: MarketFilters) => {
     setFilters(newFilters);
     // Here you would typically fetch new data based on filters
+  };
+
+  const handleApplyBrands = (brands: string[]) => {
+    setFilters((prev) => ({ ...prev, brands }));
   };
 
   const handleRemoveFilter = (
@@ -155,6 +161,10 @@ export default function MarketScreen() {
       borderWidth: 1,
       borderColor: colors.border,
     },
+    filterIconButtonActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
     scrollView: {
       flex: 1,
       paddingHorizontal: 16,
@@ -177,6 +187,12 @@ export default function MarketScreen() {
           onPress={() => setShowFilterModal(true)}
         >
           <Filter size={20} color={colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterIconButton, filters.brands.length > 0 && styles.filterIconButtonActive]}
+          onPress={() => setShowBrandModal(true)}
+        >
+          <Tag size={20} color={filters.brands.length > 0 ? '#FFFFFF' : colors.text} />
         </TouchableOpacity>
         <ActiveFilters
           filters={filters}
@@ -205,6 +221,13 @@ export default function MarketScreen() {
         onClose={() => setShowFilterModal(false)}
         filters={filters}
         onApplyFilters={handleApplyFilters}
+      />
+
+      <BrandFilterModal
+        visible={showBrandModal}
+        onClose={() => setShowBrandModal(false)}
+        selectedBrands={filters.brands}
+        onApplyBrands={handleApplyBrands}
       />
     </SafeAreaView>
   );

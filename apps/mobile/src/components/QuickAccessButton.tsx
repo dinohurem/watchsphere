@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Activity, Search, ShoppingCart, Tag, Zap, Package, ClipboardList, ShieldCheck, Grid, X } from './icons';
+import { Activity, Search, ShoppingCart, Tag, AISparkle, Package, ClipboardList, ShieldCheck, Grid, X } from './icons';
 
 interface QuickAccessButtonProps {
   title: string;
@@ -18,7 +18,7 @@ const iconMap: Record<string, React.ComponentType<{ size: number; color: string 
   search: Search,
   'shopping-cart': ShoppingCart,
   tag: Tag,
-  bot: Zap,
+  bot: AISparkle,
   package: Package,
   'clipboard-list': ClipboardList,
   'shield-check': ShieldCheck,
@@ -34,7 +34,7 @@ export function QuickAccessButton({
   onRemove,
   drag,
 }: QuickAccessButtonProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const IconComponent = iconMap[icon] || Grid;
 
   // Wiggle animation
@@ -85,14 +85,14 @@ export function QuickAccessButton({
 
   const styles = StyleSheet.create({
     wrapper: {
-      marginBottom: 12,
+      marginBottom: 4,
       paddingLeft: 8,
-      paddingTop: 8,
+      paddingTop: 4,
     },
     container: {
       flexDirection: 'row',
       backgroundColor: 'transparent',
-      padding: 16,
+      padding: 8,
       paddingLeft: 0,
     },
     iconContainer: {
@@ -109,15 +109,16 @@ export function QuickAccessButton({
       justifyContent: 'center',
     },
     title: {
-      fontSize: 16,
-      fontWeight: '700',
+      fontSize: 13,
+      fontFamily: fonts.semiBold,
       color: colors.text,
-      marginBottom: 4,
+      marginBottom: 2,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: 11,
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
-      lineHeight: 20,
+      lineHeight: 16,
     },
     removeButton: {
       position: 'absolute',

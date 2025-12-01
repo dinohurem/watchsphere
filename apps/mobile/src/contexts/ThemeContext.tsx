@@ -103,10 +103,27 @@ const darkColors: Colors = {
   buttonText: '#FFFFFF',
 };
 
+interface Fonts {
+  light: string;
+  regular: string;
+  medium: string;
+  semiBold: string;
+  bold: string;
+}
+
+const fonts: Fonts = {
+  light: 'HankenGrotesk_300Light',
+  regular: 'HankenGrotesk_400Regular',
+  medium: 'HankenGrotesk_500Medium',
+  semiBold: 'HankenGrotesk_600SemiBold',
+  bold: 'HankenGrotesk_700Bold',
+};
+
 interface ThemeContextType {
   theme: Theme;
   colorScheme: ColorScheme;
   colors: Colors;
+  fonts: Fonts;
   setTheme: (theme: Theme) => void;
 }
 
@@ -153,7 +170,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const colors = colorScheme === 'dark' ? darkColors : lightColors;
 
   return (
-    <ThemeContext.Provider value={{ theme, colorScheme, colors, setTheme }}>
+    <ThemeContext.Provider value={{ theme, colorScheme, colors, fonts, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );

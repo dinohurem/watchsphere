@@ -1,478 +1,772 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ImageSourcePropType, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft, ChevronRight, Heart, MoreVertical, X, Check } from '@/components/icons';
-import { StatsCard } from '@/components/StatsCard';
-import { TimeRangeSelector } from '@/components/TimeRangeSelector';
+import { ArrowLeft, ChevronDown, Filter, Check } from '@/components/icons';
 import { OrderBookModal } from '@/components/OrderBookModal';
 
-// Mock order book data
-const mockBuyOrders = [
-  { country: 'US' as const, date: '10.10.25', condition: 'Pristine', price: '€12,852' },
-  { country: 'EU' as const, date: '10.18.25', condition: 'Restored', price: '€12,852' },
-  { country: 'UAE' as const, date: '10.10.25', condition: 'Mint Condition', price: '€12,852' },
-  { country: 'HK' as const, date: '10.10.25', condition: 'Lightly Worn', price: '€12,852' },
-  { country: 'US' as const, date: '10.10.25', condition: 'Like New', price: '€12,852' },
-  { country: 'EU' as const, date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
-  { country: 'UAE' as const, date: '10.10.25', condition: 'Showcase Model', price: '€12,852' },
-  { country: 'HK' as const, date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
-  { country: 'US' as const, date: '10.10.25', condition: 'Lightly Used', price: '€12,852' },
-  { country: 'EU' as const, date: '10.10.25', condition: 'Gently Worn', price: '€12,852' },
-  { country: 'UAE' as const, date: '10.10.25', condition: 'Well Maintained', price: '€12,852' },
-  { country: 'HK' as const, date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
-  { country: 'US' as const, date: '10.10.25', condition: 'Unworn with Box', price: '€12,852' },
-  { country: 'EU' as const, date: '10.10.25', condition: 'Limited Edition', price: '€12,852' },
-  { country: 'UAE' as const, date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
-  { country: 'HK' as const, date: '10.10.25', condition: 'Minor Scratches', price: '€12,852' },
-  { country: 'US' as const, date: '10.10.25', condition: 'Refurbished', price: '€12,852' },
-  { country: 'EU' as const, date: '10.10.25', condition: 'Damaged', price: '€12,852' },
+// Watch data with images
+const WATCH_DATA: Record<string, {
+  brand: string;
+  model: string;
+  reference: string;
+  fullName: string;
+  image: ImageSourcePropType;
+  bestBid: number;
+  bestAsk: number;
+}> = {
+  '1': {
+    brand: 'Audemars Piguet',
+    model: 'Royal Oak',
+    reference: '26240OR Blue',
+    fullName: 'Audemars Piguet Royal Oak',
+    image: require('../../assets/images/ap.jpeg'),
+    bestBid: 104500,
+    bestAsk: 107200,
+  },
+  '2': {
+    brand: 'Patek Philippe',
+    model: 'Nautilus',
+    reference: '7118/1200R White',
+    fullName: 'Patek Philippe Nautilus',
+    image: require('../../assets/images/patek.jpeg'),
+    bestBid: 165000,
+    bestAsk: 171500,
+  },
+  '3': {
+    brand: 'Rolex',
+    model: 'GMT-Master II',
+    reference: '126710BLRO Jubilee',
+    fullName: 'Rolex GMT-Master II',
+    image: require('../../assets/images/rolex.jpeg'),
+    bestBid: 20200,
+    bestAsk: 21400,
+  },
+  '4': {
+    brand: 'Rolex',
+    model: 'Day-Date 40',
+    reference: '228238A Black',
+    fullName: 'Rolex Day-Date 40',
+    image: require('../../assets/images/rolex-gold.jpeg'),
+    bestBid: 53800,
+    bestAsk: 56500,
+  },
+};
+
+// Available years for dropdown
+const AVAILABLE_YEARS = [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018];
+
+// Market options
+const MARKET_OPTIONS = [
+  { id: 'all', label: 'All Markets' },
+  { id: 'us', label: 'United States', flag: '🇺🇸' },
+  { id: 'eu', label: 'European Union', flag: '🇪🇺' },
+  { id: 'uae', label: 'UAE', flag: '🇦🇪' },
+  { id: 'hk', label: 'Hong Kong', flag: '🇭🇰' },
 ];
 
-export default function WatchDetailScreen() {
-  const { colors } = useTheme();
+// Payment method options
+const PAYMENT_OPTIONS = [
+  { id: 'all', label: 'All Payment Methods' },
+  { id: 'wire', label: 'Wire Transfer' },
+  { id: 'crypto', label: 'Cryptocurrency' },
+  { id: 'escrow', label: 'Escrow' },
+];
+
+// Tax options
+const TAX_OPTIONS = [
+  { id: 'all', label: 'All' },
+  { id: 'included', label: 'Tax Included' },
+  { id: 'excluded', label: 'Tax Excluded' },
+];
+
+type Condition = 'unworn' | 'used';
+
+// Sample order book data
+const SAMPLE_BUY_ORDERS = [
+  { country: 'US' as const, date: '12/01', condition: 'Unworn', price: '€104,500' },
+  { country: 'EU' as const, date: '11/28', condition: 'Unworn', price: '€103,800' },
+  { country: 'UAE' as const, date: '11/25', condition: 'Used', price: '€98,200' },
+  { country: 'HK' as const, date: '11/22', condition: 'Unworn', price: '€102,000' },
+];
+
+const SAMPLE_SELL_ORDERS = [
+  { country: 'EU' as const, date: '12/01', condition: 'Unworn', price: '€107,200' },
+  { country: 'US' as const, date: '11/30', condition: 'Unworn', price: '€108,500' },
+  { country: 'HK' as const, date: '11/28', condition: 'Used', price: '€105,000' },
+  { country: 'UAE' as const, date: '11/26', condition: 'Unworn', price: '€109,800' },
+];
+
+export default function MarketDetailScreen() {
+  const { colors, fonts } = useTheme();
   const { id } = useLocalSearchParams();
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [activeTimeRange, setActiveTimeRange] = useState('1YR');
+  const watchId = typeof id === 'string' ? id : '1';
+
+  const [condition, setCondition] = useState<Condition>('unworn');
+  const [selectedYear, setSelectedYear] = useState(2025);
+  const [showYearModal, setShowYearModal] = useState(false);
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [showOrderBook, setShowOrderBook] = useState(false);
-  const [showMakeOfferModal, setShowMakeOfferModal] = useState(false);
-  const [offerAmount, setOfferAmount] = useState('12,352');
-  const [showOfferSuccess, setShowOfferSuccess] = useState(false);
 
-  const timeRanges = ['All', '1M', '3M', '6M', '1YR', 'YTD'];
+  // Filter states
+  const [selectedMarket, setSelectedMarket] = useState('all');
+  const [selectedPayment, setSelectedPayment] = useState('all');
+  const [selectedTax, setSelectedTax] = useState('all');
 
-  // Mock data
-  const watchData = {
-    brand: 'Rolex',
-    model: 'Submariner Date',
-    reference: '126610LN',
-    condition: 'New Unworn 41mm',
-    lastTrade: '€12,852',
-    highestBid: '€15,215',
-    listings: '125',
-    buyPrice: '€12,900',
-    sellPrice: '€13,100',
+  // Get watch data or use default
+  const watch = WATCH_DATA[watchId] || WATCH_DATA['1'];
+
+  // Calculate spread
+  const spread = watch.bestAsk - watch.bestBid;
+
+  // Format currency
+  const formatPrice = (price: number) => {
+    return `€${price.toLocaleString('en-US')}`;
   };
 
-  const stats = [
-    { label: 'Last trade', value: watchData.lastTrade },
-    { label: 'Highest bid', value: watchData.highestBid },
-    { label: 'Listings', value: watchData.listings },
-  ];
+  // Count active filters
+  const activeFilterCount = [selectedMarket, selectedPayment, selectedTax].filter(f => f !== 'all').length;
 
-  const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
     header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 12,
     },
-    headerButton: {
-      padding: 8,
-    },
-    headerRight: {
+    headerTopRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      justifyContent: 'space-between',
+      marginBottom: 8,
     },
-    orderBookButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 8,
-      backgroundColor: colors.backgroundSecondary,
+    backButton: {
+      padding: 4,
     },
-    orderBookText: {
+    orderBookLink: {
+      paddingVertical: 4,
+    },
+    orderBookLinkText: {
       fontSize: 14,
-      fontWeight: '600',
+      fontFamily: fonts.medium,
+      color: colors.primary,
+    },
+    headerTitleContainer: {
+      alignItems: 'center',
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontFamily: fonts.semiBold,
       color: colors.text,
+      textAlign: 'center',
+    },
+    headerSubtitle: {
+      fontSize: 13,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: 2,
     },
     scrollView: {
       flex: 1,
     },
-    imageContainer: {
-      width: '100%',
-      aspectRatio: 1,
-      padding: 16,
-      position: 'relative',
-    },
-    imagePlaceholder: {
-      flex: 1,
-      backgroundColor: colors.backgroundSecondary,
-      borderRadius: 16,
-    },
-    favoriteButton: {
-      position: 'absolute',
-      top: 24,
-      right: 24,
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.card,
-      justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
-      elevation: 4,
-    },
-    infoSection: {
-      paddingHorizontal: 16,
-      paddingBottom: 16,
-    },
-    watchTitle: {
-      fontSize: 24,
-      fontWeight: '700',
-      color: colors.text,
-      marginBottom: 4,
-    },
-    watchSubtitle: {
-      fontSize: 16,
-      color: colors.textSecondary,
-    },
-    statsContainer: {
-      paddingHorizontal: 16,
-      paddingBottom: 16,
-    },
-    actionButtons: {
-      flexDirection: 'row',
+
+    // Hero Section
+    heroSection: {
       paddingHorizontal: 16,
       paddingBottom: 24,
+    },
+    watchImageContainer: {
+      width: '100%',
+      aspectRatio: 1,
+      backgroundColor: colors.backgroundSecondary,
+      borderRadius: 20,
+      overflow: 'hidden',
+    },
+    watchImage: {
+      width: '100%',
+      height: '100%',
+      resizeMode: 'cover',
+    },
+
+    // Filters Section
+    filtersSection: {
+      paddingHorizontal: 16,
+      paddingBottom: 24,
+    },
+    filterRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+
+    // Condition Segmented Control
+    conditionControl: {
+      flex: 1,
+      flexDirection: 'row',
+      backgroundColor: colors.backgroundSecondary,
+      borderRadius: 10,
+      padding: 3,
+    },
+    conditionButton: {
+      flex: 1,
+      paddingVertical: 10,
+      alignItems: 'center',
+      borderRadius: 8,
+    },
+    conditionButtonActive: {
+      backgroundColor: colors.card,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    conditionText: {
+      fontSize: 14,
+      fontFamily: fonts.medium,
+      color: colors.textSecondary,
+    },
+    conditionTextActive: {
+      color: colors.text,
+      fontFamily: fonts.semiBold,
+    },
+
+    // Year Selector
+    yearSelector: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.backgroundSecondary,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      gap: 6,
+    },
+    yearText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+    },
+
+    // Add Filters Button
+    addFiltersButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.backgroundSecondary,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      marginTop: 10,
+      gap: 6,
+    },
+    addFiltersText: {
+      fontSize: 14,
+      fontFamily: fonts.medium,
+      color: colors.textSecondary,
+    },
+    filterBadge: {
+      backgroundColor: colors.primary,
+      borderRadius: 10,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      marginLeft: 4,
+    },
+    filterBadgeText: {
+      fontSize: 11,
+      fontFamily: fonts.semiBold,
+      color: '#FFFFFF',
+    },
+
+    // Market Overview Section
+    marketSection: {
+      paddingHorizontal: 16,
+      paddingBottom: 24,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      marginBottom: 12,
+    },
+    marketGrid: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    marketCard: {
+      flex: 1,
+      backgroundColor: colors.backgroundSecondary,
+      borderRadius: 12,
+      padding: 14,
+      alignItems: 'center',
+    },
+    marketLabel: {
+      fontSize: 13,
+      fontFamily: fonts.bold,
+      color: colors.text,
+      marginBottom: 6,
+    },
+    marketValue: {
+      fontSize: 15,
+      fontFamily: fonts.medium,
+      color: colors.text,
+    },
+
+    // Order Buttons Section
+    orderSection: {
+      paddingHorizontal: 16,
+      paddingBottom: 32,
+    },
+    orderButtons: {
+      flexDirection: 'row',
       gap: 12,
     },
     buyButton: {
       flex: 1,
       paddingVertical: 16,
       borderRadius: 12,
-      backgroundColor: colors.text,
+      backgroundColor: '#4AA078',
       alignItems: 'center',
       justifyContent: 'center',
+      shadowColor: '#4AA078',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 4,
     },
     buyButtonText: {
       fontSize: 16,
-      fontWeight: '600',
-      color: colors.background,
+      fontFamily: fonts.semiBold,
+      color: '#FFFFFF',
     },
     sellButton: {
       flex: 1,
       paddingVertical: 16,
       borderRadius: 12,
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
+      backgroundColor: '#CC6045',
       alignItems: 'center',
       justifyContent: 'center',
+      shadowColor: '#CC6045',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 4,
     },
     sellButtonText: {
       fontSize: 16,
-      fontWeight: '600',
-      color: colors.text,
+      fontFamily: fonts.semiBold,
+      color: '#FFFFFF',
     },
-    priceHistorySection: {
-      paddingHorizontal: 16,
-      paddingBottom: 24,
-    },
-    sectionTitle: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: colors.text,
-      marginBottom: 16,
-    },
-    chartContainer: {
-      marginBottom: 16,
-    },
-    chartPlaceholder: {
-      height: 200,
-      borderRadius: 12,
+
+    // Info Note
+    infoNote: {
+      marginTop: 16,
+      padding: 14,
       backgroundColor: colors.backgroundSecondary,
+      borderRadius: 10,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.primary,
     },
-    // Make Offer Modal Styles
+    infoNoteText: {
+      fontSize: 12,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
+
+    // Modal Styles
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
       justifyContent: 'flex-end',
     },
     modalContent: {
-      backgroundColor: colors.background,
+      backgroundColor: colors.card,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
-      paddingTop: 20,
-      paddingBottom: 40,
-      paddingHorizontal: 24,
-      minHeight: 400,
+      paddingBottom: 34,
+      maxHeight: '70%',
     },
-    modalHeader: {
+    modalHandle: {
+      width: 36,
+      height: 5,
+      backgroundColor: colors.border,
+      borderRadius: 2.5,
+      alignSelf: 'center',
+      marginTop: 12,
+      marginBottom: 16,
+    },
+    modalTitle: {
+      fontSize: 17,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      textAlign: 'center',
+      marginBottom: 16,
+    },
+    modalOption: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 24,
+      paddingVertical: 14,
+      paddingHorizontal: 20,
     },
-    modalTitle: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    closeButton: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: colors.backgroundSecondary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    modalWatchCard: {
-      flexDirection: 'row',
-      gap: 12,
-      marginBottom: 32,
-    },
-    modalWatchImage: {
-      width: 80,
-      height: 80,
-      borderRadius: 8,
-      backgroundColor: colors.backgroundSecondary,
-    },
-    modalWatchInfo: {
-      flex: 1,
-      justifyContent: 'center',
-    },
-    modalWatchTitle: {
+    modalOptionText: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.regular,
       color: colors.text,
-      marginBottom: 4,
     },
-    modalWatchPrice: {
-      fontSize: 15,
-      fontWeight: '400',
+    modalOptionSelected: {
+      fontFamily: fonts.semiBold,
+    },
+    modalOptionFlag: {
+      fontSize: 18,
+      marginRight: 10,
+    },
+    modalOptionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+    // Filters Modal
+    filterSection: {
+      paddingHorizontal: 20,
+      marginBottom: 20,
+    },
+    filterSectionTitle: {
+      fontSize: 13,
+      fontFamily: fonts.semiBold,
+      color: colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 12,
+    },
+    filterOptionRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    filterChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: colors.backgroundSecondary,
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    filterChipSelected: {
+      backgroundColor: colors.primary + '15',
+      borderColor: colors.primary,
+    },
+    filterChipText: {
+      fontSize: 14,
+      fontFamily: fonts.medium,
       color: colors.textSecondary,
     },
-    offerSection: {
-      marginBottom: 32,
+    filterChipTextSelected: {
+      color: colors.primary,
+      fontFamily: fonts.semiBold,
     },
-    offerLabel: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: colors.text,
-      marginBottom: 12,
-    },
-    offerInput: {
-      fontSize: 24,
-      fontWeight: '400',
-      color: colors.text,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
+    filterApplyButton: {
+      marginHorizontal: 20,
+      marginTop: 10,
+      paddingVertical: 14,
       borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.backgroundSecondary,
-    },
-    sendButton: {
-      paddingVertical: 16,
-      borderRadius: 12,
-      backgroundColor: colors.text,
+      backgroundColor: colors.primary,
       alignItems: 'center',
     },
-    sendButtonText: {
+    filterApplyButtonText: {
       fontSize: 16,
-      fontWeight: '600',
-      color: colors.background,
+      fontFamily: fonts.semiBold,
+      color: '#FFFFFF',
     },
-    // Success Modal Styles
-    successModalContent: {
-      backgroundColor: colors.background,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingTop: 40,
-      paddingBottom: 40,
-      paddingHorizontal: 24,
+    filterResetButton: {
+      marginHorizontal: 20,
+      marginTop: 10,
+      paddingVertical: 14,
       alignItems: 'center',
-      minHeight: 300,
     },
-    successIcon: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: '#E3F2FD',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 24,
+    filterResetButtonText: {
+      fontSize: 14,
+      fontFamily: fonts.medium,
+      color: colors.textSecondary,
     },
-    successText: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: colors.text,
-      marginBottom: 12,
-    },
-    successAmount: {
-      fontSize: 32,
-      fontWeight: '700',
-      color: colors.text,
-    },
-  });
+  }), [colors, fonts]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.orderBookButton} onPress={() => setShowOrderBook(true)}>
-          <Text style={styles.orderBookText}>See Order Book</Text>
-          <ChevronRight size={16} color={colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.orderBookLink} onPress={() => setShowOrderBook(true)}>
+            <Text style={styles.orderBookLinkText}>Order Book</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>{watch.fullName}</Text>
+          <Text style={styles.headerSubtitle}>{watch.reference}</Text>
+        </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Watch Image */}
-        <View style={styles.imageContainer}>
-          <View style={styles.imagePlaceholder} />
-          <TouchableOpacity
-            style={styles.favoriteButton}
-            onPress={() => setIsFavorite(!isFavorite)}
-          >
-            <Heart
-              size={24}
-              color={isFavorite ? '#FF3B30' : colors.text}
-              fill={isFavorite ? '#FF3B30' : 'none'}
-            />
-          </TouchableOpacity>
+        {/* 1. Hero Section - Watch Image */}
+        <View style={styles.heroSection}>
+          <View style={styles.watchImageContainer}>
+            <Image source={watch.image} style={styles.watchImage} />
+          </View>
         </View>
 
-        {/* Watch Info */}
-        <View style={styles.infoSection}>
-          <Text style={styles.watchTitle}>{watchData.brand} {watchData.model}</Text>
-          <Text style={styles.watchSubtitle}>
-            {watchData.reference}, {watchData.condition}
-          </Text>
-        </View>
+        {/* 2. Primary Filters */}
+        <View style={styles.filtersSection}>
+          <View style={styles.filterRow}>
+            {/* Condition Segmented Control */}
+            <View style={styles.conditionControl}>
+              <TouchableOpacity
+                style={[styles.conditionButton, condition === 'unworn' && styles.conditionButtonActive]}
+                onPress={() => setCondition('unworn')}
+              >
+                <Text style={[styles.conditionText, condition === 'unworn' && styles.conditionTextActive]}>
+                  Unworn
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.conditionButton, condition === 'used' && styles.conditionButtonActive]}
+                onPress={() => setCondition('used')}
+              >
+                <Text style={[styles.conditionText, condition === 'used' && styles.conditionTextActive]}>
+                  Used
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-        {/* Stats Card */}
-        <View style={styles.statsContainer}>
-          <StatsCard stats={stats} />
-        </View>
-
-        {/* Buy/Sell Buttons */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.buyButton}>
-            <Text style={styles.buyButtonText}>Buy Now</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.sellButton} onPress={() => setShowMakeOfferModal(true)}>
-            <Text style={styles.sellButtonText}>Make offer</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Price History */}
-        <View style={styles.priceHistorySection}>
-          <Text style={styles.sectionTitle}>Price History</Text>
-
-          {/* Chart Placeholder */}
-          <View style={styles.chartContainer}>
-            <View style={styles.chartPlaceholder} />
+            {/* Year Selector */}
+            <TouchableOpacity style={styles.yearSelector} onPress={() => setShowYearModal(true)}>
+              <Text style={styles.yearText}>{selectedYear}</Text>
+              <ChevronDown size={16} color={colors.text} />
+            </TouchableOpacity>
           </View>
 
-          {/* Time Range Selector */}
-          <TimeRangeSelector
-            ranges={timeRanges}
-            activeRange={activeTimeRange}
-            onRangeSelect={setActiveTimeRange}
-          />
+          {/* Add Filters Button */}
+          <TouchableOpacity style={styles.addFiltersButton} onPress={() => setShowFiltersModal(true)}>
+            <Filter size={16} color={colors.textSecondary} />
+            <Text style={styles.addFiltersText}>Add Filters</Text>
+            {activeFilterCount > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
+        {/* 3. Market Overview (Top-of-Book Data) */}
+        <View style={styles.marketSection}>
+          <Text style={styles.sectionTitle}>Market Overview</Text>
+
+          <View style={styles.marketGrid}>
+            {/* Best Bid */}
+            <View style={styles.marketCard}>
+              <Text style={styles.marketLabel}>Best Bid</Text>
+              <Text style={styles.marketValue}>{formatPrice(watch.bestBid)}</Text>
+            </View>
+
+            {/* Best Ask */}
+            <View style={styles.marketCard}>
+              <Text style={styles.marketLabel}>Best Ask</Text>
+              <Text style={styles.marketValue}>{formatPrice(watch.bestAsk)}</Text>
+            </View>
+
+            {/* Spread */}
+            <View style={styles.marketCard}>
+              <Text style={styles.marketLabel}>Spread</Text>
+              <Text style={styles.marketValue}>{formatPrice(spread)}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* 4. Order Placement Buttons */}
+        <View style={styles.orderSection}>
+          <View style={styles.orderButtons}>
+            <TouchableOpacity style={styles.buyButton} activeOpacity={0.8}>
+              <Text style={styles.buyButtonText}>Place Buy Order</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sellButton} activeOpacity={0.8}>
+              <Text style={styles.sellButtonText}>Place Sell Order</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Info Note */}
+          <View style={styles.infoNote}>
+            <Text style={styles.infoNoteText}>
+              Orders are matched based on the selected condition and year. Your order will be visible to all verified dealers in the market.
+            </Text>
+          </View>
+        </View>
       </ScrollView>
+
+      {/* Year Selection Modal */}
+      <Modal
+        visible={showYearModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowYearModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowYearModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Select Year</Text>
+            <ScrollView>
+              {AVAILABLE_YEARS.map((year) => (
+                <TouchableOpacity
+                  key={year}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setSelectedYear(year);
+                    setShowYearModal(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.modalOptionText,
+                    selectedYear === year && styles.modalOptionSelected
+                  ]}>
+                    {year}
+                  </Text>
+                  {selectedYear === year && <Check size={20} color={colors.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Additional Filters Modal */}
+      <Modal
+        visible={showFiltersModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFiltersModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFiltersModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Filters</Text>
+
+            <ScrollView>
+              {/* Market Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Market</Text>
+                <View style={styles.filterOptionRow}>
+                  {MARKET_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[
+                        styles.filterChip,
+                        selectedMarket === option.id && styles.filterChipSelected
+                      ]}
+                      onPress={() => setSelectedMarket(option.id)}
+                    >
+                      <Text style={[
+                        styles.filterChipText,
+                        selectedMarket === option.id && styles.filterChipTextSelected
+                      ]}>
+                        {option.flag ? `${option.flag} ${option.label}` : option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Payment Method Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Payment Method</Text>
+                <View style={styles.filterOptionRow}>
+                  {PAYMENT_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[
+                        styles.filterChip,
+                        selectedPayment === option.id && styles.filterChipSelected
+                      ]}
+                      onPress={() => setSelectedPayment(option.id)}
+                    >
+                      <Text style={[
+                        styles.filterChipText,
+                        selectedPayment === option.id && styles.filterChipTextSelected
+                      ]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Tax Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Tax</Text>
+                <View style={styles.filterOptionRow}>
+                  {TAX_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[
+                        styles.filterChip,
+                        selectedTax === option.id && styles.filterChipSelected
+                      ]}
+                      onPress={() => setSelectedTax(option.id)}
+                    >
+                      <Text style={[
+                        styles.filterChipText,
+                        selectedTax === option.id && styles.filterChipTextSelected
+                      ]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Apply Button */}
+            <TouchableOpacity
+              style={styles.filterApplyButton}
+              onPress={() => setShowFiltersModal(false)}
+            >
+              <Text style={styles.filterApplyButtonText}>Apply Filters</Text>
+            </TouchableOpacity>
+
+            {/* Reset Button */}
+            <TouchableOpacity
+              style={styles.filterResetButton}
+              onPress={() => {
+                setSelectedMarket('all');
+                setSelectedPayment('all');
+                setSelectedTax('all');
+              }}
+            >
+              <Text style={styles.filterResetButtonText}>Reset All</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Order Book Modal */}
       <OrderBookModal
         visible={showOrderBook}
         onClose={() => setShowOrderBook(false)}
-        buyOrders={mockBuyOrders}
-        sellOrders={mockBuyOrders}
+        buyOrders={SAMPLE_BUY_ORDERS}
+        sellOrders={SAMPLE_SELL_ORDERS}
       />
-
-      {/* Make Offer Modal */}
-      <Modal
-        visible={showMakeOfferModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowMakeOfferModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMakeOfferModal(false)}
-        >
-          <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Make an offer</Text>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={() => setShowMakeOfferModal(false)}
-                >
-                  <X size={20} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.modalWatchCard}>
-                <View style={styles.modalWatchImage} />
-                <View style={styles.modalWatchInfo}>
-                  <Text style={styles.modalWatchTitle}>{watchData.brand} {watchData.model}</Text>
-                  <Text style={styles.modalWatchPrice}>€12,352</Text>
-                </View>
-              </View>
-
-              <View style={styles.offerSection}>
-                <Text style={styles.offerLabel}>Your offer</Text>
-                <Text style={styles.offerInput}>€  {offerAmount}</Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={() => {
-                  setShowMakeOfferModal(false);
-                  setTimeout(() => setShowOfferSuccess(true), 300);
-                }}
-              >
-                <Text style={styles.sendButtonText}>Send</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Offer Success Modal */}
-      <Modal
-        visible={showOfferSuccess}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowOfferSuccess(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowOfferSuccess(false)}
-        >
-          <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.successModalContent}>
-              <View style={styles.successIcon}>
-                <Check size={40} color="#2196F3" />
-              </View>
-              <Text style={styles.successText}>Offer sent</Text>
-              <Text style={styles.successAmount}>€10,000</Text>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
     </SafeAreaView>
   );
 }

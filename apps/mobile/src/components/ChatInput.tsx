@@ -13,7 +13,7 @@ interface ChatInputProps {
 }
 
 export function ChatInput({ value, onChangeText, onSend, onImagePress, onTypingStart, onTypingStop }: ChatInputProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
   const sendButtonScale = useRef(new Animated.Value(value.trim().length > 0 ? 1 : 0)).current;
   const sendButtonRotate = useRef(new Animated.Value(0)).current;
@@ -111,7 +111,7 @@ export function ChatInput({ value, onChangeText, onSend, onImagePress, onTypingS
     input: {
       flex: 1,
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
       maxHeight: 100,
       paddingTop: Platform.OS === 'ios' ? 8 : 0,

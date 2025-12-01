@@ -7,8 +7,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Greeting } from '@/components/Greeting';
 import { QuickAccessButton } from '@/components/QuickAccessButton';
 import { NewsCard } from '@/components/NewsCard';
-import { MyWatchlist } from '@/components/MyWatchlist';
-import { WatchlistItemData } from '@/components/WatchlistCard';
+import { WatchlistGrid, WatchlistGridItem } from '@/components/WatchlistGrid';
+import { ActivityCenterPreview } from '@/components/ActivityCenterPreview';
 import { AIChatModal } from '@/components/AIChatModal';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ChevronRight, X, Bell } from '@/components/icons';
@@ -79,68 +79,50 @@ const ALL_QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
 ];
 
 export default function HomeScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const [isReorganizing, setIsReorganizing] = useState(false);
   const [aiChatVisible, setAiChatVisible] = useState(false);
   const [showAddItemsModal, setShowAddItemsModal] = useState(false);
-  // Mock user watchlist - in production, this would come from API or state
-  const userWatchlist: WatchlistItemData[] = [
+
+  // Watchlist with specific watches and images
+  const watchlistItems: WatchlistGridItem[] = [
     {
       id: '1',
-      name: 'Rolex Submariner',
-      code: '126610LN',
-      price: 12352,
-      priceChange: -0.7,
-      priceHistory: [12500, 12450, 12400, 12380, 12370, 12352],
+      brand: 'AP',
+      model: 'Royal Oak',
+      reference: '26240OR Blue',
+      price: 106000,
+      priceChange: 0.8,
+      image: require('../../assets/images/ap.jpeg'),
     },
     {
       id: '2',
-      name: 'Patek Philippe Nautilus',
-      code: '5712/1A',
-      price: 97467,
-      priceChange: 1.2,
-      priceHistory: [96000, 96500, 97000, 96800, 97200, 97467],
+      brand: 'Patek',
+      model: 'Nautilus',
+      reference: '7118/1200R White',
+      price: 168000,
+      priceChange: 16.3,
+      image: require('../../assets/images/patek.jpeg'),
     },
     {
       id: '3',
-      name: 'Audemars Piguet Royal Oak',
-      code: '15510ST',
-      price: 57594,
-      priceChange: 6.2,
-      priceHistory: [54000, 54500, 55500, 56200, 57000, 57594],
+      brand: 'Rolex',
+      model: 'GMT-Master',
+      reference: '126710BLRO Jub',
+      price: 20800,
+      priceChange: 1.5,
+      image: require('../../assets/images/rolex.jpeg'),
+    },
+    {
+      id: '4',
+      brand: 'Rolex',
+      model: 'Day-Date',
+      reference: '228238A Blk',
+      price: 55200,
+      priceChange: -2.5,
+      image: require('../../assets/images/rolex-gold.jpeg'),
     },
   ];
-
-  // Default watches chosen by admin (fallback if user has no watchlist)
-  const defaultWatches: WatchlistItemData[] = [
-    {
-      id: 'default-1',
-      name: 'Rolex Explorer',
-      code: '224270',
-      price: 8149,
-      priceChange: 3.9,
-      priceHistory: [7800, 7900, 8000, 7950, 8100, 8149],
-    },
-    {
-      id: 'default-2',
-      name: 'Omega Speedmaster',
-      code: '310.30.42',
-      price: 5200,
-      priceChange: 2.1,
-      priceHistory: [5000, 5050, 5100, 5150, 5180, 5200],
-    },
-    {
-      id: 'default-3',
-      name: 'Cartier Santos',
-      code: 'WSSA0018',
-      price: 7244,
-      priceChange: 5.9,
-      priceHistory: [6800, 6900, 7000, 7100, 7200, 7244],
-    },
-  ];
-
-  // Use user watchlist if they have watches, otherwise use defaults
-  const displayWatchlist = userWatchlist.length > 0 ? userWatchlist : defaultWatches;
 
   const [quickAccessItems, setQuickAccessItems] = useState<QuickAccessItem[]>(ALL_QUICK_ACCESS_ITEMS);
 
@@ -155,20 +137,28 @@ export default function HomeScreen() {
       icon: '📰',
       text: 'Patek increases Nautilus production by 5%',
       source: 'Bloomberg',
+      url: 'https://bloomberg.com',
     },
     {
       id: '2',
       icon: '📈',
       text: 'Submariner prices stabilize after -2.1% dip',
       source: 'Market Watch',
+      url: 'https://marketwatch.com',
     },
     {
       id: '3',
       icon: '🔧',
       text: 'Rolex service delays still affecting secondary market',
       source: 'WatchPro',
+      url: 'https://watchpro.com',
     },
   ];
+
+  const handleNewsPress = (url: string) => {
+    // In production, this would open the URL in a browser or webview
+    console.log('Opening news:', url);
+  };
 
   const handleViewAllWatchlist = () => {
     // Navigate to market with watchlist filter
@@ -241,7 +231,7 @@ export default function HomeScreen() {
     },
     sectionTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       lineHeight: 20,
       letterSpacing: 0.08,
@@ -253,7 +243,7 @@ export default function HomeScreen() {
     },
     reorganizeText: {
       fontSize: 13,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: colors.primary,
     },
     quickAccessButtons: {
@@ -281,7 +271,7 @@ export default function HomeScreen() {
     },
     addItemsIcon: {
       fontSize: 28,
-      fontWeight: '300',
+      fontFamily: fonts.light,
       color: colors.primary,
     },
     addItemsTextContainer: {
@@ -289,12 +279,13 @@ export default function HomeScreen() {
     },
     addItemsText: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 2,
     },
     addItemsSubtext: {
       fontSize: 13,
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
     },
     modalHeader: {
@@ -308,7 +299,7 @@ export default function HomeScreen() {
     },
     modalTitle: {
       fontSize: 18,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     modalCloseButton: {
@@ -339,7 +330,7 @@ export default function HomeScreen() {
     },
     modalItemIcon: {
       fontSize: 28,
-      fontWeight: '300',
+      fontFamily: fonts.light,
       color: colors.primary,
     },
     modalItemTextContainer: {
@@ -347,38 +338,43 @@ export default function HomeScreen() {
     },
     modalItemTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 4,
     },
     modalItemSubtitle: {
       fontSize: 13,
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
       lineHeight: 18,
     },
     newsSection: {
-      marginTop: 32,
-      marginBottom: 32,
       paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: '#FFFFFF',
+    },
+    newsHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
     },
     newsTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       lineHeight: 20,
       letterSpacing: 0.08,
-      marginBottom: 16,
     },
-    viewAllButton: {
-      marginTop: 12,
-      padding: 16,
-      backgroundColor: 'transparent',
+    newsViewAllButton: {
+      flexDirection: 'row',
       alignItems: 'center',
+      gap: 2,
     },
-    viewAllText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.text,
+    newsViewAllText: {
+      fontSize: 13,
+      fontFamily: fonts.medium,
+      color: colors.primary,
     },
   });
 
@@ -389,9 +385,12 @@ export default function HomeScreen() {
           {/* Greeting */}
           <Greeting />
 
-          {/* My Watchlist Section */}
-          <MyWatchlist
-            watches={displayWatchlist}
+          {/* Activity Center Preview */}
+          <ActivityCenterPreview onViewAll={() => router.push('/(tabs)/dashboard' as any)} />
+
+          {/* Watchlist Grid Section */}
+          <WatchlistGrid
+            watches={watchlistItems}
             onViewAll={handleViewAllWatchlist}
             onWatchPress={handleWatchPress}
           />
@@ -436,18 +435,22 @@ export default function HomeScreen() {
 
           {/* Market News */}
           <View style={styles.newsSection}>
-            <Text style={styles.newsTitle}>Latest News</Text>
+            <View style={styles.newsHeader}>
+              <Text style={styles.newsTitle}>Latest News</Text>
+              <TouchableOpacity style={styles.newsViewAllButton} onPress={() => console.log('View all news')}>
+                <Text style={styles.newsViewAllText}>View all</Text>
+                <ChevronRight size={14} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
             {newsItems.map((item) => (
               <NewsCard
                 key={item.id}
                 icon={item.icon}
                 text={item.text}
                 source={item.source}
+                onPress={() => handleNewsPress(item.url)}
               />
             ))}
-            <TouchableOpacity style={styles.viewAllButton}>
-              <Text style={styles.viewAllText}>View all News</Text>
-            </TouchableOpacity>
           </View>
         </ScrollView>
       </SafeAreaView>

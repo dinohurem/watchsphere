@@ -94,6 +94,14 @@ export function ChevronRight({ size = 24, color = '#000', fill = 'none' }: IconP
   );
 }
 
+export function ChevronDown({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M6 9l6 6 6-6" />
+    </Svg>
+  );
+}
+
 export function TrendingUp({ size = 24, color = '#000', fill = 'none' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>

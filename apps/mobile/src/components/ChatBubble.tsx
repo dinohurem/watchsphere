@@ -1,7 +1,6 @@
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Check } from './icons';
 
 interface ChatBubbleProps {
   message: string;
@@ -14,7 +13,7 @@ interface ChatBubbleProps {
 }
 
 export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender, isAI = false }: ChatBubbleProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -48,7 +47,7 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
     },
     senderName: {
       fontSize: 12,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.textSecondary,
       marginBottom: 4,
       marginLeft: 4,
@@ -74,7 +73,7 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
     },
     text: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
       lineHeight: 20,
     },
@@ -91,47 +90,7 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
       fontSize: 11,
       color: colors.textTertiary,
     },
-    statusContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
   });
-
-  const renderStatusIcon = () => {
-    if (!isUser || !status) return null;
-
-    const getStatusColor = () => {
-      switch (status) {
-        case 'sending':
-          return colors.textTertiary;
-        case 'sent':
-          return colors.textTertiary;
-        case 'delivered':
-          return colors.textSecondary;
-        case 'read':
-          return colors.primary;
-        default:
-          return colors.textTertiary;
-      }
-    };
-
-    const showDoubleCheck = status === 'delivered' || status === 'read';
-
-    return (
-      <View style={styles.statusContainer}>
-        {status === 'sending' ? (
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.textTertiary, opacity: 0.5 }} />
-        ) : (
-          <>
-            <Check size={14} color={getStatusColor()} />
-            {showDoubleCheck && (
-              <Check size={14} color={getStatusColor()} style={{ marginLeft: -6 }} />
-            )}
-          </>
-        )}
-      </View>
-    );
-  };
 
   return (
     <Animated.View style={[styles.container, isUser && styles.userContainer]}>
@@ -143,7 +102,6 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
       </View>
       <View style={styles.footer}>
         {timestamp && <Text style={styles.timestamp}>{timestamp}</Text>}
-        {renderStatusIcon()}
       </View>
     </Animated.View>
   );

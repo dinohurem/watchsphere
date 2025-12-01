@@ -1,30 +1,41 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft } from '@/components/icons';
+import { ArrowLeft, Bell, Tag, TrendingUp } from '@/components/icons';
 
 interface NotificationItem {
   id: string;
+  type: 'offer' | 'alert' | 'update';
   title: string;
+  reference: string;
   price: string;
   time: string;
-  image?: string;
 }
 
+const iconMap = {
+  offer: Tag,
+  alert: Bell,
+  update: TrendingUp,
+};
+
 export default function NotificationsScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
 
   const todayNotifications: NotificationItem[] = [
     {
       id: '1',
-      title: 'New offer for Rolex Submariner Date',
+      type: 'offer',
+      title: 'New offer',
+      reference: '126610LN',
       price: '€12,000',
       time: '2h',
     },
     {
       id: '2',
-      title: 'New offer for Rolex Submariner Date',
+      type: 'alert',
+      title: 'Price alert triggered',
+      reference: '126710BLRO',
       price: '€11,000',
       time: '10h',
     },
@@ -33,36 +44,45 @@ export default function NotificationsScreen() {
   const last7DaysNotifications: NotificationItem[] = [
     {
       id: '3',
-      title: 'New offer for Rolex Submariner Date',
+      type: 'update',
+      title: 'Market update',
+      reference: '5711/1A-014',
       price: '€12,500',
       time: '1d',
     },
     {
       id: '4',
-      title: 'New offer for Rolex Submariner Date',
+      type: 'offer',
+      title: 'New offer',
+      reference: '228238A',
       price: '€8,000',
       time: '5d',
     },
   ];
 
-  const renderNotificationItem = (item: NotificationItem) => (
-    <TouchableOpacity
-      key={item.id}
-      style={styles.notificationItem}
-      onPress={() => router.push('/watch/1' as any)}
-    >
-      <View style={styles.watchImage}>
-        {/* Placeholder for watch image */}
-      </View>
-      <View style={styles.notificationContent}>
-        <Text style={styles.notificationTitle}>{item.title}</Text>
-        <View style={styles.notificationFooter}>
-          <Text style={styles.notificationPrice}>{item.price}</Text>
-          <Text style={styles.notificationTime}>{item.time}</Text>
+  const renderNotificationItem = (item: NotificationItem) => {
+    const IconComponent = iconMap[item.type];
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={styles.notificationItem}
+        onPress={() => router.push('/watch/1' as any)}
+      >
+        <View style={styles.iconContainer}>
+          <IconComponent size={16} color={colors.primary} />
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.notificationContent}>
+          <Text style={styles.notificationTitle}>
+            {item.title} <Text style={styles.referenceText}>{item.reference}</Text>
+          </Text>
+          <View style={styles.notificationFooter}>
+            <Text style={styles.notificationPrice}>{item.price}</Text>
+            <Text style={styles.notificationTime}>{item.time}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -84,7 +104,7 @@ export default function NotificationsScreen() {
     },
     headerTitle: {
       fontSize: 17,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     scrollView: {
@@ -95,31 +115,37 @@ export default function NotificationsScreen() {
       paddingTop: 20,
     },
     sectionTitle: {
-      fontSize: 15,
-      fontWeight: '400',
+      fontSize: 13,
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
-      marginBottom: 16,
+      marginBottom: 12,
     },
     notificationItem: {
       flexDirection: 'row',
-      paddingVertical: 12,
+      paddingVertical: 10,
       gap: 12,
+      alignItems: 'center',
     },
-    watchImage: {
-      width: 80,
-      height: 80,
-      borderRadius: 8,
-      backgroundColor: colors.backgroundSecondary,
+    iconContainer: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.primaryLight,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     notificationContent: {
       flex: 1,
       justifyContent: 'center',
     },
     notificationTitle: {
-      fontSize: 16,
-      fontWeight: '400',
+      fontSize: 13,
+      fontFamily: fonts.medium,
       color: colors.text,
-      marginBottom: 8,
+      marginBottom: 4,
+    },
+    referenceText: {
+      fontFamily: fonts.semiBold,
     },
     notificationFooter: {
       flexDirection: 'row',
@@ -127,13 +153,13 @@ export default function NotificationsScreen() {
       gap: 8,
     },
     notificationPrice: {
-      fontSize: 16,
-      fontWeight: '600',
+      fontSize: 13,
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     notificationTime: {
-      fontSize: 15,
-      fontWeight: '400',
+      fontSize: 12,
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
     },
   });

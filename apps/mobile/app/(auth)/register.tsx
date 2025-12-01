@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { api } from '@/services/api';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
@@ -21,6 +22,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'dealer' | 'collector'>('collector');
   const [loading, setLoading] = useState(false);
+  const { colors, fonts } = useTheme();
 
   const login = useAuthStore((state) => state.login);
 
@@ -52,6 +54,113 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#F5F5F5',
+    },
+    keyboardView: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+    },
+    content: {
+      flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+      paddingVertical: 32,
+    },
+    header: {
+      marginBottom: 32,
+    },
+    title: {
+      fontSize: 32,
+      fontFamily: fonts.bold,
+      color: '#1A1A1A',
+      marginBottom: 8,
+    },
+    subtitle: {
+      fontSize: 16,
+      color: '#666',
+    },
+    form: {
+      gap: 16,
+    },
+    inputGroup: {
+      gap: 8,
+    },
+    label: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: '#1A1A1A',
+    },
+    input: {
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#E5E5E5',
+      borderRadius: 12,
+      padding: 16,
+      fontSize: 16,
+      color: '#1A1A1A',
+    },
+    roleContainer: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    roleButton: {
+      flex: 1,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#E5E5E5',
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+    },
+    roleButtonActive: {
+      backgroundColor: '#1A1A1A',
+      borderColor: '#1A1A1A',
+    },
+    roleButtonText: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: '#666',
+    },
+    roleButtonTextActive: {
+      color: '#fff',
+    },
+    button: {
+      backgroundColor: '#1A1A1A',
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    buttonDisabled: {
+      opacity: 0.5,
+    },
+    buttonText: {
+      color: '#fff',
+      fontSize: 16,
+      fontFamily: fonts.semiBold,
+    },
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 16,
+    },
+    footerText: {
+      fontSize: 14,
+      color: '#666',
+    },
+    link: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: '#1A1A1A',
+    },
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -148,110 +257,3 @@ export default function RegisterScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-  },
-  header: {
-    marginBottom: 32,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
-  form: {
-    gap: 16,
-  },
-  inputGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#1A1A1A',
-  },
-  roleContainer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  roleButton: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  roleButtonActive: {
-    backgroundColor: '#1A1A1A',
-    borderColor: '#1A1A1A',
-  },
-  roleButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  roleButtonTextActive: {
-    color: '#fff',
-  },
-  button: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  footerText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  link: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-});

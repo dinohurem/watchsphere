@@ -5,7 +5,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ArrowLeft, ChevronRight, User } from '@/components/icons';
 
 export default function ProfileSettingsScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
 
   const styles = StyleSheet.create({
     container: {
@@ -24,7 +24,7 @@ export default function ProfileSettingsScreen() {
     },
     headerTitle: {
       fontSize: 17,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     scrollView: {
@@ -37,13 +37,13 @@ export default function ProfileSettingsScreen() {
     },
     title: {
       fontSize: 28,
-      fontWeight: '700',
+      fontFamily: fonts.bold,
       color: colors.text,
       marginBottom: 8,
     },
     subtitle: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
       lineHeight: 22,
     },
@@ -72,7 +72,7 @@ export default function ProfileSettingsScreen() {
     },
     uploadButtonText: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
     },
     fieldsSection: {
@@ -86,7 +86,7 @@ export default function ProfileSettingsScreen() {
     },
     fieldLabel: {
       fontSize: 13,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
       marginBottom: 8,
     },
@@ -97,7 +97,7 @@ export default function ProfileSettingsScreen() {
     },
     fieldValue: {
       fontSize: 17,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
     },
   });

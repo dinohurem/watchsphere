@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
-import { X, Send, Image, Zap } from './icons';
+import { X, Send, Image, AISparkle } from './icons';
 
 interface Message {
   id: string;
@@ -28,11 +28,142 @@ interface AIChatModalProps {
 }
 
 export function AIChatModal({ visible, onClose }: AIChatModalProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const sendButtonScale = useRef(new Animated.Value(0)).current;
   const imageButtonWidth = useRef(new Animated.Value(44)).current;
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+    },
+    keyboardAvoid: {
+      flex: 1,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    aiIconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontFamily: fonts.semiBold,
+    },
+    headerSubtitle: {
+      fontSize: 13,
+      fontFamily: fonts.regular,
+    },
+    closeButton: {
+      padding: 8,
+    },
+    messagesContainer: {
+      flex: 1,
+    },
+    messagesContent: {
+      padding: 16,
+      flexGrow: 1,
+    },
+    emptyState: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 32,
+    },
+    emptyCard: {
+      paddingVertical: 20,
+      paddingHorizontal: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+    },
+    emptyTitle: {
+      fontSize: 16,
+      fontFamily: fonts.semiBold,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      textAlign: 'center',
+    },
+    messageContainer: {
+      marginBottom: 12,
+      maxWidth: '80%',
+    },
+    userMessageContainer: {
+      alignSelf: 'flex-end',
+    },
+    aiMessageContainer: {
+      alignSelf: 'flex-start',
+    },
+    messageBubble: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 18,
+    },
+    userBubble: {
+      borderBottomRightRadius: 4,
+    },
+    aiBubble: {
+      borderBottomLeftRadius: 4,
+    },
+    messageText: {
+      fontSize: 15,
+      lineHeight: 20,
+    },
+    userMessageText: {
+      color: '#FFFFFF',
+    },
+    aiMessageText: {
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+      borderTopWidth: 1,
+      gap: 8,
+    },
+    imageButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    input: {
+      flex: 1,
+      borderRadius: 24,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      fontSize: 15,
+      maxHeight: 100,
+    },
+    sendButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+  });
 
   useEffect(() => {
     // Animate send button and image button
@@ -92,8 +223,8 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.headerLeft}>
-              <View style={[styles.aiIconContainer, { backgroundColor: colors.primaryLight }]}>
-                <Zap size={20} color={colors.primary} />
+              <View style={[styles.aiIconContainer, { backgroundColor: '#F4F4F4' }]}>
+                <AISparkle size={20} color="#9747FF" />
               </View>
               <View>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Ask AI</Text>
@@ -184,134 +315,3 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardAvoid: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  aiIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    fontWeight: '400',
-  },
-  closeButton: {
-    padding: 8,
-  },
-  messagesContainer: {
-    flex: 1,
-  },
-  messagesContent: {
-    padding: 16,
-    flexGrow: 1,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyCard: {
-    paddingVertical: 20,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    fontWeight: '400',
-    textAlign: 'center',
-  },
-  messageContainer: {
-    marginBottom: 12,
-    maxWidth: '80%',
-  },
-  userMessageContainer: {
-    alignSelf: 'flex-end',
-  },
-  aiMessageContainer: {
-    alignSelf: 'flex-start',
-  },
-  messageBubble: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 18,
-  },
-  userBubble: {
-    borderBottomRightRadius: 4,
-  },
-  aiBubble: {
-    borderBottomLeftRadius: 4,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  userMessageText: {
-    color: '#FFFFFF',
-  },
-  aiMessageText: {
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    borderTopWidth: 1,
-    gap: 8,
-  },
-  imageButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
-    maxHeight: 100,
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});

@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export type WareCondition = 'worn' | 'unworn';
 
@@ -16,6 +17,7 @@ export function WareConditionFilter({
   selectedConditions,
   onToggleCondition,
 }: WareConditionFilterProps) {
+  const { colors, fonts } = useTheme();
   const conditions: WareCondition[] = ['unworn', 'worn'];
 
   return (
@@ -31,10 +33,10 @@ export function WareConditionFilter({
             onPress={() => onToggleCondition(condition)}
           >
             <View style={styles.conditionContent}>
-              <Text style={[styles.conditionLabel, isSelected && styles.conditionLabelActive]}>
+              <Text style={[styles.conditionLabel, isSelected && styles.conditionLabelActive, { fontFamily: fonts.semiBold }]}>
                 {label}
               </Text>
-              <Text style={[styles.conditionDescription, isSelected && styles.conditionDescriptionActive]}>
+              <Text style={[styles.conditionDescription, isSelected && styles.conditionDescriptionActive, { fontFamily: fonts.regular }]}>
                 {description}
               </Text>
             </View>
@@ -69,7 +71,6 @@ const styles = StyleSheet.create({
   },
   conditionLabel: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#000000',
     marginBottom: 4,
   },
@@ -78,7 +79,6 @@ const styles = StyleSheet.create({
   },
   conditionDescription: {
     fontSize: 12,
-    fontWeight: '400',
     color: '#8E8E93',
     textAlign: 'center',
   },

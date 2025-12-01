@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export interface YearMonthSelection {
   year: number;
@@ -33,6 +34,7 @@ export function YearMonthFilter({
   minYear = 1950,
   maxYear = new Date().getFullYear(),
 }: YearMonthFilterProps) {
+  const { colors, fonts } = useTheme();
   const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => maxYear - i);
 
   const isPeriodSelected = (year: number, month?: number) => {
@@ -43,7 +45,7 @@ export function YearMonthFilter({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Year</Text>
+      <Text style={[styles.label, { fontFamily: fonts.semiBold }]}>Year</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -58,7 +60,7 @@ export function YearMonthFilter({
               style={[styles.yearButton, isSelected && styles.buttonActive]}
               onPress={() => onTogglePeriod({ year })}
             >
-              <Text style={[styles.yearText, isSelected && styles.textActive]}>
+              <Text style={[styles.yearText, isSelected && styles.textActive, { fontFamily: fonts.medium }]}>
                 {year}
               </Text>
             </TouchableOpacity>
@@ -66,7 +68,7 @@ export function YearMonthFilter({
         })}
       </ScrollView>
 
-      <Text style={[styles.label, styles.monthLabel]}>Month (Optional)</Text>
+      <Text style={[styles.label, styles.monthLabel, { fontFamily: fonts.semiBold }]}>Month (Optional)</Text>
       <View style={styles.monthGrid}>
         {MONTHS.map((month) => {
           // For month selection, we need a year context - using current year as default
@@ -80,7 +82,7 @@ export function YearMonthFilter({
               style={[styles.monthButton, isSelected && styles.buttonActive]}
               onPress={() => onTogglePeriod({ year: currentYear, month: month.value })}
             >
-              <Text style={[styles.monthText, isSelected && styles.textActive]}>
+              <Text style={[styles.monthText, isSelected && styles.textActive, { fontFamily: fonts.medium }]}>
                 {month.label}
               </Text>
             </TouchableOpacity>
@@ -97,7 +99,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
     color: '#000000',
     marginBottom: 8,
   },
@@ -121,7 +122,6 @@ const styles = StyleSheet.create({
   },
   yearText: {
     fontSize: 14,
-    fontWeight: '500',
     color: '#000000',
   },
   monthGrid: {
@@ -141,7 +141,6 @@ const styles = StyleSheet.create({
   },
   monthText: {
     fontSize: 13,
-    fontWeight: '500',
     color: '#000000',
   },
   buttonActive: {

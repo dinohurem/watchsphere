@@ -14,12 +14,60 @@ interface SwipeableChatItemProps {
 }
 
 export function SwipeableChatItem({ children, onMore, onPin, onDelete, isGroup = false, onPress }: SwipeableChatItemProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const swipeableRef = useRef<Swipeable>(null);
   const [showModal, setShowModal] = React.useState(false);
   const [modalPosition, setModalPosition] = React.useState({ x: 0, y: 0 });
   const [isSwiping, setIsSwiping] = React.useState(false);
   const moreButtonRef = useRef<View>(null);
+
+  const styles = React.useMemo(() => StyleSheet.create({
+    actionsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    actionButton: {
+      width: 60,
+      height: '100%',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    actionText: {
+      color: '#FFFFFF',
+      fontSize: 11,
+      fontFamily: fonts.semiBold,
+      marginTop: 4,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    },
+    modalContent: {
+      minWidth: 200,
+      borderRadius: 12,
+      paddingVertical: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    modalOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      gap: 12,
+    },
+    modalOptionText: {
+      fontSize: 16,
+      fontFamily: fonts.medium,
+    },
+    modalDivider: {
+      height: 1,
+      marginHorizontal: 20,
+    },
+  }), [fonts]);
 
   const renderRightActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
     // Elastic animation - buttons come from right
@@ -185,51 +233,3 @@ export function SwipeableChatItem({ children, onMore, onPin, onDelete, isGroup =
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  actionsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionButton: {
-    width: 60,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-  },
-  modalContent: {
-    minWidth: 200,
-    borderRadius: 12,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  modalOptionText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  modalDivider: {
-    height: 1,
-    marginHorizontal: 20,
-  },
-});

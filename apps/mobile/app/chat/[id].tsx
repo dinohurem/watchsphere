@@ -8,12 +8,12 @@ import { useChat } from '@/contexts/ChatContext';
 import { ChatBubble } from '@/components/ChatBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { TypingIndicator } from '@/components/TypingIndicator';
-import { ChevronLeft, Phone, Video, MoreVertical, ChevronRight } from '@/components/icons';
+import { ArrowLeft, ChevronRight } from '@/components/icons';
 import { Message } from '@/services/chatService';
 
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const {
     getConversation,
     getMessages,
@@ -154,14 +154,16 @@ export default function ChatDetailScreen() {
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    headerLeft: {
+    backButton: {
+      padding: 4,
+      width: 40,
+    },
+    headerCenter: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      flex: 1,
-    },
-    backButton: {
-      marginRight: 12,
-      padding: 4,
+      justifyContent: 'center',
+      gap: 12,
     },
     avatar: {
       width: 36,
@@ -170,34 +172,19 @@ export default function ChatDetailScreen() {
       backgroundColor: colors.primary,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
     },
     avatarText: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#FFFFFF',
-    },
-    headerInfo: {
-      flex: 1,
     },
     headerName: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
-    headerStatus: {
-      fontSize: 13,
-      fontWeight: '400',
-      color: colors.textSecondary,
-      marginTop: 2,
-    },
-    headerActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 16,
-    },
-    actionButton: {
-      padding: 4,
+    headerRight: {
+      width: 40,
     },
     messagesContainer: {
       flex: 1,
@@ -222,14 +209,14 @@ export default function ChatDetailScreen() {
     },
     emptyTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 8,
       textAlign: 'center',
     },
     emptySubtitle: {
       fontSize: 14,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
       textAlign: 'center',
     },
@@ -255,12 +242,12 @@ export default function ChatDetailScreen() {
     },
     watchTitle: {
       fontSize: 15,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     watchPrice: {
       fontSize: 14,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
     },
     watchChevron: {
@@ -294,41 +281,23 @@ export default function ChatDetailScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         {/* Custom Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <ChevronLeft size={24} color={colors.text} />
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <ArrowLeft size={24} color={colors.text} />
+          </TouchableOpacity>
 
+          <View style={styles.headerCenter}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
                 {conversation?.name?.charAt(0).toUpperCase() || 'C'}
               </Text>
             </View>
-
-            <View style={styles.headerInfo}>
-              <Text style={styles.headerName}>{conversation?.name || 'Chat'}</Text>
-              <Text style={styles.headerStatus}>{getHeaderStatus()}</Text>
-            </View>
+            <Text style={styles.headerName}>{conversation?.name || 'Chat'}</Text>
           </View>
 
-          <View style={styles.headerActions}>
-            {conversation?.type === 'direct' && (
-              <>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Phone size={22} color={colors.text} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Video size={22} color={colors.text} />
-                </TouchableOpacity>
-              </>
-            )}
-            <TouchableOpacity style={styles.actionButton}>
-              <MoreVertical size={22} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+          <View style={styles.headerRight} />
         </View>
 
         {/* Watch Card */}

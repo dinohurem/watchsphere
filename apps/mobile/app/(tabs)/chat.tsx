@@ -27,7 +27,7 @@ interface AIChat {
 }
 
 export default function ChatScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('conversations');
   const [showAIChat, setShowAIChat] = useState(false);
 
@@ -250,7 +250,7 @@ export default function ChatScreen() {
     },
     headerTitle: {
       fontSize: 28,
-      fontWeight: '700',
+      fontFamily: fonts.bold,
       color: colors.text,
       paddingBottom: 12,
     },
@@ -273,7 +273,7 @@ export default function ChatScreen() {
     },
     tabText: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#212121',
       letterSpacing: 0.075,
     },
@@ -295,7 +295,7 @@ export default function ChatScreen() {
     },
     newChatButtonText: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.background,
     },
     conversationItem: {
@@ -317,7 +317,7 @@ export default function ChatScreen() {
     },
     avatarText: {
       fontSize: 18,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
     },
     conversationContent: {
@@ -327,7 +327,7 @@ export default function ChatScreen() {
     },
     conversationName: {
       fontSize: 13,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#212121',
       letterSpacing: 0.065,
       marginBottom: 4,
@@ -339,7 +339,7 @@ export default function ChatScreen() {
     },
     timestamp: {
       fontSize: 11,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#212121',
       opacity: 0.5,
       letterSpacing: 0.055,
@@ -347,7 +347,7 @@ export default function ChatScreen() {
     lastMessage: {
       flex: 1,
       fontSize: 13,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#212121',
       opacity: 0.5,
       letterSpacing: 0.065,
@@ -364,7 +364,7 @@ export default function ChatScreen() {
     },
     unreadText: {
       fontSize: 12,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#FFFFFF',
     },
     emptyState: {
@@ -376,14 +376,14 @@ export default function ChatScreen() {
     },
     emptyText: {
       fontSize: 20,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginTop: 16,
       marginBottom: 8,
     },
     emptySubtext: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.textSecondary,
       textAlign: 'center',
     },

@@ -6,7 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ArrowLeft } from '@/components/icons';
 
 export default function FieldEditScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const { field } = useLocalSearchParams<{ field: string }>();
   const [value, setValue] = useState('Fabian Wir');
 
@@ -49,7 +49,7 @@ export default function FieldEditScreen() {
     },
     headerTitle: {
       fontSize: 17,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     content: {
@@ -59,19 +59,19 @@ export default function FieldEditScreen() {
     },
     title: {
       fontSize: 28,
-      fontWeight: '700',
+      fontFamily: fonts.bold,
       color: colors.text,
       marginBottom: 8,
     },
     subtitle: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
       marginBottom: 24,
     },
     input: {
       fontSize: 17,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: colors.text,
       paddingVertical: 12,
       paddingHorizontal: 16,
@@ -91,7 +91,7 @@ export default function FieldEditScreen() {
     },
     saveButtonText: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.background,
     },
   });

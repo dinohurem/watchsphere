@@ -12,7 +12,7 @@ interface ListingStep {
 }
 
 export default function DashboardScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const [inventory] = useState<any[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -70,7 +70,7 @@ export default function DashboardScreen() {
     },
     headerTitle: {
       fontSize: 18,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       letterSpacing: 0.5,
     },
@@ -97,7 +97,7 @@ export default function DashboardScreen() {
     },
     sectionTitleText: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       lineHeight: 20,
       letterSpacing: 0.08,
@@ -128,14 +128,14 @@ export default function DashboardScreen() {
     },
     emptyTitle: {
       fontSize: 20,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#1D1D1F',
       marginBottom: 12,
       textAlign: 'center',
     },
     emptySubtitle: {
       fontSize: 15,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#1D1D1F',
       textAlign: 'center',
       marginBottom: 24,
@@ -150,7 +150,7 @@ export default function DashboardScreen() {
     },
     createButtonText: {
       fontSize: 15,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#FFFFFF',
       letterSpacing: 0.5,
     },
@@ -177,7 +177,7 @@ export default function DashboardScreen() {
     },
     inventoryBrand: {
       fontSize: 15,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 2,
     },
@@ -188,7 +188,7 @@ export default function DashboardScreen() {
     },
     inventoryPrice: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     // Modal styles
@@ -207,7 +207,7 @@ export default function DashboardScreen() {
     },
     modalTitle: {
       fontSize: 18,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     closeButton: {
@@ -248,7 +248,7 @@ export default function DashboardScreen() {
     },
     stepNumber: {
       fontSize: 14,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
     },
     stepNumberActive: {
       color: '#FFFFFF',
@@ -275,7 +275,7 @@ export default function DashboardScreen() {
     },
     stepTitle: {
       fontSize: 15,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     stepTitleActive: {
@@ -289,7 +289,7 @@ export default function DashboardScreen() {
     },
     sectionTitle: {
       fontSize: 18,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 16,
     },
@@ -327,12 +327,12 @@ export default function DashboardScreen() {
     },
     buttonTextPrimary: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#FFFFFF',
     },
     buttonTextSecondary: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
   });

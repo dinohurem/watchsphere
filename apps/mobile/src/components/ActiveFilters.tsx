@@ -23,7 +23,7 @@ const monthNames = [
 ];
 
 export function ActiveFilters({ filters, onRemoveFilter, onClearAll }: ActiveFiltersProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const hasFilters =
     filters.locations.length > 0 ||
     filters.brands.length > 0 ||
@@ -51,7 +51,7 @@ export function ActiveFilters({ filters, onRemoveFilter, onClearAll }: ActiveFil
     },
     filterText: {
       fontSize: 13,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: colors.primary,
     },
     clearAllButton: {
@@ -64,7 +64,7 @@ export function ActiveFilters({ filters, onRemoveFilter, onClearAll }: ActiveFil
     },
     clearAllText: {
       fontSize: 13,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: colors.textTertiary,
     },
   });

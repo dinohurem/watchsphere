@@ -11,6 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Sparkles, MessageSquare, Move, EyeOff } from './icons';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface FloatingAIButtonAdvancedProps {
   onPress: () => void;
@@ -22,6 +23,7 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 const BUTTON_SIZE = 48;
 
 export function FloatingAIButtonAdvanced({ onPress, onHide }: FloatingAIButtonAdvancedProps) {
+  const { colors, fonts } = useTheme();
   const [showMenu, setShowMenu] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const position = useRef(
@@ -127,21 +129,21 @@ export function FloatingAIButtonAdvanced({ onPress, onHide }: FloatingAIButtonAd
           <View style={styles.menuContainer}>
             <TouchableOpacity style={styles.menuItem} onPress={handleNewChat}>
               <MessageSquare size={20} color="#000000" />
-              <Text style={styles.menuText}>New Chat</Text>
+              <Text style={[styles.menuText, { fontFamily: fonts.medium }]}>New Chat</Text>
             </TouchableOpacity>
 
             <View style={styles.menuDivider} />
 
             <TouchableOpacity style={styles.menuItem} onPress={handleMove}>
               <Move size={20} color="#000000" />
-              <Text style={styles.menuText}>Move (Drag button)</Text>
+              <Text style={[styles.menuText, { fontFamily: fonts.medium }]}>Move (Drag button)</Text>
             </TouchableOpacity>
 
             <View style={styles.menuDivider} />
 
             <TouchableOpacity style={styles.menuItem} onPress={handleHide}>
               <EyeOff size={20} color="#FF3B30" />
-              <Text style={[styles.menuText, styles.menuTextDanger]}>Hide</Text>
+              <Text style={[styles.menuText, styles.menuTextDanger, { fontFamily: fonts.medium }]}>Hide</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -207,7 +209,6 @@ const styles = StyleSheet.create({
   },
   menuText: {
     fontSize: 16,
-    fontWeight: '500',
     color: '#000000',
   },
   menuTextDanger: {

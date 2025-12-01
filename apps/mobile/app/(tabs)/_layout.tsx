@@ -36,7 +36,7 @@ export default function TabLayout() {
           },
           tabBarLabelStyle: {
             fontSize: 10,
-            fontWeight: '500',
+            fontFamily: 'HankenGrotesk_500Medium',
             marginTop: 4,
           },
           tabBarIconStyle: {
@@ -145,6 +145,6 @@ const styles = StyleSheet.create({
   toastText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: 'HankenGrotesk_500Medium',
   },
 });

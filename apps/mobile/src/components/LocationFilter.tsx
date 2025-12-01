@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export type Location = 'US' | 'EU' | 'UAE' | 'HK';
 
@@ -15,7 +16,49 @@ const locationData: Record<Location, { label: string; initials: string; emoji: s
 };
 
 export function LocationFilter({ selectedLocations, onToggleLocation }: LocationFilterProps) {
+  const { colors, fonts } = useTheme();
   const locations: Location[] = ['US', 'EU', 'UAE', 'HK'];
+
+  const styles = StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      gap: 12,
+      paddingVertical: 8,
+    },
+    locationButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    locationButtonActive: {
+      // Active state handled by inner elements
+    },
+    iconContainer: {
+      width: 56,
+      height: 56,
+      borderRadius: 12,
+      backgroundColor: '#F5F5F5',
+      borderWidth: 2,
+      borderColor: '#E5E5EA',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconContainerActive: {
+      backgroundColor: '#E3F2FF',
+      borderColor: '#007AFF',
+    },
+    emoji: {
+      fontSize: 28,
+    },
+    initials: {
+      fontSize: 12,
+      fontFamily: fonts.semiBold,
+      color: '#8E8E93',
+    },
+    initialsActive: {
+      color: '#007AFF',
+    },
+  });
 
   return (
     <View style={styles.container}>
@@ -41,44 +84,3 @@ export function LocationFilter({ selectedLocations, onToggleLocation }: Location
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 8,
-  },
-  locationButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  locationButtonActive: {
-    // Active state handled by inner elements
-  },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: '#F5F5F5',
-    borderWidth: 2,
-    borderColor: '#E5E5EA',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconContainerActive: {
-    backgroundColor: '#E3F2FF',
-    borderColor: '#007AFF',
-  },
-  emoji: {
-    fontSize: 28,
-  },
-  initials: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  initialsActive: {
-    color: '#007AFF',
-  },
-});

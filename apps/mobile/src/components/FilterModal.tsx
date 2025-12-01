@@ -21,19 +21,8 @@ interface FilterModalProps {
   onApplyFilters: (filters: MarketFilters) => void;
 }
 
-const AVAILABLE_BRANDS = [
-  'Rolex',
-  'Omega',
-  'Patek Philippe',
-  'Audemars Piguet',
-  'Cartier',
-  'TAG Heuer',
-  'IWC',
-  'Breitling',
-];
-
 export function FilterModal({ visible, onClose, filters, onApplyFilters }: FilterModalProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const [tempFilters, setTempFilters] = React.useState<MarketFilters>(filters);
 
   React.useEffect(() => {
@@ -46,15 +35,6 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
       locations: prev.locations.includes(location)
         ? prev.locations.filter((l) => l !== location)
         : [...prev.locations, location],
-    }));
-  };
-
-  const handleToggleBrand = (brand: string) => {
-    setTempFilters((prev) => ({
-      ...prev,
-      brands: prev.brands.includes(brand)
-        ? prev.brands.filter((b) => b !== brand)
-        : [...prev.brands, brand],
     }));
   };
 
@@ -115,7 +95,7 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
     },
     headerTitle: {
       fontSize: 18,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     closeButton: {
@@ -135,34 +115,9 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
     },
     sectionTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 12,
-    },
-    brandGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    brandButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 8,
-      backgroundColor: colors.backgroundSecondary,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    brandButtonActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    brandText: {
-      fontSize: 14,
-      fontWeight: '500',
-      color: colors.text,
-    },
-    brandTextActive: {
-      color: '#FFFFFF',
     },
     footer: {
       flexDirection: 'row',
@@ -184,7 +139,7 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
     },
     resetButtonText: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
     applyButton: {
@@ -197,7 +152,7 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
     },
     applyButtonText: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: colors.background,
     },
   });
@@ -222,27 +177,6 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
               selectedLocations={tempFilters.locations}
               onToggleLocation={handleToggleLocation}
             />
-          </View>
-
-          {/* Brand Filter */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Brand</Text>
-            <View style={styles.brandGrid}>
-              {AVAILABLE_BRANDS.map((brand) => {
-                const isSelected = tempFilters.brands.includes(brand);
-                return (
-                  <TouchableOpacity
-                    key={brand}
-                    style={[styles.brandButton, isSelected && styles.brandButtonActive]}
-                    onPress={() => handleToggleBrand(brand)}
-                  >
-                    <Text style={[styles.brandText, isSelected && styles.brandTextActive]}>
-                      {brand}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
           </View>
 
           {/* Year & Month Filter */}

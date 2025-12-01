@@ -22,7 +22,7 @@ export function WatchListItem({
   priceHistory,
   onPress
 }: WatchListItemProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const hasPositiveChange = priceChange && priceChange > 0;
   const hasNegativeChange = priceChange && priceChange < 0;
 
@@ -57,13 +57,13 @@ export function WatchListItem({
     },
     title: {
       fontSize: 13,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       letterSpacing: 0.065,
     },
     subtitle: {
       fontSize: 13,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#212121',
       opacity: 0.5,
       letterSpacing: 0.065,
@@ -76,14 +76,14 @@ export function WatchListItem({
     },
     fromLabel: {
       fontSize: 11,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#212121',
       opacity: 0.5,
       letterSpacing: 0.055,
     },
     price: {
       fontSize: 13,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       letterSpacing: 0.065,
     },
@@ -98,12 +98,12 @@ export function WatchListItem({
     },
     priceChangeUp: {
       fontSize: 12,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#4AA078',
     },
     priceChangeDown: {
       fontSize: 12,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#CC6045',
     },
   });

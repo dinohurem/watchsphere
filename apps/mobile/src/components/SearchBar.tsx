@@ -9,7 +9,7 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ value, onChangeText, placeholder = 'Search watches...' }: SearchBarProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
 
   const styles = StyleSheet.create({
     container: {
@@ -25,7 +25,7 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search watches..
       flex: 1,
       fontSize: 15,
       color: colors.text,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
     },
   });
 

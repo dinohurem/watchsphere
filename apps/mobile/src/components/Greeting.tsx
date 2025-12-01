@@ -4,11 +4,10 @@ import { router } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Bell } from './icons';
-import { Logo } from './Logo';
 
 export function Greeting() {
   const user = useAuthStore((state) => state.user);
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -26,29 +25,37 @@ export function Greeting() {
       paddingTop: 8,
       paddingBottom: 16,
     },
-    logoContainer: {
+    headerRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: 16,
     },
-    logo: {
-      width: 207.78,
-      height: 44,
+    logoContainer: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    logoText: {
+      fontSize: 16,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      letterSpacing: 2,
     },
     notificationButton: {
       width: 44,
       height: 44,
       justifyContent: 'center',
       alignItems: 'center',
+      position: 'absolute',
+      right: 0,
     },
     greetingContainer: {
       flexDirection: 'row',
       alignItems: 'center',
     },
     greetingText: {
-      fontSize: 24,
-      fontWeight: '700',
+      fontSize: 18,
+      fontFamily: fonts.semiBold,
       color: colors.text,
       flex: 1,
     },
@@ -57,8 +64,10 @@ export function Greeting() {
   return (
     <View style={styles.wrapper}>
       {/* Logo and Notification */}
-      <View style={styles.logoContainer}>
-        <Logo width={207.78} height={44} />
+      <View style={styles.headerRow}>
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoText}>WATCHSPHERE</Text>
+        </View>
         <TouchableOpacity
           style={styles.notificationButton}
           onPress={() => router.push('/(tabs)/notifications' as any)}

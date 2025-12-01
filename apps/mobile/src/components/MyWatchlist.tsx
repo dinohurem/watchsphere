@@ -14,7 +14,7 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 const WATCHLIST_HEIGHT = SCREEN_HEIGHT * 0.3;
 
 export function MyWatchlist({ watches, onViewAll, onWatchPress }: MyWatchlistProps) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   // Show only first 3 watches
   const displayWatches = watches.slice(0, 3);
 
@@ -32,7 +32,7 @@ export function MyWatchlist({ watches, onViewAll, onWatchPress }: MyWatchlistPro
     },
     title: {
       fontSize: 16,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       lineHeight: 20,
       letterSpacing: 0.08,
@@ -44,7 +44,7 @@ export function MyWatchlist({ watches, onViewAll, onWatchPress }: MyWatchlistPro
     },
     viewAllText: {
       fontSize: 13,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: colors.primary,
     },
     watchlistColumn: {
@@ -56,7 +56,7 @@ export function MyWatchlist({ watches, onViewAll, onWatchPress }: MyWatchlistPro
     <View style={[styles.container, { minHeight: WATCHLIST_HEIGHT }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>My Watchlist</Text>
+        <Text style={styles.title}>Watchlist</Text>
         <TouchableOpacity style={styles.viewAllButton} onPress={onViewAll}>
           <Text style={styles.viewAllText}>View All</Text>
           <ChevronRight size={14} color={colors.primary} />

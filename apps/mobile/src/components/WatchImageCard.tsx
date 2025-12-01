@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Heart } from './icons';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface WatchImageCardProps {
   imageUrl?: string;
@@ -20,6 +21,8 @@ export function WatchImageCard({
   onPress,
   onFavoritePress,
 }: WatchImageCardProps) {
+  const { colors, fonts } = useTheme();
+
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       <View style={styles.imageContainer}>
@@ -34,9 +37,9 @@ export function WatchImageCard({
           </TouchableOpacity>
         )}
       </View>
-      <Text style={styles.title} numberOfLines={1}>{title}</Text>
-      <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
-      <Text style={styles.price}>{price}</Text>
+      <Text style={[styles.title, { fontFamily: fonts.regular }]} numberOfLines={1}>{title}</Text>
+      <Text style={[styles.subtitle, { fontFamily: fonts.regular }]} numberOfLines={1}>{subtitle}</Text>
+      <Text style={[styles.price, { fontFamily: fonts.semiBold }]}>{price}</Text>
     </TouchableOpacity>
   );
 }
@@ -76,19 +79,16 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 15,
-    fontWeight: '400',
     color: '#000000',
     marginBottom: 2,
   },
   subtitle: {
     fontSize: 13,
-    fontWeight: '400',
     color: '#8E8E93',
     marginBottom: 4,
   },
   price: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#000000',
   },
 });

@@ -63,7 +63,7 @@ const mockWatchDetails = {
 };
 
 export default function WatchDetailsScreen() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const { id } = useLocalSearchParams();
 
   const styles = StyleSheet.create({
@@ -105,13 +105,13 @@ export default function WatchDetailsScreen() {
     },
     title: {
       fontSize: 20,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#1D1D1F',
       lineHeight: 26,
     },
     subtitle: {
       fontSize: 15,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: '#212121',
       opacity: 0.5,
       lineHeight: 20,
@@ -122,13 +122,13 @@ export default function WatchDetailsScreen() {
     },
     price: {
       fontSize: 20,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#1D1D1F',
       lineHeight: 26,
     },
     addedTime: {
       fontSize: 13,
-      fontWeight: '400',
+      fontFamily: fonts.regular,
       color: '#1D1D1F',
       opacity: 0.5,
       lineHeight: 16.9,
@@ -143,7 +143,7 @@ export default function WatchDetailsScreen() {
     quickInfoLabel: {
       width: 128,
       fontSize: 15,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: '#212121',
       opacity: 0.5,
       lineHeight: 20,
@@ -152,7 +152,7 @@ export default function WatchDetailsScreen() {
     quickInfoValue: {
       flex: 1,
       fontSize: 13,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       lineHeight: 18,
       letterSpacing: 0.065,
@@ -173,7 +173,7 @@ export default function WatchDetailsScreen() {
     },
     buyButtonText: {
       fontSize: 15,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#FFFFFF',
       lineHeight: 20,
       letterSpacing: 0.075,
@@ -191,7 +191,7 @@ export default function WatchDetailsScreen() {
     },
     offerButtonText: {
       fontSize: 15,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       lineHeight: 20,
       letterSpacing: 0.075,
@@ -210,7 +210,7 @@ export default function WatchDetailsScreen() {
     },
     sectionTitle: {
       fontSize: 18,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       lineHeight: 20,
       letterSpacing: 0.09,
@@ -224,7 +224,7 @@ export default function WatchDetailsScreen() {
     infoLabel: {
       width: 168,
       fontSize: 15,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: '#212121',
       opacity: 0.5,
       lineHeight: 20,
@@ -233,7 +233,7 @@ export default function WatchDetailsScreen() {
     infoValue: {
       flex: 1,
       fontSize: 13,
-      fontWeight: '600',
+      fontFamily: fonts.semiBold,
       color: '#212121',
       lineHeight: 18,
       letterSpacing: 0.065,
@@ -248,7 +248,7 @@ export default function WatchDetailsScreen() {
     },
     conditionDescription: {
       fontSize: 13,
-      fontWeight: '500',
+      fontFamily: fonts.medium,
       color: '#212121',
       lineHeight: 18,
       letterSpacing: 0.065,
