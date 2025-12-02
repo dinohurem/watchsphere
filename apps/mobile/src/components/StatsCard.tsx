@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface StatItem {
   label: string;
@@ -10,14 +11,16 @@ interface StatsCardProps {
 }
 
 export function StatsCard({ stats }: StatsCardProps) {
+  const { colors, fonts } = useTheme();
+
   return (
     <View style={styles.container}>
       {stats.map((stat, index) => (
         <View key={stat.label}>
           {index > 0 && <View style={styles.divider} />}
           <View style={styles.statItem}>
-            <Text style={styles.label}>{stat.label}</Text>
-            <Text style={styles.value}>{stat.value}</Text>
+            <Text style={[styles.label, { fontFamily: fonts.regular }]}>{stat.label}</Text>
+            <Text style={[styles.value, { fontFamily: fonts.semiBold }]}>{stat.value}</Text>
           </View>
         </View>
       ))}
@@ -45,13 +48,11 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '400',
     color: '#8E8E93',
     marginBottom: 4,
   },
   value: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#000000',
   },
 });

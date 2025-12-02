@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1A1A1A"
+      "backgroundColor": "#000000"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -32,10 +32,25 @@
     "scheme": "watchsphere",
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#000000",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "New message"
+        }
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "notification": {
+      "color": "#000000",
+      "androidMode": "default",
+      "androidCollapsedTitle": "{{unread_count}} new messages"
     }
   }
 }

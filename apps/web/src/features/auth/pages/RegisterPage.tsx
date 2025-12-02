@@ -29,7 +29,7 @@ export function RegisterPage() {
 
       const { user, access_token } = response.data;
       login(user, access_token);
-      navigate('/');
+      navigate('/app');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
     } finally {

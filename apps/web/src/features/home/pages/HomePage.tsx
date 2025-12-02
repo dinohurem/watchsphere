@@ -1,20 +1,20 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import {
-  Activity,
   Search,
   ShoppingCart,
-  Tag,
   Bot,
-  Package,
   ClipboardList,
-  ShieldCheck,
-  Grid3x3
+  TrendingUp,
+  Heart
 } from 'lucide-react';
+import { api } from '@/services/api';
 
 export function HomePage() {
   const user = useAuthStore((state) => state.user);
+  const [watchlist, setWatchlist] = useState<any[]>([]);
+  const [loadingWatchlist, setLoadingWatchlist] = useState(true);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -23,13 +23,28 @@ export function HomePage() {
     return 'Good evening';
   }, []);
 
+  // Extract first name from full name
+  const firstName = useMemo(() => {
+    return user?.name ? user.name.split(' ')[0] : 'User';
+  }, [user?.name]);
+
+  useEffect(() => {
+    loadWatchlist();
+  }, []);
+
+  const loadWatchlist = async () => {
+    try {
+      const response = await api.get('/watchlist');
+      setWatchlist(response.data.slice(0, 3)); // Show only first 3
+    } catch (error) {
+      console.error('Failed to load watchlist:', error);
+      setWatchlist([]);
+    } finally {
+      setLoadingWatchlist(false);
+    }
+  };
+
   const quickAccessButtons = [
-    {
-      icon: Activity,
-      title: 'Activity Center',
-      subtitle: 'All your updates — matches, payments, shipping and alerts in one place.',
-      href: '#'
-    },
     {
       icon: Search,
       title: 'Smart Search',
@@ -38,45 +53,33 @@ export function HomePage() {
     },
     {
       icon: ShoppingCart,
-      title: 'Buy',
-      subtitle: 'Buy from verified dealers in your chosen market region.',
+      title: 'Browse Market',
+      subtitle: 'Explore watches from verified dealers in your preferred region.',
       href: '/market'
     },
     {
-      icon: Tag,
-      title: 'Sell',
-      subtitle: 'List your watches for sale and connect with active buyers.',
-      href: '/dashboard'
+      icon: Heart,
+      title: 'My Watchlist',
+      subtitle: 'Track price changes and get alerts on your favorite watches.',
+      href: '/watchlist'
     },
     {
       icon: Bot,
       title: 'Ask AI Assistant',
-      subtitle: 'Your personal assistant, 24/7.',
+      subtitle: 'Your personal watch expert, available 24/7.',
       href: '/chat'
-    },
-    {
-      icon: Package,
-      title: 'My Inventory',
-      subtitle: 'Manage, edit and track your full watch stock in real time.',
-      href: '/dashboard'
     },
     {
       icon: ClipboardList,
       title: 'My Orders',
-      subtitle: 'View and manage all your active buy orders.',
+      subtitle: 'View and track all your watch purchases.',
       href: '#'
     },
     {
-      icon: ShieldCheck,
-      title: 'Checks',
-      subtitle: 'Avoid risk — check your serials and close deals confidently.',
-      href: '#'
-    },
-    {
-      icon: Grid3x3,
-      title: 'All Tools',
-      subtitle: 'Everything else you need — organized in one place.',
-      href: '#'
+      icon: TrendingUp,
+      title: 'Market Trends',
+      subtitle: 'Discover trending watches and market insights.',
+      href: '/market'
     },
   ];
 
@@ -92,49 +95,113 @@ export function HomePage() {
       {/* Greeting */}
       <div className="mb-8">
         <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
-          {greeting}, {user?.name}.
+          {greeting}, {firstName}.
         </h1>
         <p className="text-gray-600">Here's what's happening with your watches today.</p>
       </div>
 
-      {/* Quick Access Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {quickAccessButtons.map((btn, idx) => {
-          const Icon = btn.icon;
-          return (
+      {/* My Watchlist Section */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-900">My Watchlist</h2>
+          <Link
+            to="/watchlist"
+            className="text-sm font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+          >
+            View All
+            <span>→</span>
+          </Link>
+        </div>
+
+        {loadingWatchlist ? (
+          <div className="flex items-center justify-center py-12 bg-white rounded-xl border border-gray-200">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : watchlist.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 border border-gray-200 text-center">
+            <Heart className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-600 mb-4">Your watchlist is empty</p>
             <Link
-              key={idx}
-              to={btn.href}
-              className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-lg hover:border-gray-300 transition-all duration-200 group"
+              to="/market"
+              className="inline-block px-4 py-2 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors"
             >
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
-                  <Icon className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1 group-hover:text-primary transition-colors">
-                    {btn.title}
-                  </h3>
-                  <p className="text-sm text-gray-600 line-clamp-2">
-                    {btn.subtitle}
-                  </p>
+              Browse Watches
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {watchlist.map((watch) => (
+              <div
+                key={watch.id}
+                className="bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer"
+              >
+                <div className="flex items-center gap-4">
+                  {/* Watch Image Placeholder */}
+                  <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-3xl">⌚</span>
+                  </div>
+
+                  {/* Watch Info */}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      {watch.brand} {watch.model}
+                    </h3>
+                    <p className="text-sm text-gray-600">{watch.reference}</p>
+                  </div>
+
+                  {/* Mini Chart Placeholder */}
+                  <div className="hidden md:block w-24 h-12 bg-gray-50 rounded"></div>
+
+                  {/* Price Info */}
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-gray-900">
+                      €{watch.price?.toLocaleString() || 'N/A'}
+                    </p>
+                    <p className={`text-sm font-medium ${
+                      watch.priceChange > 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {watch.priceChange > 0 ? '▲' : '▼'} {Math.abs(watch.priceChange || 0).toFixed(1)}%
+                    </p>
+                  </div>
                 </div>
               </div>
-            </Link>
-          );
-        })}
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Customize Section */}
+      {/* Quick Access Section */}
       <div className="mb-8">
-        <button className="w-full bg-white rounded-xl p-6 border-2 border-dashed border-gray-300 hover:border-primary hover:bg-gray-50 transition-all text-center group">
-          <p className="text-base font-semibold text-gray-900 group-hover:text-primary transition-colors">
-            Customize your Homescreen
-          </p>
-          <p className="text-sm text-gray-600 mt-1">
-            Add, remove or rearrange your main tools.
-          </p>
-        </button>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-900">Quick Access</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {quickAccessButtons.map((btn, idx) => {
+            const Icon = btn.icon;
+            return (
+              <Link
+                key={idx}
+                to={btn.href}
+                className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-lg hover:border-gray-300 transition-all duration-200 group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1 group-hover:text-primary transition-colors">
+                      {btn.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 line-clamp-2">
+                      {btn.subtitle}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
       {/* Market News */}
