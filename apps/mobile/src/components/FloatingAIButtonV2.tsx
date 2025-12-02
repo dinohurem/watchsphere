@@ -194,6 +194,18 @@ export function FloatingAIButtonV2({ onPress, onHide }: FloatingAIButtonV2Props)
     outputRange: [BUTTON_SIZE, EXPANDED_WIDTH],
   });
 
+  // When on right side, offset x position to expand leftward
+  const expandOffset = expandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -(EXPANDED_WIDTH - BUTTON_SIZE)],
+  });
+
+  // Animate padding to center icon when collapsed
+  const contentPaddingLeft = expandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 14],
+  });
+
   const styles = StyleSheet.create({
     floatingButton: {
       position: 'absolute',
@@ -204,29 +216,31 @@ export function FloatingAIButtonV2({ onPress, onHide }: FloatingAIButtonV2Props)
       width: '100%',
       height: '100%',
       borderRadius: BUTTON_SIZE / 2,
-      backgroundColor: '#9747FF',
+      backgroundColor: '#FFFFFF',
+      borderWidth: 1,
+      borderColor: '#0088FF',
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
-      paddingHorizontal: 14,
-      shadowColor: '#9747FF',
+      shadowColor: '#000',
       shadowOffset: {
         width: 0,
-        height: 4,
+        height: 2,
       },
-      shadowOpacity: 0.4,
-      shadowRadius: 8,
-      elevation: 8,
+      shadowOpacity: 0.15,
+      shadowRadius: 6,
+      elevation: 4,
     },
     buttonContent: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      justifyContent: 'center',
     },
     buttonText: {
       fontSize: 14,
       fontFamily: fonts.semiBold,
-      color: '#FFFFFF',
+      color: '#0088FF',
+      marginLeft: 6,
     },
     bubbleMenu: {
       position: 'absolute',
@@ -300,7 +314,11 @@ export function FloatingAIButtonV2({ onPress, onHide }: FloatingAIButtonV2Props)
           styles.floatingButton,
           {
             width: buttonWidth,
-            transform: position.getTranslateTransform(),
+            transform: [
+              ...position.getTranslateTransform(),
+              // Apply offset only when on right side to expand leftward
+              { translateX: isOnLeftSide ? 0 : expandOffset },
+            ],
           },
         ]}
         {...panResponder.panHandlers}
@@ -312,14 +330,12 @@ export function FloatingAIButtonV2({ onPress, onHide }: FloatingAIButtonV2Props)
           onPressOut={handlePressOut}
           activeOpacity={0.8}
         >
-          <View style={styles.buttonContent}>
-            <AISparkle size={20} color="#FFFFFF" />
-            {isExpanded && (
-              <Animated.Text style={[styles.buttonText, { opacity: textOpacity }]}>
-                Ask AI
-              </Animated.Text>
-            )}
-          </View>
+          <Animated.View style={[styles.buttonContent, { paddingLeft: contentPaddingLeft }]}>
+            <AISparkle size={20} color="#0088FF" />
+            <Animated.Text style={[styles.buttonText, { opacity: textOpacity }]}>
+              Ask AI
+            </Animated.Text>
+          </Animated.View>
         </TouchableOpacity>
 
         {/* Bubble Menu */}

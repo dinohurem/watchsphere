@@ -1,10 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ImageSourcePropType, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useMemo } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ArrowLeft, ChevronDown, Filter, Check } from '@/components/icons';
 import { OrderBookModal } from '@/components/OrderBookModal';
+import { PriceHistoryChart } from '@/components/PriceHistoryChart';
 
 // Watch data with images
 const WATCH_DATA: Record<string, {
@@ -82,6 +84,17 @@ const TAX_OPTIONS = [
 ];
 
 type Condition = 'unworn' | 'used';
+type OrderBookTab = 'buy' | 'sell';
+
+// Country data for flags and abbreviations
+const countryData: Record<string, { emoji: string; abbr: string }> = {
+  US: { emoji: '🇺🇸', abbr: 'US' },
+  EU: { emoji: '🇪🇺', abbr: 'EU' },
+  UAE: { emoji: '🇦🇪', abbr: 'UAE' },
+  HK: { emoji: '🇭🇰', abbr: 'HK' },
+  UK: { emoji: '🇬🇧', abbr: 'UK' },
+  CH: { emoji: '🇨🇭', abbr: 'CH' },
+};
 
 // Sample order book data
 const SAMPLE_BUY_ORDERS = [
@@ -108,6 +121,7 @@ export default function MarketDetailScreen() {
   const [showYearModal, setShowYearModal] = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [showOrderBook, setShowOrderBook] = useState(false);
+  const [orderBookPreviewTab, setOrderBookPreviewTab] = useState<OrderBookTab>('buy');
 
   // Filter states
   const [selectedMarket, setSelectedMarket] = useState('all');
@@ -151,7 +165,7 @@ export default function MarketDetailScreen() {
       paddingVertical: 4,
     },
     orderBookLinkText: {
-      fontSize: 14,
+      fontSize: 15,
       fontFamily: fonts.medium,
       color: colors.primary,
     },
@@ -159,13 +173,13 @@ export default function MarketDetailScreen() {
       alignItems: 'center',
     },
     headerTitle: {
-      fontSize: 17,
+      fontSize: 19,
       fontFamily: fonts.semiBold,
       color: colors.text,
       textAlign: 'center',
     },
     headerSubtitle: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.regular,
       color: colors.textSecondary,
       textAlign: 'center',
@@ -182,15 +196,17 @@ export default function MarketDetailScreen() {
     },
     watchImageContainer: {
       width: '100%',
-      aspectRatio: 1,
+      aspectRatio: 1.3,
       backgroundColor: colors.backgroundSecondary,
       borderRadius: 20,
       overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     watchImage: {
       width: '100%',
       height: '100%',
-      resizeMode: 'cover',
+      resizeMode: 'contain',
     },
 
     // Filters Section
@@ -287,7 +303,7 @@ export default function MarketDetailScreen() {
       paddingBottom: 24,
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: 18,
       fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 12,
@@ -298,20 +314,20 @@ export default function MarketDetailScreen() {
     },
     marketCard: {
       flex: 1,
-      backgroundColor: colors.backgroundSecondary,
+      backgroundColor: colors.background,
       borderRadius: 12,
       padding: 14,
       alignItems: 'center',
     },
     marketLabel: {
-      fontSize: 13,
-      fontFamily: fonts.bold,
-      color: colors.text,
-      marginBottom: 6,
+      fontSize: 12,
+      fontFamily: fonts.medium,
+      color: colors.textSecondary,
+      marginBottom: 4,
     },
     marketValue: {
-      fontSize: 15,
-      fontFamily: fonts.medium,
+      fontSize: 19,
+      fontFamily: fonts.semiBold,
       color: colors.text,
     },
 
@@ -324,57 +340,128 @@ export default function MarketDetailScreen() {
       flexDirection: 'row',
       gap: 12,
     },
-    buyButton: {
+    orderButton: {
       flex: 1,
-      paddingVertical: 16,
-      borderRadius: 12,
-      backgroundColor: '#4AA078',
+      borderRadius: 14,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    orderButtonGradient: {
+      paddingVertical: 18,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#4AA078',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 4,
     },
-    buyButtonText: {
+    orderButtonText: {
       fontSize: 16,
       fontFamily: fonts.semiBold,
       color: '#FFFFFF',
-    },
-    sellButton: {
-      flex: 1,
-      paddingVertical: 16,
-      borderRadius: 12,
-      backgroundColor: '#CC6045',
-      alignItems: 'center',
-      justifyContent: 'center',
-      shadowColor: '#CC6045',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 4,
-    },
-    sellButtonText: {
-      fontSize: 16,
-      fontFamily: fonts.semiBold,
-      color: '#FFFFFF',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
     },
 
-    // Info Note
-    infoNote: {
-      marginTop: 16,
-      padding: 14,
-      backgroundColor: colors.backgroundSecondary,
-      borderRadius: 10,
-      borderLeftWidth: 3,
-      borderLeftColor: colors.primary,
+    // Order Book Preview Section
+    orderBookPreviewSection: {
+      paddingHorizontal: 16,
+      paddingBottom: 32,
     },
-    infoNoteText: {
+    orderBookPreviewHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    orderBookPreviewTabs: {
+      flexDirection: 'row',
+      backgroundColor: colors.backgroundSecondary,
+      borderRadius: 8,
+      padding: 2,
+    },
+    orderBookPreviewTab: {
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderRadius: 6,
+    },
+    orderBookPreviewTabActive: {
+      backgroundColor: colors.card,
+    },
+    orderBookPreviewTabText: {
+      fontSize: 14,
+      fontFamily: fonts.medium,
+      color: colors.textSecondary,
+    },
+    orderBookPreviewTabTextActive: {
+      color: colors.text,
+      fontFamily: fonts.semiBold,
+    },
+    orderBookViewAllLink: {
+      paddingVertical: 4,
+    },
+    orderBookViewAllText: {
+      fontSize: 14,
+      fontFamily: fonts.medium,
+      color: colors.primary,
+    },
+    orderBookPreviewTable: {
+      backgroundColor: colors.backgroundSecondary,
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    orderBookPreviewHeaderRow: {
+      flexDirection: 'row',
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    orderBookPreviewHeaderText: {
       fontSize: 12,
+      fontFamily: fonts.semiBold,
+      color: colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    orderBookPreviewRow: {
+      flexDirection: 'row',
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
+    orderBookPreviewRowLast: {
+    },
+    orderBookPreviewCell: {
+      flex: 1,
+    },
+    orderBookPreviewCellMarket: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    orderBookPreviewEmoji: {
+      fontSize: 14,
+    },
+    orderBookPreviewAbbr: {
+      fontSize: 14,
+      fontFamily: fonts.medium,
+      color: colors.text,
+    },
+    orderBookPreviewDate: {
+      fontSize: 14,
       fontFamily: fonts.regular,
       color: colors.textSecondary,
-      lineHeight: 18,
+    },
+    orderBookPreviewCondition: {
+      fontSize: 14,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+    },
+    orderBookPreviewPrice: {
+      fontSize: 14,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      textAlign: 'right',
     },
 
     // Modal Styles
@@ -457,8 +544,8 @@ export default function MarketDetailScreen() {
       borderColor: 'transparent',
     },
     filterChipSelected: {
-      backgroundColor: colors.primary + '15',
-      borderColor: colors.primary,
+      backgroundColor: 'rgba(33, 33, 33, 0.08)',
+      borderColor: colors.text,
     },
     filterChipText: {
       fontSize: 14,
@@ -466,7 +553,7 @@ export default function MarketDetailScreen() {
       color: colors.textSecondary,
     },
     filterChipTextSelected: {
-      color: colors.primary,
+      color: colors.text,
       fontFamily: fonts.semiBold,
     },
     filterApplyButton: {
@@ -591,19 +678,95 @@ export default function MarketDetailScreen() {
         {/* 4. Order Placement Buttons */}
         <View style={styles.orderSection}>
           <View style={styles.orderButtons}>
-            <TouchableOpacity style={styles.buyButton} activeOpacity={0.8}>
-              <Text style={styles.buyButtonText}>Place Buy Order</Text>
+            <TouchableOpacity style={styles.orderButton} activeOpacity={0.85}>
+              <LinearGradient
+                colors={['#2ECC71', '#27AE60']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.orderButtonGradient}
+              >
+                <Text style={styles.orderButtonText}>Buy</Text>
+              </LinearGradient>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.sellButton} activeOpacity={0.8}>
-              <Text style={styles.sellButtonText}>Place Sell Order</Text>
+            <TouchableOpacity style={styles.orderButton} activeOpacity={0.85}>
+              <LinearGradient
+                colors={['#E74C3C', '#C0392B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.orderButtonGradient}
+              >
+                <Text style={styles.orderButtonText}>Sell</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 5. Price History Chart */}
+        <PriceHistoryChart />
+
+        {/* 6. Order Book Preview */}
+        <View style={styles.orderBookPreviewSection}>
+          <View style={styles.orderBookPreviewHeader}>
+            <View style={styles.orderBookPreviewTabs}>
+              <TouchableOpacity
+                style={[styles.orderBookPreviewTab, orderBookPreviewTab === 'buy' && styles.orderBookPreviewTabActive]}
+                onPress={() => setOrderBookPreviewTab('buy')}
+              >
+                <Text style={[styles.orderBookPreviewTabText, orderBookPreviewTab === 'buy' && styles.orderBookPreviewTabTextActive]}>
+                  Buy
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.orderBookPreviewTab, orderBookPreviewTab === 'sell' && styles.orderBookPreviewTabActive]}
+                onPress={() => setOrderBookPreviewTab('sell')}
+              >
+                <Text style={[styles.orderBookPreviewTabText, orderBookPreviewTab === 'sell' && styles.orderBookPreviewTabTextActive]}>
+                  Sell
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.orderBookViewAllLink} onPress={() => setShowOrderBook(true)}>
+              <Text style={styles.orderBookViewAllText}>View all</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Info Note */}
-          <View style={styles.infoNote}>
-            <Text style={styles.infoNoteText}>
-              Orders are matched based on the selected condition and year. Your order will be visible to all verified dealers in the market.
-            </Text>
+          <View style={styles.orderBookPreviewTable}>
+            {/* Header Row */}
+            <View style={styles.orderBookPreviewHeaderRow}>
+              <View style={styles.orderBookPreviewCell}>
+                <Text style={styles.orderBookPreviewHeaderText}>Market</Text>
+              </View>
+              <View style={styles.orderBookPreviewCell}>
+                <Text style={styles.orderBookPreviewHeaderText}>Date</Text>
+              </View>
+              <View style={styles.orderBookPreviewCell}>
+                <Text style={styles.orderBookPreviewHeaderText}>Condition</Text>
+              </View>
+              <View style={styles.orderBookPreviewCell}>
+                <Text style={[styles.orderBookPreviewHeaderText, { textAlign: 'right' }]}>Price</Text>
+              </View>
+            </View>
+            {/* Data Rows */}
+            {(orderBookPreviewTab === 'buy' ? SAMPLE_BUY_ORDERS : SAMPLE_SELL_ORDERS).slice(0, 3).map((order, index, arr) => (
+              <View
+                key={`${order.country}-${order.date}-${index}`}
+                style={[styles.orderBookPreviewRow, index === arr.length - 1 && styles.orderBookPreviewRowLast]}
+              >
+                <View style={[styles.orderBookPreviewCell, styles.orderBookPreviewCellMarket]}>
+                  <Text style={styles.orderBookPreviewEmoji}>{countryData[order.country]?.emoji}</Text>
+                  <Text style={styles.orderBookPreviewAbbr}>{countryData[order.country]?.abbr}</Text>
+                </View>
+                <View style={styles.orderBookPreviewCell}>
+                  <Text style={styles.orderBookPreviewDate}>{order.date}</Text>
+                </View>
+                <View style={styles.orderBookPreviewCell}>
+                  <Text style={styles.orderBookPreviewCondition}>{order.condition}</Text>
+                </View>
+                <View style={styles.orderBookPreviewCell}>
+                  <Text style={styles.orderBookPreviewPrice}>{order.price}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         </View>
       </ScrollView>
@@ -612,7 +775,7 @@ export default function MarketDetailScreen() {
       <Modal
         visible={showYearModal}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowYearModal(false)}
       >
         <TouchableOpacity
@@ -639,7 +802,7 @@ export default function MarketDetailScreen() {
                   ]}>
                     {year}
                   </Text>
-                  {selectedYear === year && <Check size={20} color={colors.primary} />}
+                  {selectedYear === year && <Check size={20} color={colors.text} />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -651,7 +814,7 @@ export default function MarketDetailScreen() {
       <Modal
         visible={showFiltersModal}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowFiltersModal(false)}
       >
         <TouchableOpacity

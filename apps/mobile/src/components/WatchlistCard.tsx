@@ -36,13 +36,13 @@ export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
       marginRight: 12,
     },
     name: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 2,
     },
     code: {
-      fontSize: 11,
+      fontSize: 13,
       fontFamily: fonts.regular,
       color: colors.textTertiary,
     },
@@ -59,17 +59,17 @@ export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
       marginBottom: 2,
     },
     fromLabel: {
-      fontSize: 11,
+      fontSize: 13,
       fontFamily: fonts.regular,
       color: colors.textTertiary,
     },
     price: {
-      fontSize: 14,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
     priceChange: {
-      fontSize: 12,
+      fontSize: 13,
       fontFamily: fonts.medium,
     },
     priceUp: {

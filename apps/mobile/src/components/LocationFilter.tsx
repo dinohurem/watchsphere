@@ -44,8 +44,8 @@ export function LocationFilter({ selectedLocations, onToggleLocation }: Location
       justifyContent: 'center',
     },
     iconContainerActive: {
-      backgroundColor: '#E3F2FF',
-      borderColor: '#007AFF',
+      backgroundColor: 'rgba(33, 33, 33, 0.05)',
+      borderColor: '#212121',
     },
     emoji: {
       fontSize: 28,
@@ -56,7 +56,7 @@ export function LocationFilter({ selectedLocations, onToggleLocation }: Location
       color: '#8E8E93',
     },
     initialsActive: {
-      color: '#007AFF',
+      color: '#212121',
     },
   });
 

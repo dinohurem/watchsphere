@@ -56,17 +56,17 @@ export function WatchListItem({
       justifyContent: 'center',
     },
     title: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
       color: '#212121',
-      letterSpacing: 0.065,
+      letterSpacing: 0.075,
     },
     subtitle: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.regular,
       color: '#212121',
       opacity: 0.5,
-      letterSpacing: 0.065,
+      letterSpacing: 0.075,
     },
     priceRow: {
       flexDirection: 'row',
@@ -75,17 +75,17 @@ export function WatchListItem({
       marginBottom: 2,
     },
     fromLabel: {
-      fontSize: 11,
+      fontSize: 13,
       fontFamily: fonts.regular,
       color: '#212121',
       opacity: 0.5,
-      letterSpacing: 0.055,
+      letterSpacing: 0.065,
     },
     price: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
       color: '#212121',
-      letterSpacing: 0.065,
+      letterSpacing: 0.075,
     },
     priceChangeRow: {
       flexDirection: 'row',
@@ -97,12 +97,12 @@ export function WatchListItem({
       height: 12,
     },
     priceChangeUp: {
-      fontSize: 12,
+      fontSize: 14,
       fontFamily: fonts.regular,
       color: '#4AA078',
     },
     priceChangeDown: {
-      fontSize: 12,
+      fontSize: 14,
       fontFamily: fonts.regular,
       color: '#CC6045',
     },

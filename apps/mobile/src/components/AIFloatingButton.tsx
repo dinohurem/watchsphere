@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { TouchableOpacity, Text, StyleSheet, Animated } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Zap } from './icons';
 
@@ -9,7 +9,8 @@ interface AIFloatingButtonProps {
 
 export function AIFloatingButton({ onPress }: AIFloatingButtonProps) {
   const { colors, fonts } = useTheme();
-  const widthAnim = useRef(new Animated.Value(120)).current;
+  const [isExpanded, setIsExpanded] = useState(true);
+  const widthAnim = useRef(new Animated.Value(130)).current;
   const textOpacity = useRef(new Animated.Value(1)).current;
 
   const styles = StyleSheet.create({
@@ -27,17 +28,17 @@ export function AIFloatingButton({ onPress }: AIFloatingButtonProps) {
       overflow: 'hidden',
     },
     button: {
-      flex: 1,
+      width: '100%',
+      height: '100%',
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 16,
-      gap: 8,
     },
     text: {
       fontSize: 16,
       fontFamily: fonts.semiBold,
       color: '#FFFFFF',
+      marginLeft: 8,
     },
   });
 
@@ -53,9 +54,11 @@ export function AIFloatingButton({ onPress }: AIFloatingButtonProps) {
         Animated.timing(textOpacity, {
           toValue: 0,
           duration: 200,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
-      ]).start();
+      ]).start(() => {
+        setIsExpanded(false);
+      });
     }, 3000);
 
     return () => clearTimeout(timer);
@@ -77,16 +80,19 @@ export function AIFloatingButton({ onPress }: AIFloatingButtonProps) {
         activeOpacity={0.8}
       >
         <Zap size={24} color="#FFFFFF" />
-        <Animated.Text
-          style={[
-            styles.text,
-            {
-              opacity: textOpacity,
-            },
-          ]}
-        >
-          Ask AI
-        </Animated.Text>
+        {isExpanded && (
+          <Animated.Text
+            style={[
+              styles.text,
+              {
+                opacity: textOpacity,
+              },
+            ]}
+            numberOfLines={1}
+          >
+            Ask AI
+          </Animated.Text>
+        )}
       </TouchableOpacity>
     </Animated.View>
   );

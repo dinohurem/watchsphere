@@ -78,30 +78,51 @@ export function BrandFilterModal({ visible, onClose, selectedBrands, onApplyBran
       paddingHorizontal: 16,
       paddingVertical: 20,
     },
-    brandGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+    brandList: {
       gap: 8,
     },
     brandButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderRadius: 12,
       backgroundColor: colors.backgroundSecondary,
-      borderWidth: 1,
+      borderWidth: 1.5,
       borderColor: colors.border,
     },
     brandButtonActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
+      backgroundColor: 'rgba(33, 33, 33, 0.05)',
+      borderColor: colors.text,
     },
     brandText: {
-      fontSize: 14,
+      fontSize: 16,
       fontFamily: fonts.medium,
       color: colors.text,
+      letterSpacing: 0.3,
     },
     brandTextActive: {
+      color: colors.text,
+      fontFamily: fonts.semiBold,
+    },
+    checkIndicator: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 2,
+      borderColor: colors.border,
+      marginRight: 14,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    checkIndicatorActive: {
+      backgroundColor: colors.text,
+      borderColor: colors.text,
+    },
+    checkMark: {
+      fontSize: 12,
       color: '#FFFFFF',
+      fontWeight: 'bold',
     },
     footer: {
       flexDirection: 'row',
@@ -127,7 +148,7 @@ export function BrandFilterModal({ visible, onClose, selectedBrands, onApplyBran
       color: colors.text,
     },
     applyButton: {
-      flex: 2,
+      flex: 1,
       paddingVertical: 16,
       borderRadius: 12,
       backgroundColor: colors.text,
@@ -155,7 +176,7 @@ export function BrandFilterModal({ visible, onClose, selectedBrands, onApplyBran
         {/* Brand Content */}
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
-            <View style={styles.brandGrid}>
+            <View style={styles.brandList}>
               {AVAILABLE_BRANDS.map((brand) => {
                 const isSelected = tempBrands.includes(brand);
                 return (
@@ -163,7 +184,11 @@ export function BrandFilterModal({ visible, onClose, selectedBrands, onApplyBran
                     key={brand}
                     style={[styles.brandButton, isSelected && styles.brandButtonActive]}
                     onPress={() => handleToggleBrand(brand)}
+                    activeOpacity={0.7}
                   >
+                    <View style={[styles.checkIndicator, isSelected && styles.checkIndicatorActive]}>
+                      {isSelected && <Text style={styles.checkMark}>✓</Text>}
+                    </View>
                     <Text style={[styles.brandText, isSelected && styles.brandTextActive]}>
                       {brand}
                     </Text>

@@ -223,8 +223,8 @@ export function AIChatModal({ visible, onClose }: AIChatModalProps) {
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.headerLeft}>
-              <View style={[styles.aiIconContainer, { backgroundColor: '#F4F4F4' }]}>
-                <AISparkle size={20} color="#9747FF" />
+              <View style={[styles.aiIconContainer, { backgroundColor: colors.primaryLight }]}>
+                <AISparkle size={20} color={colors.primary} />
               </View>
               <View>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Ask AI</Text>

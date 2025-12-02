@@ -6,7 +6,7 @@ import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-nativ
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Greeting } from '@/components/Greeting';
 import { QuickAccessButton } from '@/components/QuickAccessButton';
-import { NewsCard } from '@/components/NewsCard';
+import { NewsCard, NewsItem } from '@/components/NewsCard';
 import { WatchlistGrid, WatchlistGridItem } from '@/components/WatchlistGrid';
 import { ActivityCenterPreview } from '@/components/ActivityCenterPreview';
 import { AIChatModal } from '@/components/AIChatModal';
@@ -131,13 +131,16 @@ export default function HomeScreen() {
     (item) => !quickAccessItems.find((active) => active.id === item.id)
   );
 
-  const newsItems = [
+  const newsItems: NewsItem[] = [
     {
       id: '1',
       icon: '📰',
       text: 'Patek increases Nautilus production by 5%',
       source: 'Bloomberg',
       url: 'https://bloomberg.com',
+      date: 'December 1, 2025',
+      fullText: 'Patek Philippe has announced a strategic increase in production capacity for their flagship Nautilus collection, responding to sustained market demand. The Swiss manufacturer confirmed a 5% uptick in annual output, marking the first significant production adjustment since 2021. Industry analysts suggest this move could help stabilize secondary market prices, which have seen considerable volatility over the past year. The decision comes amid broader discussions about luxury watch accessibility and the balance between exclusivity and availability.',
+      imageUrl: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=800',
     },
     {
       id: '2',
@@ -145,6 +148,9 @@ export default function HomeScreen() {
       text: 'Submariner prices stabilize after -2.1% dip',
       source: 'Market Watch',
       url: 'https://marketwatch.com',
+      date: 'November 30, 2025',
+      fullText: 'After weeks of declining values, Rolex Submariner prices appear to be finding their floor. The popular dive watch experienced a 2.1% correction over the past month, bringing average transaction prices closer to retail levels. Market observers note this stabilization follows a period of speculation-driven inflation that peaked in early 2024. Current prices suggest a healthier, more sustainable market dynamic.',
+      imageUrl: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=800',
     },
     {
       id: '3',
@@ -152,13 +158,11 @@ export default function HomeScreen() {
       text: 'Rolex service delays still affecting secondary market',
       source: 'WatchPro',
       url: 'https://watchpro.com',
+      date: 'November 28, 2025',
+      fullText: 'Extended service wait times at Rolex authorized service centers continue to impact secondary market dynamics. Current estimates suggest 8-12 month waits for standard servicing, leading some collectors to factor maintenance costs and timing into purchase decisions. The backlog, attributed to increased global demand and meticulous quality standards, has created opportunities for independent watchmakers while raising questions about long-term brand service capacity.',
+      imageUrl: 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=800',
     },
   ];
-
-  const handleNewsPress = (url: string) => {
-    // In production, this would open the URL in a browser or webview
-    console.log('Opening news:', url);
-  };
 
   const handleViewAllWatchlist = () => {
     // Navigate to market with watchlist filter
@@ -445,10 +449,7 @@ export default function HomeScreen() {
             {newsItems.map((item) => (
               <NewsCard
                 key={item.id}
-                icon={item.icon}
-                text={item.text}
-                source={item.source}
-                onPress={() => handleNewsPress(item.url)}
+                item={item}
               />
             ))}
           </View>

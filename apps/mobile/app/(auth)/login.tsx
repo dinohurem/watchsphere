@@ -68,6 +68,14 @@ export default function LoginScreen() {
     header: {
       marginBottom: 32,
     },
+    logoText: {
+      fontSize: 16,
+      fontFamily: fonts.semiBold,
+      color: '#1A1A1A',
+      letterSpacing: 2,
+      textAlign: 'center',
+      marginBottom: 32,
+    },
     title: {
       fontSize: 32,
       fontFamily: fonts.bold,
@@ -137,6 +145,7 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <View style={styles.content}>
+          <Text style={styles.logoText}>WATCHSPHERE</Text>
           <View style={styles.header}>
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>Sign in to your WatchSphere account</Text>

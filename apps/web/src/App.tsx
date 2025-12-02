@@ -8,17 +8,19 @@ import { MarketPage } from './features/market/pages/MarketPage'
 import { WatchlistPage } from './features/watchlist/pages/WatchlistPage'
 import { ChatPage } from './features/chat/pages/ChatPage'
 import { ProfilePage } from './features/profile/pages/ProfilePage'
+import { LandingPage } from './features/landing/pages/LandingPage'
 
 function App() {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
 
       {/* Protected routes */}
       <Route
-        path="/"
+        path="/app"
         element={
           <ProtectedRoute>
             <MainLayout />

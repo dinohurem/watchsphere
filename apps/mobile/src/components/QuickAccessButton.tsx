@@ -98,7 +98,7 @@ export function QuickAccessButton({
     iconContainer: {
       width: 48,
       height: 48,
-      borderRadius: 12,
+      borderRadius: 10,
       backgroundColor: colors.primaryLight,
       justifyContent: 'center',
       alignItems: 'center',
@@ -109,16 +109,16 @@ export function QuickAccessButton({
       justifyContent: 'center',
     },
     title: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 2,
     },
     subtitle: {
-      fontSize: 11,
+      fontSize: 13,
       fontFamily: fonts.regular,
       color: colors.textSecondary,
-      lineHeight: 16,
+      lineHeight: 19,
     },
     removeButton: {
       position: 'absolute',

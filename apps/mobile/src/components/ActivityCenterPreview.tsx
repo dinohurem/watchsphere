@@ -17,19 +17,19 @@ const MOCK_ACTIVITIES: ActivityItem[] = [
   {
     id: '1',
     icon: 'tag',
-    text: 'New offer on 126610LN listing',
+    text: 'New offer on 126610LN listing.',
     time: '2m ago',
   },
   {
     id: '2',
     icon: 'bell',
-    text: 'Order #4521 has been shipped',
+    text: 'Your buy order #4521 has been confirmed.',
     time: '15m ago',
   },
   {
     id: '3',
     icon: 'trending',
-    text: '26240OR price alert triggered',
+    text: '26240OR price change triggered.',
     time: '1h ago',
   },
 ];
@@ -56,11 +56,11 @@ export function ActivityCenterPreview({ onViewAll }: ActivityCenterPreviewProps)
       marginBottom: 8,
     },
     title: {
-      fontSize: 16,
+      fontSize: 17,
       fontFamily: fonts.semiBold,
       color: '#212121',
-      lineHeight: 20,
-      letterSpacing: 0.08,
+      lineHeight: 21,
+      letterSpacing: 0.085,
     },
     viewAllButton: {
       flexDirection: 'row',
@@ -68,7 +68,7 @@ export function ActivityCenterPreview({ onViewAll }: ActivityCenterPreviewProps)
       gap: 2,
     },
     viewAllText: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.medium,
       color: colors.primary,
     },
@@ -84,7 +84,7 @@ export function ActivityCenterPreview({ onViewAll }: ActivityCenterPreviewProps)
     iconContainer: {
       width: 32,
       height: 32,
-      borderRadius: 16,
+      borderRadius: 8,
       backgroundColor: colors.primaryLight,
       justifyContent: 'center',
       alignItems: 'center',
@@ -93,12 +93,12 @@ export function ActivityCenterPreview({ onViewAll }: ActivityCenterPreviewProps)
       flex: 1,
     },
     activityText: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.medium,
       color: colors.text,
     },
     timeText: {
-      fontSize: 11,
+      fontSize: 13,
       fontFamily: fonts.regular,
       color: colors.textSecondary,
       marginTop: 2,

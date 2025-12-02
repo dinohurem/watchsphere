@@ -41,11 +41,11 @@ export function WatchlistGrid({ watches, onViewAll, onWatchPress }: WatchlistGri
       marginBottom: 16,
     },
     title: {
-      fontSize: 16,
+      fontSize: 17,
       fontFamily: fonts.semiBold,
       color: '#212121',
-      lineHeight: 20,
-      letterSpacing: 0.08,
+      lineHeight: 21,
+      letterSpacing: 0.085,
     },
     viewAllButton: {
       flexDirection: 'row',
@@ -53,7 +53,7 @@ export function WatchlistGrid({ watches, onViewAll, onWatchPress }: WatchlistGri
       gap: 2,
     },
     viewAllText: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.medium,
       color: colors.primary,
     },
@@ -84,13 +84,13 @@ export function WatchlistGrid({ watches, onViewAll, onWatchPress }: WatchlistGri
       padding: 10,
     },
     brandModel: {
-      fontSize: 11,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 2,
     },
     reference: {
-      fontSize: 10,
+      fontSize: 13,
       fontFamily: fonts.regular,
       color: colors.textSecondary,
       marginBottom: 6,
@@ -101,7 +101,7 @@ export function WatchlistGrid({ watches, onViewAll, onWatchPress }: WatchlistGri
       justifyContent: 'space-between',
     },
     price: {
-      fontSize: 12,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
@@ -111,7 +111,7 @@ export function WatchlistGrid({ watches, onViewAll, onWatchPress }: WatchlistGri
       gap: 2,
     },
     changeText: {
-      fontSize: 10,
+      fontSize: 13,
       fontFamily: fonts.medium,
     },
     changeUp: {

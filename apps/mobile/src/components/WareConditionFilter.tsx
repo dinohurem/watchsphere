@@ -63,8 +63,8 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5EA',
   },
   conditionButtonActive: {
-    backgroundColor: '#E3F2FF',
-    borderColor: '#007AFF',
+    backgroundColor: 'rgba(33, 33, 33, 0.05)',
+    borderColor: '#212121',
   },
   conditionContent: {
     alignItems: 'center',
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   conditionLabelActive: {
-    color: '#007AFF',
+    color: '#212121',
   },
   conditionDescription: {
     fontSize: 12,
@@ -83,6 +83,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   conditionDescriptionActive: {
-    color: '#007AFF',
+    color: '#212121',
   },
 });

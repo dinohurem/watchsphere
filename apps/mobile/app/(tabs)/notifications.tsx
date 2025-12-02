@@ -115,7 +115,7 @@ export default function NotificationsScreen() {
       paddingTop: 20,
     },
     sectionTitle: {
-      fontSize: 13,
+      fontSize: 14,
       fontFamily: fonts.regular,
       color: colors.textSecondary,
       marginBottom: 12,
@@ -139,7 +139,7 @@ export default function NotificationsScreen() {
       justifyContent: 'center',
     },
     notificationTitle: {
-      fontSize: 13,
+      fontSize: 14,
       fontFamily: fonts.medium,
       color: colors.text,
       marginBottom: 4,
@@ -153,12 +153,12 @@ export default function NotificationsScreen() {
       gap: 8,
     },
     notificationPrice: {
-      fontSize: 13,
+      fontSize: 14,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
     notificationTime: {
-      fontSize: 12,
+      fontSize: 13,
       fontFamily: fonts.regular,
       color: colors.textSecondary,
     },

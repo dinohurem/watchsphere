@@ -157,7 +157,7 @@ export default function ChatScreen() {
   const renderAIChatItem = ({ item }: { item: AIChat }) => (
     <TouchableOpacity style={styles.conversationItem} onPress={() => router.push(`/chat/${item.id}` as any)}>
       <View style={[styles.avatar, styles.aiAvatar]}>
-        <AISparkle size={20} color="#9747FF" />
+        <AISparkle size={20} color={colors.primary} />
       </View>
       <View style={styles.conversationContent}>
         <Text style={styles.conversationName}>{item.title}</Text>
@@ -225,7 +225,7 @@ export default function ChatScreen() {
               style={styles.list}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <AISparkle size={48} color="#9747FF" />
+                  <AISparkle size={48} color={colors.primary} />
                   <Text style={styles.emptyText}>No AI chat history</Text>
                   <Text style={styles.emptySubtext}>
                     Start a conversation with our AI assistant
@@ -272,10 +272,10 @@ export default function ChatScreen() {
       backgroundColor: '#212121',
     },
     tabText: {
-      fontSize: 15,
+      fontSize: 16,
       fontFamily: fonts.regular,
       color: '#212121',
-      letterSpacing: 0.075,
+      letterSpacing: 0.08,
     },
     activeTabText: {
       color: '#FFFFFF',
@@ -294,7 +294,7 @@ export default function ChatScreen() {
       borderRadius: 12,
     },
     newChatButtonText: {
-      fontSize: 16,
+      fontSize: 17,
       fontFamily: fonts.semiBold,
       color: colors.background,
     },
@@ -313,10 +313,10 @@ export default function ChatScreen() {
       marginRight: 10,
     },
     aiAvatar: {
-      backgroundColor: '#F4F4F4',
+      backgroundColor: colors.primaryLight,
     },
     avatarText: {
-      fontSize: 18,
+      fontSize: 19,
       fontFamily: fonts.semiBold,
       color: '#212121',
     },
@@ -326,10 +326,10 @@ export default function ChatScreen() {
       justifyContent: 'center',
     },
     conversationName: {
-      fontSize: 13,
+      fontSize: 15,
       fontFamily: fonts.regular,
       color: '#212121',
-      letterSpacing: 0.065,
+      letterSpacing: 0.075,
       marginBottom: 4,
     },
     rightSection: {
@@ -338,19 +338,19 @@ export default function ChatScreen() {
       gap: 4,
     },
     timestamp: {
-      fontSize: 11,
-      fontFamily: fonts.regular,
-      color: '#212121',
-      opacity: 0.5,
-      letterSpacing: 0.055,
-    },
-    lastMessage: {
-      flex: 1,
       fontSize: 13,
       fontFamily: fonts.regular,
       color: '#212121',
       opacity: 0.5,
       letterSpacing: 0.065,
+    },
+    lastMessage: {
+      flex: 1,
+      fontSize: 15,
+      fontFamily: fonts.regular,
+      color: '#212121',
+      opacity: 0.5,
+      letterSpacing: 0.075,
     },
     unreadBadge: {
       minWidth: 20,
@@ -363,7 +363,7 @@ export default function ChatScreen() {
       marginLeft: 8,
     },
     unreadText: {
-      fontSize: 12,
+      fontSize: 13,
       fontFamily: fonts.semiBold,
       color: '#FFFFFF',
     },
@@ -375,14 +375,14 @@ export default function ChatScreen() {
       paddingHorizontal: 32,
     },
     emptyText: {
-      fontSize: 20,
+      fontSize: 21,
       fontFamily: fonts.semiBold,
       color: colors.text,
       marginTop: 16,
       marginBottom: 8,
     },
     emptySubtext: {
-      fontSize: 15,
+      fontSize: 16,
       fontFamily: fonts.regular,
       color: colors.textSecondary,
       textAlign: 'center',

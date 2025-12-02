@@ -122,8 +122,6 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
       alignItems: 'center',
       paddingVertical: 14,
       paddingHorizontal: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
     },
     tableRowEven: {
       backgroundColor: colors.backgroundSecondary,

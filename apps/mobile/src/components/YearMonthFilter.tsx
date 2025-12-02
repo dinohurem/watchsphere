@@ -144,8 +144,8 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   buttonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: '#212121',
+    borderColor: '#212121',
   },
   textActive: {
     color: '#FFFFFF',

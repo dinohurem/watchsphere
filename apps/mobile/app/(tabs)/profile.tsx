@@ -91,12 +91,6 @@ export default function ProfileScreen() {
       fontSize: 24,
       fontFamily: fonts.semiBold,
       color: colors.text,
-      marginBottom: 4,
-    },
-    userCustomerId: {
-      fontSize: 15,
-      fontFamily: fonts.regular,
-      color: colors.textSecondary,
     },
     favoritesSection: {
       paddingHorizontal: 16,
@@ -200,7 +194,6 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
           <Text style={styles.userName}>{user?.name || 'Fabian Wirtz'}</Text>
-          <Text style={styles.userCustomerId}>Customer ID: 009 978 333</Text>
         </View>
 
         {/* Favorites Section */}

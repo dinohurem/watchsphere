@@ -2,8 +2,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, Tex
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Plus, X, Package } from '@/components/icons';
+import { Plus, X } from '@/components/icons';
 import { WatchlistCard } from '@/components/WatchlistCard';
+import { LogoIcon } from '@/components/LogoIcon';
 
 interface ListingStep {
   id: number;
@@ -69,7 +70,7 @@ export default function DashboardScreen() {
       borderBottomColor: 'rgba(33, 33, 33, 0.05)',
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: 19,
       fontFamily: fonts.semiBold,
       color: colors.text,
       letterSpacing: 0.5,
@@ -96,11 +97,11 @@ export default function DashboardScreen() {
       paddingVertical: 16,
     },
     sectionTitleText: {
-      fontSize: 16,
+      fontSize: 17,
       fontFamily: fonts.semiBold,
       color: '#212121',
-      lineHeight: 20,
-      letterSpacing: 0.08,
+      lineHeight: 21,
+      letterSpacing: 0.085,
     },
     sectionContent: {
       paddingHorizontal: 16,
@@ -127,20 +128,20 @@ export default function DashboardScreen() {
       marginBottom: 24,
     },
     emptyTitle: {
-      fontSize: 20,
+      fontSize: 21,
       fontFamily: fonts.semiBold,
       color: '#1D1D1F',
       marginBottom: 12,
       textAlign: 'center',
     },
     emptySubtitle: {
-      fontSize: 15,
+      fontSize: 16,
       fontFamily: fonts.regular,
       color: '#1D1D1F',
       textAlign: 'center',
       marginBottom: 24,
       opacity: 0.6,
-      lineHeight: 20,
+      lineHeight: 21,
     },
     createButton: {
       backgroundColor: '#212121',
@@ -149,7 +150,7 @@ export default function DashboardScreen() {
       borderRadius: 12,
     },
     createButtonText: {
-      fontSize: 15,
+      fontSize: 16,
       fontFamily: fonts.semiBold,
       color: '#FFFFFF',
       letterSpacing: 0.5,
@@ -176,18 +177,18 @@ export default function DashboardScreen() {
       padding: 12,
     },
     inventoryBrand: {
-      fontSize: 15,
+      fontSize: 16,
       fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 2,
     },
     inventoryReference: {
-      fontSize: 12,
+      fontSize: 13,
       color: colors.textSecondary,
       marginBottom: 8,
     },
     inventoryPrice: {
-      fontSize: 16,
+      fontSize: 17,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
@@ -206,7 +207,7 @@ export default function DashboardScreen() {
       borderBottomColor: colors.border,
     },
     modalTitle: {
-      fontSize: 18,
+      fontSize: 19,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
@@ -247,7 +248,7 @@ export default function DashboardScreen() {
       borderColor: colors.border,
     },
     stepNumber: {
-      fontSize: 14,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
     },
     stepNumberActive: {
@@ -274,7 +275,7 @@ export default function DashboardScreen() {
       paddingTop: 4,
     },
     stepTitle: {
-      fontSize: 15,
+      fontSize: 16,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
@@ -288,7 +289,7 @@ export default function DashboardScreen() {
       marginBottom: 24,
     },
     sectionTitle: {
-      fontSize: 18,
+      fontSize: 19,
       fontFamily: fonts.semiBold,
       color: colors.text,
       marginBottom: 16,
@@ -298,7 +299,7 @@ export default function DashboardScreen() {
       borderRadius: 12,
       paddingHorizontal: 16,
       paddingVertical: 14,
-      fontSize: 15,
+      fontSize: 16,
       color: colors.text,
       marginBottom: 12,
       borderWidth: 1,
@@ -326,12 +327,12 @@ export default function DashboardScreen() {
       borderColor: colors.border,
     },
     buttonTextPrimary: {
-      fontSize: 16,
+      fontSize: 17,
       fontFamily: fonts.semiBold,
       color: '#FFFFFF',
     },
     buttonTextSecondary: {
-      fontSize: 16,
+      fontSize: 17,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
@@ -375,7 +376,7 @@ export default function DashboardScreen() {
             {inventory.length === 0 ? (
               <View style={[styles.emptyState, { paddingTop: 40 }]}>
                 <View style={styles.emptyIconContainer}>
-                  <Package size={32} color="#212121" />
+                  <LogoIcon size={36} color="#212121" />
                 </View>
                 <Text style={styles.emptyTitle}>Create new listings here</Text>
                 <Text style={styles.emptySubtitle}>Listing currently empty, list your watches and manage them all in one place.</Text>
@@ -399,12 +400,10 @@ export default function DashboardScreen() {
             )}
           </View>
 
-          <View style={styles.divider} />
-
           {/* Watchlist Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeaderContainer}>
-              <Text style={styles.sectionTitleText}>My Watchlist</Text>
+              <Text style={styles.sectionTitleText}>Watchlist</Text>
             </View>
             <View style={styles.sectionContent}>
               {watchlist.map((watch) => (

@@ -143,7 +143,7 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
       color: colors.text,
     },
     applyButton: {
-      flex: 2,
+      flex: 1,
       paddingVertical: 16,
       borderRadius: 12,
       backgroundColor: colors.text,
@@ -204,7 +204,7 @@ export function FilterModal({ visible, onClose, filters, onApplyFilters }: Filte
             <Text style={styles.resetButtonText}>Reset</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
-            <Text style={styles.applyButtonText}>Apply Filters</Text>
+            <Text style={styles.applyButtonText}>Apply</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
