@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React from 'react';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Zap } from './icons';
 
@@ -8,92 +8,40 @@ interface AIFloatingButtonProps {
 }
 
 export function AIFloatingButton({ onPress }: AIFloatingButtonProps) {
-  const { colors, fonts } = useTheme();
-  const [isExpanded, setIsExpanded] = useState(true);
-  const widthAnim = useRef(new Animated.Value(130)).current;
-  const textOpacity = useRef(new Animated.Value(1)).current;
+  const { colors } = useTheme();
 
   const styles = StyleSheet.create({
     container: {
       position: 'absolute',
       bottom: 80,
       right: 16,
+      width: 56,
       height: 56,
       borderRadius: 28,
+      backgroundColor: colors.primary,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
       shadowRadius: 8,
       elevation: 8,
-      overflow: 'hidden',
     },
     button: {
       width: '100%',
       height: '100%',
-      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    text: {
-      fontSize: 16,
-      fontFamily: fonts.semiBold,
-      color: '#FFFFFF',
-      marginLeft: 8,
-    },
   });
 
-  useEffect(() => {
-    // Start expanded, then collapse after 3 seconds
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(widthAnim, {
-          toValue: 56,
-          duration: 300,
-          useNativeDriver: false,
-        }),
-        Animated.timing(textOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: false,
-        }),
-      ]).start(() => {
-        setIsExpanded(false);
-      });
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          width: widthAnim,
-          backgroundColor: colors.primary,
-        },
-      ]}
-    >
+    <View style={styles.container}>
       <TouchableOpacity
         style={styles.button}
         onPress={onPress}
         activeOpacity={0.8}
       >
         <Zap size={24} color="#FFFFFF" />
-        {isExpanded && (
-          <Animated.Text
-            style={[
-              styles.text,
-              {
-                opacity: textOpacity,
-              },
-            ]}
-            numberOfLines={1}
-          >
-            Ask AI
-          </Animated.Text>
-        )}
       </TouchableOpacity>
-    </Animated.View>
+    </View>
   );
 }

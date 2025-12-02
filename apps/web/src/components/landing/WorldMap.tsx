@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useMemo, useEffect, useState } from 'react';
+import { useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 
 interface MapProps {
@@ -9,11 +9,6 @@ interface MapProps {
     end: { lat: number; lng: number; label?: string };
   }>;
 }
-
-// Simplified world map SVG path (realistic continent shapes)
-const WORLD_MAP_PATH = `
-M 22,48 L 24,46 L 28,46 L 30,48 L 32,46 L 36,48 L 38,46 L 42,48 L 44,50 L 46,48 L 50,50 L 52,48 L 56,50 L 58,48 L 62,50 L 64,52 L 68,50 L 72,52 L 76,54 L 80,52 L 84,54 L 88,56 L 92,54 L 96,56 L 100,58 L 98,62 L 94,64 L 90,66 L 86,68 L 82,70 L 78,72 L 74,74 L 70,76 L 66,78 L 62,80 L 58,82 L 54,84 L 50,86 L 46,88 L 42,90 L 38,88 L 34,86 L 30,84 L 26,82 L 22,80 L 20,76 L 22,72 L 24,68 L 26,64 L 28,60 L 26,56 L 24,52 L 22,48 Z
-`;
 
 export function WorldMap({ dots = [] }: MapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -36,8 +31,6 @@ export function WorldMap({ dots = [] }: MapProps) {
 
   // Pre-computed world map dots for realistic continents
   const mapDots = useMemo(() => {
-    const dots: JSX.Element[] = [];
-
     // World map dot coordinates (pre-computed for realistic shapes)
     const continentPoints = [
       // North America
