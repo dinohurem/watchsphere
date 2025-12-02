@@ -1,4 +1,5 @@
 import { ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface TimeRangeSelectorProps {
   ranges: string[];
@@ -7,6 +8,8 @@ interface TimeRangeSelectorProps {
 }
 
 export function TimeRangeSelector({ ranges, activeRange, onRangeSelect }: TimeRangeSelectorProps) {
+  const { colors, fonts } = useTheme();
+
   return (
     <ScrollView
       horizontal
@@ -19,7 +22,7 @@ export function TimeRangeSelector({ ranges, activeRange, onRangeSelect }: TimeRa
           style={[styles.button, range === activeRange && styles.buttonActive]}
           onPress={() => onRangeSelect(range)}
         >
-          <Text style={[styles.text, range === activeRange && styles.textActive]}>
+          <Text style={[styles.text, range === activeRange && styles.textActive, { fontFamily: fonts.medium }]}>
             {range}
           </Text>
         </TouchableOpacity>
@@ -45,7 +48,6 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 14,
-    fontWeight: '500',
     color: '#000000',
   },
   textActive: {

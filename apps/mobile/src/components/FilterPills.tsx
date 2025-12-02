@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Filter } from './icons';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface FilterPillsProps {
   filters: string[];
@@ -9,6 +10,8 @@ interface FilterPillsProps {
 }
 
 export function FilterPills({ filters, activeFilter, onFilterPress, onFilterIconPress }: FilterPillsProps) {
+  const { colors, fonts } = useTheme();
+
   return (
     <ScrollView
       horizontal
@@ -26,7 +29,7 @@ export function FilterPills({ filters, activeFilter, onFilterPress, onFilterIcon
           style={[styles.pill, filter === activeFilter && styles.pillActive]}
           onPress={() => onFilterPress(filter)}
         >
-          <Text style={[styles.pillText, filter === activeFilter && styles.pillTextActive]}>
+          <Text style={[styles.pillText, filter === activeFilter && styles.pillTextActive, { fontFamily: fonts.medium }]}>
             {filter}
           </Text>
         </TouchableOpacity>
@@ -62,7 +65,6 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontSize: 15,
-    fontWeight: '500',
     color: '#000000',
   },
   pillTextActive: {
