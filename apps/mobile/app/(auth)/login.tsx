@@ -43,10 +43,32 @@ export default function LoginScreen() {
       });
 
       const { user, access_token } = response.data;
+
+      // Block admin login on mobile - admin panel is web only
+      if (user.role === 'admin') {
+        Alert.alert(
+          'Admin Access Restricted',
+          'Admin accounts can only log in via the web application. Please use the web admin panel at watchsphere.com/admin',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       login(user, access_token);
       router.replace('/(tabs)');
     } catch (error: any) {
-      Alert.alert('Login Failed', error.response?.data?.detail || 'Please try again');
+      const errorMessage = error.response?.data?.detail || 'Please try again';
+
+      // Check for pending approval error
+      if (errorMessage.toLowerCase().includes('pending approval')) {
+        Alert.alert(
+          'Account Pending Approval',
+          'Your account is awaiting admin approval. You will receive an email notification once your account has been reviewed.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Login Failed', errorMessage);
+      }
     } finally {
       setLoading(false);
     }

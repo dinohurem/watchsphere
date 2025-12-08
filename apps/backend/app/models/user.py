@@ -17,6 +17,7 @@ class User(Document):
     name: str
     role: UserRole = UserRole.COLLECTOR
     verified: bool = False
+    approved: bool = False  # Admin must approve before user can login
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
@@ -34,6 +35,7 @@ class User(Document):
                 "name": "John Doe",
                 "role": "dealer",
                 "verified": True,
+                "approved": True,
                 "is_active": True
             }
         }

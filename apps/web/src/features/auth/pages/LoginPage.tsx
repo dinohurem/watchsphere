@@ -30,9 +30,22 @@ export function LoginPage() {
 
       const { user, access_token } = response.data;
       login(user, access_token);
-      navigate('/app');
+
+      // Role-based redirect
+      if (user.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/app');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      const errorDetail = err.response?.data?.detail || 'Login failed. Please try again.';
+
+      // Check for pending approval error
+      if (errorDetail.toLowerCase().includes('pending approval')) {
+        setError('Your account is pending approval. Please wait for an administrator to approve your account.');
+      } else {
+        setError(errorDetail);
+      }
     } finally {
       setLoading(false);
     }

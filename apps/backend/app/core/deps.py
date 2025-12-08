@@ -41,9 +41,19 @@ async def get_current_user(
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """Get current active user"""
+    """Get current active user (must be approved unless admin)"""
+    from app.models.user import UserRole
+
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+
+    # Check if user is approved (skip for admin users)
+    if not current_user.approved and current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account pending approval. Please wait for admin approval."
+        )
+
     return current_user
 
 
