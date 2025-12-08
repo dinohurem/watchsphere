@@ -26,6 +26,7 @@ class UserResponse(BaseModel):
     name: str
     role: UserRole
     verified: bool
+    approved: bool
 
     class Config:
         from_attributes = True
@@ -75,6 +76,7 @@ async def register(user_in: UserCreate) -> Any:
             "name": user.name,
             "role": user.role,
             "verified": user.verified,
+            "approved": user.approved,
         },
         "access_token": access_token,
         "token_type": "bearer",
@@ -95,6 +97,13 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
+    # Check approval status (skip for admin users)
+    if not user.approved and user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account pending approval. Please wait for admin approval.",
+        )
+
     # Create access token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -108,6 +117,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
             "name": user.name,
             "role": user.role,
             "verified": user.verified,
+            "approved": user.approved,
         },
         "access_token": access_token,
         "token_type": "bearer",

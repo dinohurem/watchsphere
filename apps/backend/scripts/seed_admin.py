@@ -46,6 +46,7 @@ async def seed_admin():
         name=admin_name,
         role=UserRole.ADMIN,
         verified=True,
+        approved=True,  # Admin is auto-approved
         is_active=True
     )
 
@@ -103,6 +104,7 @@ async def create_test_users():
             name=user_data["name"],
             role=user_data["role"],
             verified=True,
+            approved=True,  # Test users are auto-approved for development
             is_active=True
         )
 

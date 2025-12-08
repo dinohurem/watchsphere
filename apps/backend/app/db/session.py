@@ -16,10 +16,22 @@ async def connect_to_mongo():
     from app.models.user import User
     from app.models.watch import Watch
     from app.models.chat import Message, Conversation
+    from app.models.news import News
+    from app.models.chat_group import ConversationMember
+    from app.models.billing import Billing, Subscription, Transaction
+    from app.models.watchlist import WatchlistRecord
+    from app.models.activity_log import ActivityLog
+    from app.models.whatsapp_import import WhatsAppImport, WhatsAppMessage, ExtractedWatchListing
 
     await init_beanie(
         database=mongodb_client[settings.MONGODB_DB_NAME],
-        document_models=[User, Watch, Message, Conversation]
+        document_models=[
+            User, Watch, Message, Conversation,
+            News, ConversationMember,
+            Billing, Subscription, Transaction,
+            WatchlistRecord, ActivityLog,
+            WhatsAppImport, WhatsAppMessage, ExtractedWatchListing
+        ]
     )
 
 

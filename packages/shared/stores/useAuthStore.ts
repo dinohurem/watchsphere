@@ -8,12 +8,14 @@ export interface User {
   name: string;
   role: 'dealer' | 'collector' | 'admin';
   verified: boolean;
+  approved: boolean;
 }
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
 
   // Actions
   setUser: (user: User) => void;
@@ -28,21 +30,28 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      isAdmin: false,
 
-      setUser: (user) => set({ user, isAuthenticated: true }),
+      setUser: (user) => set({
+        user,
+        isAuthenticated: true,
+        isAdmin: user.role === 'admin'
+      }),
 
       setToken: (token) => set({ token }),
 
       login: (user, token) => set({
         user,
         token,
-        isAuthenticated: true
+        isAuthenticated: true,
+        isAdmin: user.role === 'admin'
       }),
 
       logout: () => set({
         user: null,
         token: null,
-        isAuthenticated: false
+        isAuthenticated: false,
+        isAdmin: false
       }),
     }),
     {

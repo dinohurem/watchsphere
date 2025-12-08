@@ -16,6 +16,7 @@ class UserListResponse(BaseModel):
     name: str
     role: UserRole
     verified: bool
+    approved: bool
     is_active: bool
     created_at: datetime
 
@@ -30,6 +31,7 @@ class DashboardStats(BaseModel):
     total_admins: int
     verified_users: int
     active_users: int
+    pending_approval: int
 
 
 @router.get("/dashboard", response_model=DashboardStats)
@@ -48,6 +50,7 @@ async def get_dashboard_stats(
         "total_admins": len([u for u in all_users if u.role == UserRole.ADMIN]),
         "verified_users": len([u for u in all_users if u.verified]),
         "active_users": len([u for u in all_users if u.is_active]),
+        "pending_approval": len([u for u in all_users if not u.approved and u.role != UserRole.ADMIN]),
     }
 
     return stats
@@ -70,6 +73,7 @@ async def list_users(
             "name": user.name,
             "role": user.role,
             "verified": user.verified,
+            "approved": user.approved,
             "is_active": user.is_active,
             "created_at": user.created_at,
         }
@@ -99,6 +103,7 @@ async def get_user(
         "name": user.name,
         "role": user.role,
         "verified": user.verified,
+        "approved": user.approved,
         "is_active": user.is_active,
         "created_at": user.created_at,
     }
@@ -106,6 +111,7 @@ async def get_user(
 
 class UserUpdate(BaseModel):
     verified: bool | None = None
+    approved: bool | None = None
     is_active: bool | None = None
     role: UserRole | None = None
 
@@ -130,6 +136,8 @@ async def update_user(
     # Update fields if provided
     if user_update.verified is not None:
         user.verified = user_update.verified
+    if user_update.approved is not None:
+        user.approved = user_update.approved
     if user_update.is_active is not None:
         user.is_active = user_update.is_active
     if user_update.role is not None:
@@ -144,6 +152,7 @@ async def update_user(
         "name": user.name,
         "role": user.role,
         "verified": user.verified,
+        "approved": user.approved,
         "is_active": user.is_active,
         "created_at": user.created_at,
     }
@@ -175,3 +184,107 @@ async def delete_user(
     await user.delete()
 
     return {"message": "User deleted successfully"}
+
+
+@router.get("/users/pending", response_model=List[UserListResponse])
+async def list_pending_users(
+    current_admin: User = Depends(get_current_admin_user),
+    skip: int = 0,
+    limit: int = 100,
+) -> Any:
+    """List all users pending approval (Admin only)"""
+
+    # Find users who are not approved and not admins
+    users = await User.find(
+        User.approved == False,
+        User.role != UserRole.ADMIN
+    ).skip(skip).limit(limit).to_list()
+
+    return [
+        {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "verified": user.verified,
+            "approved": user.approved,
+            "is_active": user.is_active,
+            "created_at": user.created_at,
+        }
+        for user in users
+    ]
+
+
+@router.post("/users/{user_id}/approve")
+async def approve_user(
+    user_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Approve a user account (Admin only)"""
+    from beanie import PydanticObjectId
+
+    user = await User.get(PydanticObjectId(user_id))
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    if user.approved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is already approved"
+        )
+
+    user.approved = True
+    user.updated_at = datetime.utcnow()
+    await user.save()
+
+    # TODO: Send approval email via SendGrid
+
+    return {
+        "message": "User approved successfully",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "approved": user.approved,
+        }
+    }
+
+
+@router.post("/users/{user_id}/reject")
+async def reject_user(
+    user_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Reject a user account (Admin only)"""
+    from beanie import PydanticObjectId
+
+    user = await User.get(PydanticObjectId(user_id))
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Deactivate the user
+    user.approved = False
+    user.is_active = False
+    user.updated_at = datetime.utcnow()
+    await user.save()
+
+    # TODO: Send rejection email via SendGrid
+
+    return {
+        "message": "User rejected successfully",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "approved": user.approved,
+            "is_active": user.is_active,
+        }
+    }

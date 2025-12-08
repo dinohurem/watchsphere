@@ -2,7 +2,7 @@ from beanie import Document
 from pydantic import Field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 
 
 class MessageType(str, Enum):
@@ -20,17 +20,29 @@ class ConversationType(str, Enum):
 class Conversation(Document):
     type: ConversationType
     name: Optional[str] = None  # For group chats
+    description: Optional[str] = None  # Group description
+    avatar: Optional[str] = None  # Group avatar URL
+    created_by: Optional[str] = None  # Admin who created the group
+    participant_ids: List[str] = Field(default_factory=list)  # For direct chats
+    is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
 
     class Settings:
         name = "conversations"
+        indexes = [
+            "type",
+            "created_by",
+            "is_active",
+        ]
 
     class Config:
         json_schema_extra = {
             "example": {
-                "type": "direct",
-                "name": "Chat with John"
+                "type": "group",
+                "name": "Watch Enthusiasts",
+                "description": "A group for watch collectors",
+                "is_active": True
             }
         }
 
