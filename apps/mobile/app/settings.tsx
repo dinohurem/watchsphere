@@ -6,6 +6,7 @@ import { useContext } from 'react';
 import { AIButtonContext } from '@/contexts/AIButtonContext';
 import { useTheme, Theme } from '@/contexts/ThemeContext';
 import { ArrowLeft, ChevronRight, User, Clock, Star, Bell, Languages, FileText, Lock, Database } from '@/components/icons';
+import { wp, hp, sp, fp } from '@/utils/responsive';
 
 export default function SettingsScreen() {
   const { colors, fonts } = useTheme();
@@ -37,15 +38,15 @@ export default function SettingsScreen() {
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 16,
+      paddingHorizontal: wp(16),
+      paddingVertical: hp(16),
     },
     backButton: {
-      padding: 4,
-      marginRight: 16,
+      padding: sp(4),
+      marginRight: wp(16),
     },
     headerTitle: {
-      fontSize: 17,
+      fontSize: fp(17),
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
@@ -54,36 +55,36 @@ export default function SettingsScreen() {
     },
     card: {
       backgroundColor: colors.card,
-      marginHorizontal: 16,
-      marginBottom: 16,
-      borderRadius: 12,
-      padding: 16,
+      marginHorizontal: wp(16),
+      marginBottom: hp(16),
+      borderRadius: sp(12),
+      padding: wp(16),
     },
     cardTitle: {
-      fontSize: 16,
+      fontSize: fp(16),
       fontFamily: fonts.semiBold,
       color: colors.text,
-      marginBottom: 12,
+      marginBottom: hp(12),
     },
     menuItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 12,
+      paddingVertical: hp(12),
       borderBottomWidth: 1,
       borderBottomColor: colors.borderLight,
     },
     menuIconContainer: {
-      width: 32,
-      height: 32,
-      borderRadius: 8,
+      width: sp(32),
+      height: sp(32),
+      borderRadius: sp(8),
       backgroundColor: colors.backgroundTertiary,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
+      marginRight: wp(12),
     },
     menuText: {
       flex: 1,
-      fontSize: 15,
+      fontSize: fp(15),
       color: colors.text,
     },
     menuTextContainer: {
@@ -91,13 +92,13 @@ export default function SettingsScreen() {
     },
     themeButtons: {
       flexDirection: 'row',
-      gap: 8,
-      marginTop: 8,
+      gap: wp(8),
+      marginTop: hp(8),
     },
     themeButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 8,
+      paddingVertical: hp(6),
+      paddingHorizontal: wp(12),
+      borderRadius: sp(8),
       backgroundColor: colors.backgroundTertiary,
       borderWidth: 1,
       borderColor: colors.border,
@@ -107,7 +108,7 @@ export default function SettingsScreen() {
       borderColor: colors.primary,
     },
     themeButtonText: {
-      fontSize: 13,
+      fontSize: fp(13),
       fontFamily: fonts.medium,
       color: colors.text,
     },
@@ -116,16 +117,16 @@ export default function SettingsScreen() {
     },
     logoutButton: {
       backgroundColor: colors.error,
-      padding: 16,
-      borderRadius: 12,
+      padding: wp(16),
+      borderRadius: sp(12),
       alignItems: 'center',
-      marginHorizontal: 16,
-      marginTop: 8,
-      marginBottom: 32,
+      marginHorizontal: wp(16),
+      marginTop: hp(8),
+      marginBottom: hp(32),
     },
     logoutText: {
       color: '#FFFFFF',
-      fontSize: 16,
+      fontSize: fp(16),
       fontFamily: fonts.semiBold,
     },
   });
@@ -191,7 +192,10 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Settings</Text>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/(tabs)/notifications' as any)}
+          >
             <View style={styles.menuIconContainer}>
               <Bell size={20} color={colors.text} />
             </View>

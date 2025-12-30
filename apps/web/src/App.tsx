@@ -3,6 +3,7 @@ import { UserLayout } from './components/layout/UserLayout'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { LoginPage } from './features/auth/pages/LoginPage'
 import { RegisterPage } from './features/auth/pages/RegisterPage'
+import { OnboardingPage } from './features/auth/pages/OnboardingPage'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 import { AdminRoute } from './features/auth/components/AdminRoute'
 import { HomePage } from './features/home/pages/HomePage'
@@ -35,6 +36,7 @@ function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
 
       {/* Admin routes */}
       <Route

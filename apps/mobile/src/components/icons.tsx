@@ -512,3 +512,119 @@ export function ExternalLink({ size = 24, color = '#000', fill = 'none' }: IconP
     </Svg>
   );
 }
+
+export function TagPlus({ size = 18, color = '#0088FF', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill={fill}>
+      <Path d="M7.5 2.24961H2.25V9.37461L8.93535 16.06C9.5211 16.6457 10.4709 16.6457 11.0566 16.06L16.125 10.9916C16.675 10.4416 16.675 9.54966 16.125 8.99961" stroke={color} strokeWidth={1.5} strokeLinecap="square" />
+      <Path d="M6.37451 6.74902C6.58162 6.74902 6.74951 6.58113 6.74951 6.37402C6.74951 6.16692 6.58162 5.99902 6.37451 5.99902C6.16741 5.99902 5.99951 6.16692 5.99951 6.37402C5.99951 6.58113 6.16741 6.74902 6.37451 6.74902Z" fill={color} stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M13.5 6.7502V0.750195" stroke={color} strokeWidth={1.5} strokeMiterlimit={10} strokeLinecap="square" />
+      <Path d="M10.4995 3.74902H16.4995" stroke={color} strokeWidth={1.5} strokeMiterlimit={10} strokeLinecap="square" />
+    </Svg>
+  );
+}
+
+export function PriceAlertUp({ size = 20, color = '#4AA078', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill={fill}>
+      <Path d="M1.25 12.9173L5.83333 8.33398L10.8333 13.334L18.3333 5.83398L18.026 6.14135" stroke={color} strokeWidth={1.66667} strokeMiterlimit={10} strokeLinecap="square" />
+      <Path d="M12.5 5.83398H18.3333V11.6673" stroke={color} strokeWidth={1.66667} strokeMiterlimit={10} strokeLinecap="square" />
+    </Svg>
+  );
+}
+
+export function PriceAlertDown({ size = 20, color = '#D90429', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill={fill}>
+      <Path d="M1.25 7.08268L5.83333 11.666L10.8333 6.66602L18.3333 14.166L18.026 13.8586" stroke={color} strokeWidth={1.66667} strokeMiterlimit={10} strokeLinecap="square" />
+      <Path d="M12.5 14.166H18.3333V8.33268" stroke={color} strokeWidth={1.66667} strokeMiterlimit={10} strokeLinecap="square" />
+    </Svg>
+  );
+}
+
+export function WatchSphereLogo({ size = 44, color = '#212121' }: IconProps) {
+  const height = size * 0.62;
+  return (
+    <Svg width={size} height={height} viewBox="0 0 44 27" fill="none">
+      <Path d="M22 0L8 8V22H16V14H28V22H36V8L22 0Z" fill={color} />
+      <Path d="M2 8L0 10V24H6V16H4V10L8 8H2Z" fill={color} opacity={0.6} />
+      <Path d="M42 8L44 10V24H38V16H40V10L36 8H42Z" fill={color} opacity={0.6} />
+    </Svg>
+  );
+}
+
+export function Magnifier({ size = 18, color = '#212121', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill={fill}>
+      <Path d="M8.25 14.25C11.5637 14.25 14.25 11.5637 14.25 8.25C14.25 4.93629 11.5637 2.25 8.25 2.25C4.93629 2.25 2.25 4.93629 2.25 8.25C2.25 11.5637 4.93629 14.25 8.25 14.25Z" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M15.75 15.75L12.4875 12.4875" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function UserCircleFilled({ size = 36, color = '#212121', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 36 36" fill={fill}>
+      <Path d="M18 18C19.6569 18 21 16.6569 21 15C21 13.3431 19.6569 12 18 12C16.3431 12 15 13.3431 15 15C15 16.6569 16.3431 18 18 18Z" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M24 27C24 24.2386 21.3137 22 18 22C14.6863 22 12 24.2386 12 27" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M18 30C24.6274 30 30 24.6274 30 18C30 11.3726 24.6274 6 18 6C11.3726 6 6 11.3726 6 18C6 24.6274 11.3726 30 18 30Z" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function ActivityChart({ size = 20, color = '#FFFFFF', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill={fill}>
+      <Path d="M2.5 10H6.25L8.75 4.16667L12.5 15.8333L15 10H17.5" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function SparkleIcon({ size = 16, color = '#FFFFFF' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path d="M8 0L9.79 5.21L15 7L9.79 8.79L8 14L6.21 8.79L1 7L6.21 5.21L8 0Z" fill={color} />
+      <Path d="M3 11L3.79 13.21L6 14L3.79 14.79L3 17L2.21 14.79L0 14L2.21 13.21L3 11Z" fill={color} />
+    </Svg>
+  );
+}
+
+export function WatchIcon({ size = 16, color = '#FFFFFF', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill={fill}>
+      <Path d="M5 4L5.67 0.67H10.33L11 4" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M5 12L5.67 15.33H10.33L11 12" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M3 8C3 10.7614 5.23858 13 8 13C10.7614 13 13 10.7614 13 8C13 5.23858 10.7614 3 8 3C5.23858 3 3 5.23858 3 8Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M8 5.5V8L9.5 9.5" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function FileCheckIcon({ size = 16, color = '#FFFFFF', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill={fill}>
+      <Path d="M9.33 1.33H4C3.64 1.33 3.33 1.64 3.33 2V14C3.33 14.36 3.64 14.67 4 14.67H12C12.36 14.67 12.67 14.36 12.67 14V4.67L9.33 1.33Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M6 10L7.33 11.33L10 8.67" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function ShieldCheckIcon({ size = 16, color = '#FFFFFF', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill={fill}>
+      <Path d="M8 14.67C8 14.67 13.33 12 13.33 8V3.33L8 1.33L2.67 3.33V8C2.67 12 8 14.67 8 14.67Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M6 8L7.33 9.33L10 6.67" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function GridIcon({ size = 16, color = '#FFFFFF', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill={fill}>
+      <Path d="M2 2H6.67V6.67H2V2Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M9.33 2H14V6.67H9.33V2Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M9.33 9.33H14V14H9.33V9.33Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M2 9.33H6.67V14H2V9.33Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
