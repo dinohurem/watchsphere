@@ -278,6 +278,8 @@ MONGODB_URL=mongodb://localhost:27017
 MONGODB_DB_NAME=watchsphere
 Start developing:
 # Backend
+cd apps/backend
+source venv/bin/activate
 cd apps/backend && uvicorn app.main:app --reload
 
 # Web

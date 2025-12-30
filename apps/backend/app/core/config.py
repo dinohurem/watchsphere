@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
 
+    # Email (Mailchimp/Mandrill)
+    MAILCHIMP_API_KEY: str = ""
+    EMAIL_FROM: str = "noreply@watchsphere.com"
+    EMAIL_FROM_NAME: str = "WatchSphere"
+
+    # Verification
+    TEST_VERIFICATION_CODE: str = "123456"  # Default test code for development
+
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://localhost:8081"
 
