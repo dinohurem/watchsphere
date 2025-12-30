@@ -104,7 +104,7 @@ async def create_test_users():
             name=user_data["name"],
             role=user_data["role"],
             verified=True,
-            approved=True,  # Test users are auto-approved for development
+            approved=False,  # Test users need admin approval
             is_active=True
         )
 

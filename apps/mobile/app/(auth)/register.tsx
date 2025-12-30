@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,37 +14,139 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { api } from '@/services/api';
-import { useTheme } from '@/contexts/ThemeContext';
+import Svg, { Path } from 'react-native-svg';
+import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
+
+const TOTAL_STEPS = 4; // Account creation, Email verification, Personal info (handled in onboarding)
+
+// Back Arrow Icon
+function BackArrow() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#1D1D1F" strokeWidth={2}>
+      <Path d="M19 12H5M12 19l-7-7 7-7" />
+    </Svg>
+  );
+}
+
+// Check Icon
+function CheckIcon({ checked }: { checked: boolean }) {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill={checked ? '#1D1D1F' : '#CCCCCC'}>
+      <Path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+    </Svg>
+  );
+}
+
+// Chevron Down Icon
+function ChevronDown() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#999999" strokeWidth={2}>
+      <Path d="M6 9l6 6 6-6" />
+    </Svg>
+  );
+}
+
+type Step = 1 | 2;
+
+interface PasswordValidation {
+  minLength: boolean;
+  hasUppercase: boolean;
+  hasNumber: boolean;
+  hasSpecial: boolean;
+}
 
 export default function RegisterScreen() {
-  const [name, setName] = useState('');
+  const [step, setStep] = useState<Step>(1);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'dealer' | 'collector'>('collector');
+  const [repeatPassword, setRepeatPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const { colors, fonts } = useTheme();
+  const [resendTimer, setResendTimer] = useState(0);
+  const [passwordFocused, setPasswordFocused] = useState(false);
 
   const login = useAuthStore((state) => state.login);
 
-  const handleRegister = async () => {
-    if (!name || !email || !password) {
+  // Refs for verification code inputs
+  const codeInputRefs = useRef<(TextInput | null)[]>([]);
+
+  // Resend timer countdown
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendTimer]);
+
+  // Password validation
+  const validatePassword = (pwd: string): PasswordValidation => ({
+    minLength: pwd.length >= 12,
+    hasUppercase: /[A-Z]/.test(pwd),
+    hasNumber: /[0-9]/.test(pwd),
+    hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(pwd),
+  });
+
+  const passwordValidation = validatePassword(password);
+  const isPasswordValid = Object.values(passwordValidation).every(Boolean);
+  const passwordsMatch = password === repeatPassword && repeatPassword.length > 0;
+
+  const handleCodeChange = (index: number, value: string) => {
+    if (value.length > 1) {
+      value = value.slice(-1);
+    }
+
+    const newCode = verificationCode.split('');
+    newCode[index] = value;
+    setVerificationCode(newCode.join(''));
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      codeInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleCodeKeyPress = (index: number, key: string) => {
+    if (key === 'Backspace' && !verificationCode[index] && index > 0) {
+      codeInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleBack = () => {
+    if (step === 1) {
+      router.back();
+    } else {
+      setStep(1);
+    }
+  };
+
+  const handleCreateAccount = async () => {
+    if (!email || !password || !repeatPassword) {
       Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (!isPasswordValid) {
+      Alert.alert('Error', 'Please ensure your password meets all requirements');
+      return;
+    }
+
+    if (password !== repeatPassword) {
+      Alert.alert('Error', 'Passwords do not match');
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await api.post('/auth/register', {
-        name,
+      // Create account - this will send verification email
+      await api.post('/auth/register', {
         email,
         password,
-        role,
       });
 
-      const { user, access_token } = response.data;
-      login(user, access_token);
-      router.replace('/(tabs)');
+      // Move to verification step
+      setStep(2);
+      setResendTimer(30);
     } catch (error: any) {
       Alert.alert(
         'Registration Failed',
@@ -55,205 +157,426 @@ export default function RegisterScreen() {
     }
   };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: '#F5F5F5',
-    },
-    keyboardView: {
-      flex: 1,
-    },
-    scrollContent: {
-      flexGrow: 1,
-    },
-    content: {
-      flex: 1,
-      justifyContent: 'center',
-      paddingHorizontal: 24,
-      paddingVertical: 32,
-    },
-    header: {
-      marginBottom: 32,
-    },
-    title: {
-      fontSize: 32,
-      fontFamily: fonts.bold,
-      color: '#1A1A1A',
-      marginBottom: 8,
-    },
-    subtitle: {
-      fontSize: 16,
-      color: '#666',
-    },
-    form: {
-      gap: 16,
-    },
-    inputGroup: {
-      gap: 8,
-    },
-    label: {
-      fontSize: 14,
-      fontFamily: fonts.semiBold,
-      color: '#1A1A1A',
-    },
-    input: {
-      backgroundColor: '#fff',
-      borderWidth: 1,
-      borderColor: '#E5E5E5',
-      borderRadius: 12,
-      padding: 16,
-      fontSize: 16,
-      color: '#1A1A1A',
-    },
-    roleContainer: {
-      flexDirection: 'row',
-      gap: 12,
-    },
-    roleButton: {
-      flex: 1,
-      backgroundColor: '#fff',
-      borderWidth: 1,
-      borderColor: '#E5E5E5',
-      borderRadius: 12,
-      padding: 16,
-      alignItems: 'center',
-    },
-    roleButtonActive: {
-      backgroundColor: '#1A1A1A',
-      borderColor: '#1A1A1A',
-    },
-    roleButtonText: {
-      fontSize: 14,
-      fontFamily: fonts.semiBold,
-      color: '#666',
-    },
-    roleButtonTextActive: {
-      color: '#fff',
-    },
-    button: {
-      backgroundColor: '#1A1A1A',
-      borderRadius: 12,
-      padding: 16,
-      alignItems: 'center',
-      marginTop: 8,
-    },
-    buttonDisabled: {
-      opacity: 0.5,
-    },
-    buttonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontFamily: fonts.semiBold,
-    },
-    footer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginTop: 16,
-    },
-    footerText: {
-      fontSize: 14,
-      color: '#666',
-    },
-    link: {
-      fontSize: 14,
-      fontFamily: fonts.semiBold,
-      color: '#1A1A1A',
-    },
-  });
+  const handleVerifyCode = async () => {
+    if (verificationCode.length !== 6) {
+      Alert.alert('Error', 'Please enter the 6-digit code');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await api.post('/auth/verify-email', {
+        email,
+        code: verificationCode,
+      });
+
+      const { user, access_token } = response.data;
+
+      if (user && access_token) {
+        login(user, access_token);
+        // Go to onboarding to complete profile
+        router.replace('/(auth)/onboarding');
+      } else {
+        Alert.alert('Error', 'Verification failed. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert(
+        'Verification Failed',
+        error.response?.data?.detail || 'Invalid code. Please try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendTimer > 0) return;
+
+    try {
+      await api.post('/auth/resend-verification', { email });
+      setResendTimer(30);
+      Alert.alert('Success', 'Verification code resent!');
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to resend code');
+    }
+  };
+
+  const renderProgressBar = () => {
+    const progress = step / TOTAL_STEPS;
+    return (
+      <View style={styles.progressBarContainer}>
+        <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
+      </View>
+    );
+  };
+
+  const renderStep1 = () => (
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={styles.title}>Create your account</Text>
+      <Text style={styles.subtitle}>
+        Set your email and password for Watch Sphere account to continue.
+      </Text>
+
+      <View style={styles.form}>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Email address</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="johndoe.watches@gmail.com"
+            placeholderTextColor="#999999"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={[styles.input, passwordFocused && styles.inputFocused]}
+            placeholder="********"
+            placeholderTextColor="#999999"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Repeat Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Please repeat your password"
+            placeholderTextColor="#999999"
+            value={repeatPassword}
+            onChangeText={setRepeatPassword}
+            secureTextEntry
+            autoCapitalize="none"
+          />
+        </View>
+
+        {/* Password Requirements */}
+        <View style={styles.requirementsContainer}>
+          <Text style={styles.requirementsTitle}>Your password must contain:</Text>
+
+          <View style={styles.requirementRow}>
+            <CheckIcon checked={passwordValidation.minLength} />
+            <Text style={[
+              styles.requirementText,
+              passwordValidation.minLength && styles.requirementMet
+            ]}>
+              At least <Text style={styles.requirementBold}>12 characters</Text>
+            </Text>
+          </View>
+
+          <View style={styles.requirementRow}>
+            <CheckIcon checked={passwordValidation.hasUppercase} />
+            <Text style={[
+              styles.requirementText,
+              passwordValidation.hasUppercase && styles.requirementMet
+            ]}>
+              Includes <Text style={styles.requirementBold}>one uppercase letter</Text>
+            </Text>
+          </View>
+
+          <View style={styles.requirementRow}>
+            <CheckIcon checked={passwordValidation.hasNumber} />
+            <Text style={[
+              styles.requirementText,
+              passwordValidation.hasNumber && styles.requirementMet
+            ]}>
+              Includes <Text style={styles.requirementBold}>one number</Text>
+            </Text>
+          </View>
+
+          <View style={styles.requirementRow}>
+            <CheckIcon checked={passwordValidation.hasSpecial} />
+            <Text style={[
+              styles.requirementText,
+              passwordValidation.hasSpecial && styles.requirementMet
+            ]}>
+              Includes <Text style={styles.requirementBold}>one special character</Text>
+            </Text>
+          </View>
+        </View>
+      </View>
+    </ScrollView>
+  );
+
+  const renderStep2 = () => (
+    <View style={styles.stepContent}>
+      <Text style={styles.title}>Verify your email</Text>
+      <Text style={styles.subtitle}>
+        Enter the 6 digit code we sent to{'\n'}
+        <Text style={styles.emailHighlight}>{email}</Text>
+      </Text>
+
+      <View style={styles.codeContainer}>
+        {[0, 1, 2, 3, 4, 5].map((index) => (
+          <TextInput
+            key={index}
+            ref={(el) => (codeInputRefs.current[index] = el)}
+            style={[
+              styles.codeInput,
+              verificationCode[index] ? styles.codeInputFilled : null
+            ]}
+            maxLength={1}
+            keyboardType="number-pad"
+            value={verificationCode[index] || ''}
+            onChangeText={(value) => handleCodeChange(index, value)}
+            onKeyPress={({ nativeEvent }) => handleCodeKeyPress(index, nativeEvent.key)}
+          />
+        ))}
+      </View>
+
+      <View style={styles.resendContainer}>
+        <Text style={styles.resendText}>Didn't get the code? </Text>
+        {resendTimer > 0 ? (
+          <Text style={styles.resendTimerText}>
+            Resend in 00:{resendTimer.toString().padStart(2, '0')}
+          </Text>
+        ) : (
+          <TouchableOpacity onPress={handleResendCode}>
+            <Text style={styles.resendLink}>Resend</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
+  const canProceed = step === 1
+    ? isPasswordValid && passwordsMatch && email.length > 0
+    : verificationCode.length === 6;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <BackArrow />
+        </TouchableOpacity>
+        {renderProgressBar()}
+        <View style={styles.headerSpacer} />
+      </View>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.content}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Create account</Text>
-              <Text style={styles.subtitle}>Join WatchSphere today</Text>
-            </View>
+        {step === 1 ? renderStep1() : renderStep2()}
 
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Full Name</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="John Doe"
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="you@example.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Password</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="••••••••"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>I am a</Text>
-                <View style={styles.roleContainer}>
-                  <TouchableOpacity
-                    style={[styles.roleButton, role === 'collector' && styles.roleButtonActive]}
-                    onPress={() => setRole('collector')}
-                  >
-                    <Text style={[styles.roleButtonText, role === 'collector' && styles.roleButtonTextActive]}>
-                      Watch Collector
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.roleButton, role === 'dealer' && styles.roleButtonActive]}
-                    onPress={() => setRole('dealer')}
-                  >
-                    <Text style={[styles.roleButtonText, role === 'dealer' && styles.roleButtonTextActive]}>
-                      Watch Dealer
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleRegister}
-                disabled={loading}
-              >
-                <Text style={styles.buttonText}>
-                  {loading ? 'Creating account...' : 'Create account'}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>Already have an account? </Text>
-                <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-                  <Text style={styles.link}>Sign in</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
+        {/* Bottom Button */}
+        <View style={styles.bottomButtons}>
+          <TouchableOpacity
+            style={[
+              styles.continueButton,
+              (!canProceed || loading) && styles.buttonDisabled
+            ]}
+            onPress={step === 1 ? handleCreateAccount : handleVerifyCode}
+            disabled={!canProceed || loading}
+          >
+            <Text style={styles.continueButtonText}>
+              {loading ? 'Please wait...' : step === 1 ? 'Create Account' : 'Continue'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(16),
+    paddingVertical: hp(10),
+    gap: wp(16),
+  },
+  backButton: {
+    width: sp(44),
+    height: sp(44),
+    borderRadius: sp(296),
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressBarContainer: {
+    width: wp(188),
+    height: hp(4),
+    backgroundColor: 'rgba(33, 33, 33, 0.05)',
+    borderRadius: sp(99),
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#212121',
+    borderRadius: sp(99),
+  },
+  headerSpacer: {
+    width: sp(44),
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: wp(24),
+    paddingTop: hp(16),
+    paddingBottom: hp(24),
+  },
+  stepContent: {
+    flex: 1,
+    paddingHorizontal: wp(24),
+    paddingTop: hp(16),
+  },
+  title: {
+    fontSize: fp(34),
+    fontWeight: '700',
+    color: '#1D1D1F',
+    marginBottom: hp(8),
+    letterSpacing: -0.6,
+    lineHeight: fp(41),
+  },
+  subtitle: {
+    fontSize: fp(17),
+    color: 'rgba(29, 29, 31, 0.6)',
+    lineHeight: fp(22),
+    marginBottom: hp(32),
+    letterSpacing: -0.43,
+  },
+  emailHighlight: {
+    fontWeight: '600',
+    color: '#1D1D1F',
+  },
+  form: {
+    gap: hp(20),
+  },
+  inputGroup: {
+    gap: hp(8),
+  },
+  label: {
+    fontSize: fp(15),
+    fontWeight: '600',
+    color: '#1D1D1F',
+    letterSpacing: 0.075,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: sp(999),
+    height: hp(48),
+    paddingHorizontal: wp(16),
+    fontSize: fp(15),
+    color: '#1D1D1F',
+    backgroundColor: '#FFFFFF',
+    letterSpacing: 0.075,
+  },
+  inputFocused: {
+    borderWidth: 2,
+    borderColor: '#1D1D1F',
+  },
+  requirementsContainer: {
+    marginTop: hp(16),
+    gap: hp(12),
+  },
+  requirementsTitle: {
+    fontSize: fp(14),
+    color: '#1D1D1F',
+    marginBottom: hp(4),
+  },
+  requirementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(12),
+  },
+  requirementText: {
+    fontSize: fp(14),
+    color: '#666666',
+  },
+  requirementMet: {
+    color: '#1D1D1F',
+  },
+  requirementBold: {
+    fontWeight: '600',
+  },
+  codeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: hp(24),
+    gap: wp(8),
+  },
+  codeInput: {
+    width: (SCREEN_WIDTH - wp(48) - wp(40)) / 6,
+    height: sp(54),
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: sp(16),
+    fontSize: fp(24),
+    fontWeight: '600',
+    textAlign: 'center',
+    color: '#1D1D1F',
+    backgroundColor: '#FAFAFA',
+  },
+  codeInputFilled: {
+    borderWidth: 2,
+    borderColor: '#1D1D1F',
+    backgroundColor: '#FFFFFF',
+  },
+  resendContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resendText: {
+    fontSize: fp(15),
+    color: '#666666',
+  },
+  resendTimerText: {
+    fontSize: fp(15),
+    color: 'rgba(29, 29, 31, 0.5)',
+  },
+  resendLink: {
+    fontSize: fp(15),
+    fontWeight: '600',
+    color: '#1D1D1F',
+  },
+  bottomButtons: {
+    paddingHorizontal: wp(24),
+    paddingBottom: hp(24),
+    paddingTop: hp(16),
+  },
+  continueButton: {
+    backgroundColor: '#212121',
+    borderRadius: sp(99),
+    height: hp(48),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueButtonText: {
+    fontSize: fp(16),
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.08,
+  },
+  buttonDisabled: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+});

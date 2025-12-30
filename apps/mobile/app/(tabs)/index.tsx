@@ -1,91 +1,70 @@
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Modal } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useState, useCallback, useRef, Fragment } from 'react';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Greeting } from '@/components/Greeting';
-import { QuickAccessButton } from '@/components/QuickAccessButton';
-import { NewsCard, NewsItem } from '@/components/NewsCard';
-import { WatchlistGrid, WatchlistGridItem } from '@/components/WatchlistGrid';
-import { ActivityCenterPreview } from '@/components/ActivityCenterPreview';
-import { AIChatModal } from '@/components/AIChatModal';
+import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ChevronRight, X, Bell } from '@/components/icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+  Magnifier,
+  UserCircleFilled,
+  TagPlus,
+  PriceAlertDown,
+  TrendingUp,
+  ChevronRight,
+  ActivityChart,
+  SparkleIcon,
+  WatchIcon,
+  FileCheckIcon,
+  ShieldCheckIcon,
+  GridIcon,
+  AISparkle,
+} from '@/components/icons';
+import { LogoIcon } from '@/components/LogoIcon';
+import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
+
+const CARD_GAP = wp(12);
+const HORIZONTAL_PADDING = wp(16);
+const CARD_WIDTH = (SCREEN_WIDTH - (HORIZONTAL_PADDING * 2) - CARD_GAP) / 2;
+
+interface WatchlistItem {
+  id: string;
+  brand: string;
+  model: string;
+  reference: string;
+  price: number;
+  priceChange: number;
+  image: any;
+}
+
+interface ActivityItem {
+  id: string;
+  type: 'new_offer' | 'price_alert';
+  reference: string;
+  price: number;
+  time: string;
+}
 
 interface QuickAccessItem {
   id: string;
   title: string;
   subtitle: string;
-  icon: string;
+  icon: 'activity' | 'sparkle' | 'watch' | 'file' | 'shield' | 'grid';
+  color: string;
 }
 
-// All available Quick Access items
-const ALL_QUICK_ACCESS_ITEMS: QuickAccessItem[] = [
-  {
-    id: '1',
-    title: 'Activity Center',
-    subtitle: 'All your updates — matches, payments, shipping and alerts in one place.',
-    icon: 'activity',
-  },
-  {
-    id: '2',
-    title: 'Smart Search',
-    subtitle: 'Find watches worldwide with intelligent filters and live matches.',
-    icon: 'search',
-  },
-  {
-    id: '3',
-    title: 'Buy',
-    subtitle: 'Buy from verified dealers in your chosen market region.',
-    icon: 'shopping-cart',
-  },
-  {
-    id: '4',
-    title: 'Sell',
-    subtitle: 'List your watches for sale and connect with active buyers.',
-    icon: 'tag',
-  },
-  {
-    id: '5',
-    title: 'Ask AI Assistant',
-    subtitle: 'Your personal assistant, 24/7.',
-    icon: 'bot',
-  },
-  {
-    id: '6',
-    title: 'My Inventory',
-    subtitle: 'Manage, edit and track your full watch stock in real time.',
-    icon: 'package',
-  },
-  {
-    id: '7',
-    title: 'My Orders',
-    subtitle: 'View and manage all your active buy orders.',
-    icon: 'clipboard-list',
-  },
-  {
-    id: '8',
-    title: 'Checks',
-    subtitle: 'Avoid risk — check your serials and close deals confidently.',
-    icon: 'shield-check',
-  },
-  {
-    id: '9',
-    title: 'All Tools',
-    subtitle: 'Everything else you need — organized in one place.',
-    icon: 'grid',
-  },
-];
+interface NewsItem {
+  id: string;
+  title: string;
+  source: string;
+  time: string;
+  imageUrl: string;
+}
 
 export default function HomeScreen() {
   const { colors, fonts } = useTheme();
-  const [isReorganizing, setIsReorganizing] = useState(false);
-  const [aiChatVisible, setAiChatVisible] = useState(false);
-  const [showAddItemsModal, setShowAddItemsModal] = useState(false);
 
-  // Watchlist with specific watches and images
-  const watchlistItems: WatchlistGridItem[] = [
+  // Watchlist data matching Figma design
+  const watchlistItems: WatchlistItem[] = [
     {
       id: '1',
       brand: 'AP',
@@ -124,94 +103,123 @@ export default function HomeScreen() {
     },
   ];
 
-  const [quickAccessItems, setQuickAccessItems] = useState<QuickAccessItem[]>(ALL_QUICK_ACCESS_ITEMS);
-
-  // Get items that have been removed
-  const removedItems = ALL_QUICK_ACCESS_ITEMS.filter(
-    (item) => !quickAccessItems.find((active) => active.id === item.id)
-  );
-
-  const newsItems: NewsItem[] = [
+  // Activity items matching Figma design
+  const activityItems: ActivityItem[] = [
     {
       id: '1',
-      icon: '📰',
-      text: 'Patek increases Nautilus production by 5%',
-      source: 'Bloomberg',
-      url: 'https://bloomberg.com',
-      date: 'December 1, 2025',
-      fullText: 'Patek Philippe has announced a strategic increase in production capacity for their flagship Nautilus collection, responding to sustained market demand. The Swiss manufacturer confirmed a 5% uptick in annual output, marking the first significant production adjustment since 2021. Industry analysts suggest this move could help stabilize secondary market prices, which have seen considerable volatility over the past year. The decision comes amid broader discussions about luxury watch accessibility and the balance between exclusivity and availability.',
-      imageUrl: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=800',
+      type: 'new_offer',
+      reference: '126610LN',
+      price: 12000,
+      time: '1 min ago',
     },
     {
       id: '2',
-      icon: '📈',
-      text: 'Submariner prices stabilize after -2.1% dip',
-      source: 'Market Watch',
-      url: 'https://marketwatch.com',
-      date: 'November 30, 2025',
-      fullText: 'After weeks of declining values, Rolex Submariner prices appear to be finding their floor. The popular dive watch experienced a 2.1% correction over the past month, bringing average transaction prices closer to retail levels. Market observers note this stabilization follows a period of speculation-driven inflation that peaked in early 2024. Current prices suggest a healthier, more sustainable market dynamic.',
-      imageUrl: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=800',
+      type: 'new_offer',
+      reference: '126610LN',
+      price: 12000,
+      time: '1 min ago',
     },
     {
       id: '3',
-      icon: '🔧',
-      text: 'Rolex service delays still affecting secondary market',
-      source: 'WatchPro',
-      url: 'https://watchpro.com',
-      date: 'November 28, 2025',
-      fullText: 'Extended service wait times at Rolex authorized service centers continue to impact secondary market dynamics. Current estimates suggest 8-12 month waits for standard servicing, leading some collectors to factor maintenance costs and timing into purchase decisions. The backlog, attributed to increased global demand and meticulous quality standards, has created opportunities for independent watchmakers while raising questions about long-term brand service capacity.',
-      imageUrl: 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=800',
+      type: 'price_alert',
+      reference: '126710BLRO',
+      price: 11000,
+      time: '1 min ago',
     },
   ];
 
-  const handleViewAllWatchlist = () => {
-    // Navigate to market with watchlist filter
-    router.push('/market');
+  // Quick Access items matching Figma design
+  const quickAccessItems: QuickAccessItem[] = [
+    {
+      id: '1',
+      title: 'Activity Center',
+      subtitle: 'Track your matches, payments, shipping',
+      icon: 'activity',
+      color: '#FF7373',
+    },
+    {
+      id: '2',
+      title: 'Ask AI Assistant',
+      subtitle: 'Your personal assistant, 24/7.',
+      icon: 'sparkle',
+      color: '#D573FF',
+    },
+    {
+      id: '3',
+      title: 'My Inventory',
+      subtitle: 'Manage, edit and track your full watch stock.',
+      icon: 'watch',
+      color: '#767676',
+    },
+    {
+      id: '4',
+      title: 'My Orders',
+      subtitle: 'View and manage all your active buy orders.',
+      icon: 'file',
+      color: '#32D287',
+    },
+    {
+      id: '5',
+      title: 'Checks',
+      subtitle: 'Check your serials and close deals confidently.',
+      icon: 'shield',
+      color: '#7C73FF',
+    },
+    {
+      id: '6',
+      title: 'All Tools',
+      subtitle: 'Everything else you need, in one place.',
+      icon: 'grid',
+      color: '#73BEFF',
+    },
+  ];
+
+  // News items matching Figma design
+  const newsItems: NewsItem[] = [
+    {
+      id: '1',
+      title: 'Patek Philippe increases Nautilus production rate by 5%',
+      source: 'Bloomberg',
+      time: '2 days ago',
+      imageUrl: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=200',
+    },
+    {
+      id: '2',
+      title: 'Rolex unveils new Submariner model with enhanced features',
+      source: 'Bloomberg',
+      time: '2 days ago',
+      imageUrl: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=200',
+    },
+    {
+      id: '3',
+      title: 'Audemars Piguet introduces a new concept watch at the Geneva Watch Fair',
+      source: 'Bloomberg',
+      time: '2 days ago',
+      imageUrl: 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=200',
+    },
+  ];
+
+  const formatPrice = (price: number) => {
+    return `€${price.toLocaleString()}`;
   };
 
-  const handleWatchPress = (watchId: string) => {
-    router.push(`/watch/${watchId}`);
-  };
-
-  const handleReorganize = () => {
-    setIsReorganizing(!isReorganizing);
-  };
-
-  const handleRemoveItem = (itemId: string) => {
-    setQuickAccessItems((items) => items.filter((item) => item.id !== itemId));
-  };
-
-  const handleAddItem = (item: QuickAccessItem) => {
-    setQuickAccessItems((items) => [...items, item]);
-    setShowAddItemsModal(false);
-  };
-
-  const handleQuickAccessPress = (item: QuickAccessItem) => {
-    if (item.title === 'Activity Center') {
-      router.push('/(tabs)/dashboard' as any);
-    } else if (item.title === 'Smart Search') {
-      router.push('/(tabs)/market');
-    } else if (item.title === 'Ask AI Assistant') {
-      setAiChatVisible(true);
-    } else {
-      console.log('Pressed:', item.title);
+  const renderQuickAccessIcon = (icon: string, color: string) => {
+    switch (icon) {
+      case 'activity':
+        return <ActivityChart size={18} color="#FFFFFF" />;
+      case 'sparkle':
+        return <SparkleIcon size={16} color="#FFFFFF" />;
+      case 'watch':
+        return <WatchIcon size={16} color="#FFFFFF" />;
+      case 'file':
+        return <FileCheckIcon size={16} color="#FFFFFF" />;
+      case 'shield':
+        return <ShieldCheckIcon size={16} color="#FFFFFF" />;
+      case 'grid':
+        return <GridIcon size={16} color="#FFFFFF" />;
+      default:
+        return <GridIcon size={16} color="#FFFFFF" />;
     }
-  };
-
-  const renderQuickAccessItem = ({ item, drag, isActive }: RenderItemParams<QuickAccessItem>) => {
-    return (
-      <ScaleDecorator>
-        <QuickAccessButton
-          title={item.title}
-          subtitle={item.subtitle}
-          icon={item.icon}
-          onPress={() => handleQuickAccessPress(item)}
-          isReorganizing={isReorganizing}
-          onRemove={() => handleRemoveItem(item.id)}
-          drag={drag}
-        />
-      </ScaleDecorator>
-    );
   };
 
   const styles = StyleSheet.create({
@@ -222,275 +230,516 @@ export default function HomeScreen() {
     scrollView: {
       flex: 1,
     },
-    quickAccessContainer: {
-      paddingHorizontal: 16,
-      paddingVertical: 20,
-      backgroundColor: '#FFFFFF',
+    scrollContent: {
+      paddingBottom: hp(100),
     },
+    // Header styles
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: wp(16),
+      paddingVertical: 0,
+      marginBottom: hp(32),
+      gap: wp(16),
+    },
+    logoContainer: {
+      width: sp(33),
+      height: sp(28),
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    searchBar: {
+      flex: 1,
+      height: sp(44),
+      backgroundColor: '#F6F7F9',
+      borderRadius: sp(99),
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: wp(16),
+    },
+    searchIcon: {
+      marginRight: wp(8),
+      opacity: 0.4,
+    },
+    searchPlaceholder: {
+      fontSize: fp(15),
+      fontFamily: fonts.medium,
+      color: '#212121',
+      opacity: 0.5,
+    },
+    profileButton: {
+      width: sp(44),
+      height: sp(44),
+      backgroundColor: '#F6F7F9',
+      borderRadius: sp(99),
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    // Section header styles
     sectionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 16,
+      paddingHorizontal: wp(16),
+      marginBottom: hp(16),
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: fp(24),
+      fontFamily: fonts.bold,
+      color: '#212121',
+      letterSpacing: 0.12,
+    },
+    viewAllButton: {
+      borderBottomWidth: 1,
+      borderBottomColor: '#212121',
+      paddingVertical: hp(2),
+    },
+    viewAllText: {
+      fontSize: fp(15),
       fontFamily: fonts.semiBold,
       color: '#212121',
-      lineHeight: 20,
-      letterSpacing: 0.08,
+      letterSpacing: 0.075,
     },
-    reorganizeButton: {
+    // Activity section styles
+    activitySection: {
+      marginBottom: hp(32),
+    },
+    activityItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 2,
+      paddingHorizontal: wp(16),
+      paddingVertical: hp(16),
+      gap: wp(12),
     },
-    reorganizeText: {
-      fontSize: 13,
-      fontFamily: fonts.medium,
-      color: colors.primary,
-    },
-    quickAccessButtons: {
-      gap: 0,
-    },
-    addItemsButton: {
-      marginTop: 12,
-      padding: 16,
-      backgroundColor: 'transparent',
-      borderRadius: 12,
-      borderWidth: 2,
-      borderColor: colors.border,
-      borderStyle: 'dashed',
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    addItemsIconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 12,
-      backgroundColor: colors.primaryLight,
+    activityIconContainer: {
+      width: sp(40),
+      height: sp(40),
+      borderRadius: sp(540),
       justifyContent: 'center',
       alignItems: 'center',
     },
-    addItemsIcon: {
-      fontSize: 28,
-      fontFamily: fonts.light,
-      color: colors.primary,
+    activityIconBlue: {
+      backgroundColor: 'rgba(0, 136, 255, 0.05)',
     },
-    addItemsTextContainer: {
+    activityIconRed: {
+      backgroundColor: 'rgba(217, 4, 41, 0.05)',
+    },
+    activityContent: {
       flex: 1,
+      gap: hp(2),
     },
-    addItemsText: {
-      fontSize: 16,
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-      marginBottom: 2,
-    },
-    addItemsSubtext: {
-      fontSize: 13,
-      fontFamily: fonts.regular,
-      color: colors.textSecondary,
-    },
-    modalHeader: {
+    activityRow: {
       flexDirection: 'row',
-      alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    modalTitle: {
-      fontSize: 18,
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-    },
-    modalCloseButton: {
-      padding: 8,
-    },
-    modalContent: {
-      flex: 1,
-      padding: 16,
-    },
-    modalItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      padding: 16,
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      marginBottom: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    modalItemIconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 12,
-      backgroundColor: colors.primaryLight,
-      justifyContent: 'center',
       alignItems: 'center',
     },
-    modalItemIcon: {
-      fontSize: 28,
-      fontFamily: fonts.light,
-      color: colors.primary,
-    },
-    modalItemTextContainer: {
-      flex: 1,
-    },
-    modalItemTitle: {
-      fontSize: 16,
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-      marginBottom: 4,
-    },
-    modalItemSubtitle: {
-      fontSize: 13,
+    activityText: {
+      fontSize: fp(15),
       fontFamily: fonts.regular,
-      color: colors.textSecondary,
-      lineHeight: 18,
+      color: '#212121',
     },
-    newsSection: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+    activityReference: {
+      fontFamily: fonts.semiBold,
+    },
+    activityPrice: {
+      fontSize: fp(15),
+      fontFamily: fonts.semiBold,
+      color: '#212121',
+    },
+    activityTime: {
+      fontSize: fp(12),
+      fontFamily: fonts.regular,
+      color: '#747474',
+      letterSpacing: 0.06,
+    },
+    // Watchlist section styles
+    watchlistSection: {
+      paddingHorizontal: wp(16),
+      paddingVertical: hp(32),
+    },
+    watchlistGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: wp(12),
+    },
+    watchCard: {
+      width: CARD_WIDTH,
       backgroundColor: '#FFFFFF',
+      borderRadius: sp(16),
+      borderWidth: 1,
+      borderColor: 'rgba(0, 0, 0, 0.05)',
+      overflow: 'hidden',
     },
-    newsHeader: {
+    watchImageContainer: {
+      width: '100%',
+      height: hp(140),
+      borderTopLeftRadius: sp(12),
+      borderTopRightRadius: sp(12),
+      overflow: 'hidden',
+    },
+    watchImageGradient: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    watchImage: {
+      width: '66%',
+      height: '85%',
+      resizeMode: 'contain',
+    },
+    watchCardContent: {
+      padding: wp(16),
+      paddingTop: hp(12),
+      gap: hp(12),
+    },
+    watchName: {
+      fontSize: fp(13),
+      fontFamily: fonts.semiBold,
+      color: '#212121',
+      lineHeight: fp(17),
+    },
+    watchReference: {
+      fontSize: fp(13),
+      fontFamily: fonts.medium,
+      color: '#212121',
+      opacity: 0.5,
+      lineHeight: fp(17),
+    },
+    watchPriceRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 8,
+    },
+    watchPrice: {
+      fontSize: fp(15),
+      fontFamily: fonts.semiBold,
+      color: '#212121',
+      lineHeight: fp(20),
+    },
+    watchChangeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: wp(4),
+      paddingHorizontal: wp(7),
+      paddingVertical: hp(3),
+      borderRadius: sp(99),
+    },
+    watchChangeBadgeUp: {
+      backgroundColor: 'rgba(74, 160, 120, 0.05)',
+    },
+    watchChangeBadgeDown: {
+      backgroundColor: 'rgba(201, 57, 39, 0.05)',
+    },
+    watchChangeText: {
+      fontSize: fp(11),
+      fontFamily: fonts.semiBold,
+      lineHeight: fp(14),
+    },
+    watchChangeTextUp: {
+      color: '#4AA078',
+    },
+    watchChangeTextDown: {
+      color: '#C93927',
+    },
+    // Quick Access section styles
+    quickAccessSection: {
+      paddingHorizontal: wp(20),
+      paddingVertical: hp(32),
+      paddingTop: 0,
+    },
+    quickAccessList: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: sp(16),
+      paddingVertical: hp(16),
+      gap: hp(16),
+    },
+    quickAccessItem: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: wp(16),
+    },
+    quickAccessIconContainer: {
+      width: sp(36),
+      height: sp(36),
+      borderRadius: sp(8),
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    quickAccessContent: {
+      flex: 1,
+      gap: hp(12),
+    },
+    quickAccessTextRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: wp(8),
+    },
+    quickAccessTextContent: {
+      flex: 1,
+    },
+    quickAccessTitle: {
+      fontSize: fp(14),
+      fontFamily: fonts.semiBold,
+      color: '#212121',
+      letterSpacing: 0.07,
+      lineHeight: fp(19),
+    },
+    quickAccessSubtitle: {
+      fontSize: fp(13),
+      fontFamily: fonts.regular,
+      color: '#787789',
+      lineHeight: fp(19),
+    },
+    quickAccessChevron: {
+      opacity: 0.4,
+    },
+    quickAccessDivider: {
+      height: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    },
+    // News section styles
+    newsSection: {
+      paddingHorizontal: wp(20),
+      paddingBottom: hp(32),
+    },
+    newsItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: wp(12),
+      paddingVertical: hp(16),
+    },
+    newsImage: {
+      width: sp(80),
+      height: sp(80),
+      borderRadius: sp(16),
+      backgroundColor: '#E6E6E6',
+    },
+    newsContent: {
+      flex: 1,
+      gap: hp(4),
     },
     newsTitle: {
-      fontSize: 16,
+      fontSize: fp(15),
       fontFamily: fonts.semiBold,
       color: '#212121',
-      lineHeight: 20,
-      letterSpacing: 0.08,
+      letterSpacing: 0.075,
+      lineHeight: fp(19),
     },
-    newsViewAllButton: {
+    newsSourceRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 2,
+      gap: wp(4),
     },
-    newsViewAllText: {
-      fontSize: 13,
+    newsSource: {
+      fontSize: fp(13),
       fontFamily: fonts.medium,
-      color: colors.primary,
+      color: '#787789',
+      letterSpacing: -0.13,
+    },
+    newsTime: {
+      fontSize: fp(13),
+      fontFamily: fonts.medium,
+      color: '#787789',
+      letterSpacing: -0.13,
     },
   });
 
   return (
-    <>
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* Greeting */}
-          <Greeting />
-
-          {/* Activity Center Preview */}
-          <ActivityCenterPreview onViewAll={() => router.push('/(tabs)/dashboard' as any)} />
-
-          {/* Watchlist Grid Section */}
-          <WatchlistGrid
-            watches={watchlistItems}
-            onViewAll={handleViewAllWatchlist}
-            onWatchPress={handleWatchPress}
-          />
-
-          {/* Quick Access Section */}
-          <View style={styles.quickAccessContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Quick Access</Text>
-              <TouchableOpacity style={styles.reorganizeButton} onPress={handleReorganize}>
-                <Text style={styles.reorganizeText}>{isReorganizing ? 'Done' : 'Reorganize'}</Text>
-                {!isReorganizing && <ChevronRight size={14} color={colors.primary} />}
-              </TouchableOpacity>
-            </View>
-            <GestureHandlerRootView style={styles.quickAccessButtons}>
-              <DraggableFlatList
-                data={quickAccessItems}
-                renderItem={renderQuickAccessItem}
-                keyExtractor={(item) => item.id}
-                onDragEnd={({ data }) => setQuickAccessItems(data)}
-                scrollEnabled={false}
-              />
-            </GestureHandlerRootView>
-
-            {/* Add Items Button - Only shown when reorganizing and items are removed */}
-            {isReorganizing && removedItems.length > 0 && (
-              <TouchableOpacity
-                style={styles.addItemsButton}
-                onPress={() => setShowAddItemsModal(true)}
-              >
-                <View style={styles.addItemsIconContainer}>
-                  <Text style={styles.addItemsIcon}>+</Text>
-                </View>
-                <View style={styles.addItemsTextContainer}>
-                  <Text style={styles.addItemsText}>Add Quick Access Items</Text>
-                  <Text style={styles.addItemsSubtext}>
-                    {removedItems.length} item{removedItems.length > 1 ? 's' : ''} available to add
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )}
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Header with Logo, Search Bar, and Profile */}
+        <View style={styles.header}>
+          {/* Logo */}
+          <View style={styles.logoContainer}>
+            <LogoIcon width={33} height={28} color="#212121" />
           </View>
 
-          {/* Market News */}
-          <View style={styles.newsSection}>
-            <View style={styles.newsHeader}>
-              <Text style={styles.newsTitle}>Latest News</Text>
-              <TouchableOpacity style={styles.newsViewAllButton} onPress={() => console.log('View all news')}>
-                <Text style={styles.newsViewAllText}>View all</Text>
-                <ChevronRight size={14} color={colors.primary} />
-              </TouchableOpacity>
+          {/* Search Bar */}
+          <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/market')}>
+            <View style={styles.searchIcon}>
+              <Magnifier size={18} color="#212121" />
             </View>
-            {newsItems.map((item) => (
-              <NewsCard
-                key={item.id}
-                item={item}
-              />
-            ))}
-          </View>
-        </ScrollView>
-      </SafeAreaView>
+            <Text style={styles.searchPlaceholder}>Search watches...</Text>
+          </TouchableOpacity>
 
-      {/* Add Items Modal */}
-      <Modal
-        visible={showAddItemsModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowAddItemsModal(false)}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add Quick Access Items</Text>
-            <TouchableOpacity onPress={() => setShowAddItemsModal(false)} style={styles.modalCloseButton}>
-              <X size={24} color={colors.text} />
+          {/* Profile Button */}
+          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+            <UserCircleFilled size={32} color="#212121" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Latest Activity Section */}
+        <View style={styles.activitySection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Latest activity</Text>
+            <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/(tabs)/notifications' as any)}>
+              <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.modalContent}>
-            {removedItems.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.modalItem}
-                onPress={() => handleAddItem(item)}
-              >
-                <View style={styles.modalItemIconContainer}>
-                  <Text style={styles.modalItemIcon}>+</Text>
-                </View>
-                <View style={styles.modalItemTextContainer}>
-                  <Text style={styles.modalItemTitle}>{item.title}</Text>
-                  <Text style={styles.modalItemSubtitle}>{item.subtitle}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
 
-      <AIChatModal visible={aiChatVisible} onClose={() => setAiChatVisible(false)} />
-    </>
+          {activityItems.map((item) => (
+            <View key={item.id} style={styles.activityItem}>
+              <View
+                style={[
+                  styles.activityIconContainer,
+                  item.type === 'new_offer' ? styles.activityIconBlue : styles.activityIconRed,
+                ]}
+              >
+                {item.type === 'new_offer' ? (
+                  <TagPlus size={18} color="#0088FF" />
+                ) : (
+                  <PriceAlertDown size={20} color="#C93927" />
+                )}
+              </View>
+              <View style={styles.activityContent}>
+                <View style={styles.activityRow}>
+                  <Text style={styles.activityText}>
+                    {item.type === 'new_offer' ? 'New offer ' : 'Price alert triggered '}
+                    <Text style={styles.activityReference}>{item.reference}</Text>
+                  </Text>
+                  <Text style={styles.activityPrice}>{formatPrice(item.price)}</Text>
+                </View>
+                <Text style={styles.activityTime}>{item.time}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Watchlist Section */}
+        <View style={styles.watchlistSection}>
+          <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
+            <Text style={styles.sectionTitle}>Watchlist</Text>
+            <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/market')}>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.watchlistGrid}>
+            {watchlistItems.map((watch) => {
+              const isPositive = watch.priceChange > 0;
+              return (
+                <TouchableOpacity
+                  key={watch.id}
+                  style={styles.watchCard}
+                  onPress={() => router.push(`/watch/${watch.id}`)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.watchImageContainer}>
+                    <LinearGradient
+                      colors={['#FFFFFF', '#F4F4F4']}
+                      style={styles.watchImageGradient}
+                    >
+                      <Image source={watch.image} style={styles.watchImage} />
+                    </LinearGradient>
+                  </View>
+                  <View style={styles.watchCardContent}>
+                    <View>
+                      <Text style={styles.watchName}>{watch.brand} {watch.model}</Text>
+                      <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
+                    </View>
+                    <View style={styles.watchPriceRow}>
+                      <Text style={styles.watchPrice}>{formatPrice(watch.price)}€</Text>
+                      <View
+                        style={[
+                          styles.watchChangeBadge,
+                          isPositive ? styles.watchChangeBadgeUp : styles.watchChangeBadgeDown,
+                        ]}
+                      >
+                        {isPositive ? (
+                          <TrendingUp size={12} color="#4AA078" />
+                        ) : (
+                          <PriceAlertDown size={12} color="#C93927" />
+                        )}
+                        <Text
+                          style={[
+                            styles.watchChangeText,
+                            isPositive ? styles.watchChangeTextUp : styles.watchChangeTextDown,
+                          ]}
+                        >
+                          {Math.abs(watch.priceChange).toFixed(1)}%
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Quick Access Section */}
+        <View style={styles.quickAccessSection}>
+          <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
+            <Text style={styles.sectionTitle}>Quick Access</Text>
+          </View>
+
+          <View style={styles.quickAccessList}>
+            {quickAccessItems.map((item, index) => (
+              <View key={item.id}>
+                <TouchableOpacity
+                  style={styles.quickAccessItem}
+                  onPress={() => {
+                    if (item.title === 'Activity Center') {
+                      router.push('/(tabs)/dashboard' as any);
+                    } else if (item.title === 'My Inventory') {
+                      router.push('/market');
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.quickAccessIconContainer, { backgroundColor: item.color }]}>
+                    {renderQuickAccessIcon(item.icon, item.color)}
+                  </View>
+                  <View style={styles.quickAccessContent}>
+                    <View style={styles.quickAccessTextRow}>
+                      <View style={styles.quickAccessTextContent}>
+                        <Text style={styles.quickAccessTitle}>{item.title}</Text>
+                        <Text style={styles.quickAccessSubtitle}>{item.subtitle}</Text>
+                      </View>
+                      <View style={styles.quickAccessChevron}>
+                        <ChevronRight size={18} color="#212121" />
+                      </View>
+                    </View>
+                    {index < quickAccessItems.length - 1 && <View style={styles.quickAccessDivider} />}
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Trending News Section */}
+        <View style={styles.newsSection}>
+          <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
+            <Text style={styles.sectionTitle}>Trending news</Text>
+            <TouchableOpacity style={styles.viewAllButton}>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {newsItems.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.newsItem}
+              activeOpacity={0.7}
+            >
+              <Image
+                source={{ uri: item.imageUrl }}
+                style={styles.newsImage}
+              />
+              <View style={styles.newsContent}>
+                <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
+                <View style={styles.newsSourceRow}>
+                  <Text style={styles.newsSource}>{item.source}</Text>
+                  <Text style={styles.newsTime}> · </Text>
+                  <Text style={styles.newsTime}>{item.time}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

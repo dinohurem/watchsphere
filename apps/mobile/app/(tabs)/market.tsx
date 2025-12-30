@@ -12,6 +12,7 @@ import { Filter, Tag } from '@/components/icons';
 import { Location } from '@/components/LocationFilter';
 import { WareCondition } from '@/components/WareConditionFilter';
 import { YearMonthSelection } from '@/components/YearMonthFilter';
+import { wp, hp, sp } from '@/utils/responsive';
 
 // Mock data with price history for charts
 const mockWatches = [
@@ -140,21 +141,21 @@ export default function MarketScreen() {
       backgroundColor: '#FFFFFF',
     },
     searchContainer: {
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 12,
+      paddingHorizontal: wp(16),
+      paddingTop: hp(8),
+      paddingBottom: hp(12),
     },
     filterBar: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingBottom: 8,
-      gap: 8,
+      paddingHorizontal: wp(16),
+      paddingBottom: hp(8),
+      gap: wp(8),
     },
     filterIconButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: sp(40),
+      height: sp(40),
+      borderRadius: sp(20),
       backgroundColor: colors.buttonBackground,
       justifyContent: 'center',
       alignItems: 'center',
@@ -167,7 +168,7 @@ export default function MarketScreen() {
     },
     scrollView: {
       flex: 1,
-      paddingHorizontal: 16,
+      paddingHorizontal: wp(16),
     },
   });
 

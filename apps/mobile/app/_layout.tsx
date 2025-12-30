@@ -39,9 +39,9 @@ function RootLayoutNav() {
   const { colorScheme } = useTheme();
 
   useEffect(() => {
-    // Redirect to login if not authenticated
+    // Redirect to auth screen if not authenticated
     if (!isAuthenticated) {
-      router.replace('/(auth)/login');
+      router.replace('/(auth)');
     }
   }, [isAuthenticated]);
 

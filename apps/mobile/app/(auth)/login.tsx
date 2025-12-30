@@ -8,20 +8,35 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { api } from '@/services/api';
-import { useTheme } from '@/contexts/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Svg, { Path } from 'react-native-svg';
+import { wp, hp, sp, fp } from '@/utils/responsive';
+
+// Back Arrow Icon
+function BackArrow() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#1D1D1F" strokeWidth={2}>
+      <Path d="M19 12H5M12 19l-7-7 7-7" />
+    </Svg>
+  );
+}
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { colors, fonts } = useTheme();
 
   const login = useAuthStore((state) => state.login);
+
+  const handleBack = () => {
+    router.back();
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -44,18 +59,16 @@ export default function LoginScreen() {
 
       const { user, access_token } = response.data;
 
-      // Block admin login on mobile - admin panel is web only
-      if (user.role === 'admin') {
-        Alert.alert(
-          'Admin Access Restricted',
-          'Admin accounts can only log in via the web application. Please use the web admin panel at watchsphere.com/admin',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
       login(user, access_token);
-      router.replace('/(tabs)');
+
+      // Check if notification prompt has been shown before
+      const notificationPromptShown = await AsyncStorage.getItem('notification_prompt_shown');
+      if (!notificationPromptShown) {
+        // Show notification screen if user hasn't seen it
+        router.replace('/(auth)/notifications');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       const errorMessage = error.response?.data?.detail || 'Please try again';
 
@@ -74,111 +87,39 @@ export default function LoginScreen() {
     }
   };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: '#F5F5F5',
-    },
-    keyboardView: {
-      flex: 1,
-    },
-    content: {
-      flex: 1,
-      justifyContent: 'center',
-      paddingHorizontal: 24,
-    },
-    header: {
-      marginBottom: 32,
-    },
-    logoText: {
-      fontSize: 16,
-      fontFamily: fonts.semiBold,
-      color: '#1A1A1A',
-      letterSpacing: 2,
-      textAlign: 'center',
-      marginBottom: 32,
-    },
-    title: {
-      fontSize: 32,
-      fontFamily: fonts.bold,
-      color: '#1A1A1A',
-      marginBottom: 8,
-    },
-    subtitle: {
-      fontSize: 16,
-      color: '#666',
-    },
-    form: {
-      gap: 16,
-    },
-    inputGroup: {
-      gap: 8,
-    },
-    label: {
-      fontSize: 14,
-      fontFamily: fonts.semiBold,
-      color: '#1A1A1A',
-    },
-    input: {
-      backgroundColor: '#fff',
-      borderWidth: 1,
-      borderColor: '#E5E5E5',
-      borderRadius: 12,
-      padding: 16,
-      fontSize: 16,
-      color: '#1A1A1A',
-    },
-    button: {
-      backgroundColor: '#1A1A1A',
-      borderRadius: 12,
-      padding: 16,
-      alignItems: 'center',
-      marginTop: 8,
-    },
-    buttonDisabled: {
-      opacity: 0.5,
-    },
-    buttonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontFamily: fonts.semiBold,
-    },
-    footer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginTop: 16,
-    },
-    footerText: {
-      fontSize: 14,
-      color: '#666',
-    },
-    link: {
-      fontSize: 14,
-      fontFamily: fonts.semiBold,
-      color: '#1A1A1A',
-    },
-  });
+  const canLogin = email.length > 0 && password.length > 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <BackArrow />
+        </TouchableOpacity>
+      </View>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <View style={styles.content}>
-          <Text style={styles.logoText}>WATCHSPHERE</Text>
-          <View style={styles.header}>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in to your WatchSphere account</Text>
-          </View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.title}>Welcome back</Text>
+          <Text style={styles.subtitle}>
+            Sign in to your Watch Sphere account to continue.
+          </Text>
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>Email address</Text>
               <TextInput
                 style={styles.input}
-                placeholder="you@example.com"
+                placeholder="johndoe.watches@gmail.com"
+                placeholderTextColor="#999999"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -191,7 +132,8 @@ export default function LoginScreen() {
               <Text style={styles.label}>Password</Text>
               <TextInput
                 style={styles.input}
-                placeholder="••••••••"
+                placeholder="********"
+                placeholderTextColor="#999999"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -199,25 +141,149 @@ export default function LoginScreen() {
               />
             </View>
 
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleLogin}
-              disabled={loading}
-            >
-              <Text style={styles.buttonText}>
-                {loading ? 'Signing in...' : 'Sign in'}
-              </Text>
+            <TouchableOpacity style={styles.forgotPassword}>
+              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
             </TouchableOpacity>
+          </View>
+        </ScrollView>
 
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-                <Text style={styles.link}>Create one</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Bottom Button */}
+        <View style={styles.bottomButtons}>
+          <TouchableOpacity
+            style={[
+              styles.loginButton,
+              (!canLogin || loading) && styles.buttonDisabled
+            ]}
+            onPress={handleLogin}
+            disabled={!canLogin || loading}
+          >
+            <Text style={styles.loginButtonText}>
+              {loading ? 'Signing in...' : 'Sign in'}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+              <Text style={styles.footerLink}>Create one</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(16),
+    paddingVertical: hp(10),
+  },
+  backButton: {
+    width: sp(44),
+    height: sp(44),
+    borderRadius: sp(296),
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: wp(24),
+    paddingTop: hp(16),
+    paddingBottom: hp(24),
+  },
+  title: {
+    fontSize: fp(34),
+    fontWeight: '700',
+    color: '#1D1D1F',
+    marginBottom: hp(8),
+    letterSpacing: -0.6,
+    lineHeight: fp(41),
+  },
+  subtitle: {
+    fontSize: fp(17),
+    color: 'rgba(29, 29, 31, 0.6)',
+    lineHeight: fp(22),
+    marginBottom: hp(32),
+    letterSpacing: -0.43,
+  },
+  form: {
+    gap: hp(20),
+  },
+  inputGroup: {
+    gap: hp(8),
+  },
+  label: {
+    fontSize: fp(15),
+    fontWeight: '600',
+    color: '#1D1D1F',
+    letterSpacing: 0.075,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: sp(999),
+    height: hp(48),
+    paddingHorizontal: wp(16),
+    fontSize: fp(15),
+    color: '#1D1D1F',
+    backgroundColor: '#FFFFFF',
+    letterSpacing: 0.075,
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+  },
+  forgotPasswordText: {
+    fontSize: fp(14),
+    fontWeight: '500',
+    color: '#1D1D1F',
+  },
+  bottomButtons: {
+    paddingHorizontal: wp(24),
+    paddingBottom: hp(24),
+    paddingTop: hp(16),
+  },
+  loginButton: {
+    backgroundColor: '#212121',
+    borderRadius: sp(99),
+    height: hp(48),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginButtonText: {
+    fontSize: fp(16),
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.08,
+  },
+  buttonDisabled: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: hp(16),
+  },
+  footerText: {
+    fontSize: fp(14),
+    color: 'rgba(29, 29, 31, 0.6)',
+  },
+  footerLink: {
+    fontSize: fp(14),
+    fontWeight: '600',
+    color: '#1D1D1F',
+  },
+});
