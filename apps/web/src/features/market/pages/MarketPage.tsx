@@ -2,21 +2,69 @@ import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
 import { Search, SlidersHorizontal, Grid3x3, List, Heart, TrendingUp, TrendingDown } from 'lucide-react';
 
+interface WatchData {
+  id: string;
+  reference: string;
+  brand: string;
+  model: string;
+  price: number;
+  priceChange: number;
+  condition?: string;
+  year?: number;
+  location?: string;
+  dealer?: {
+    name: string;
+    verified: boolean;
+  };
+}
+
 export function MarketPage() {
-  const [watches, setWatches] = useState<any[]>([]);
+  const [watches, setWatches] = useState<WatchData[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('hot');
+
+  const categories = [
+    { key: 'hot', label: 'Hot' },
+    { key: 'gainers', label: 'Gainers' },
+    { key: 'losers', label: 'Losers' },
+    { key: 'new', label: 'New' },
+    { key: 'trending', label: 'Trending' },
+  ];
 
   useEffect(() => {
     loadWatches();
-  }, []);
+  }, [selectedCategory]);
 
   const loadWatches = async () => {
+    setLoading(true);
     try {
-      const response = await api.get('/market');
-      setWatches(response.data);
+      // Use aggregated endpoint with proper pricing logic
+      const response = await api.get('/market/aggregated', {
+        params: {
+          category: selectedCategory,
+          limit: 50
+        }
+      });
+
+      if (response.data && response.data.length > 0) {
+        const watchData = response.data.map((item: any) => ({
+          id: item.reference,
+          reference: item.reference,
+          brand: item.brand,
+          model: item.model,
+          // display_price is lowest order price OR admin price
+          price: item.display_price || 0,
+          priceChange: item.price_change || 0,
+        }));
+        setWatches(watchData);
+      } else {
+        // Fallback to old endpoint
+        const fallbackResponse = await api.get('/market');
+        setWatches(fallbackResponse.data || []);
+      }
     } catch (error) {
       console.error('Failed to load watches:', error);
       setWatches([]);
@@ -98,6 +146,23 @@ export function MarketPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Category Tabs */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          {categories.map((category) => (
+            <button
+              key={category.key}
+              onClick={() => setSelectedCategory(category.key)}
+              className={`px-5 py-2.5 rounded-full font-medium whitespace-nowrap transition-colors ${
+                selectedCategory === category.key
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {category.label}
+            </button>
+          ))}
         </div>
 
         {/* Results Count */}

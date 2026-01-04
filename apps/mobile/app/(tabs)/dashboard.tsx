@@ -1,517 +1,704 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
-import { useTheme } from '@/contexts/ThemeContext';
-import { Plus, X } from '@/components/icons';
-import { WatchlistCard } from '@/components/WatchlistCard';
-import { LogoIcon } from '@/components/LogoIcon';
+import { useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
+import Svg, { Path, Circle } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
-interface ListingStep {
-  id: number;
-  title: string;
-  completed: boolean;
+// Plus Icon
+function PlusIcon() {
+  return (
+    <Svg width={sp(18)} height={sp(18)} viewBox="0 0 18 18" fill="none">
+      <Path
+        d="M9 3V15M3 9H15"
+        stroke="#1D1D1F"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// Watch Icon for Empty State
+function WatchIcon() {
+  return (
+    <Svg width={sp(32)} height={sp(32)} viewBox="0 0 32 32" fill="none">
+      <Path
+        d="M10 8L11.33 2.67H20.67L22 8"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 24L11.33 29.33H20.67L22 24"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle
+        cx={16}
+        cy={16}
+        r={10}
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 10V16L19.5 19.5"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// Search/Magnifier Icon
+function SearchIcon() {
+  return (
+    <Svg width={sp(18)} height={sp(18)} viewBox="0 0 18 18" fill="none">
+      <Path
+        d="M8.25 14.25C11.5637 14.25 14.25 11.5637 14.25 8.25C14.25 4.93629 11.5637 2.25 8.25 2.25C4.93629 2.25 2.25 4.93629 2.25 8.25C2.25 11.5637 4.93629 14.25 8.25 14.25Z"
+        stroke="#212121"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={0.4}
+      />
+      <Path
+        d="M15.75 15.75L12.4875 12.4875"
+        stroke="#212121"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={0.4}
+      />
+    </Svg>
+  );
+}
+
+// Trend Up Icon
+function TrendUpIcon() {
+  return (
+    <Svg width={sp(12)} height={sp(12)} viewBox="0 0 12 12" fill="none">
+      <Path
+        d="M1 8.5L4.5 5L7 7.5L11 3.5"
+        stroke="#4AA078"
+        strokeWidth={1.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 3.5H11V6.5"
+        stroke="#4AA078"
+        strokeWidth={1.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// Trend Down Icon
+function TrendDownIcon() {
+  return (
+    <Svg width={sp(12)} height={sp(12)} viewBox="0 0 12 12" fill="none">
+      <Path
+        d="M1 3.5L4.5 7L7 4.5L11 8.5"
+        stroke="#C93927"
+        strokeWidth={1.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 8.5H11V5.5"
+        stroke="#C93927"
+        strokeWidth={1.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+interface InventoryWatch {
+  id: string;
+  brand: string;
+  reference: string;
+  soldOrder: string;
+  change: string;
+  isPositive: boolean;
+  sellNowPrice: string | null;
+  image: string;
 }
 
 export default function DashboardScreen() {
-  const { colors, fonts } = useTheme();
-  const [inventory] = useState<any[]>([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
-
-  // Mock watchlist data
-  const watchlist = [
+  // Set to empty array to show empty state, or add items to show populated state
+  const [inventory, setInventory] = useState<InventoryWatch[]>([
     {
       id: '1',
-      name: 'Rolex Submariner',
-      code: '126610LN',
-      price: 12352,
-      priceChange: -0.7,
-      priceHistory: [12500, 12450, 12400, 12380, 12370, 12352],
+      brand: 'AP Royal Oak',
+      reference: '26240OR Blue',
+      soldOrder: '106,000€',
+      change: '0,8%',
+      isPositive: true,
+      sellNowPrice: '€105,000',
+      image: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?w=400&h=400&fit=crop',
     },
     {
       id: '2',
-      name: 'Patek Philippe Nautilus',
-      code: '5712/1A',
-      price: 97467,
-      priceChange: 1.2,
-      priceHistory: [95000, 95500, 96000, 96500, 97000, 97467],
+      brand: 'Rolex Day-Date',
+      reference: '228238A Blk',
+      soldOrder: '55,200€',
+      change: '2,5%',
+      isPositive: false,
+      sellNowPrice: null,
+      image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=400&fit=crop',
     },
     {
       id: '3',
-      name: 'Audemars Piguet Royal Oak',
-      code: '15500ST',
-      price: 65000,
-      priceChange: 0.5,
-      priceHistory: [64000, 64200, 64500, 64700, 64900, 65000],
+      brand: 'Rolex GMT-Master',
+      reference: '126710BLRO Jub',
+      soldOrder: '20,800€',
+      change: '1,5%',
+      isPositive: true,
+      sellNowPrice: '€29,850',
+      image: 'https://images.unsplash.com/photo-1548171915-e79a380a2a4b?w=400&h=400&fit=crop',
     },
-  ];
+    {
+      id: '4',
+      brand: 'Patek Nautilus',
+      reference: '7118/1200R White',
+      soldOrder: '168,000€',
+      change: '16,3%',
+      isPositive: true,
+      sellNowPrice: '€85,250',
+      image: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=400&h=400&fit=crop',
+    },
+  ]);
 
-  const steps: ListingStep[] = [
-    { id: 1, title: 'Basic information', completed: currentStep > 1 },
-    { id: 2, title: 'Caliber information', completed: currentStep > 2 },
-    { id: 3, title: 'Case information', completed: currentStep > 3 },
-    { id: 4, title: 'Bracelet/Strap information', completed: currentStep > 4 },
-    { id: 5, title: 'Photos', completed: currentStep > 5 },
-    { id: 6, title: 'Listing overview', completed: false },
-  ];
+  const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: wp(16),
-      paddingVertical: hp(12),
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(33, 33, 33, 0.05)',
-    },
-    headerTitle: {
-      fontSize: fp(19),
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-      letterSpacing: 0.5,
-    },
-    addButton: {
-      padding: sp(4),
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    scrollView: {
-      flex: 1,
-    },
-    scrollContent: {
-      paddingBottom: hp(16),
-    },
-    section: {
-      marginBottom: 0,
-    },
-    sectionHeaderContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: wp(16),
-      paddingVertical: hp(16),
-    },
-    sectionTitleText: {
-      fontSize: fp(17),
-      fontFamily: fonts.semiBold,
-      color: '#212121',
-      lineHeight: fp(21),
-      letterSpacing: 0.085,
-    },
-    sectionContent: {
-      paddingHorizontal: wp(16),
-    },
-    divider: {
-      height: 1,
-      backgroundColor: 'rgba(33, 33, 33, 0.05)',
-      marginVertical: hp(16),
-    },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingHorizontal: wp(32),
-      paddingTop: hp(100),
-    },
-    emptyIconContainer: {
-      width: sp(64),
-      height: sp(64),
-      borderRadius: sp(80),
-      backgroundColor: '#F7F7F7',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: hp(24),
-    },
-    emptyTitle: {
-      fontSize: fp(21),
-      fontFamily: fonts.semiBold,
-      color: '#1D1D1F',
-      marginBottom: hp(12),
-      textAlign: 'center',
-    },
-    emptySubtitle: {
-      fontSize: fp(16),
-      fontFamily: fonts.regular,
-      color: '#1D1D1F',
-      textAlign: 'center',
-      marginBottom: hp(24),
-      opacity: 0.6,
-      lineHeight: fp(21),
-    },
-    createButton: {
-      backgroundColor: '#212121',
-      paddingHorizontal: wp(20),
-      paddingVertical: hp(14),
-      borderRadius: sp(12),
-    },
-    createButtonText: {
-      fontSize: fp(16),
-      fontFamily: fonts.semiBold,
-      color: '#FFFFFF',
-      letterSpacing: 0.5,
-    },
-    grid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: wp(12),
-    },
-    inventoryCard: {
-      width: '48%',
-      backgroundColor: colors.card,
-      borderRadius: sp(12),
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    inventoryImage: {
-      width: '100%',
-      height: hp(120),
-      backgroundColor: colors.backgroundSecondary,
-    },
-    inventoryInfo: {
-      padding: wp(12),
-    },
-    inventoryBrand: {
-      fontSize: fp(16),
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-      marginBottom: hp(2),
-    },
-    inventoryReference: {
-      fontSize: fp(13),
-      color: colors.textSecondary,
-      marginBottom: hp(8),
-    },
-    inventoryPrice: {
-      fontSize: fp(17),
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-    },
-    // Modal styles
-    modalContainer: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: wp(16),
-      paddingVertical: hp(12),
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    modalTitle: {
-      fontSize: fp(19),
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-    },
-    closeButton: {
-      padding: sp(8),
-    },
-    modalContent: {
-      flex: 1,
-    },
-    stepperContainer: {
-      paddingVertical: hp(24),
-      paddingHorizontal: wp(16),
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    stepItem: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      marginBottom: hp(24),
-    },
-    stepIndicator: {
-      width: sp(32),
-      height: sp(32),
-      borderRadius: sp(16),
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: wp(12),
-    },
-    stepIndicatorActive: {
-      backgroundColor: colors.primary,
-    },
-    stepIndicatorCompleted: {
-      backgroundColor: colors.primary,
-    },
-    stepIndicatorInactive: {
-      backgroundColor: colors.backgroundSecondary,
-      borderWidth: 2,
-      borderColor: colors.border,
-    },
-    stepNumber: {
-      fontSize: fp(15),
-      fontFamily: fonts.semiBold,
-    },
-    stepNumberActive: {
-      color: '#FFFFFF',
-    },
-    stepNumberInactive: {
-      color: colors.textSecondary,
-    },
-    stepLine: {
-      position: 'absolute',
-      left: sp(15),
-      top: sp(32),
-      width: 2,
-      height: hp(24),
-    },
-    stepLineActive: {
-      backgroundColor: colors.primary,
-    },
-    stepLineInactive: {
-      backgroundColor: colors.border,
-    },
-    stepContent: {
-      flex: 1,
-      paddingTop: hp(4),
-    },
-    stepTitle: {
-      fontSize: fp(16),
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-    },
-    stepTitleActive: {
-      color: colors.primary,
-    },
-    formContainer: {
-      padding: wp(16),
-    },
-    formSection: {
-      marginBottom: hp(24),
-    },
-    sectionTitle: {
-      fontSize: fp(19),
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-      marginBottom: hp(16),
-    },
-    input: {
-      backgroundColor: colors.backgroundSecondary,
-      borderRadius: sp(12),
-      paddingHorizontal: wp(16),
-      paddingVertical: hp(14),
-      fontSize: fp(16),
-      color: colors.text,
-      marginBottom: hp(12),
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    buttonContainer: {
-      flexDirection: 'row',
-      gap: wp(12),
-      padding: wp(16),
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    button: {
-      flex: 1,
-      paddingVertical: hp(14),
-      borderRadius: sp(12),
-      alignItems: 'center',
-    },
-    buttonPrimary: {
-      backgroundColor: colors.primary,
-    },
-    buttonSecondary: {
-      backgroundColor: colors.backgroundSecondary,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    buttonTextPrimary: {
-      fontSize: fp(17),
-      fontFamily: fonts.semiBold,
-      color: '#FFFFFF',
-    },
-    buttonTextSecondary: {
-      fontSize: fp(17),
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-    },
-  });
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadInventory();
+    }, [])
+  );
 
-  const renderStepForm = () => {
-    if (currentStep === 1) {
-      return (
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
-          <TextInput style={styles.input} placeholder="Brand" placeholderTextColor={colors.textTertiary} />
-          <TextInput style={styles.input} placeholder="Model" placeholderTextColor={colors.textTertiary} />
-          <TextInput style={styles.input} placeholder="Reference Number" placeholderTextColor={colors.textTertiary} />
-          <TextInput style={styles.input} placeholder="Year" placeholderTextColor={colors.textTertiary} />
-          <TextInput style={styles.input} placeholder="Size" placeholderTextColor={colors.textTertiary} />
-        </View>
-      );
-    }
-    // Add more step forms as needed
-    return null;
+  const loadInventory = async () => {
+    // TODO: Load inventory from API when available
+    // For now, this just simulates a refresh
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadInventory();
+    setRefreshing(false);
+  }, []);
+
+  // Calculate total inventory value
+  const totalValue = inventory.reduce((sum, watch) => {
+    const price = parseFloat(watch.soldOrder.replace(/[€,]/g, '').replace('.', ''));
+    return sum + price;
+  }, 0);
+
+  // Filter inventory based on search query
+  const filteredInventory = useMemo(() => {
+    if (!searchQuery.trim()) return inventory;
+    const query = searchQuery.toLowerCase();
+    return inventory.filter(watch =>
+      watch.brand.toLowerCase().includes(query) ||
+      watch.reference.toLowerCase().includes(query)
+    );
+  }, [inventory, searchQuery]);
+
+  // Navigate to create listing
+  const handleCreateListing = useCallback(() => {
+    router.push('/listing/create');
+  }, []);
+
+  const renderWatchCard = (watch: InventoryWatch) => (
+    <View key={watch.id} style={styles.watchCard}>
+      {/* Watch Image */}
+      <View style={styles.watchImageContainer}>
+        <LinearGradient
+          colors={['#FFFFFF', '#F4F4F4']}
+          style={styles.watchImageGradient}
+        >
+          <Image
+            source={{ uri: watch.image }}
+            style={styles.watchImage}
+            resizeMode="contain"
+          />
+        </LinearGradient>
+      </View>
+
+      {/* Watch Info */}
+      <View style={styles.watchInfo}>
+        <View style={styles.watchDetails}>
+          {/* Brand and Reference */}
+          <View style={styles.watchNameContainer}>
+            <Text style={styles.watchBrand}>{watch.brand}</Text>
+            <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
+          </View>
+
+          {/* Price Row */}
+          <View style={styles.watchPriceRow}>
+            <View style={styles.priceContainer}>
+              <Text style={styles.soldOrderLabel}>Sold order:</Text>
+              <Text style={styles.soldOrderPrice}>{watch.soldOrder}</Text>
+            </View>
+            <View style={[
+              styles.changeBadge,
+              { backgroundColor: watch.isPositive ? 'rgba(74, 160, 120, 0.05)' : 'rgba(201, 57, 39, 0.05)' }
+            ]}>
+              {watch.isPositive ? <TrendUpIcon /> : <TrendDownIcon />}
+              <Text style={[
+                styles.changeText,
+                { color: watch.isPositive ? '#4AA078' : '#C93927' }
+              ]}>{watch.change}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Sell Now Button */}
+        <View style={styles.sellButtonContainer}>
+          {watch.sellNowPrice ? (
+            <TouchableOpacity style={styles.sellNowButton} activeOpacity={0.8}>
+              <Text style={styles.sellNowButtonText}>Sell now {watch.sellNowPrice}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.noBuyOrdersButton}>
+              <Text style={styles.noBuyOrdersText}>No buy now orders</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyStateContainer}>
+      <View style={styles.emptyIconContainer}>
+        <WatchIcon />
+      </View>
+      <View style={styles.emptyTextContainer}>
+        <Text style={styles.emptyTitle}>Create new listings here</Text>
+        <Text style={styles.emptySubtitle}>
+          Listing currently empty, list your watches and manage them all in one place.
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={styles.createListingButton}
+        onPress={handleCreateListing}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.createListingButtonText}>Create new listing</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderPopulatedState = () => (
+    <View style={styles.populatedContainer}>
+      {/* Stats Row */}
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>€{totalValue.toLocaleString()}</Text>
+          <Text style={styles.statLabel}>Total inventory value</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{inventory.length}</Text>
+          <Text style={styles.statLabel}>Listed watches</Text>
+        </View>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <SearchIcon />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search inventory"
+          placeholderTextColor="rgba(33, 33, 33, 0.5)"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
+      {/* Watch Grid */}
+      <View style={styles.watchGrid}>
+        {filteredInventory.length === 0 ? (
+          <View style={styles.noResultsContainer}>
+            <Text style={styles.noResultsText}>No watches match your search</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.watchRow}>
+              {filteredInventory.slice(0, 2).map(renderWatchCard)}
+            </View>
+            {filteredInventory.length > 2 && (
+              <View style={styles.watchRow}>
+                {filteredInventory.slice(2, 4).map(renderWatchCard)}
+              </View>
+            )}
+            {filteredInventory.length > 4 && (
+              <View style={styles.watchRow}>
+                {filteredInventory.slice(4, 6).map(renderWatchCard)}
+              </View>
+            )}
+          </>
+        )}
+      </View>
+    </View>
+  );
 
   return (
     <>
       <SafeAreaView style={styles.container} edges={['top']}>
         {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Dashboard</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
-            <Plus size={28} color={colors.text} />
-          </TouchableOpacity>
-        </View>
+        {inventory.length === 0 ? (
+          // Empty state header with centered title
+          <View style={styles.headerEmpty}>
+            <Text style={styles.headerTitleCentered}>Inventory</Text>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleCreateListing}
+              activeOpacity={0.7}
+            >
+              <PlusIcon />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          // Populated state header with left-aligned title
+          <View style={styles.headerPopulated}>
+            <Text style={styles.headerTitleLeft}>Inventory</Text>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleCreateListing}
+              activeOpacity={0.7}
+            >
+              <PlusIcon />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Content */}
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {/* Listings Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderContainer}>
-              <Text style={styles.sectionTitleText}>My Listings</Text>
-            </View>
-            {inventory.length === 0 ? (
-              <View style={[styles.emptyState, { paddingTop: 40 }]}>
-                <View style={styles.emptyIconContainer}>
-                  <LogoIcon size={36} color="#212121" />
-                </View>
-                <Text style={styles.emptyTitle}>Create new listings here</Text>
-                <Text style={styles.emptySubtitle}>Listing currently empty, list your watches and manage them all in one place.</Text>
-                <TouchableOpacity style={styles.createButton} onPress={() => setShowCreateModal(true)}>
-                  <Text style={styles.createButtonText}>Create new listing</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={[styles.grid, styles.sectionContent]}>
-                {inventory.map((item) => (
-                  <TouchableOpacity key={item.id} style={styles.inventoryCard}>
-                    <Image source={{ uri: item.image }} style={styles.inventoryImage} resizeMode="cover" />
-                    <View style={styles.inventoryInfo}>
-                      <Text style={styles.inventoryBrand}>{item.brand} {item.model}</Text>
-                      <Text style={styles.inventoryReference}>{item.reference}</Text>
-                      <Text style={styles.inventoryPrice}>€{item.price.toLocaleString()}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* Watchlist Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderContainer}>
-              <Text style={styles.sectionTitleText}>Watchlist</Text>
-            </View>
-            <View style={styles.sectionContent}>
-              {watchlist.map((watch) => (
-                <WatchlistCard
-                  key={watch.id}
-                  watch={watch}
-                  onPress={() => console.log('Watch pressed:', watch.id)}
-                />
-              ))}
-            </View>
-          </View>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
+          }
+        >
+          {inventory.length === 0 ? renderEmptyState() : renderPopulatedState()}
         </ScrollView>
       </SafeAreaView>
-
-      {/* Create Listing Modal */}
-      <Modal visible={showCreateModal} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
-          {/* Modal Header */}
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Create Listing</Text>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setShowCreateModal(false)}>
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Stepper */}
-          <View style={styles.stepperContainer}>
-            {steps.map((step, index) => {
-              const isActive = step.id === currentStep;
-              const isCompleted = step.completed;
-              const isLast = index === steps.length - 1;
-
-              return (
-                <View key={step.id}>
-                  <View style={styles.stepItem}>
-                    <View>
-                      <View
-                        style={[
-                          styles.stepIndicator,
-                          isActive && styles.stepIndicatorActive,
-                          isCompleted && styles.stepIndicatorCompleted,
-                          !isActive && !isCompleted && styles.stepIndicatorInactive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.stepNumber,
-                            (isActive || isCompleted) && styles.stepNumberActive,
-                            !isActive && !isCompleted && styles.stepNumberInactive,
-                          ]}
-                        >
-                          {step.id}
-                        </Text>
-                      </View>
-                      {!isLast && (
-                        <View
-                          style={[
-                            styles.stepLine,
-                            isCompleted ? styles.stepLineActive : styles.stepLineInactive,
-                          ]}
-                        />
-                      )}
-                    </View>
-                    <View style={styles.stepContent}>
-                      <Text style={[styles.stepTitle, isActive && styles.stepTitleActive]}>
-                        {step.title}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Form Content */}
-          <ScrollView style={styles.modalContent}>
-            <View style={styles.formContainer}>{renderStepForm()}</View>
-          </ScrollView>
-
-          {/* Bottom Buttons */}
-          <View style={styles.buttonContainer}>
-            {currentStep > 1 && (
-              <TouchableOpacity
-                style={[styles.button, styles.buttonSecondary]}
-                onPress={() => setCurrentStep(currentStep - 1)}
-              >
-                <Text style={styles.buttonTextSecondary}>Back</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[styles.button, styles.buttonPrimary]}
-              onPress={() => {
-                if (currentStep < steps.length) {
-                  setCurrentStep(currentStep + 1);
-                } else {
-                  setShowCreateModal(false);
-                  setCurrentStep(1);
-                }
-              }}
-            >
-              <Text style={styles.buttonTextPrimary}>
-                {currentStep === steps.length ? 'Finish' : 'Continue'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </Modal>
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  // Empty state header
+  headerEmpty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: hp(44),
+    paddingHorizontal: wp(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(33, 33, 33, 0.05)',
+    position: 'relative',
+  },
+  headerTitleCentered: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(18),
+    fontWeight: '600',
+    color: '#212121',
+    letterSpacing: 0.09,
+    lineHeight: fp(20),
+  },
+  // Populated state header
+  headerPopulated: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(16),
+    paddingVertical: hp(16),
+  },
+  headerTitleLeft: {
+    fontFamily: 'HankenGrotesk_700Bold',
+    fontSize: fp(24),
+    fontWeight: '700',
+    color: '#212121',
+    letterSpacing: 0.12,
+    lineHeight: fp(32),
+  },
+  addButton: {
+    width: sp(32),
+    height: sp(32),
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    right: wp(8),
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: hp(120),
+  },
+  // Empty State Styles
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: wp(16),
+  },
+  emptyIconContainer: {
+    width: sp(64),
+    height: sp(64),
+    borderRadius: sp(80),
+    backgroundColor: '#FAFAFA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyTextContainer: {
+    alignItems: 'center',
+    marginTop: hp(24),
+    width: wp(278),
+  },
+  emptyTitle: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(20),
+    fontWeight: '600',
+    color: '#1D1D1F',
+    lineHeight: fp(26),
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: fp(15),
+    fontWeight: '400',
+    color: '#1D1D1F',
+    opacity: 0.6,
+    lineHeight: fp(20),
+    textAlign: 'center',
+    marginTop: hp(12),
+  },
+  createListingButton: {
+    backgroundColor: '#212121',
+    paddingHorizontal: wp(33),
+    paddingVertical: hp(12),
+    borderRadius: sp(99),
+    marginTop: hp(24),
+  },
+  createListingButtonText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(16),
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.08,
+    lineHeight: fp(20),
+  },
+  // Populated State Styles
+  populatedContainer: {
+    paddingHorizontal: wp(16),
+    gap: hp(16),
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: wp(10),
+  },
+  statCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(33, 33, 33, 0.05)',
+    borderRadius: sp(12),
+    paddingHorizontal: wp(16),
+    paddingVertical: hp(12),
+    gap: hp(4),
+  },
+  statValue: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(17),
+    fontWeight: '600',
+    color: '#212121',
+    lineHeight: fp(22),
+  },
+  statLabel: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(15),
+    fontWeight: '500',
+    color: '#212121',
+    opacity: 0.4,
+    lineHeight: fp(20),
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+    borderRadius: sp(99),
+    paddingHorizontal: wp(16),
+    height: hp(44),
+    gap: wp(8),
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(15),
+    fontWeight: '500',
+    color: '#212121',
+    lineHeight: fp(20),
+  },
+  watchGrid: {
+    gap: hp(16),
+    marginTop: hp(8),
+  },
+  watchRow: {
+    flexDirection: 'row',
+    gap: wp(12),
+  },
+  watchCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: sp(16),
+    borderWidth: 1,
+    borderColor: 'rgba(33, 33, 33, 0.05)',
+    overflow: 'hidden',
+  },
+  watchImageContainer: {
+    height: hp(140),
+    borderTopLeftRadius: sp(12),
+    borderTopRightRadius: sp(12),
+    overflow: 'hidden',
+  },
+  watchImageGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  watchImage: {
+    width: '66%',
+    height: '86%',
+  },
+  watchInfo: {
+    paddingHorizontal: wp(16),
+    paddingBottom: hp(16),
+    gap: hp(12),
+  },
+  watchDetails: {
+    gap: hp(8),
+  },
+  watchNameContainer: {
+    gap: 0,
+  },
+  watchBrand: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(13),
+    fontWeight: '600',
+    color: '#212121',
+    lineHeight: fp(17),
+  },
+  watchReference: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(13),
+    fontWeight: '500',
+    color: '#212121',
+    opacity: 0.5,
+    lineHeight: fp(17),
+  },
+  watchPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  priceContainer: {
+    gap: 0,
+  },
+  soldOrderLabel: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(12),
+    fontWeight: '500',
+    color: 'rgba(33, 33, 33, 0.6)',
+    lineHeight: fp(16),
+  },
+  soldOrderPrice: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(15),
+    fontWeight: '600',
+    color: '#212121',
+    lineHeight: fp(20),
+  },
+  changeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(7),
+    paddingVertical: hp(3),
+    borderRadius: sp(99),
+    gap: wp(4),
+  },
+  changeText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(11),
+    fontWeight: '600',
+    lineHeight: fp(14),
+  },
+  sellButtonContainer: {
+    alignItems: 'center',
+  },
+  sellNowButton: {
+    backgroundColor: '#212121',
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(8),
+    borderRadius: sp(99),
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  sellNowButtonText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(11),
+    fontWeight: '600',
+    color: '#FFFFFF',
+    lineHeight: fp(14),
+  },
+  noBuyOrdersButton: {
+    backgroundColor: 'rgba(33, 33, 33, 0.05)',
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(8),
+    borderRadius: sp(99),
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  noBuyOrdersText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(11),
+    fontWeight: '600',
+    color: 'rgba(33, 33, 33, 0.5)',
+    lineHeight: fp(14),
+  },
+  // No Results Styles
+  noResultsContainer: {
+    paddingVertical: hp(40),
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(15),
+    color: 'rgba(33, 33, 33, 0.5)',
+    textAlign: 'center',
+  },
+});

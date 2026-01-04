@@ -28,7 +28,12 @@ export function LoginPage() {
         },
       });
 
-      const { user, access_token } = response.data;
+      const { user, access_token, refresh_token } = response.data;
+
+      // Store tokens
+      localStorage.setItem('auth_token', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
+
       login(user, access_token);
 
       if (user.role === 'admin') {

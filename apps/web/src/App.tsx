@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { UserLayout } from './components/layout/UserLayout'
 import { AdminLayout } from './components/layout/AdminLayout'
@@ -8,10 +9,14 @@ import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 import { AdminRoute } from './features/auth/components/AdminRoute'
 import { HomePage } from './features/home/pages/HomePage'
 import { MarketPage } from './features/market/pages/MarketPage'
+import { WatchDetailsPage } from './features/market/pages/WatchDetailsPage'
 import { WatchlistPage } from './features/watchlist/pages/WatchlistPage'
 import { ChatPage } from './features/chat/pages/ChatPage'
+import { AIChatPage } from './features/chat/pages/AIChatPage'
 import { ProfilePage } from './features/profile/pages/ProfilePage'
 import { LandingPage } from './features/landing/pages/LandingPage'
+import { useAuthStore } from '@watchsphere/shared/stores'
+import { api } from './services/api'
 
 // Admin pages
 import {
@@ -29,7 +34,78 @@ import {
   AdminSettings
 } from './features/admin/pages'
 
+// Legal pages
+import { PrivacyPolicyPage, TermsConditionsPage, ContactPage } from './features/legal/pages'
+
 function App() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const hasHydrated = useAuthStore((state) => state._hasHydrated)
+  const login = useAuthStore((state) => state.login)
+  const [isRestoringSession, setIsRestoringSession] = useState(true)
+
+  // Try to restore session from stored tokens on app startup
+  useEffect(() => {
+    const restoreSession = async () => {
+      if (!hasHydrated) return
+
+      // If already authenticated from zustand persist, we're done
+      if (isAuthenticated) {
+        setIsRestoringSession(false)
+        return
+      }
+
+      try {
+        // Check if we have a stored token
+        const token = localStorage.getItem('auth_token')
+        const refreshToken = localStorage.getItem('refresh_token')
+
+        if (token) {
+          // Try to get current user with the stored token
+          try {
+            const response = await api.get('/auth/me')
+            if (response.data) {
+              // Restore the session
+              login(response.data, token)
+              setIsRestoringSession(false)
+              return
+            }
+          } catch (error: any) {
+            // Token might be expired, try refresh if we have refresh token
+            if (refreshToken && error.response?.status === 401) {
+              try {
+                const refreshResponse = await api.post('/auth/refresh', {
+                  refresh_token: refreshToken,
+                })
+                const { user, access_token, refresh_token: newRefreshToken } = refreshResponse.data
+
+                localStorage.setItem('auth_token', access_token)
+                localStorage.setItem('refresh_token', newRefreshToken)
+
+                login(user, access_token)
+                setIsRestoringSession(false)
+                return
+              } catch (refreshError) {
+                // Refresh failed, clear tokens
+                localStorage.removeItem('auth_token')
+                localStorage.removeItem('refresh_token')
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error restoring session:', error)
+      }
+
+      setIsRestoringSession(false)
+    }
+
+    restoreSession()
+  }, [hasHydrated, isAuthenticated, login])
+
+  // Show loading while hydrating or restoring session
+  if (!hasHydrated || isRestoringSession) {
+    return null
+  }
   return (
     <Routes>
       {/* Public routes */}
@@ -37,6 +113,9 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms-conditions" element={<TermsConditionsPage />} />
+      <Route path="/contact" element={<ContactPage />} />
 
       {/* Admin routes */}
       <Route
@@ -72,8 +151,10 @@ function App() {
       >
         <Route index element={<HomePage />} />
         <Route path="market" element={<MarketPage />} />
+        <Route path="watch/:watchId" element={<WatchDetailsPage />} />
         <Route path="watchlist" element={<WatchlistPage />} />
         <Route path="chat" element={<ChatPage />} />
+        <Route path="ai-assistant" element={<AIChatPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Routes>

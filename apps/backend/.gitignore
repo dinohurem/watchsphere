@@ -55,3 +55,7 @@ media/
 # Logs
 *.log
 logs/
+
+# Firebase
+firebase-service-account.json
+*-firebase-adminsdk-*.json
