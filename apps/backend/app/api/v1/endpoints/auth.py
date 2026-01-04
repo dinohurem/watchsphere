@@ -1,14 +1,17 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
+from dateutil.relativedelta import relativedelta
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.core.config import settings
-from app.core.security import create_access_token, get_password_hash, verify_password
+from app.core.security import create_access_token, create_tokens, verify_refresh_token, get_password_hash, verify_password
 from app.core.deps import get_current_active_user, get_current_user
 from app.models.user import User, UserRole
 from app.models.verification import VerificationCode
+from app.models.billing import Subscription, SubscriptionPlan, SubscriptionStatus
 from app.services.email import email_service
+from app.services.watchlist import assign_default_watchlist_to_user
 from pydantic import BaseModel, EmailStr
 
 router = APIRouter()
@@ -42,7 +45,12 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user: UserResponse
     access_token: str
+    refresh_token: str
     token_type: str
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 class VerifyEmailRequest(BaseModel):
@@ -84,6 +92,26 @@ async def register(user_in: UserCreate) -> Any:
     )
     await user.insert()
 
+    # Create free trial subscription (1 month, no credit card required)
+    trial_end_date = datetime.utcnow() + relativedelta(months=1)
+    subscription = Subscription(
+        user_id=str(user.id),
+        user_name=user.name,
+        user_email=user.email,
+        plan=SubscriptionPlan.BASIC,  # Free trial gives basic plan access
+        status=SubscriptionStatus.ACTIVE,
+        price_monthly=0.0,  # Free during trial
+        currency="EUR",
+        started_at=datetime.utcnow(),
+        expires_at=trial_end_date,
+        next_billing_date=trial_end_date,  # First billing after trial ends
+        auto_renew=False,  # User must actively subscribe after trial
+    )
+    await subscription.insert()
+
+    # Assign default watchlist items to the new user
+    await assign_default_watchlist_to_user(user)
+
     # Generate and send verification code
     # Use test code in development, random code in production
     if settings.ENVIRONMENT == "development":
@@ -104,11 +132,8 @@ async def register(user_in: UserCreate) -> Any:
         user_name=user_in.name
     )
 
-    # Create access token
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        subject=str(user.id), expires_delta=access_token_expires
-    )
+    # Create access and refresh tokens
+    access_token, refresh_token = create_tokens(str(user.id))
 
     return {
         "user": {
@@ -120,6 +145,7 @@ async def register(user_in: UserCreate) -> Any:
             "approved": user.approved,
         },
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
     }
 
@@ -253,11 +279,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
             detail="Account pending approval. Please wait for admin approval.",
         )
 
-    # Create access token
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        subject=str(user.id), expires_delta=access_token_expires
-    )
+    # Create access and refresh tokens
+    access_token, refresh_token = create_tokens(str(user.id))
 
     return {
         "user": {
@@ -269,16 +292,69 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
             "approved": user.approved,
         },
         "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/refresh")
+async def refresh_tokens(request: RefreshTokenRequest) -> Any:
+    """Refresh access token using refresh token"""
+    user_id = verify_refresh_token(request.refresh_token)
+
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    # Get user from database
+    from beanie import PydanticObjectId
+    user = await User.get(PydanticObjectId(user_id))
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Inactive user",
+        )
+
+    # Create new access and refresh tokens
+    access_token, new_refresh_token = create_tokens(str(user.id))
+
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "verified": user.verified,
+            "approved": user.approved,
+        },
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
         "token_type": "bearer",
     }
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user),
 ) -> Any:
     """Get current user info"""
-    return current_user
+    return UserResponse(
+        id=str(current_user.id),
+        email=current_user.email,
+        name=current_user.name,
+        role=current_user.role,
+        verified=current_user.verified,
+        approved=current_user.approved,
+    )
 
 
 @router.post("/logout")

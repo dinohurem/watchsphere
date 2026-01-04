@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
@@ -16,7 +16,8 @@ import {
   Settings,
   ChevronDown,
   Store,
-  MessageCircle
+  MessageCircle,
+  ExternalLink
 } from 'lucide-react'
 
 interface NavItem {
@@ -67,20 +68,21 @@ const adminNavigation: NavSection[] = [
       { name: 'Billing', to: '/admin/billing', icon: CreditCard },
     ]
   },
-  {
-    title: 'Preview',
-    items: [
-      { name: 'User Home', to: '/app', icon: Eye },
-      { name: 'User Market', to: '/app/market', icon: Store },
-      { name: 'User Chat', to: '/app/chat', icon: MessageCircle },
-    ]
-  },
+]
+
+// Preview links for viewing as user
+const previewLinks = [
+  { name: 'Home', to: '/app', icon: Eye },
+  { name: 'Market', to: '/app/market', icon: Store },
+  { name: 'Chat', to: '/app/chat', icon: MessageCircle },
 ]
 
 export function AdminSidebar() {
+  const navigate = useNavigate()
   const [expandedSections, setExpandedSections] = useState<string[]>(
     adminNavigation.map(s => s.title)
   )
+  const [showPreviewMenu, setShowPreviewMenu] = useState(false)
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev =>
@@ -140,6 +142,44 @@ export function AdminSidebar() {
           </div>
         ))}
       </nav>
+
+      {/* View as User Section */}
+      <div className="border-t p-4">
+        <div className="relative">
+          <button
+            onClick={() => setShowPreviewMenu(!showPreviewMenu)}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700 transition-all"
+          >
+            <div className="flex items-center">
+              <Eye className="w-5 h-5 mr-3" />
+              View as User
+            </div>
+            <ExternalLink className="w-4 h-4" />
+          </button>
+
+          {/* Preview dropdown menu */}
+          {showPreviewMenu && (
+            <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 border-b">
+                <p className="text-xs font-medium text-gray-500 uppercase">Preview Pages</p>
+              </div>
+              {previewLinks.map((link) => (
+                <button
+                  key={link.name}
+                  onClick={() => {
+                    setShowPreviewMenu(false)
+                    navigate(link.to)
+                  }}
+                  className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  <link.icon className="w-4 h-4 mr-3 text-gray-500" />
+                  {link.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Settings */}
       <div className="border-t p-4">

@@ -1,16 +1,17 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
 
-from app.core.deps import get_current_admin_user
+from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
 from app.models.billing import (
     Billing, BillingType, BillingStatus,
     Subscription, SubscriptionPlan, SubscriptionStatus,
     Transaction, TransactionStatus
 )
+from app.services.payment import monri_service, check_subscription_status
 
 router = APIRouter()
 
@@ -486,3 +487,121 @@ async def admin_billing_stats(
             "fees_collected": total_fees_collected,
         },
     }
+
+
+# ============== USER SUBSCRIPTION ENDPOINTS ==============
+
+class SubscribeRequest(BaseModel):
+    return_url: str
+    cancel_url: str
+
+
+class UserSubscriptionResponse(BaseModel):
+    has_subscription: bool
+    status: Optional[str] = None
+    plan: Optional[str] = None
+    is_trial: bool
+    trial_days_remaining: int
+    subscription_days_remaining: int
+    expires_at: Optional[datetime] = None
+    price_monthly: Optional[float] = None
+    currency: Optional[str] = None
+    auto_renew: Optional[bool] = None
+
+
+@router.get("/subscription/status", response_model=UserSubscriptionResponse)
+async def get_subscription_status(
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Get current user's subscription status"""
+    status_info = await check_subscription_status(str(current_user.id))
+    return status_info
+
+
+@router.post("/subscription/subscribe")
+async def initiate_subscription(
+    data: SubscribeRequest,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Initiate subscription payment.
+    Returns payment form data for Monri hosted payment page.
+    """
+    # Check if user already has an active non-trial subscription
+    status_info = await check_subscription_status(str(current_user.id))
+
+    if status_info["has_subscription"] and not status_info["is_trial"]:
+        # Check if subscription is still valid for more than 7 days
+        if status_info["subscription_days_remaining"] > 7:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You already have an active subscription"
+            )
+
+    # Create billing record
+    billing = await monri_service.create_subscription_billing(current_user)
+
+    # Get payment form data
+    payment_data = await monri_service.create_payment_form_data(
+        user=current_user,
+        order_number=billing.invoice_number,
+        return_url=data.return_url,
+        cancel_url=data.cancel_url,
+    )
+
+    return {
+        "billing_id": str(billing.id),
+        "order_number": billing.invoice_number,
+        **payment_data,
+    }
+
+
+@router.post("/subscription/cancel")
+async def cancel_subscription(
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Cancel auto-renewal of subscription"""
+    subscription = await Subscription.find_one(
+        Subscription.user_id == str(current_user.id)
+    )
+
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No subscription found"
+        )
+
+    if subscription.status != SubscriptionStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Subscription is not active"
+        )
+
+    # Cancel auto-renewal but keep subscription active until expiration
+    subscription.auto_renew = False
+    subscription.updated_at = datetime.utcnow()
+    await subscription.save()
+
+    return {
+        "message": "Subscription will not renew automatically",
+        "expires_at": subscription.expires_at,
+    }
+
+
+@router.post("/webhook/monri")
+async def monri_webhook(request: Request) -> Any:
+    """Handle Monri payment webhook callbacks"""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = dict(await request.form())
+
+    result = await monri_service.process_webhook(payload)
+
+    if result.get("success"):
+        return {"status": "ok"}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Unknown error")
+        )

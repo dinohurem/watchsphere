@@ -32,10 +32,15 @@ const asyncStorageAdapter: StateStorage = {
   },
 };
 
+// Auto-initialize storage when this module is imported
+// This ensures storage is set before any stores are created
+setStorage(asyncStorageAdapter);
+
 /**
  * Initialize storage for mobile app
- * Call this before any stores are used
+ * This is now a no-op since storage is auto-initialized,
+ * but kept for backward compatibility
  */
 export const initializeStorage = () => {
-  setStorage(asyncStorageAdapter);
+  // Storage is already initialized when this module is imported
 };

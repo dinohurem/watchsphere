@@ -1,12 +1,21 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from beanie import PydanticObjectId
 
 from app.core.deps import get_current_active_user, get_current_admin_user
 from app.models.user import User
 from app.models.watch import Watch, WatchCondition, WatchStatus
+from app.models.order import Order, OrderType, OrderStatus, OrderCondition
+
+
+# Map WatchCondition to OrderCondition
+def map_watch_to_order_condition(watch_condition: WatchCondition) -> OrderCondition:
+    """Map watch condition to order condition (Unworn vs Used)"""
+    if watch_condition in [WatchCondition.NEW, WatchCondition.NOS]:
+        return OrderCondition.UNWORN
+    return OrderCondition.USED
 
 router = APIRouter()
 
@@ -27,6 +36,10 @@ class WatchResponse(BaseModel):
     cover_image: Optional[str] = None
     status: WatchStatus
     featured: bool
+    trending: bool = False
+    order_count: int = 0
+    price_change: float = 0.0
+    price_history: List[float] = []
     dealer_id: str
     dealer_name: Optional[str] = None
     views: int
@@ -36,6 +49,21 @@ class WatchResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class MarketWatchResponse(BaseModel):
+    """Response model for market/trending watches"""
+    id: str
+    brand: str
+    model: str
+    reference: Optional[str] = None
+    price: float
+    currency: str
+    cover_image: Optional[str] = None
+    trending: bool = False
+    order_count: int = 0
+    price_change: float = 0.0
+    price_history: List[float] = []
 
 
 class WatchListResponse(BaseModel):
@@ -85,9 +113,89 @@ class WatchUpdate(BaseModel):
     cover_image: Optional[str] = None
     status: Optional[WatchStatus] = None
     featured: Optional[bool] = None
+    trending: Optional[bool] = None
+    order_count: Optional[int] = None
+    price_change: Optional[float] = None
+    price_history: Optional[List[float]] = None
 
 
 # ============== PUBLIC ENDPOINTS ==============
+
+# NOTE: Route order matters in FastAPI! More specific routes must come before parameterized routes.
+# The /watches endpoint must be defined before /{watch_id} to avoid "watches" being matched as a watch_id.
+
+@router.get("/watches", response_model=List[MarketWatchResponse])
+async def get_market_watches(
+    category: str = Query(default="hot"),
+    limit: int = Query(default=20, le=100),
+) -> Any:
+    """
+    Get watches for market display with category filtering.
+
+    Categories:
+    - hot: Most active (by order_count)
+    - gainers: Positive price change
+    - losers: Negative price change
+    - new: Recently added
+    - trending: Admin-flagged or high order count
+    """
+
+    # Start with active watches
+    base_query = Watch.status == WatchStatus.ACTIVE
+
+    if category == "hot":
+        # Sort by order count (most active)
+        watches = await Watch.find(base_query).sort([("order_count", -1)]).limit(limit).to_list()
+
+    elif category == "gainers":
+        # Positive price change, sorted by change amount
+        watches = await Watch.find(
+            base_query,
+            Watch.price_change > 0
+        ).sort([("price_change", -1)]).limit(limit).to_list()
+
+    elif category == "losers":
+        # Negative price change, sorted by change amount (most negative first)
+        watches = await Watch.find(
+            base_query,
+            Watch.price_change < 0
+        ).sort([("price_change", 1)]).limit(limit).to_list()
+
+    elif category == "new":
+        # Recently published
+        watches = await Watch.find(base_query).sort([("published_at", -1)]).limit(limit).to_list()
+
+    elif category == "trending":
+        # Trending flagged or high order count
+        watches = await Watch.find(
+            base_query,
+            {"$or": [
+                {"trending": True},
+                {"order_count": {"$gt": 0}}
+            ]}
+        ).sort([("trending", -1), ("order_count", -1)]).limit(limit).to_list()
+
+    else:
+        # Default: all active, sorted by created_at
+        watches = await Watch.find(base_query).sort([("created_at", -1)]).limit(limit).to_list()
+
+    return [
+        {
+            "id": str(watch.id),
+            "brand": watch.brand,
+            "model": watch.model,
+            "reference": watch.reference,
+            "price": watch.price,
+            "currency": watch.currency,
+            "cover_image": watch.cover_image,
+            "trending": watch.trending,
+            "order_count": watch.order_count,
+            "price_change": watch.price_change,
+            "price_history": watch.price_history,
+        }
+        for watch in watches
+    ]
+
 
 @router.get("", response_model=List[WatchListResponse])
 async def list_watches(
@@ -164,6 +272,194 @@ async def list_brands() -> Any:
     brands.sort()
 
     return brands
+
+
+# ============== AGGREGATED MARKET DATA ENDPOINTS ==============
+# NOTE: These must be defined BEFORE /{watch_id} to avoid route conflicts
+
+class AggregatedWatchResponse(BaseModel):
+    """Aggregated market data for a watch reference (combines listings with orders)"""
+    reference: str
+    brand: str
+    model: str
+    cover_image: Optional[str] = None
+    # Price is the lowest from active sell orders, or admin price if no orders
+    display_price: float
+    lowest_order_price: Optional[float] = None
+    admin_price: Optional[float] = None
+    currency: str = "EUR"
+    # Price change from 1-month trend
+    price_change: float = 0.0
+    price_history: List[float] = []
+    # Order counts for trending
+    total_orders: int = 0
+    trending: bool = False
+
+
+@router.get("/aggregated", response_model=List[AggregatedWatchResponse])
+async def get_aggregated_market_data(
+    category: str = Query(default="hot"),
+    limit: int = Query(default=20, le=100),
+) -> Any:
+    """
+    Get aggregated market data with proper pricing logic.
+
+    Price calculation:
+    1. Always show the lowest price from active sell orders for the same reference
+    2. If no sell orders exist, show admin's set price
+
+    Categories:
+    - hot: Most active (by order_count)
+    - gainers: Positive price change
+    - losers: Negative price change
+    - new: Recently added
+    - trending: Admin-flagged or high order count
+    """
+
+    try:
+        # Get all active watches
+        base_query = Watch.status == WatchStatus.ACTIVE
+
+        if category == "hot":
+            watches = await Watch.find(base_query).sort([("order_count", -1)]).limit(limit).to_list()
+        elif category == "gainers":
+            watches = await Watch.find(base_query, Watch.price_change > 0).sort([("price_change", -1)]).limit(limit).to_list()
+        elif category == "losers":
+            watches = await Watch.find(base_query, Watch.price_change < 0).sort([("price_change", 1)]).limit(limit).to_list()
+        elif category == "new":
+            watches = await Watch.find(base_query).sort([("published_at", -1)]).limit(limit).to_list()
+        elif category == "trending":
+            watches = await Watch.find(
+                base_query,
+                {"$or": [{"trending": True}, {"order_count": {"$gt": 0}}]}
+            ).sort([("trending", -1), ("order_count", -1)]).limit(limit).to_list()
+        else:
+            watches = await Watch.find(base_query).sort([("created_at", -1)]).limit(limit).to_list()
+
+        # Return empty list if no watches
+        if not watches:
+            return []
+
+        # Get unique references (only non-empty ones)
+        references = list(set(w.reference for w in watches if w.reference))
+
+        # Get lowest sell order prices for each reference
+        lowest_prices_by_ref = {}
+        order_counts_by_ref = {}
+
+        for ref in references:
+            try:
+                # Get lowest active sell order price
+                sell_orders = await Order.find(
+                    Order.reference == ref,
+                    Order.order_type == OrderType.SELL,
+                    Order.status == OrderStatus.ACTIVE,
+                ).sort([("price", 1)]).limit(1).to_list()
+
+                if sell_orders:
+                    lowest_prices_by_ref[ref] = sell_orders[0].price
+
+                # Get total order count
+                order_count = await Order.find(
+                    Order.reference == ref,
+                    Order.status == OrderStatus.ACTIVE,
+                ).count()
+                order_counts_by_ref[ref] = order_count
+            except Exception:
+                # If order lookup fails, just continue without order data
+                pass
+
+        # Build response with proper pricing
+        result = []
+        seen_refs = set()
+
+        for watch in watches:
+            # Include watches without reference too (use id as fallback)
+            ref_key = watch.reference or str(watch.id)
+
+            # Skip duplicates (group by reference)
+            if ref_key in seen_refs:
+                continue
+            seen_refs.add(ref_key)
+
+            lowest_order_price = lowest_prices_by_ref.get(watch.reference) if watch.reference else None
+            admin_price = watch.price
+            display_price = lowest_order_price if lowest_order_price else admin_price
+
+            result.append(AggregatedWatchResponse(
+                reference=watch.reference or str(watch.id),
+                brand=watch.brand,
+                model=watch.model,
+                cover_image=watch.cover_image,
+                display_price=display_price,
+                lowest_order_price=lowest_order_price,
+                admin_price=admin_price,
+                currency=watch.currency,
+                price_change=watch.price_change or 0.0,
+                price_history=watch.price_history or [],
+                total_orders=order_counts_by_ref.get(watch.reference, 0) + (watch.order_count or 0),
+                trending=watch.trending or False,
+            ))
+
+        return result
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logging.error(f"Error in get_aggregated_market_data: {str(e)}")
+        # Return empty list instead of 500 error
+        return []
+
+
+@router.get("/aggregated/{reference}")
+async def get_aggregated_watch_by_reference(reference: str) -> Any:
+    """
+    Get aggregated market data for a specific watch reference.
+
+    Returns combined data from watch model and active orders.
+    """
+
+    # Get the watch model
+    watch = await Watch.find_one(
+        Watch.reference == reference,
+        Watch.status == WatchStatus.ACTIVE,
+    )
+
+    if not watch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watch not found"
+        )
+
+    # Get lowest active sell order price
+    sell_orders = await Order.find(
+        Order.reference == reference,
+        Order.order_type == OrderType.SELL,
+        Order.status == OrderStatus.ACTIVE,
+    ).sort([("price", 1)]).limit(1).to_list()
+
+    lowest_order_price = sell_orders[0].price if sell_orders else None
+    display_price = lowest_order_price if lowest_order_price else watch.price
+
+    # Get total order count
+    order_count = await Order.find(
+        Order.reference == reference,
+        Order.status == OrderStatus.ACTIVE,
+    ).count()
+
+    return AggregatedWatchResponse(
+        reference=watch.reference,
+        brand=watch.brand,
+        model=watch.model,
+        cover_image=watch.cover_image,
+        display_price=display_price,
+        lowest_order_price=lowest_order_price,
+        admin_price=watch.price,
+        currency=watch.currency,
+        price_change=watch.price_change,
+        price_history=watch.price_history,
+        total_orders=order_count + watch.order_count,
+        trending=watch.trending,
+    )
 
 
 @router.get("/{watch_id}", response_model=WatchResponse)
@@ -311,7 +607,11 @@ async def admin_create_watch(
     watch_data: WatchCreate,
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Create a new watch (Admin only)"""
+    """Create a new watch (Admin only)
+
+    When a watch is created with status 'active' and has a reference,
+    a sell order is automatically created in the order book.
+    """
 
     # Get dealer info if dealer_id provided
     dealer_name = None
@@ -345,6 +645,32 @@ async def admin_create_watch(
     )
 
     await watch.insert()
+
+    # Auto-create sell order if watch is active and has a reference
+    if watch_data.status == WatchStatus.ACTIVE and watch_data.reference:
+        sell_order = Order(
+            order_type=OrderType.SELL,
+            brand=watch_data.brand,
+            model=watch_data.model,
+            reference=watch_data.reference,
+            watch_id=str(watch.id),
+            price=watch_data.price,
+            currency=watch_data.currency,
+            condition=map_watch_to_order_condition(watch_data.condition),
+            country_code="CH",  # Default to Switzerland for admin-created listings
+            country_name="Switzerland",
+            user_id=dealer_id,
+            user_name=dealer_name,
+            user_email=current_admin.email,
+            status=OrderStatus.ACTIVE,
+            has_box=True,  # Default to true for admin listings
+            has_papers=True,
+        )
+        await sell_order.insert()
+
+        # Increment order count on the watch
+        watch.order_count = 1
+        await watch.save()
 
     return {
         "id": str(watch.id),
@@ -492,3 +818,108 @@ async def admin_watch_stats(
     }
 
     return stats
+
+
+# ============== MARKET/TRENDING ENDPOINTS ==============
+
+@router.get("/trending", response_model=List[MarketWatchResponse])
+async def get_trending_watches(
+    limit: int = Query(default=5, le=10),
+) -> Any:
+    """
+    Get trending watches for market display.
+
+    Trending logic:
+    1. Watches with trending=True (admin-flagged) are prioritized
+    2. Then sorted by order_count (total sell/buy orders)
+    3. Maximum of 5 trending watches
+    """
+
+    # First, get admin-flagged trending watches
+    trending_watches = await Watch.find(
+        Watch.status == WatchStatus.ACTIVE,
+        Watch.trending == True
+    ).sort([("order_count", -1)]).limit(limit).to_list()
+
+    # If we don't have enough trending watches, fill with most active by order count
+    if len(trending_watches) < limit:
+        remaining = limit - len(trending_watches)
+        trending_ids = [w.id for w in trending_watches]
+
+        # Get watches with highest order counts that aren't already in trending
+        additional_watches = await Watch.find(
+            Watch.status == WatchStatus.ACTIVE,
+            {"_id": {"$nin": trending_ids}}
+        ).sort([("order_count", -1)]).limit(remaining).to_list()
+
+        trending_watches.extend(additional_watches)
+
+    return [
+        {
+            "id": str(watch.id),
+            "brand": watch.brand,
+            "model": watch.model,
+            "reference": watch.reference,
+            "price": watch.price,
+            "currency": watch.currency,
+            "cover_image": watch.cover_image,
+            "trending": watch.trending,
+            "order_count": watch.order_count,
+            "price_change": watch.price_change,
+            "price_history": watch.price_history,
+        }
+        for watch in trending_watches
+    ]
+
+
+@router.post("/admin/{watch_id}/toggle-trending")
+async def admin_toggle_trending(
+    watch_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Toggle trending status for a watch (Admin only)"""
+
+    watch = await Watch.get(PydanticObjectId(watch_id))
+
+    if not watch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watch not found"
+        )
+
+    # Toggle trending status
+    watch.trending = not watch.trending
+    watch.updated_at = datetime.utcnow()
+    await watch.save()
+
+    return {
+        "message": f"Watch trending status {'enabled' if watch.trending else 'disabled'}",
+        "id": str(watch.id),
+        "trending": watch.trending
+    }
+
+
+@router.post("/admin/{watch_id}/increment-order-count")
+async def admin_increment_order_count(
+    watch_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Increment order count for a watch (Admin only - used when orders are placed)"""
+
+    watch = await Watch.get(PydanticObjectId(watch_id))
+
+    if not watch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watch not found"
+        )
+
+    watch.order_count += 1
+    watch.updated_at = datetime.utcnow()
+    await watch.save()
+
+    return {
+        "message": "Order count incremented",
+        "id": str(watch.id),
+        "order_count": watch.order_count
+    }

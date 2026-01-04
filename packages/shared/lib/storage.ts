@@ -10,15 +10,33 @@ export const setStorage = (storageImpl: StateStorage) => {
   storage = storageImpl;
 };
 
+/**
+ * Returns a proxy storage that always delegates to the current storage implementation.
+ * This allows storage to be set after stores are created.
+ */
 export const getStorage = (): StateStorage => {
-  if (!storage) {
-    // Fallback to in-memory storage if no storage is set
-    const memoryStorage: StateStorage = {
-      getItem: () => null,
-      setItem: () => {},
-      removeItem: () => {},
-    };
-    return memoryStorage;
-  }
-  return storage;
+  // Return a proxy that always looks up the current storage
+  // This allows storage to be set after the store is created
+  return {
+    getItem: async (name: string): Promise<string | null> => {
+      if (!storage) {
+        // Storage not initialized yet - this is expected during initial bundle load
+        // The session restore logic will handle auth restoration from AsyncStorage directly
+        return null;
+      }
+      return storage.getItem(name);
+    },
+    setItem: async (name: string, value: string): Promise<void> => {
+      if (!storage) {
+        return;
+      }
+      return storage.setItem(name, value);
+    },
+    removeItem: async (name: string): Promise<void> => {
+      if (!storage) {
+        return;
+      }
+      return storage.removeItem(name);
+    },
+  };
 };

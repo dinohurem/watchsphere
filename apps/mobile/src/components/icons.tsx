@@ -628,3 +628,67 @@ export function GridIcon({ size = 16, color = '#FFFFFF', fill = 'none' }: IconPr
     </Svg>
   );
 }
+
+// Social Search Icon - Globe with magnifier for social media search
+export function SocialSearchIcon({ size = 16, color = '#FFFFFF', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill={fill}>
+      {/* Globe circle */}
+      <Path d="M6.5 12C9.53757 12 12 9.53757 12 6.5C12 3.46243 9.53757 1 6.5 1C3.46243 1 1 3.46243 1 6.5C1 9.53757 3.46243 12 6.5 12Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      {/* Globe horizontal line */}
+      <Path d="M1 6.5H12" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      {/* Globe vertical arc */}
+      <Path d="M6.5 1C7.93261 2.55556 8.75 4.47826 8.75 6.5C8.75 8.52174 7.93261 10.4444 6.5 12C5.06739 10.4444 4.25 8.52174 4.25 6.5C4.25 4.47826 5.06739 2.55556 6.5 1Z" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      {/* Magnifier handle */}
+      <Path d="M10.5 10.5L15 15" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function Share({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M4 12V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V12" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M16 6L12 2L8 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 2V15" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function Bookmark({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M19 21L12 16L5 21V5C5 4.46957 5.21071 3.96086 5.58579 3.58579C5.96086 3.21071 6.46957 3 7 3H17C17.5304 3 18.0391 3.21071 18.4142 3.58579C18.7893 3.96086 19 4.46957 19 5V21Z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function OrderBookIcon({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill}>
+      <Path d="M3 6H21" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M3 10H15" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M3 14H18" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M3 18H12" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function LogoIcon({ size = 32, color = '#212121' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <Path d="M16 4L6 10V22H12V16H20V22H26V10L16 4Z" fill={color} />
+      <Path d="M3 10L2 11V24H6V17H4V11L6 10H3Z" fill={color} opacity={0.6} />
+      <Path d="M29 10L30 11V24H26V17H28V11L26 10H29Z" fill={color} opacity={0.6} />
+    </Svg>
+  );
+}
+
+export function Newspaper({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}

@@ -14,16 +14,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { api } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 
 const TOTAL_STEPS = 4; // Account creation, Email verification, Personal info (handled in onboarding)
 
-// Back Arrow Icon
+// Back Arrow Icon (matches Figma design)
 function BackArrow() {
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#1D1D1F" strokeWidth={2}>
-      <Path d="M19 12H5M12 19l-7-7 7-7" />
+    <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M12.5 15L7.5 10L12.5 5"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -33,15 +40,6 @@ function CheckIcon({ checked }: { checked: boolean }) {
   return (
     <Svg width={16} height={16} viewBox="0 0 24 24" fill={checked ? '#1D1D1F' : '#CCCCCC'}>
       <Path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-    </Svg>
-  );
-}
-
-// Chevron Down Icon
-function ChevronDown() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#999999" strokeWidth={2}>
-      <Path d="M6 9l6 6 6-6" />
     </Svg>
   );
 }
@@ -57,13 +55,19 @@ interface PasswordValidation {
 
 export default function RegisterScreen() {
   const [step, setStep] = useState<Step>(1);
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
+
+  // Focus states for all inputs
+  const [usernameFocused, setUsernameFocused] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [repeatPasswordFocused, setRepeatPasswordFocused] = useState(false);
 
   const login = useAuthStore((state) => state.login);
 
@@ -80,7 +84,7 @@ export default function RegisterScreen() {
 
   // Password validation
   const validatePassword = (pwd: string): PasswordValidation => ({
-    minLength: pwd.length >= 12,
+    minLength: pwd.length >= 8,
     hasUppercase: /[A-Z]/.test(pwd),
     hasNumber: /[0-9]/.test(pwd),
     hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(pwd),
@@ -120,7 +124,7 @@ export default function RegisterScreen() {
   };
 
   const handleCreateAccount = async () => {
-    if (!email || !password || !repeatPassword) {
+    if (!username || !email || !password || !repeatPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -140,6 +144,7 @@ export default function RegisterScreen() {
     try {
       // Create account - this will send verification email
       await api.post('/auth/register', {
+        name: username,
         email,
         password,
       });
@@ -166,16 +171,31 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      const response = await api.post('/auth/verify-email', {
-        email,
+      // Verify the email code
+      await api.post('/auth/verify-email', {
         code: verificationCode,
       });
 
-      const { user, access_token } = response.data;
+      // After verification, login the user
+      // The register endpoint already returned tokens, so we need to login with them
+      const loginFormData = new FormData();
+      loginFormData.append('username', email);
+      loginFormData.append('password', password);
+
+      const loginResponse = await api.post('/auth/login', loginFormData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+
+      const { user, access_token, refresh_token } = loginResponse.data;
 
       if (user && access_token) {
+        // Store tokens
+        await AsyncStorage.setItem('auth_token', access_token);
+        await AsyncStorage.setItem('refresh_token', refresh_token);
+
         login(user, access_token);
-        // Go to onboarding to complete profile
         router.replace('/(auth)/onboarding');
       } else {
         Alert.alert('Error', 'Verification failed. Please try again.');
@@ -220,49 +240,82 @@ export default function RegisterScreen() {
     >
       <Text style={styles.title}>Create your account</Text>
       <Text style={styles.subtitle}>
-        Set your email and password for Watch Sphere account to continue.
+        Set your email and password for WatchSphere account to continue.
       </Text>
 
       <View style={styles.form}>
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email address</Text>
+          <Text style={styles.label}>
+            Username<Text style={styles.requiredAsterisk}>*</Text>
+          </Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, usernameFocused && styles.inputFocused]}
+            placeholder="johndoe_watches"
+            placeholderTextColor="rgba(29, 29, 31, 0.4)"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            autoCorrect={false}
+            onFocus={() => setUsernameFocused(true)}
+            onBlur={() => setUsernameFocused(false)}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>
+            Email address<Text style={styles.requiredAsterisk}>*</Text>
+          </Text>
+          <TextInput
+            style={[styles.input, emailFocused && styles.inputFocused]}
             placeholder="johndoe.watches@gmail.com"
-            placeholderTextColor="#999999"
+            placeholderTextColor="rgba(29, 29, 31, 0.4)"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            onFocus={() => setEmailFocused(true)}
+            onBlur={() => setEmailFocused(false)}
           />
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>
+            Password<Text style={styles.requiredAsterisk}>*</Text>
+          </Text>
           <TextInput
             style={[styles.input, passwordFocused && styles.inputFocused]}
             placeholder="********"
-            placeholderTextColor="#999999"
+            placeholderTextColor="rgba(29, 29, 31, 0.4)"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect={false}
+            textContentType="oneTimeCode"
             onFocus={() => setPasswordFocused(true)}
             onBlur={() => setPasswordFocused(false)}
           />
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Repeat Password</Text>
+          <Text style={styles.label}>
+            Repeat Password<Text style={styles.requiredAsterisk}>*</Text>
+          </Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, repeatPasswordFocused && styles.inputFocused]}
             placeholder="Please repeat your password"
-            placeholderTextColor="#999999"
+            placeholderTextColor="rgba(29, 29, 31, 0.4)"
             value={repeatPassword}
             onChangeText={setRepeatPassword}
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect={false}
+            textContentType="oneTimeCode"
+            onFocus={() => setRepeatPasswordFocused(true)}
+            onBlur={() => setRepeatPasswordFocused(false)}
           />
         </View>
 
@@ -276,7 +329,7 @@ export default function RegisterScreen() {
               styles.requirementText,
               passwordValidation.minLength && styles.requirementMet
             ]}>
-              At least <Text style={styles.requirementBold}>12 characters</Text>
+              At least <Text style={styles.requirementBold}>8 characters</Text>
             </Text>
           </View>
 
@@ -309,6 +362,18 @@ export default function RegisterScreen() {
               Includes <Text style={styles.requirementBold}>one special character</Text>
             </Text>
           </View>
+        </View>
+
+        {/* Terms and Privacy Notice */}
+        <View style={styles.legalNotice}>
+          <Text style={styles.legalText}>By creating an account, you agree to our </Text>
+          <TouchableOpacity onPress={() => router.push('/terms-conditions' as any)}>
+            <Text style={styles.legalLink}>Terms</Text>
+          </TouchableOpacity>
+          <Text style={styles.legalText}> and </Text>
+          <TouchableOpacity onPress={() => router.push('/privacy-policy' as any)}>
+            <Text style={styles.legalLink}>Privacy Policy</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>
@@ -356,7 +421,7 @@ export default function RegisterScreen() {
   );
 
   const canProceed = step === 1
-    ? isPasswordValid && passwordsMatch && email.length > 0
+    ? isPasswordValid && passwordsMatch && email.length > 0 && username.length > 0
     : verificationCode.length === 6;
 
   return (
@@ -448,6 +513,7 @@ const styles = StyleSheet.create({
     paddingTop: hp(16),
   },
   title: {
+    fontFamily: 'HankenGrotesk_700Bold',
     fontSize: fp(34),
     fontWeight: '700',
     color: '#1D1D1F',
@@ -456,6 +522,7 @@ const styles = StyleSheet.create({
     lineHeight: fp(41),
   },
   subtitle: {
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(17),
     color: 'rgba(29, 29, 31, 0.6)',
     lineHeight: fp(22),
@@ -463,6 +530,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.43,
   },
   emailHighlight: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
     fontWeight: '600',
     color: '#1D1D1F',
   },
@@ -473,18 +541,23 @@ const styles = StyleSheet.create({
     gap: hp(8),
   },
   label: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
     fontSize: fp(15),
     fontWeight: '600',
     color: '#1D1D1F',
     letterSpacing: 0.075,
   },
+  requiredAsterisk: {
+    color: '#FF3B30',
+  },
   input: {
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: 'rgba(29, 29, 31, 0.05)',
     borderRadius: sp(999),
     height: hp(48),
     paddingHorizontal: wp(16),
     fontSize: fp(15),
+    fontFamily: 'HankenGrotesk_400Regular',
     color: '#1D1D1F',
     backgroundColor: '#FFFFFF',
     letterSpacing: 0.075,
@@ -498,6 +571,7 @@ const styles = StyleSheet.create({
     gap: hp(12),
   },
   requirementsTitle: {
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(14),
     color: '#1D1D1F',
     marginBottom: hp(4),
@@ -508,6 +582,7 @@ const styles = StyleSheet.create({
     gap: wp(12),
   },
   requirementText: {
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(14),
     color: '#666666',
   },
@@ -515,6 +590,7 @@ const styles = StyleSheet.create({
     color: '#1D1D1F',
   },
   requirementBold: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
     fontWeight: '600',
   },
   codeContainer: {
@@ -527,9 +603,10 @@ const styles = StyleSheet.create({
     width: (SCREEN_WIDTH - wp(48) - wp(40)) / 6,
     height: sp(54),
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: 'rgba(29, 29, 31, 0.05)',
     borderRadius: sp(16),
     fontSize: fp(24),
+    fontFamily: 'HankenGrotesk_600SemiBold',
     fontWeight: '600',
     textAlign: 'center',
     color: '#1D1D1F',
@@ -546,14 +623,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resendText: {
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(15),
     color: '#666666',
   },
   resendTimerText: {
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(15),
     color: 'rgba(29, 29, 31, 0.5)',
   },
   resendLink: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
     fontSize: fp(15),
     fontWeight: '600',
     color: '#1D1D1F',
@@ -564,19 +644,39 @@ const styles = StyleSheet.create({
     paddingTop: hp(16),
   },
   continueButton: {
-    backgroundColor: '#212121',
-    borderRadius: sp(99),
+    backgroundColor: '#1D1D1F',
+    borderRadius: sp(999),
     height: hp(48),
     alignItems: 'center',
     justifyContent: 'center',
   },
   continueButtonText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
     fontSize: fp(16),
     fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.08,
   },
   buttonDisabled: {
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: 'rgba(33, 33, 33, 0.05)',
+  },
+  legalNotice: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: hp(24),
+  },
+  legalText: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: fp(12),
+    color: 'rgba(29, 29, 31, 0.5)',
+    lineHeight: fp(18),
+  },
+  legalLink: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(12),
+    fontWeight: '500',
+    color: 'rgba(29, 29, 31, 0.7)',
+    textDecorationLine: 'underline',
+    lineHeight: fp(18),
   },
 });

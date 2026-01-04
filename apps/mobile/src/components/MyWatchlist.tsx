@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { WatchlistCard, WatchlistItemData } from './WatchlistCard';
-import { ChevronRight } from './icons';
+import { ChevronRight, Heart } from './icons';
+import { wp, hp, sp, fp } from '@/utils/responsive';
 
 interface MyWatchlistProps {
   watches: WatchlistItemData[];
@@ -20,35 +21,64 @@ export function MyWatchlist({ watches, onViewAll, onWatchPress }: MyWatchlistPro
 
   const styles = StyleSheet.create({
     container: {
-      paddingHorizontal: 16,
-      paddingVertical: 20,
+      paddingHorizontal: wp(16),
+      paddingVertical: hp(20),
       backgroundColor: '#FFFFFF',
     },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 16,
+      marginBottom: hp(16),
     },
     title: {
-      fontSize: 16,
+      fontSize: fp(16),
       fontFamily: fonts.semiBold,
       color: '#212121',
-      lineHeight: 20,
+      lineHeight: fp(20),
       letterSpacing: 0.08,
     },
     viewAllButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 2,
+      gap: wp(2),
     },
     viewAllText: {
-      fontSize: 13,
+      fontSize: fp(13),
       fontFamily: fonts.medium,
       color: colors.primary,
     },
     watchlistColumn: {
-      gap: 12,
+      gap: hp(12),
+    },
+    emptyState: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: hp(32),
+      paddingHorizontal: wp(24),
+    },
+    emptyIconContainer: {
+      width: sp(64),
+      height: sp(64),
+      borderRadius: sp(32),
+      backgroundColor: 'rgba(33, 33, 33, 0.05)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: hp(16),
+    },
+    emptyTitle: {
+      fontSize: fp(17),
+      fontFamily: fonts.semiBold,
+      color: '#212121',
+      marginBottom: hp(8),
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      fontSize: fp(14),
+      fontFamily: fonts.regular,
+      color: 'rgba(33, 33, 33, 0.6)',
+      textAlign: 'center',
+      lineHeight: fp(20),
     },
   });
 
@@ -63,16 +93,28 @@ export function MyWatchlist({ watches, onViewAll, onWatchPress }: MyWatchlistPro
         </TouchableOpacity>
       </View>
 
-      {/* Watchlist Items - Column layout */}
-      <View style={styles.watchlistColumn}>
-        {displayWatches.map((watch) => (
-          <WatchlistCard
-            key={watch.id}
-            watch={watch}
-            onPress={() => onWatchPress?.(watch.id)}
-          />
-        ))}
-      </View>
+      {/* Watchlist Items or Empty State */}
+      {displayWatches.length > 0 ? (
+        <View style={styles.watchlistColumn}>
+          {displayWatches.map((watch) => (
+            <WatchlistCard
+              key={watch.id}
+              watch={watch}
+              onPress={() => onWatchPress?.(watch.id)}
+            />
+          ))}
+        </View>
+      ) : (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIconContainer}>
+            <Heart size={28} color="rgba(33, 33, 33, 0.4)" />
+          </View>
+          <Text style={styles.emptyTitle}>Your watchlist is empty</Text>
+          <Text style={styles.emptySubtitle}>
+            Start tracking watches to monitor their prices and market trends
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
