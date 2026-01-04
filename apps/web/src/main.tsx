@@ -4,6 +4,10 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import './index.css'
+import { initializeStorage } from './lib/storage'
+
+// Initialize storage for Zustand persist before any stores are used
+initializeStorage()
 
 const queryClient = new QueryClient({
   defaultOptions: {

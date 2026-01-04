@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Search, MoreVertical, Check, X, Trash2 } from 'lucide-react'
+import { Search, Check, X, Trash2 } from 'lucide-react'
 import { api } from '@/services/api'
+import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 
 interface User {
   id: string
@@ -184,52 +185,41 @@ export function AdminUsers() {
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="relative">
-                      <button
-                        onClick={() => setActionMenuOpen(actionMenuOpen === user.id ? null : user.id)}
-                        className="p-1 hover:bg-gray-100 rounded"
-                      >
-                        <MoreVertical className="w-5 h-5 text-gray-400" />
-                      </button>
-
-                      {actionMenuOpen === user.id && (
-                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-10">
-                          {!user.approved && user.role !== 'admin' && (
-                            <button
-                              onClick={() => handleApprove(user.id)}
-                              className="flex items-center w-full px-4 py-2 text-sm text-green-600 hover:bg-gray-50"
-                            >
-                              <Check className="w-4 h-4 mr-2" />
-                              Approve
-                            </button>
-                          )}
-                          {!user.approved && user.role !== 'admin' && (
-                            <button
-                              onClick={() => handleReject(user.id)}
-                              className="flex items-center w-full px-4 py-2 text-sm text-amber-600 hover:bg-gray-50"
-                            >
-                              <X className="w-4 h-4 mr-2" />
-                              Reject
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleToggleActive(user.id, user.is_active)}
-                            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            {user.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
-                          {user.role !== 'admin' && (
-                            <button
-                              onClick={() => handleDelete(user.id)}
-                              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-50"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </button>
-                          )}
-                        </div>
+                    <ActionMenu
+                      isOpen={actionMenuOpen === user.id}
+                      onToggle={() => setActionMenuOpen(actionMenuOpen === user.id ? null : user.id)}
+                      onClose={() => setActionMenuOpen(null)}
+                    >
+                      {!user.approved && user.role !== 'admin' && (
+                        <ActionMenuItem
+                          onClick={() => handleApprove(user.id)}
+                          variant="success"
+                          icon={<Check className="w-4 h-4" />}
+                        >
+                          Approve
+                        </ActionMenuItem>
                       )}
-                    </div>
+                      {!user.approved && user.role !== 'admin' && (
+                        <ActionMenuItem
+                          onClick={() => handleReject(user.id)}
+                          icon={<X className="w-4 h-4" />}
+                        >
+                          Reject
+                        </ActionMenuItem>
+                      )}
+                      <ActionMenuItem onClick={() => handleToggleActive(user.id, user.is_active)}>
+                        {user.is_active ? 'Deactivate' : 'Activate'}
+                      </ActionMenuItem>
+                      {user.role !== 'admin' && (
+                        <ActionMenuItem
+                          onClick={() => handleDelete(user.id)}
+                          variant="danger"
+                          icon={<Trash2 className="w-4 h-4" />}
+                        >
+                          Delete
+                        </ActionMenuItem>
+                      )}
+                    </ActionMenu>
                   </td>
                 </tr>
               ))}

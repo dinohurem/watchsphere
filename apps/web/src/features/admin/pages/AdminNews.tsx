@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, MoreVertical, Edit2, Trash2, Eye, Send } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Eye, Send } from 'lucide-react'
 import { api } from '@/services/api'
+import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 
 interface NewsArticle {
   id: string
@@ -277,42 +278,34 @@ export function AdminNews() {
                       : new Date(article.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="relative">
-                      <button
-                        onClick={() => setActionMenuOpen(actionMenuOpen === article.id ? null : article.id)}
-                        className="p-1 hover:bg-gray-100 rounded"
+                    <ActionMenu
+                      isOpen={actionMenuOpen === article.id}
+                      onToggle={() => setActionMenuOpen(actionMenuOpen === article.id ? null : article.id)}
+                      onClose={() => setActionMenuOpen(null)}
+                    >
+                      <ActionMenuItem
+                        onClick={() => handleEdit(article)}
+                        icon={<Edit2 className="w-4 h-4" />}
                       >
-                        <MoreVertical className="w-5 h-5 text-gray-400" />
-                      </button>
-
-                      {actionMenuOpen === article.id && (
-                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-10">
-                          <button
-                            onClick={() => handleEdit(article)}
-                            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            <Edit2 className="w-4 h-4 mr-2" />
-                            Edit
-                          </button>
-                          {article.status === 'draft' && (
-                            <button
-                              onClick={() => handlePublish(article.id)}
-                              className="flex items-center w-full px-4 py-2 text-sm text-green-600 hover:bg-gray-50"
-                            >
-                              <Send className="w-4 h-4 mr-2" />
-                              Publish
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleDelete(article.id)}
-                            className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-50"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete
-                          </button>
-                        </div>
+                        Edit
+                      </ActionMenuItem>
+                      {article.status === 'draft' && (
+                        <ActionMenuItem
+                          onClick={() => handlePublish(article.id)}
+                          variant="success"
+                          icon={<Send className="w-4 h-4" />}
+                        >
+                          Publish
+                        </ActionMenuItem>
                       )}
-                    </div>
+                      <ActionMenuItem
+                        onClick={() => handleDelete(article.id)}
+                        variant="danger"
+                        icon={<Trash2 className="w-4 h-4" />}
+                      >
+                        Delete
+                      </ActionMenuItem>
+                    </ActionMenu>
                   </td>
                 </tr>
               ))}

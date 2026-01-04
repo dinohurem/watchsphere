@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, MoreVertical, Edit2, Trash2, Users, UserPlus, UserMinus, Shield } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Users, UserPlus, UserMinus, Shield } from 'lucide-react'
 import { api } from '@/services/api'
+import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 
 interface Member {
   id: string
@@ -259,40 +260,31 @@ export function AdminChatGroups() {
                     <p className="text-sm text-gray-500">{group.member_count} members</p>
                   </div>
                 </div>
-                <div className="relative">
-                  <button
-                    onClick={() => setActionMenuOpen(actionMenuOpen === group.id ? null : group.id)}
-                    className="p-1 hover:bg-gray-100 rounded"
+                <ActionMenu
+                  isOpen={actionMenuOpen === group.id}
+                  onToggle={() => setActionMenuOpen(actionMenuOpen === group.id ? null : group.id)}
+                  onClose={() => setActionMenuOpen(null)}
+                >
+                  <ActionMenuItem
+                    onClick={() => handleViewMembers(group)}
+                    icon={<Users className="w-4 h-4" />}
                   >
-                    <MoreVertical className="w-5 h-5 text-gray-400" />
-                  </button>
-
-                  {actionMenuOpen === group.id && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-10">
-                      <button
-                        onClick={() => handleViewMembers(group)}
-                        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        <Users className="w-4 h-4 mr-2" />
-                        View Members
-                      </button>
-                      <button
-                        onClick={() => handleEdit(group)}
-                        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        <Edit2 className="w-4 h-4 mr-2" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(group.id)}
-                        className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-50"
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
+                    View Members
+                  </ActionMenuItem>
+                  <ActionMenuItem
+                    onClick={() => handleEdit(group)}
+                    icon={<Edit2 className="w-4 h-4" />}
+                  >
+                    Edit
+                  </ActionMenuItem>
+                  <ActionMenuItem
+                    onClick={() => handleDelete(group.id)}
+                    variant="danger"
+                    icon={<Trash2 className="w-4 h-4" />}
+                  >
+                    Delete
+                  </ActionMenuItem>
+                </ActionMenu>
               </div>
               {group.description && (
                 <p className="mt-3 text-sm text-gray-600 line-clamp-2">{group.description}</p>

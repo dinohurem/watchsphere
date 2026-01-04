@@ -130,7 +130,7 @@ export default function NotificationsPermissionScreen() {
               <WSLogoSmall />
               <View style={styles.notificationContent}>
                 <View style={styles.notificationHeader}>
-                  <Text style={styles.notificationTitle}>Watch Sphere</Text>
+                  <Text style={styles.notificationTitle}>WatchSphere</Text>
                   <Text style={styles.notificationTime}>9:41 AM</Text>
                 </View>
                 <Text style={styles.notificationText}>

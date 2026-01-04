@@ -1,9 +1,11 @@
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Platform } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { api } from '@/services/api';
 import {
   Magnifier,
   UserCircleFilled,
@@ -15,9 +17,11 @@ import {
   SparkleIcon,
   WatchIcon,
   FileCheckIcon,
-  ShieldCheckIcon,
+  SocialSearchIcon,
   GridIcon,
   AISparkle,
+  Heart,
+  Newspaper,
 } from '@/components/icons';
 import { LogoIcon } from '@/components/LogoIcon';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
@@ -33,7 +37,7 @@ interface WatchlistItem {
   reference: string;
   price: number;
   priceChange: number;
-  image: any;
+  image?: string;
 }
 
 interface ActivityItem {
@@ -48,7 +52,7 @@ interface QuickAccessItem {
   id: string;
   title: string;
   subtitle: string;
-  icon: 'activity' | 'sparkle' | 'watch' | 'file' | 'shield' | 'grid';
+  icon: 'activity' | 'sparkle' | 'watch' | 'file' | 'social' | 'grid';
   color: string;
 }
 
@@ -57,78 +61,22 @@ interface NewsItem {
   title: string;
   source: string;
   time: string;
-  imageUrl: string;
+  imageUrl?: string;
 }
 
 export default function HomeScreen() {
   const { colors, fonts } = useTheme();
 
-  // Watchlist data matching Figma design
-  const watchlistItems: WatchlistItem[] = [
-    {
-      id: '1',
-      brand: 'AP',
-      model: 'Royal Oak',
-      reference: '26240OR Blue',
-      price: 106000,
-      priceChange: 0.8,
-      image: require('../../assets/images/ap.jpeg'),
-    },
-    {
-      id: '2',
-      brand: 'Patek',
-      model: 'Nautilus',
-      reference: '7118/1200R White',
-      price: 168000,
-      priceChange: 16.3,
-      image: require('../../assets/images/patek.jpeg'),
-    },
-    {
-      id: '3',
-      brand: 'Rolex',
-      model: 'GMT-Master',
-      reference: '126710BLRO Jub',
-      price: 20800,
-      priceChange: 1.5,
-      image: require('../../assets/images/rolex.jpeg'),
-    },
-    {
-      id: '4',
-      brand: 'Rolex',
-      model: 'Day-Date',
-      reference: '228238A Blk',
-      price: 55200,
-      priceChange: -2.5,
-      image: require('../../assets/images/rolex-gold.jpeg'),
-    },
-  ];
+  // State for API data
+  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
+  const [loadingWatchlist, setLoadingWatchlist] = useState(true);
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [loadingNews, setLoadingNews] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Activity items matching Figma design
-  const activityItems: ActivityItem[] = [
-    {
-      id: '1',
-      type: 'new_offer',
-      reference: '126610LN',
-      price: 12000,
-      time: '1 min ago',
-    },
-    {
-      id: '2',
-      type: 'new_offer',
-      reference: '126610LN',
-      price: 12000,
-      time: '1 min ago',
-    },
-    {
-      id: '3',
-      type: 'price_alert',
-      reference: '126710BLRO',
-      price: 11000,
-      time: '1 min ago',
-    },
-  ];
-
-  // Quick Access items matching Figma design
+  // Quick Access items (static - these are navigation items)
   const quickAccessItems: QuickAccessItem[] = [
     {
       id: '1',
@@ -160,9 +108,9 @@ export default function HomeScreen() {
     },
     {
       id: '5',
-      title: 'Checks',
-      subtitle: 'Check your serials and close deals confidently.',
-      icon: 'shield',
+      title: 'Social search',
+      subtitle: 'Look up watches from different social channels.',
+      icon: 'social',
       color: '#7C73FF',
     },
     {
@@ -174,30 +122,130 @@ export default function HomeScreen() {
     },
   ];
 
-  // News items matching Figma design
-  const newsItems: NewsItem[] = [
-    {
-      id: '1',
-      title: 'Patek Philippe increases Nautilus production rate by 5%',
-      source: 'Bloomberg',
-      time: '2 days ago',
-      imageUrl: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=200',
-    },
-    {
-      id: '2',
-      title: 'Rolex unveils new Submariner model with enhanced features',
-      source: 'Bloomberg',
-      time: '2 days ago',
-      imageUrl: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=200',
-    },
-    {
-      id: '3',
-      title: 'Audemars Piguet introduces a new concept watch at the Geneva Watch Fair',
-      source: 'Bloomberg',
-      time: '2 days ago',
-      imageUrl: 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=200',
-    },
-  ];
+  // Load data on initial mount
+  useEffect(() => {
+    loadAllData();
+  }, []);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadAllData();
+    }, [])
+  );
+
+  const loadAllData = async () => {
+    await Promise.all([loadWatchlist(), loadActivity(), loadNews()]);
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  }, []);
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  };
+
+  const loadWatchlist = async () => {
+    try {
+      const response = await api.get('/profile/watchlist');
+      if (response.data && response.data.length > 0) {
+        setWatchlistItems(response.data.slice(0, 4).map((item: any) => ({
+          id: item.id,
+          brand: item.brand,
+          model: item.model,
+          reference: item.reference || '',
+          price: item.price || item.target_price || 0,
+          priceChange: item.priceChange || 0,
+          image: item.image,
+        })));
+      } else {
+        // User watchlist is empty, try to fetch default watchlist
+        try {
+          const defaultResponse = await api.get('/default-watchlist/admin/default-watchlist');
+          if (defaultResponse.data && defaultResponse.data.length > 0) {
+            // Filter only active items and map to watchlist format
+            const activeItems = defaultResponse.data.filter((item: any) => item.is_active);
+            setWatchlistItems(activeItems.slice(0, 4).map((item: any) => ({
+              id: item.id,
+              brand: item.brand,
+              model: item.model,
+              reference: item.reference || '',
+              price: item.target_price || 0,
+              priceChange: 0,
+              image: null,
+            })));
+          } else {
+            setWatchlistItems([]);
+          }
+        } catch (defaultError) {
+          // Default watchlist also not available
+          setWatchlistItems([]);
+        }
+      }
+    } catch (error) {
+      // Silently handle errors - show empty state instead
+      setWatchlistItems([]);
+    } finally {
+      setLoadingWatchlist(false);
+    }
+  };
+
+  const loadActivity = async () => {
+    try {
+      const response = await api.get('/activity/admin/activity?limit=3');
+      if (response.data && response.data.length > 0) {
+        setActivityItems(response.data.map((item: any) => ({
+          id: item.id,
+          type: item.activity_type === 'price_alert' ? 'price_alert' : 'new_offer',
+          reference: item.metadata?.reference || item.entity_id || '',
+          price: item.metadata?.price || 0,
+          time: formatTimeAgo(item.created_at),
+        })));
+      } else {
+        setActivityItems([]);
+      }
+    } catch (error) {
+      // Silently handle errors - show empty state instead
+      setActivityItems([]);
+    } finally {
+      setLoadingActivity(false);
+    }
+  };
+
+  const loadNews = async () => {
+    try {
+      const response = await api.get('/news?limit=3');
+      if (response.data && response.data.length > 0) {
+        setNewsItems(response.data.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          source: item.author_name || 'WatchSphere',
+          time: formatTimeAgo(item.published_at || item.created_at),
+          imageUrl: item.cover_image,
+        })));
+      } else {
+        setNewsItems([]);
+      }
+    } catch (error) {
+      // Silently handle errors - show empty state instead
+      setNewsItems([]);
+    } finally {
+      setLoadingNews(false);
+    }
+  };
 
   const formatPrice = (price: number) => {
     return `€${price.toLocaleString()}`;
@@ -213,8 +261,8 @@ export default function HomeScreen() {
         return <WatchIcon size={16} color="#FFFFFF" />;
       case 'file':
         return <FileCheckIcon size={16} color="#FFFFFF" />;
-      case 'shield':
-        return <ShieldCheckIcon size={16} color="#FFFFFF" />;
+      case 'social':
+        return <SocialSearchIcon size={16} color="#FFFFFF" />;
       case 'grid':
         return <GridIcon size={16} color="#FFFFFF" />;
       default:
@@ -301,9 +349,66 @@ export default function HomeScreen() {
       color: '#212121',
       letterSpacing: 0.075,
     },
+    // Loading and empty state styles
+    loadingContainer: {
+      paddingVertical: hp(32),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emptyState: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: hp(32),
+      paddingHorizontal: wp(24),
+    },
+    emptyIconContainer: {
+      width: sp(64),
+      height: sp(64),
+      borderRadius: sp(32),
+      backgroundColor: 'rgba(33, 33, 33, 0.05)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: hp(16),
+    },
+    emptyTitle: {
+      fontSize: fp(17),
+      fontFamily: fonts.semiBold,
+      color: '#212121',
+      marginBottom: hp(8),
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      fontSize: fp(14),
+      fontFamily: fonts.regular,
+      color: 'rgba(33, 33, 33, 0.6)',
+      textAlign: 'center',
+      lineHeight: fp(20),
+    },
     // Activity section styles
     activitySection: {
       marginBottom: hp(32),
+    },
+    activityEmptyState: {
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: wp(16),
+      paddingVertical: hp(24),
+      gap: hp(12),
+    },
+    activityEmptyIconContainer: {
+      width: sp(48),
+      height: sp(48),
+      borderRadius: sp(24),
+      backgroundColor: 'rgba(33, 33, 33, 0.05)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    activityEmptyText: {
+      fontSize: fp(14),
+      fontFamily: fonts.regular,
+      color: 'rgba(33, 33, 33, 0.5)',
+      textAlign: 'center',
     },
     activityItem: {
       flexDirection: 'row',
@@ -387,6 +492,9 @@ export default function HomeScreen() {
       width: '66%',
       height: '85%',
       resizeMode: 'contain',
+    },
+    watchImagePlaceholder: {
+      fontSize: fp(48),
     },
     watchCardContent: {
       padding: wp(16),
@@ -515,6 +623,14 @@ export default function HomeScreen() {
       borderRadius: sp(16),
       backgroundColor: '#E6E6E6',
     },
+    newsImagePlaceholder: {
+      width: sp(80),
+      height: sp(80),
+      borderRadius: sp(16),
+      backgroundColor: '#F6F7F9',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     newsContent: {
       flex: 1,
       gap: hp(4),
@@ -547,7 +663,14 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
+        }
+      >
         {/* Header with Logo, Search Bar, and Profile */}
         <View style={styles.header}>
           {/* Logo */}
@@ -578,32 +701,45 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {activityItems.map((item) => (
-            <View key={item.id} style={styles.activityItem}>
-              <View
-                style={[
-                  styles.activityIconContainer,
-                  item.type === 'new_offer' ? styles.activityIconBlue : styles.activityIconRed,
-                ]}
-              >
-                {item.type === 'new_offer' ? (
-                  <TagPlus size={18} color="#0088FF" />
-                ) : (
-                  <PriceAlertDown size={20} color="#C93927" />
-                )}
-              </View>
-              <View style={styles.activityContent}>
-                <View style={styles.activityRow}>
-                  <Text style={styles.activityText}>
-                    {item.type === 'new_offer' ? 'New offer ' : 'Price alert triggered '}
-                    <Text style={styles.activityReference}>{item.reference}</Text>
-                  </Text>
-                  <Text style={styles.activityPrice}>{formatPrice(item.price)}</Text>
-                </View>
-                <Text style={styles.activityTime}>{item.time}</Text>
-              </View>
+          {loadingActivity ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#212121" />
             </View>
-          ))}
+          ) : activityItems.length === 0 ? (
+            <View style={styles.activityEmptyState}>
+              <View style={styles.activityEmptyIconContainer}>
+                <ActivityChart size={20} color="rgba(33, 33, 33, 0.4)" />
+              </View>
+              <Text style={styles.activityEmptyText}>No recent activity</Text>
+            </View>
+          ) : (
+            activityItems.map((item) => (
+              <View key={item.id} style={styles.activityItem}>
+                <View
+                  style={[
+                    styles.activityIconContainer,
+                    item.type === 'new_offer' ? styles.activityIconBlue : styles.activityIconRed,
+                  ]}
+                >
+                  {item.type === 'new_offer' ? (
+                    <TagPlus size={18} color="#0088FF" />
+                  ) : (
+                    <PriceAlertDown size={20} color="#C93927" />
+                  )}
+                </View>
+                <View style={styles.activityContent}>
+                  <View style={styles.activityRow}>
+                    <Text style={styles.activityText}>
+                      {item.type === 'new_offer' ? 'New offer ' : 'Price alert triggered '}
+                      <Text style={styles.activityReference}>{item.reference}</Text>
+                    </Text>
+                    <Text style={styles.activityPrice}>{formatPrice(item.price)}</Text>
+                  </View>
+                  <Text style={styles.activityTime}>{item.time}</Text>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
         {/* Watchlist Section */}
@@ -615,57 +751,85 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.watchlistGrid}>
-            {watchlistItems.map((watch) => {
-              const isPositive = watch.priceChange > 0;
-              return (
-                <TouchableOpacity
-                  key={watch.id}
-                  style={styles.watchCard}
-                  onPress={() => router.push(`/watch/${watch.id}`)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.watchImageContainer}>
-                    <LinearGradient
-                      colors={['#FFFFFF', '#F4F4F4']}
-                      style={styles.watchImageGradient}
-                    >
-                      <Image source={watch.image} style={styles.watchImage} />
-                    </LinearGradient>
-                  </View>
-                  <View style={styles.watchCardContent}>
-                    <View>
-                      <Text style={styles.watchName}>{watch.brand} {watch.model}</Text>
-                      <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
-                    </View>
-                    <View style={styles.watchPriceRow}>
-                      <Text style={styles.watchPrice}>{formatPrice(watch.price)}€</Text>
-                      <View
-                        style={[
-                          styles.watchChangeBadge,
-                          isPositive ? styles.watchChangeBadgeUp : styles.watchChangeBadgeDown,
-                        ]}
+          {loadingWatchlist ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#212121" />
+            </View>
+          ) : watchlistItems.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Heart size={28} color="rgba(33, 33, 33, 0.4)" />
+              </View>
+              <Text style={styles.emptyTitle}>Your watchlist is empty</Text>
+              <Text style={styles.emptySubtitle}>
+                Start tracking watches to monitor their prices and market trends
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.watchlistGrid}>
+              {watchlistItems.map((watch) => {
+                const isPositive = watch.priceChange > 0;
+                return (
+                  <TouchableOpacity
+                    key={watch.id}
+                    style={styles.watchCard}
+                    onPress={() => router.push({
+                      pathname: '/market/[id]',
+                      params: {
+                        id: watch.id,
+                        reference: watch.reference,
+                        brand: watch.brand,
+                        model: watch.model,
+                      },
+                    } as any)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.watchImageContainer}>
+                      <LinearGradient
+                        colors={['#FFFFFF', '#F4F4F4']}
+                        style={styles.watchImageGradient}
                       >
-                        {isPositive ? (
-                          <TrendingUp size={12} color="#4AA078" />
+                        {watch.image ? (
+                          <Image source={{ uri: watch.image }} style={styles.watchImage} />
                         ) : (
-                          <PriceAlertDown size={12} color="#C93927" />
+                          <Text style={styles.watchImagePlaceholder}>⌚</Text>
                         )}
-                        <Text
+                      </LinearGradient>
+                    </View>
+                    <View style={styles.watchCardContent}>
+                      <View>
+                        <Text style={styles.watchName}>{watch.brand} {watch.model}</Text>
+                        <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
+                      </View>
+                      <View style={styles.watchPriceRow}>
+                        <Text style={styles.watchPrice}>{formatPrice(watch.price)}€</Text>
+                        <View
                           style={[
-                            styles.watchChangeText,
-                            isPositive ? styles.watchChangeTextUp : styles.watchChangeTextDown,
+                            styles.watchChangeBadge,
+                            isPositive ? styles.watchChangeBadgeUp : styles.watchChangeBadgeDown,
                           ]}
                         >
-                          {Math.abs(watch.priceChange).toFixed(1)}%
-                        </Text>
+                          {isPositive ? (
+                            <TrendingUp size={12} color="#4AA078" />
+                          ) : (
+                            <PriceAlertDown size={12} color="#C93927" />
+                          )}
+                          <Text
+                            style={[
+                              styles.watchChangeText,
+                              isPositive ? styles.watchChangeTextUp : styles.watchChangeTextDown,
+                            ]}
+                          >
+                            {Math.abs(watch.priceChange).toFixed(1)}%
+                          </Text>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Quick Access Section */}
@@ -681,9 +845,16 @@ export default function HomeScreen() {
                   style={styles.quickAccessItem}
                   onPress={() => {
                     if (item.title === 'Activity Center') {
-                      router.push('/(tabs)/dashboard' as any);
+                      router.push('/(auth)/notifications' as any);
                     } else if (item.title === 'My Inventory') {
-                      router.push('/market');
+                      router.push('/(tabs)/dashboard' as any);
+                    } else if (item.title === 'Ask AI Assistant') {
+                      router.push('/chat/ai');
+                    } else if (item.title === 'My Orders') {
+                      router.push({ pathname: '/settings/orders', params: { type: 'buy' } } as any);
+                    } else if (item.title === 'Social search') {
+                      // TODO: Navigate to social search when implemented
+                      console.log('Social search coming soon');
                     }
                   }}
                   activeOpacity={0.7}
@@ -713,31 +884,52 @@ export default function HomeScreen() {
         <View style={styles.newsSection}>
           <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
             <Text style={styles.sectionTitle}>Trending news</Text>
-            <TouchableOpacity style={styles.viewAllButton}>
+            <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/news' as any)}>
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
 
-          {newsItems.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.newsItem}
-              activeOpacity={0.7}
-            >
-              <Image
-                source={{ uri: item.imageUrl }}
-                style={styles.newsImage}
-              />
-              <View style={styles.newsContent}>
-                <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
-                <View style={styles.newsSourceRow}>
-                  <Text style={styles.newsSource}>{item.source}</Text>
-                  <Text style={styles.newsTime}> · </Text>
-                  <Text style={styles.newsTime}>{item.time}</Text>
-                </View>
+          {loadingNews ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#212121" />
+            </View>
+          ) : newsItems.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Newspaper size={28} color="rgba(33, 33, 33, 0.4)" />
               </View>
-            </TouchableOpacity>
-          ))}
+              <Text style={styles.emptyTitle}>No news available</Text>
+              <Text style={styles.emptySubtitle}>Latest watch news will appear here</Text>
+            </View>
+          ) : (
+            newsItems.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.newsItem}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/news/${item.id}`)}
+              >
+                {item.imageUrl ? (
+                  <Image
+                    source={{ uri: item.imageUrl }}
+                    style={styles.newsImage}
+                  />
+                ) : (
+                  <View style={styles.newsImagePlaceholder}>
+                    <Newspaper size={24} color="rgba(33, 33, 33, 0.3)" />
+                  </View>
+                )}
+                <View style={styles.newsContent}>
+                  <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
+                  <View style={styles.newsSourceRow}>
+                    <Text style={styles.newsSource}>{item.source}</Text>
+                    <Text style={styles.newsTime}> · </Text>
+                    <Text style={styles.newsTime}>{item.time}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

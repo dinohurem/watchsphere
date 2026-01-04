@@ -63,60 +63,63 @@ export default function WelcomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
-        {/* Logo */}
-        <WSLogo />
+        {/* Main Content - Centered */}
+        <View style={styles.mainContent}>
+          {/* Logo */}
+          <WSLogo />
 
-        {/* Welcome Text */}
-        <View style={styles.welcomeContainer}>
-          <Text style={styles.welcomeTitle}>Welcome to</Text>
-          <Text style={styles.welcomeTitle}>Watch Sphere</Text>
-          <Text style={styles.welcomeSubtitle}>
-          Track market prices, manage your inventory, and trade securely with trusted dealers - all in one place.
-          </Text>
+          {/* Welcome Text */}
+          <View style={styles.welcomeContainer}>
+            <Text style={styles.welcomeTitle}>Welcome to</Text>
+            <Text style={styles.welcomeTitle}>WatchSphere</Text>
+            <Text style={styles.welcomeSubtitle}>
+              Track market prices, manage your inventory, and trade securely with trusted dealers - all in one place.
+            </Text>
+          </View>
+
+          {/* Buttons */}
+          <View style={styles.buttonsContainer}>
+            {/* Continue with Apple */}
+            <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+              <AppleLogo />
+              <Text style={styles.socialButtonText}>Continue with Apple</Text>
+            </TouchableOpacity>
+
+            {/* Continue with Google */}
+            <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+              <GoogleLogo />
+              <Text style={styles.socialButtonText}>Continue with Google</Text>
+            </TouchableOpacity>
+
+            {/* Sign Up Button */}
+            <TouchableOpacity
+              style={styles.signUpButton}
+              onPress={() => router.push('/(auth)/register')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.signUpButtonText}>Sign Up</Text>
+            </TouchableOpacity>
+
+            {/* Log In Button */}
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={() => router.push('/(auth)/login')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.loginButtonText}>Log in</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Buttons */}
-        <View style={styles.buttonsContainer}>
-          {/* Continue with Apple */}
-          <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-            <AppleLogo />
-            <Text style={styles.socialButtonText}>Continue with Apple</Text>
-          </TouchableOpacity>
-
-          {/* Continue with Google */}
-          <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-            <GoogleLogo />
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {/* Sign Up Button */}
-          <TouchableOpacity
-            style={styles.signUpButton}
-            onPress={() => router.push('/(auth)/register')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.signUpButtonText}>Sign Up</Text>
-          </TouchableOpacity>
-
-          {/* Log In Button */}
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={() => router.push('/(auth)/login')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.loginButtonText}>Log in</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Footer Links */}
+        {/* Footer Links - Fixed at bottom */}
         <View style={styles.footer}>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/privacy-policy' as any)}>
             <Text style={styles.footerLink}>Privacy Policy</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/terms-conditions' as any)}>
             <Text style={styles.footerLink}>Terms and Conditions</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/contact' as any)}>
             <Text style={styles.footerLink}>Contact</Text>
           </TouchableOpacity>
         </View>
@@ -128,11 +131,14 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
   },
   content: {
     flex: 1,
     paddingHorizontal: wp(24),
+  },
+  mainContent: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -144,6 +150,7 @@ const styles = StyleSheet.create({
     marginBottom: hp(48),
   },
   welcomeTitle: {
+    fontFamily: 'HankenGrotesk_700Bold',
     fontSize: fp(34),
     fontWeight: '700',
     color: '#1D1D1F',
@@ -152,8 +159,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   welcomeSubtitle: {
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(16),
-    color: 'rgba(0, 0, 0, 0.8)',
+    color: 'rgba(33, 33, 33, 0.8)',
     textAlign: 'center',
     lineHeight: fp(24),
     marginTop: hp(16),
@@ -175,6 +183,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(29, 29, 31, 0.05)',
   },
   socialButtonText: {
+    fontFamily: 'HankenGrotesk_500Medium',
     fontSize: fp(16),
     fontWeight: '500',
     color: '#1D1D1F',
@@ -187,6 +196,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   signUpButtonText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
     fontSize: fp(16),
     fontWeight: '600',
     color: '#FFFFFF',
@@ -201,6 +211,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(29, 29, 31, 0.05)',
   },
   loginButtonText: {
+    fontFamily: 'HankenGrotesk_500Medium',
     fontSize: fp(16),
     fontWeight: '500',
     color: '#1D1D1F',
@@ -210,12 +221,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: wp(24),
-    marginTop: hp(48),
     paddingBottom: hp(16),
   },
   footerLink: {
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(14),
-    fontWeight: '500',
+    fontWeight: '400',
     color: 'rgba(0, 0, 0, 0.7)',
   },
 });

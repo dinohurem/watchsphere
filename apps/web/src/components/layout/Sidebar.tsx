@@ -4,7 +4,8 @@ import {
   Store,
   Heart,
   MessageSquare,
-  User
+  User,
+  Sparkles
 } from 'lucide-react'
 
 const navigation = [
@@ -12,6 +13,7 @@ const navigation = [
   { name: 'Market', to: '/market', icon: Store },
   { name: 'My Watchlist', to: '/watchlist', icon: Heart },
   { name: 'Chat', to: '/chat', icon: MessageSquare },
+  { name: 'AI Assistant', to: '/ai-assistant', icon: Sparkles },
   { name: 'Profile', to: '/profile', icon: User },
 ]
 

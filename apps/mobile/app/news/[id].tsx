@@ -1,19 +1,69 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
+import { useState, useEffect } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ArrowLeft, ExternalLink } from '@/components/icons';
+import { api } from '@/services/api';
+
+interface NewsArticle {
+  id: string;
+  title: string;
+  content: string;
+  excerpt?: string;
+  cover_image?: string;
+  author_name: string;
+  published_at?: string;
+  created_at: string;
+  source_url?: string;
+}
 
 export default function NewsArticleScreen() {
   const { colors, fonts } = useTheme();
   const params = useLocalSearchParams();
+  const id = typeof params.id === 'string' ? params.id : '';
 
-  const title = typeof params.title === 'string' ? params.title : '';
-  const source = typeof params.source === 'string' ? params.source : '';
-  const url = typeof params.url === 'string' ? params.url : '';
-  const date = typeof params.date === 'string' ? params.date : '';
-  const fullText = typeof params.fullText === 'string' ? params.fullText : '';
-  const imageUrl = typeof params.imageUrl === 'string' ? params.imageUrl : '';
+  const [article, setArticle] = useState<NewsArticle | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadArticle();
+  }, [id]);
+
+  const loadArticle = async () => {
+    if (!id) {
+      setError('Article not found');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await api.get(`/news/${id}`);
+      setArticle(response.data);
+    } catch (err) {
+      setError('Failed to load article');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const title = article?.title || '';
+  const source = article?.author_name || 'WatchSphere';
+  const url = article?.source_url || '';
+  const date = formatDate(article?.published_at || article?.created_at);
+  const fullText = article?.content || '';
+  const imageUrl = article?.cover_image || '';
 
   const handleOpenSource = () => {
     if (url) {
@@ -110,7 +160,71 @@ export default function NewsArticleScreen() {
       fontFamily: fonts.medium,
       color: colors.text,
     },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 32,
+    },
+    errorText: {
+      fontSize: 16,
+      fontFamily: fonts.medium,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginBottom: 16,
+    },
+    retryButton: {
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      backgroundColor: colors.text,
+      borderRadius: 8,
+    },
+    retryButtonText: {
+      fontSize: 15,
+      fontFamily: fonts.semiBold,
+      color: colors.background,
+    },
   });
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>Article</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.text} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !article) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>Article</Text>
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error || 'Article not found'}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadArticle}>
+            <Text style={styles.retryButtonText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

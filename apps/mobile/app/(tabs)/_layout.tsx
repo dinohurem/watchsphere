@@ -39,7 +39,7 @@ function CustomTabBar() {
               <TouchableOpacity
                 key={tab.name}
                 style={[styles.tabItem, active && styles.tabItemActive]}
-                onPress={() => router.push(tab.route as any)}
+                onPress={() => router.replace(tab.route as any)}
                 activeOpacity={0.7}
               >
                 <View style={styles.tabIconWrapper}>

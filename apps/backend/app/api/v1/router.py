@@ -1,7 +1,8 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, market, inventory, chat, profile, admin, news,
-    chat_groups, billing, watchlist_admin, activity, whatsapp, ai_insights
+    chat_groups, billing, watchlist_admin, default_watchlist_admin,
+    activity, whatsapp, ai_insights, upload, orders
 )
 
 api_router = APIRouter()
@@ -17,9 +18,12 @@ api_router.include_router(news.router, prefix="/news", tags=["news"])
 api_router.include_router(chat_groups.router, prefix="/chat-groups", tags=["chat-groups"])
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
 api_router.include_router(watchlist_admin.router, prefix="/watchlist", tags=["watchlist-admin"])
+api_router.include_router(default_watchlist_admin.router, prefix="/default-watchlist", tags=["default-watchlist-admin"])
 api_router.include_router(activity.router, prefix="/activity", tags=["activity"])
 api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["whatsapp"])
 api_router.include_router(ai_insights.router, prefix="/insights", tags=["ai-insights"])
+api_router.include_router(upload.router, prefix="/upload", tags=["upload"])
+api_router.include_router(orders.router, prefix="/orders", tags=["orders"])
 
 
 @api_router.get("/status")

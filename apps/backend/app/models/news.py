@@ -20,6 +20,8 @@ class News(Document):
 
     # Media
     cover_image: Optional[str] = None
+    cover_image_thumbnail: Optional[str] = None
+    cover_image_path: Optional[str] = None  # For deletion
 
     # Author
     author_id: str = Field(..., index=True)

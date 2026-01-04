@@ -28,6 +28,12 @@ export function RegisterPage() {
 
       // If registration returns user and token, go to onboarding
       if (response.data.user && response.data.access_token) {
+        // Store tokens
+        localStorage.setItem('auth_token', response.data.access_token);
+        if (response.data.refresh_token) {
+          localStorage.setItem('refresh_token', response.data.refresh_token);
+        }
+
         login(response.data.user, response.data.access_token);
         navigate('/onboarding');
       } else {

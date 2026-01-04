@@ -38,9 +38,12 @@ class Watch(Document):
     serial_number: Optional[str] = Field(None, unique=True)
     description: Optional[str] = None
 
-    # Images
-    images: List[str] = Field(default_factory=list)  # URLs to images
+    # Images - URLs to Firebase Storage
+    images: List[str] = Field(default_factory=list)  # Full-size image URLs
+    image_thumbnails: List[str] = Field(default_factory=list)  # Thumbnail URLs
+    image_paths: List[str] = Field(default_factory=list)  # Storage paths for deletion
     cover_image: Optional[str] = None  # Primary display image
+    cover_image_thumbnail: Optional[str] = None
 
     # Status & Visibility
     status: WatchStatus = WatchStatus.DRAFT
@@ -52,6 +55,12 @@ class Watch(Document):
 
     # Stats
     views: int = 0
+    order_count: int = 0  # Total buy/sell orders for trending calculation
+
+    # Market/Trending
+    trending: bool = False  # Admin can manually flag watches as trending
+    price_history: List[float] = Field(default_factory=list)  # Historical prices for charts
+    price_change: float = 0.0  # Percentage change
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)

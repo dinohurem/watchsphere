@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     SECRET_KEY: str = "dev-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 30 days for refresh token
 
     # Database
     MONGODB_URL: str = "mongodb://localhost:27017"
@@ -24,9 +25,15 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # AI Services
+    # AI Services (OpenAI for AI chat)
     OPENAI_API_KEY: str = ""
-    ANTHROPIC_API_KEY: str = ""
+
+    # Monri Payments
+    MONRI_MERCHANT_KEY: str = ""
+    MONRI_AUTHENTICITY_TOKEN: str = ""
+    MONRI_API_URL: str = "https://ipg.monri.com"  # Use https://ipgtest.monri.com for testing
+    MONRI_SUBSCRIPTION_PRICE: float = 100.0  # 100€/month
+    MONRI_CURRENCY: str = "EUR"
 
     # Email (Mailchimp/Mandrill)
     MAILCHIMP_API_KEY: str = ""
@@ -42,6 +49,10 @@ class Settings(BaseSettings):
     # File Upload
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB
     UPLOAD_DIR: str = "./uploads"
+
+    # Firebase
+    FIREBASE_SERVICE_ACCOUNT_PATH: str = ""
+    FIREBASE_STORAGE_BUCKET: str = ""
 
     @property
     def cors_origins(self) -> List[str]:
