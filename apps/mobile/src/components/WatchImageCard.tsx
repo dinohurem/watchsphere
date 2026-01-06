@@ -1,6 +1,9 @@
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
 import { Heart } from './icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { ImagePlaceholder } from './ImagePlaceholder';
+
+const CARD_WIDTH = (Dimensions.get('window').width - 48) / 2;
 
 interface WatchImageCardProps {
   imageUrl?: string;
@@ -29,7 +32,7 @@ export function WatchImageCard({
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.image} />
         ) : (
-          <View style={styles.imagePlaceholder} />
+          <ImagePlaceholder size={CARD_WIDTH} borderRadius={12} />
         )}
         {onFavoritePress && (
           <TouchableOpacity style={styles.favoriteButton} onPress={onFavoritePress}>

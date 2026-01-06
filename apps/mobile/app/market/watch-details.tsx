@@ -1,10 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
+import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 
 // Country flag component using flag CDN
@@ -79,6 +80,57 @@ function XIcon() {
   );
 }
 
+// 3 Dots Menu Icon
+function MoreIcon() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13Z"
+        stroke="#1D1D1F"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M19 13C19.5523 13 20 12.5523 20 12C20 11.4477 19.5523 11 19 11C18.4477 11 18 11.4477 18 12C18 12.5523 18.4477 13 19 13Z"
+        stroke="#1D1D1F"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M5 13C5.55228 13 6 12.5523 6 12C6 11.4477 5.55228 11 5 11C4.44772 11 4 11.4477 4 12C4 12.5523 4.44772 13 5 13Z"
+        stroke="#1D1D1F"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// Sold Tag Icon
+function SoldTagIcon() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M20.59 13.41L13.42 20.58C13.2343 20.766 13.0137 20.9135 12.7709 21.0141C12.5281 21.1148 12.2678 21.1666 12.005 21.1666C11.7422 21.1666 11.4819 21.1148 11.2391 21.0141C10.9963 20.9135 10.7757 20.766 10.59 20.58L2 12V2H12L20.59 10.59C20.9625 10.9647 21.1716 11.4716 21.1716 12C21.1716 12.5284 20.9625 13.0353 20.59 13.41Z"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7 7H7.01"
+        stroke="#1D1D1F"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 interface WatchDetailsParams {
   orderId?: string;
   reference?: string;
@@ -91,7 +143,9 @@ interface WatchDetailsParams {
   has_box?: string;
   has_papers?: string;
   user_name?: string;
+  user_id?: string;
   fromOrderBook?: string;
+  order_type?: string;
 }
 
 interface WatchSpec {
@@ -134,8 +188,10 @@ const MOCK_SPECS = {
 
 export default function WatchDetailsScreen() {
   const params = useLocalSearchParams<WatchDetailsParams>();
+  const { user } = useAuthStore();
   const [isFavorite, setIsFavorite] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   const isFromOrderBook = params.fromOrderBook === 'true';
   const price = params.price ? parseFloat(params.price) : 104500;
@@ -148,6 +204,11 @@ export default function WatchDetailsScreen() {
   const model = params.model || 'Royal Oak';
   const reference = params.reference || '26240OR Blue';
   const userName = params.user_name || 'Seller';
+  const orderUserId = params.user_id;
+  const orderType = params.order_type;
+
+  // Check if this is the current user's sell order
+  const isOwnSellOrder = orderUserId === user?.id && orderType === 'sell';
 
   const formatPrice = (price: number) => {
     return `€${price.toLocaleString('de-DE')}`;
@@ -209,12 +270,22 @@ export default function WatchDetailsScreen() {
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
               <BackArrow />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.favoriteButton}
-              onPress={() => setIsFavorite(!isFavorite)}
-            >
-              <HeartIcon filled={isFavorite} />
-            </TouchableOpacity>
+            <View style={styles.headerRightButtons}>
+              {isOwnSellOrder && (
+                <TouchableOpacity
+                  style={styles.moreButton}
+                  onPress={() => setShowMenu(true)}
+                >
+                  <MoreIcon />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.favoriteButton}
+                onPress={() => setIsFavorite(!isFavorite)}
+              >
+                <HeartIcon filled={isFavorite} />
+              </TouchableOpacity>
+            </View>
           </SafeAreaView>
         </View>
 
@@ -285,6 +356,42 @@ export default function WatchDetailsScreen() {
           </TouchableOpacity>
         </View>
       </LinearGradient>
+
+      {/* Action Menu Modal */}
+      <Modal
+        visible={showMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMenu(false)}
+        >
+          <View style={styles.menuContainer}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenu(false);
+                router.push({
+                  pathname: '/market/mark-sold',
+                  params: {
+                    orderId: params.orderId || '',
+                    brand,
+                    model,
+                    reference,
+                    price: price.toString(),
+                  },
+                });
+              }}
+            >
+              <SoldTagIcon />
+              <Text style={styles.menuItemText}>Mark as Sold</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -328,6 +435,18 @@ const styles = StyleSheet.create({
     paddingTop: hp(8),
   },
   backButton: {
+    width: sp(44),
+    height: sp(44),
+    borderRadius: sp(999),
+    backgroundColor: '#F8F8F8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerRightButtons: {
+    flexDirection: 'row',
+    gap: wp(8),
+  },
+  moreButton: {
     width: sp(44),
     height: sp(44),
     borderRadius: sp(999),
@@ -475,5 +594,29 @@ const styles = StyleSheet.create({
     fontSize: fp(16),
     color: '#FFFFFF',
     letterSpacing: 0.08,
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  menuContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: sp(24),
+    borderTopRightRadius: sp(24),
+    paddingTop: hp(16),
+    paddingBottom: hp(40),
+    paddingHorizontal: wp(24),
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: hp(16),
+    gap: wp(16),
+  },
+  menuItemText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(17),
+    color: '#212121',
   },
 });

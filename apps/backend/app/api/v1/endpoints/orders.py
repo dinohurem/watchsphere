@@ -399,6 +399,60 @@ async def cancel_order(
     return {"message": "Order cancelled successfully"}
 
 
+@router.post("/{order_id}/mark-sold", response_model=OrderResponse)
+async def mark_order_as_sold(
+    order_id: str,
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Mark own sell order as sold (removes from inventory)"""
+
+    order = await Order.get(PydanticObjectId(order_id))
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    if order.user_id != str(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to modify this order"
+        )
+
+    if order.order_type != OrderType.SELL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only sell orders can be marked as sold"
+        )
+
+    order.status = OrderStatus.SOLD
+    order.updated_at = datetime.utcnow()
+    await order.save()
+
+    return OrderResponse(
+        id=str(order.id),
+        order_type=order.order_type,
+        brand=order.brand,
+        model=order.model,
+        reference=order.reference,
+        watch_id=order.watch_id,
+        price=order.price,
+        currency=order.currency,
+        condition=order.condition,
+        country_code=order.country_code,
+        country_name=order.country_name,
+        user_id=order.user_id,
+        user_name=order.user_name,
+        status=order.status,
+        has_box=order.has_box,
+        has_papers=order.has_papers,
+        notes=order.notes,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+    )
+
+
 # ============== ADMIN ENDPOINTS ==============
 
 @router.get("/admin/all", response_model=List[OrderResponse])

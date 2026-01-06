@@ -132,7 +132,7 @@ export default function OrderBookScreen() {
     return `€${price.toLocaleString('de-DE')}`;
   };
 
-  const handleOrderPress = (order: OrderBookEntry) => {
+  const handleOrderPress = (order: OrderBookEntry, orderType: 'buy' | 'sell') => {
     // Navigate to watch details page with fromOrderBook flag
     router.push({
       pathname: '/market/watch-details',
@@ -148,19 +148,22 @@ export default function OrderBookScreen() {
         has_box: order.has_box.toString(),
         has_papers: order.has_papers.toString(),
         user_name: order.user_name || '',
+        user_id: order.user_id,
+        order_type: orderType,
         fromOrderBook: 'true',
       },
     });
   };
 
   const orders = selectedTab === 'Buy' ? orderBook?.buy_orders : orderBook?.sell_orders;
+  const currentOrderType = selectedTab === 'Buy' ? 'buy' : 'sell';
 
   const renderOrderRow = ({ item, index }: { item: OrderBookEntry; index: number }) => {
     const isAlt = index % 2 === 0;
     return (
       <TouchableOpacity
         style={[styles.tableRow, isAlt && styles.tableRowAlt]}
-        onPress={() => handleOrderPress(item)}
+        onPress={() => handleOrderPress(item, currentOrderType)}
         activeOpacity={0.7}
       >
         <View style={[styles.tableCell, styles.marketCellContainer]}>

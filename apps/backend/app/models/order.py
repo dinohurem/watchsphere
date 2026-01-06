@@ -20,6 +20,7 @@ class OrderStatus(str, Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
+    SOLD = "sold"
 
 
 class Order(Document):

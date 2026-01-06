@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useCallback, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { api } from '@/services/api';
+import { LogoIcon } from '@/components/LogoIcon';
 
 // Plus Icon
 function PlusIcon() {
@@ -140,50 +142,9 @@ interface InventoryWatch {
 }
 
 export default function DashboardScreen() {
-  // Set to empty array to show empty state, or add items to show populated state
-  const [inventory, setInventory] = useState<InventoryWatch[]>([
-    {
-      id: '1',
-      brand: 'AP Royal Oak',
-      reference: '26240OR Blue',
-      soldOrder: '106,000€',
-      change: '0,8%',
-      isPositive: true,
-      sellNowPrice: '€105,000',
-      image: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?w=400&h=400&fit=crop',
-    },
-    {
-      id: '2',
-      brand: 'Rolex Day-Date',
-      reference: '228238A Blk',
-      soldOrder: '55,200€',
-      change: '2,5%',
-      isPositive: false,
-      sellNowPrice: null,
-      image: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=400&fit=crop',
-    },
-    {
-      id: '3',
-      brand: 'Rolex GMT-Master',
-      reference: '126710BLRO Jub',
-      soldOrder: '20,800€',
-      change: '1,5%',
-      isPositive: true,
-      sellNowPrice: '€29,850',
-      image: 'https://images.unsplash.com/photo-1548171915-e79a380a2a4b?w=400&h=400&fit=crop',
-    },
-    {
-      id: '4',
-      brand: 'Patek Nautilus',
-      reference: '7118/1200R White',
-      soldOrder: '168,000€',
-      change: '16,3%',
-      isPositive: true,
-      sellNowPrice: '€85,250',
-      image: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=400&h=400&fit=crop',
-    },
-  ]);
-
+  // Start with empty array - data will be loaded from API
+  const [inventory, setInventory] = useState<InventoryWatch[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -195,8 +156,33 @@ export default function DashboardScreen() {
   );
 
   const loadInventory = async () => {
-    // TODO: Load inventory from API when available
-    // For now, this just simulates a refresh
+    try {
+      // Load sell orders for the current user (inventory = user's sell orders)
+      // Use order_type=sell query param to only get sell orders
+      const response = await api.get('/orders/my-orders', {
+        params: { order_type: 'sell' }
+      });
+      if (response.data && Array.isArray(response.data)) {
+        const sellOrders = response.data;
+
+        const formattedInventory: InventoryWatch[] = sellOrders.map((order: any) => ({
+          id: order.id || order._id,
+          brand: `${order.brand} ${order.model || ''}`.trim(),
+          reference: order.reference || '',
+          soldOrder: order.price ? `${order.price.toLocaleString('de-DE')}€` : '0€',
+          change: order.price_change ? `${Math.abs(order.price_change).toFixed(1).replace('.', ',')}%` : '0%',
+          isPositive: (order.price_change || 0) >= 0,
+          sellNowPrice: order.best_bid ? `€${order.best_bid.toLocaleString('de-DE')}` : null,
+          image: order.cover_image || '',
+        }));
+        setInventory(formattedInventory);
+      }
+    } catch (error) {
+      console.error('Failed to load inventory:', error);
+      setInventory([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onRefresh = useCallback(async () => {
@@ -234,11 +220,15 @@ export default function DashboardScreen() {
           colors={['#FFFFFF', '#F4F4F4']}
           style={styles.watchImageGradient}
         >
-          <Image
-            source={{ uri: watch.image }}
-            style={styles.watchImage}
-            resizeMode="contain"
-          />
+          {watch.image ? (
+            <Image
+              source={{ uri: watch.image }}
+              style={styles.watchImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <LogoIcon size={sp(40)} color="rgba(33, 33, 33, 0.15)" />
+          )}
         </LinearGradient>
       </View>
 
@@ -399,7 +389,15 @@ export default function DashboardScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
           }
         >
-          {inventory.length === 0 ? renderEmptyState() : renderPopulatedState()}
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#212121" />
+            </View>
+          ) : inventory.length === 0 ? (
+            renderEmptyState()
+          ) : (
+            renderPopulatedState()
+          )}
         </ScrollView>
       </SafeAreaView>
     </>
@@ -460,6 +458,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingBottom: hp(120),
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: hp(100),
   },
   // Empty State Styles
   emptyStateContainer: {

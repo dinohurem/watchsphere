@@ -6,7 +6,9 @@ import Svg, { Path, Circle, Line, Rect, G, Defs, LinearGradient as SvgLinearGrad
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
+import { useFilters } from '@/contexts/FilterContext';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
+import { LogoIcon } from '@/components/LogoIcon';
 
 // Country flag component using flag CDN
 function CountryFlag({ countryCode, size = 14 }: { countryCode: string; size?: number }) {
@@ -146,8 +148,8 @@ function StarIcon({ filled = false }: { filled?: boolean }) {
       {/* 5-pointed star outline */}
       <Path
         d="M11.0002 2.05811L13.786 7.70294L20.0166 8.60769L15.5084 13.0031L16.5726 19.208L11.0002 16.2793L5.4278 19.208L6.49205 13.0031L1.98389 8.60769L8.21447 7.70294L11.0002 2.05811Z"
-        stroke={filled ? "#FFB800" : "#1D1D1F"}
-        fill={filled ? "#FFB800" : "none"}
+        stroke="#1D1D1F"
+        fill={filled ? "#1D1D1F" : "none"}
         strokeWidth={1.83333}
         strokeMiterlimit={10}
         strokeLinecap="square"
@@ -374,6 +376,7 @@ export default function WatchDetailsScreen() {
     model?: string;
   }>();
   const { isAuthenticated, user } = useAuthStore();
+  const { getOrderBookFilterCount, hasActiveOrderBookFilters } = useFilters();
   const [watch, setWatch] = useState<WatchDetails>(MOCK_WATCH);
   const [loading, setLoading] = useState(true);
   const [buyOrders, setBuyOrders] = useState<OrderBookItem[]>([]);
@@ -689,8 +692,12 @@ export default function WatchDetailsScreen() {
             locations={[0.067, 1]}
             style={styles.heroGradient}
           />
-          {watch.image && (
+          {watch.image ? (
             <Image source={{ uri: watch.image }} style={styles.heroImage} resizeMode="contain" />
+          ) : (
+            <View style={styles.heroPlaceholder}>
+              <LogoIcon size={sp(80)} color="rgba(33, 33, 33, 0.15)" />
+            </View>
           )}
 
           {/* Header overlay */}
@@ -746,6 +753,11 @@ export default function WatchDetailsScreen() {
           <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/market/filters')}>
             <View style={styles.actionIconContainer}>
               <FilterIcon />
+              {hasActiveOrderBookFilters() && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{getOrderBookFilterCount()}</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.actionLabel}>Filters</Text>
           </TouchableOpacity>
@@ -964,11 +976,13 @@ export default function WatchDetailsScreen() {
               <>
                 {/* Watch Info */}
                 <View style={styles.offerWatchInfo}>
-                  {watch.image && (
-                    <View style={styles.offerWatchImageContainer}>
+                  <View style={styles.offerWatchImageContainer}>
+                    {watch.image ? (
                       <Image source={{ uri: watch.image }} style={styles.offerWatchImage} />
-                    </View>
-                  )}
+                    ) : (
+                      <LogoIcon size={sp(30)} color="rgba(33, 33, 33, 0.2)" />
+                    )}
+                  </View>
                   <View style={styles.offerWatchDetails}>
                     <Text style={styles.offerWatchName}>{watch.brand} {watch.model}</Text>
                     <Text style={styles.offerWatchPrice}>
@@ -1050,6 +1064,14 @@ const styles = StyleSheet.create({
     height: '59%',
     alignSelf: 'center',
     marginTop: hp(130),
+  },
+  heroPlaceholder: {
+    width: '77%',
+    height: '59%',
+    alignSelf: 'center',
+    marginTop: hp(130),
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerOverlay: {
     position: 'absolute',
@@ -1159,9 +1181,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(33, 33, 33, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
   actionIconContainerActive: {
     backgroundColor: 'rgba(255, 184, 0, 0.15)',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -sp(2),
+    right: -sp(2),
+    minWidth: sp(18),
+    height: sp(18),
+    borderRadius: sp(9),
+    backgroundColor: '#212121',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: sp(4),
+  },
+  filterBadgeText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(10),
+    color: '#FFFFFF',
+    lineHeight: fp(12),
   },
   actionLabel: {
     fontFamily: 'HankenGrotesk_600SemiBold',
@@ -1381,7 +1422,8 @@ const styles = StyleSheet.create({
   orderButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: wp(8),
+    flex: 1,
+    marginRight: wp(12),
   },
   buyButton: {
     backgroundColor: '#54B368',
@@ -1391,7 +1433,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: sp(3),
     height: sp(48),
     flex: 1,
-    paddingHorizontal: wp(12),
+    paddingHorizontal: wp(16),
     paddingVertical: hp(14),
     alignItems: 'center',
     justifyContent: 'center',
@@ -1404,7 +1446,8 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: sp(64),
     height: sp(48),
     flex: 1,
-    paddingHorizontal: wp(12),
+    marginLeft: wp(4),
+    paddingHorizontal: wp(16),
     paddingVertical: hp(14),
     alignItems: 'center',
     justifyContent: 'center',

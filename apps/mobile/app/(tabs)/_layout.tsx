@@ -93,14 +93,15 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
           tabBarStyle: { display: 'none' },
+          animation: 'none',
         }}
       >
-        <Tabs.Screen name="index" />
-        <Tabs.Screen name="market" />
-        <Tabs.Screen name="chat" />
-        <Tabs.Screen name="dashboard" />
-        <Tabs.Screen name="profile" options={{ href: null }} />
-        <Tabs.Screen name="notifications" options={{ href: null }} />
+        <Tabs.Screen name="index" options={{ animation: 'none' }} />
+        <Tabs.Screen name="market" options={{ animation: 'none' }} />
+        <Tabs.Screen name="chat" options={{ animation: 'none' }} />
+        <Tabs.Screen name="dashboard" options={{ animation: 'none' }} />
+        <Tabs.Screen name="profile" options={{ href: null, animation: 'none' }} />
+        <Tabs.Screen name="notifications" options={{ href: null, animation: 'none' }} />
       </Tabs>
 
       {/* Custom Tab Bar */}

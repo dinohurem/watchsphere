@@ -62,6 +62,21 @@ interface FormattedTextPart {
   italic?: boolean;
 }
 
+// Send button icon (up arrow in circle)
+function SendIcon({ color = '#FFFFFF' }: { color?: string }) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M10 15V5M10 5L5 10M10 5L15 10"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export default function AIChatScreen() {
   const { id, initialMessage, title: passedTitle } = useLocalSearchParams<{
     id: string;
@@ -73,12 +88,68 @@ export default function AIChatScreen() {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationTitle, setConversationTitle] = useState(passedTitle || 'New Chat');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
   const hasInitialized = useRef(false);
 
+  // Load existing messages when opening a chat
+  useEffect(() => {
+    loadChatHistory();
+  }, [id]);
+
+  const loadChatHistory = async () => {
+    try {
+      setIsLoadingHistory(true);
+      const savedMessages = await AsyncStorage.getItem(`ai_chat_messages_${id}`);
+      if (savedMessages) {
+        const parsedMessages = JSON.parse(savedMessages);
+        // Restore Date objects
+        const messagesWithDates = parsedMessages.map((msg: Message) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+        setMessages(messagesWithDates);
+
+        // Set title from first message
+        const firstUserMessage = messagesWithDates.find((m: Message) => m.isUser);
+        if (firstUserMessage && !passedTitle) {
+          const title = firstUserMessage.content.slice(0, 25);
+          setConversationTitle(title + (firstUserMessage.content.length > 25 ? '...' : ''));
+        }
+
+        // Mark as initialized since we loaded history
+        hasInitialized.current = true;
+
+        // Scroll to bottom after loading
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Save messages whenever they change
+  useEffect(() => {
+    if (messages.length > 0 && !isLoadingHistory) {
+      saveChatMessages();
+    }
+  }, [messages, isLoadingHistory]);
+
+  const saveChatMessages = async () => {
+    try {
+      await AsyncStorage.setItem(`ai_chat_messages_${id}`, JSON.stringify(messages));
+    } catch (error) {
+      console.error('Error saving chat messages:', error);
+    }
+  };
+
   // Handle initial message from new chat
   useEffect(() => {
-    if (initialMessage && !hasInitialized.current) {
+    if (initialMessage && !hasInitialized.current && !isLoadingHistory) {
       hasInitialized.current = true;
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -92,8 +163,8 @@ export default function AIChatScreen() {
       );
       setIsLoading(true);
 
-      // Save chat to storage
-      saveChat(initialMessage);
+      // Save chat metadata to storage
+      saveChatMetadata(initialMessage);
 
       // Simulate AI response
       setTimeout(() => {
@@ -107,7 +178,7 @@ export default function AIChatScreen() {
         setIsLoading(false);
       }, 2000);
     }
-  }, [initialMessage]);
+  }, [initialMessage, isLoadingHistory]);
 
   // Extract title from first user message
   useEffect(() => {
@@ -120,17 +191,21 @@ export default function AIChatScreen() {
     }
   }, [messages, passedTitle]);
 
-  const saveChat = async (title: string) => {
+  const saveChatMetadata = async (title: string) => {
     try {
       const savedChats = await AsyncStorage.getItem('ai_chats');
       const chats = savedChats ? JSON.parse(savedChats) : [];
-      const newChat = {
-        id,
-        title,
-        createdAt: new Date().toISOString(),
-      };
-      chats.unshift(newChat);
-      await AsyncStorage.setItem('ai_chats', JSON.stringify(chats.slice(0, 50)));
+      // Check if chat already exists
+      const existingIndex = chats.findIndex((c: any) => c.id === id);
+      if (existingIndex === -1) {
+        const newChat = {
+          id,
+          title,
+          createdAt: new Date().toISOString(),
+        };
+        chats.unshift(newChat);
+        await AsyncStorage.setItem('ai_chats', JSON.stringify(chats.slice(0, 50)));
+      }
     } catch (error) {
       console.error('Error saving chat:', error);
     }
@@ -424,13 +499,15 @@ export default function AIChatScreen() {
     },
     textInputContainer: {
       flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: 'rgba(33, 33, 33, 0.04)',
       borderRadius: sp(99),
       paddingHorizontal: wp(16),
       paddingVertical: hp(12),
-      justifyContent: 'center',
     },
     textInput: {
+      flex: 1,
       fontSize: fp(15),
       fontFamily: fonts.medium,
       color: '#212121',
@@ -438,6 +515,18 @@ export default function AIChatScreen() {
       letterSpacing: 0.075,
       padding: 0,
       margin: 0,
+    },
+    sendButton: {
+      width: sp(44),
+      height: sp(44),
+      borderRadius: sp(99),
+      backgroundColor: '#212121',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginLeft: wp(8),
+    },
+    sendButtonDisabled: {
+      opacity: 0.3,
     },
     imagePreview: {
       width: wp(200),
@@ -528,6 +617,13 @@ export default function AIChatScreen() {
                   editable={!isLoading}
                 />
               </View>
+              <TouchableOpacity
+                style={[styles.sendButton, (!inputText.trim() || isLoading) && styles.sendButtonDisabled]}
+                onPress={handleSend}
+                disabled={!inputText.trim() || isLoading}
+              >
+                <SendIcon />
+              </TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
