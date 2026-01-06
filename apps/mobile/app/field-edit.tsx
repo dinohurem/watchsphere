@@ -1,21 +1,28 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ArrowLeft } from '@/components/icons';
+import { api } from '@/services/api';
+import { useAuthStore } from '@watchsphere/shared/stores';
+import { wp, hp, sp, fp } from '@/utils/responsive';
 
 export default function FieldEditScreen() {
   const { colors, fonts } = useTheme();
-  const { field } = useLocalSearchParams<{ field: string }>();
-  const [value, setValue] = useState('Fabian Wir');
+  const { field, value: initialValue } = useLocalSearchParams<{ field: string; value?: string }>();
+  const [value, setValue] = useState(initialValue || '');
+  const [saving, setSaving] = useState(false);
+  const { user, setUser } = useAuthStore();
 
   const getFieldTitle = () => {
     switch (field) {
       case 'name':
         return 'Name';
-      case 'contact':
+      case 'phone':
         return 'Contact Information';
+      case 'email':
+        return 'Email Address';
       default:
         return 'Edit Field';
     }
@@ -25,10 +32,69 @@ export default function FieldEditScreen() {
     switch (field) {
       case 'name':
         return 'Please enter your full name here.';
-      case 'contact':
-        return 'Please enter your contact information.';
+      case 'phone':
+        return 'Please enter your phone number.';
+      case 'email':
+        return 'Please enter your email address.';
       default:
         return 'Enter value';
+    }
+  };
+
+  const getInputPlaceholder = () => {
+    switch (field) {
+      case 'name':
+        return 'Full Name';
+      case 'phone':
+        return '+1 234 567 8900';
+      case 'email':
+        return 'email@example.com';
+      default:
+        return 'Enter value';
+    }
+  };
+
+  const getKeyboardType = () => {
+    switch (field) {
+      case 'phone':
+        return 'phone-pad' as const;
+      case 'email':
+        return 'email-address' as const;
+      default:
+        return 'default' as const;
+    }
+  };
+
+  const handleSave = async () => {
+    if (!value.trim()) {
+      Alert.alert('Error', 'Please enter a value');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const updateData: Record<string, string> = {};
+      updateData[field] = value.trim();
+
+      await api.patch('/profile/me', updateData);
+
+      // Update the auth store if the name was changed
+      if (field === 'name' && user) {
+        setUser({
+          ...user,
+          name: value.trim(),
+        });
+      }
+
+      router.back();
+    } catch (error: any) {
+      console.error('Error saving field:', error);
+      Alert.alert(
+        'Error',
+        error.response?.data?.detail || 'Failed to save changes. Please try again.'
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -40,57 +106,63 @@ export default function FieldEditScreen() {
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 16,
+      paddingHorizontal: wp(16),
+      paddingVertical: hp(16),
     },
     backButton: {
-      padding: 4,
-      marginRight: 16,
+      padding: sp(4),
+      marginRight: wp(16),
     },
     headerTitle: {
-      fontSize: 17,
+      fontSize: fp(17),
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
     content: {
       flex: 1,
-      paddingHorizontal: 16,
-      paddingTop: 24,
+      paddingHorizontal: wp(16),
+      paddingTop: hp(24),
     },
     title: {
-      fontSize: 28,
+      fontSize: fp(28),
       fontFamily: fonts.bold,
       color: colors.text,
-      marginBottom: 8,
+      marginBottom: hp(8),
     },
     subtitle: {
-      fontSize: 15,
+      fontSize: fp(15),
       fontFamily: fonts.regular,
       color: colors.text,
-      marginBottom: 24,
+      marginBottom: hp(24),
     },
     input: {
-      fontSize: 17,
+      fontSize: fp(17),
       fontFamily: fonts.regular,
       color: colors.text,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 12,
+      paddingVertical: hp(12),
+      paddingHorizontal: wp(16),
+      borderRadius: sp(12),
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.backgroundSecondary,
-      marginBottom: 32,
+      marginBottom: hp(32),
     },
     saveButton: {
-      paddingVertical: 16,
-      borderRadius: 12,
+      paddingVertical: hp(16),
+      borderRadius: sp(12),
       backgroundColor: colors.text,
       alignItems: 'center',
+      justifyContent: 'center',
       marginTop: 'auto',
-      marginBottom: 32,
+      marginBottom: hp(32),
+      flexDirection: 'row',
+      gap: wp(8),
+    },
+    saveButtonDisabled: {
+      opacity: 0.5,
     },
     saveButtonText: {
-      fontSize: 16,
+      fontSize: fp(16),
       fontFamily: fonts.semiBold,
       color: colors.background,
     },
@@ -103,6 +175,7 @@ export default function FieldEditScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
+          disabled={saving}
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
@@ -118,17 +191,25 @@ export default function FieldEditScreen() {
           style={styles.input}
           value={value}
           onChangeText={setValue}
-          placeholder={getFieldPlaceholder()}
+          placeholder={getInputPlaceholder()}
           placeholderTextColor={colors.textSecondary}
           autoFocus
+          keyboardType={getKeyboardType()}
+          autoCapitalize={field === 'email' ? 'none' : 'words'}
+          autoCorrect={false}
+          editable={!saving}
         />
 
         {/* Save Button */}
         <TouchableOpacity
-          style={styles.saveButton}
-          onPress={() => router.back()}
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={saving}
         >
-          <Text style={styles.saveButtonText}>Save Changes</Text>
+          {saving && <ActivityIndicator size="small" color={colors.background} />}
+          <Text style={styles.saveButtonText}>
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

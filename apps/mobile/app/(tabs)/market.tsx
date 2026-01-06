@@ -2,7 +2,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useFilters } from '@/contexts/FilterContext';
 import { api } from '@/services/api';
@@ -58,14 +58,76 @@ function MiniSparkline({ data, isPositive, width = 40, height = 16 }: { data: nu
 
 export default function MarketScreen() {
   const { colors, fonts } = useTheme();
-  const { getTotalFilterCount } = useFilters();
+  const { filters, getTotalFilterCount, hasActiveFilters } = useFilters();
+  const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
   const totalFilterCount = getTotalFilterCount();
   const [selectedCategory, setSelectedCategory] = useState('Hot');
   const [watches, setWatches] = useState<WatchMarketData[]>([]);
+  const [allWatches, setAllWatches] = useState<WatchMarketData[]>([]); // Unfiltered watches
   const [trendingWatches, setTrendingWatches] = useState<WatchMarketData[]>([]);
   const [featuredWatches, setFeaturedWatches] = useState<WatchMarketData[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(searchParam || '');
+
+  // Update search query when param changes
+  useEffect(() => {
+    if (searchParam) {
+      setSearchQuery(searchParam);
+    }
+  }, [searchParam]);
+
+  // Apply filters and search to watches whenever they change
+  useEffect(() => {
+    if (allWatches.length > 0) {
+      let filtered = applyFiltersToWatches(allWatches, filters);
+      // Apply search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        filtered = filtered.filter(watch =>
+          watch.brand.toLowerCase().includes(query) ||
+          watch.model.toLowerCase().includes(query) ||
+          watch.reference.toLowerCase().includes(query) ||
+          `${watch.brand} ${watch.model}`.toLowerCase().includes(query)
+        );
+      }
+      setWatches(filtered);
+    }
+  }, [filters, allWatches, searchQuery]);
+
+  // Filter function to apply active filters to watch list
+  const applyFiltersToWatches = (watchList: WatchMarketData[], activeFilters: typeof filters) => {
+    if (!hasActiveFilters()) return watchList;
+
+    return watchList.filter(watch => {
+      // Filter by brand
+      if (activeFilters.brands.length > 0 && !activeFilters.brands.includes(watch.brand)) {
+        return false;
+      }
+
+      // Filter by model
+      if (activeFilters.models.length > 0 && !activeFilters.models.includes(watch.model)) {
+        return false;
+      }
+
+      // Filter by price range
+      if (activeFilters.priceMin !== null && watch.price < activeFilters.priceMin) {
+        return false;
+      }
+      if (activeFilters.priceMax !== null && watch.price > activeFilters.priceMax) {
+        return false;
+      }
+
+      // Filter by reference
+      if (activeFilters.references.length > 0 && !activeFilters.references.some(ref =>
+        watch.reference.toLowerCase().includes(ref.toLowerCase())
+      )) {
+        return false;
+      }
+
+      return true;
+    });
+  };
 
   useEffect(() => {
     loadMarketData();
@@ -111,7 +173,8 @@ export default function MarketScreen() {
           adminPrice: item.admin_price,
         }));
 
-        setWatches(watchData);
+        setAllWatches(watchData);
+        setWatches(applyFiltersToWatches(watchData, filters));
 
         // Get trending watches
         const trending = watchData.filter((w: WatchMarketData) => w.trending).slice(0, 5);
@@ -145,7 +208,8 @@ export default function MarketScreen() {
             orderCount: item.order_count || 0,
           }));
 
-          setWatches(watchData);
+          setAllWatches(watchData);
+          setWatches(applyFiltersToWatches(watchData, filters));
 
           const trending = watchData.filter((w: WatchMarketData) => w.trending).slice(0, 5);
           setTrendingWatches(trending);
@@ -158,6 +222,7 @@ export default function MarketScreen() {
           }
         } else {
           // No data available - show empty state
+          setAllWatches([]);
           setWatches([]);
           setTrendingWatches([]);
           await loadFeaturedWatches();
@@ -166,6 +231,7 @@ export default function MarketScreen() {
     } catch (error) {
       // Error fetching - show empty state
       console.error('Failed to load market data:', error);
+      setAllWatches([]);
       setWatches([]);
       setTrendingWatches([]);
       await loadFeaturedWatches();
@@ -269,6 +335,12 @@ export default function MarketScreen() {
       fontFamily: fonts.medium,
       color: '#212121',
       opacity: 0.5,
+    },
+    searchText: {
+      fontSize: fp(15),
+      fontFamily: fonts.medium,
+      color: '#212121',
+      flex: 1,
     },
     profileButton: {
       width: sp(44),
@@ -534,11 +606,13 @@ export default function MarketScreen() {
         <View style={styles.logoContainer}>
           <LogoIcon width={44} height={27.25} color="#212121" />
         </View>
-        <TouchableOpacity style={styles.searchBar} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.searchBar} activeOpacity={0.7} onPress={() => router.push('/search')}>
           <View style={styles.searchIcon}>
             <Magnifier size={18} color="#212121" />
           </View>
-          <Text style={styles.searchPlaceholder}>Search watches...</Text>
+          <Text style={searchQuery ? styles.searchText : styles.searchPlaceholder}>
+            {searchQuery || 'Search watches...'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
           <UserCircleFilled size={36} color="#212121" />
