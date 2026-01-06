@@ -493,9 +493,6 @@ export default function HomeScreen() {
       height: '85%',
       resizeMode: 'contain',
     },
-    watchImagePlaceholder: {
-      fontSize: fp(48),
-    },
     watchCardContent: {
       padding: wp(16),
       paddingTop: hp(12),
@@ -679,7 +676,7 @@ export default function HomeScreen() {
           </View>
 
           {/* Search Bar */}
-          <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/market')}>
+          <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/search')}>
             <View style={styles.searchIcon}>
               <Magnifier size={18} color="#212121" />
             </View>
@@ -792,7 +789,7 @@ export default function HomeScreen() {
                         {watch.image ? (
                           <Image source={{ uri: watch.image }} style={styles.watchImage} />
                         ) : (
-                          <Text style={styles.watchImagePlaceholder}>⌚</Text>
+                          <LogoIcon size={sp(48)} color="rgba(33, 33, 33, 0.15)" />
                         )}
                       </LinearGradient>
                     </View>

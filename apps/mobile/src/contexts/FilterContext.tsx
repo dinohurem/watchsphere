@@ -50,7 +50,18 @@ export interface FilterState {
   claspType: string[];
 }
 
+// Order book specific filters (for Market Details page)
+export interface OrderBookFilterState {
+  priceMin: number | null;
+  priceMax: number | null;
+  locations: string[];
+  condition: string[];
+  hasBox: boolean | null;
+  hasPapers: boolean | null;
+}
+
 interface FilterContextType {
+  // Market filters
   filters: FilterState;
   setFilter: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
   toggleFilterItem: (key: keyof FilterState, item: string) => void;
@@ -59,6 +70,14 @@ interface FilterContextType {
   getFilterCount: (key: keyof FilterState) => number;
   getTotalFilterCount: () => number;
   hasActiveFilters: () => boolean;
+
+  // Order book filters (separate from market filters)
+  orderBookFilters: OrderBookFilterState;
+  setOrderBookFilter: <K extends keyof OrderBookFilterState>(key: K, value: OrderBookFilterState[K]) => void;
+  toggleOrderBookFilterItem: (key: 'locations' | 'condition', item: string) => void;
+  resetOrderBookFilters: () => void;
+  getOrderBookFilterCount: () => number;
+  hasActiveOrderBookFilters: () => boolean;
 }
 
 const initialFilterState: FilterState = {
@@ -93,11 +112,22 @@ const initialFilterState: FilterState = {
   claspType: [],
 };
 
+const initialOrderBookFilterState: OrderBookFilterState = {
+  priceMin: null,
+  priceMax: null,
+  locations: [],
+  condition: [],
+  hasBox: null,
+  hasPapers: null,
+};
+
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
 
 export function FilterProvider({ children }: { children: ReactNode }) {
   const [filters, setFilters] = useState<FilterState>(initialFilterState);
+  const [orderBookFilters, setOrderBookFilters] = useState<OrderBookFilterState>(initialOrderBookFilterState);
 
+  // Market filter functions
   const setFilter = useCallback(<K extends keyof FilterState>(key: K, value: FilterState[K]) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   }, []);
@@ -153,9 +183,48 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     return getTotalFilterCount() > 0;
   }, [getTotalFilterCount]);
 
+  // Order book filter functions
+  const setOrderBookFilter = useCallback(<K extends keyof OrderBookFilterState>(key: K, value: OrderBookFilterState[K]) => {
+    setOrderBookFilters(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  const toggleOrderBookFilterItem = useCallback((key: 'locations' | 'condition', item: string) => {
+    setOrderBookFilters(prev => {
+      const currentValue = prev[key];
+      const newValue = currentValue.includes(item)
+        ? currentValue.filter(i => i !== item)
+        : [...currentValue, item];
+      return { ...prev, [key]: newValue };
+    });
+  }, []);
+
+  const resetOrderBookFilters = useCallback(() => {
+    setOrderBookFilters(initialOrderBookFilterState);
+  }, []);
+
+  const getOrderBookFilterCount = useCallback((): number => {
+    let count = 0;
+    // Count array filters
+    count += orderBookFilters.locations.length;
+    count += orderBookFilters.condition.length;
+    // Add 1 for price range if either is set
+    if (orderBookFilters.priceMin !== null || orderBookFilters.priceMax !== null) {
+      count += 1;
+    }
+    // Add 1 for each boolean filter that is set
+    if (orderBookFilters.hasBox !== null) count += 1;
+    if (orderBookFilters.hasPapers !== null) count += 1;
+    return count;
+  }, [orderBookFilters]);
+
+  const hasActiveOrderBookFilters = useCallback((): boolean => {
+    return getOrderBookFilterCount() > 0;
+  }, [getOrderBookFilterCount]);
+
   return (
     <FilterContext.Provider
       value={{
+        // Market filters
         filters,
         setFilter,
         toggleFilterItem,
@@ -164,6 +233,13 @@ export function FilterProvider({ children }: { children: ReactNode }) {
         getFilterCount,
         getTotalFilterCount,
         hasActiveFilters,
+        // Order book filters
+        orderBookFilters,
+        setOrderBookFilter,
+        toggleOrderBookFilterItem,
+        resetOrderBookFilters,
+        getOrderBookFilterCount,
+        hasActiveOrderBookFilters,
       }}
     >
       {children}

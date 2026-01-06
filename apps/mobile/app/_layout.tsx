@@ -145,7 +145,14 @@ function RootLayoutNav() {
         }}
       >
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+        <Stack.Screen
+          name="search"
+          options={{
+            animation: 'fade',
+            animationDuration: 150,
+          }}
+        />
       </Stack>
     </>
   );

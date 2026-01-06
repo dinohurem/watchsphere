@@ -64,6 +64,16 @@ class NotificationPreferencesRequest(BaseModel):
     notify_messages: Optional[bool] = None
 
 
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 @router.get("/me")
 async def get_profile(
     current_user: User = Depends(get_current_active_user),
@@ -73,6 +83,7 @@ async def get_profile(
         "id": str(current_user.id),
         "email": current_user.email,
         "name": current_user.name,
+        "phone": current_user.phone,
         "role": current_user.role,
         "is_active": current_user.is_active,
         "verified": current_user.verified,
@@ -84,6 +95,53 @@ async def get_profile(
         "notify_messages": current_user.notify_messages,
         "created_at": current_user.created_at,
     }
+
+
+@router.patch("/me")
+async def update_profile(
+    data: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Update current user's profile"""
+    update_data = data.model_dump(exclude_unset=True)
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        await current_user.set(update_data)
+
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "name": current_user.name,
+        "phone": current_user.phone,
+        "role": current_user.role,
+        "is_active": current_user.is_active,
+        "verified": current_user.verified,
+        "profile_image_url": current_user.profile_image_url,
+        "profile_image_thumbnail_url": current_user.profile_image_thumbnail_url,
+    }
+
+
+@router.post("/change-password")
+async def change_password(
+    data: PasswordChangeRequest,
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Change user's password"""
+    from app.core.security import verify_password, get_password_hash
+
+    # Verify current password
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+
+    # Update password
+    current_user.hashed_password = get_password_hash(data.new_password)
+    current_user.updated_at = datetime.utcnow()
+    await current_user.save()
+
+    return {"message": "Password changed successfully"}
 
 
 @router.post("/fcm-token")

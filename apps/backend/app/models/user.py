@@ -15,6 +15,7 @@ class User(Document):
     email: EmailStr = Field(..., unique=True)
     hashed_password: str
     name: str
+    phone: Optional[str] = None
     role: UserRole = UserRole.COLLECTOR
     verified: bool = False
     approved: bool = False  # Admin must approve before user can login
