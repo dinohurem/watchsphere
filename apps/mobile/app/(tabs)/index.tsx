@@ -850,8 +850,7 @@ export default function HomeScreen() {
                     } else if (item.title === 'My Orders') {
                       router.push({ pathname: '/settings/orders', params: { type: 'buy' } } as any);
                     } else if (item.title === 'Social search') {
-                      // TODO: Navigate to social search when implemented
-                      console.log('Social search coming soon');
+                      router.push('/social-search');
                     }
                   }}
                   activeOpacity={0.7}
