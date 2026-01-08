@@ -2,9 +2,13 @@ from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+import secrets
+import string
 
 from app.core.deps import get_current_admin_user
+from app.core.security import get_password_hash
 from app.models.user import User, UserRole
+from app.services.email import email_service
 
 router = APIRouter()
 
@@ -241,7 +245,11 @@ async def approve_user(
     user.updated_at = datetime.utcnow()
     await user.save()
 
-    # TODO: Send approval email via SendGrid
+    # Send account confirmation email
+    await email_service.send_account_confirmation_email(
+        to_email=user.email,
+        user_name=user.name
+    )
 
     return {
         "message": "User approved successfully",
@@ -276,8 +284,6 @@ async def reject_user(
     user.updated_at = datetime.utcnow()
     await user.save()
 
-    # TODO: Send rejection email via SendGrid
-
     return {
         "message": "User rejected successfully",
         "user": {
@@ -286,5 +292,114 @@ async def reject_user(
             "name": user.name,
             "approved": user.approved,
             "is_active": user.is_active,
+        }
+    }
+
+
+class AdminInviteRequest(BaseModel):
+    email: EmailStr
+    name: str
+
+
+def generate_temp_password(length: int = 12) -> str:
+    """Generate a secure temporary password"""
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+@router.post("/invite-admin")
+async def invite_admin(
+    request: AdminInviteRequest,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Invite a new admin user (Admin only)"""
+
+    # Check if user already exists
+    existing_user = await User.find_one(User.email == request.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email already exists"
+        )
+
+    # Generate temporary password
+    temp_password = generate_temp_password()
+
+    # Create admin user
+    user = User(
+        email=request.email,
+        hashed_password=get_password_hash(temp_password),
+        name=request.name,
+        role=UserRole.ADMIN,
+        verified=True,  # Auto-verify admin invites
+        approved=True,  # Auto-approve admin invites
+        is_active=True,
+    )
+    await user.insert()
+
+    # Send admin invite email
+    await email_service.send_admin_invite_email(
+        to_email=request.email,
+        inviter_name=current_admin.name,
+        temp_password=temp_password
+    )
+
+    return {
+        "message": "Admin invitation sent successfully",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role.value,
+        }
+    }
+
+
+class AdminReinviteRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/reinvite-admin")
+async def reinvite_admin(
+    request: AdminReinviteRequest,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Re-invite an existing admin user with a new password (Admin only)"""
+
+    # Find the admin user
+    user = await User.find_one(User.email == request.email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not an admin"
+        )
+
+    # Generate new temporary password
+    temp_password = generate_temp_password()
+
+    # Update user password
+    user.hashed_password = get_password_hash(temp_password)
+    user.updated_at = datetime.utcnow()
+    await user.save()
+
+    # Send admin invite email with new credentials
+    await email_service.send_admin_invite_email(
+        to_email=user.email,
+        inviter_name=current_admin.name,
+        temp_password=temp_password
+    )
+
+    return {
+        "message": "Re-invitation sent successfully",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
         }
     }

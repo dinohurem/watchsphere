@@ -80,7 +80,7 @@ export default function MarketScreen() {
   // Apply filters and search to watches whenever they change
   useEffect(() => {
     if (allWatches.length > 0) {
-      let filtered = applyFiltersToWatches(allWatches, filters);
+      let filtered = applyFiltersToWatches(allWatches);
       // Apply search filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
@@ -96,33 +96,43 @@ export default function MarketScreen() {
   }, [filters, allWatches, searchQuery]);
 
   // Filter function to apply active filters to watch list
-  const applyFiltersToWatches = (watchList: WatchMarketData[], activeFilters: typeof filters) => {
+  const applyFiltersToWatches = (watchList: WatchMarketData[]) => {
     if (!hasActiveFilters()) return watchList;
 
     return watchList.filter(watch => {
       // Filter by brand
-      if (activeFilters.brands.length > 0 && !activeFilters.brands.includes(watch.brand)) {
-        return false;
+      if (filters.brands.length > 0) {
+        const watchBrand = watch.brand?.toLowerCase();
+        const filterBrands = filters.brands.map(b => b.toLowerCase());
+        if (!filterBrands.some(b => watchBrand?.includes(b))) {
+          return false;
+        }
       }
 
       // Filter by model
-      if (activeFilters.models.length > 0 && !activeFilters.models.includes(watch.model)) {
-        return false;
+      if (filters.models.length > 0) {
+        const watchModel = watch.model?.toLowerCase();
+        const filterModels = filters.models.map(m => m.toLowerCase());
+        if (!filterModels.some(m => watchModel?.includes(m))) {
+          return false;
+        }
       }
 
       // Filter by price range
-      if (activeFilters.priceMin !== null && watch.price < activeFilters.priceMin) {
+      if (filters.priceMin !== null && watch.price < filters.priceMin) {
         return false;
       }
-      if (activeFilters.priceMax !== null && watch.price > activeFilters.priceMax) {
+      if (filters.priceMax !== null && watch.price > filters.priceMax) {
         return false;
       }
 
       // Filter by reference
-      if (activeFilters.references.length > 0 && !activeFilters.references.some(ref =>
-        watch.reference.toLowerCase().includes(ref.toLowerCase())
-      )) {
-        return false;
+      if (filters.references.length > 0) {
+        const watchRef = watch.reference?.toLowerCase();
+        const filterRefs = filters.references.map(r => r.toLowerCase());
+        if (!filterRefs.some(r => watchRef?.includes(r))) {
+          return false;
+        }
       }
 
       return true;
@@ -174,7 +184,7 @@ export default function MarketScreen() {
         }));
 
         setAllWatches(watchData);
-        setWatches(applyFiltersToWatches(watchData, filters));
+        setWatches(applyFiltersToWatches(watchData));
 
         // Get trending watches
         const trending = watchData.filter((w: WatchMarketData) => w.trending).slice(0, 5);
@@ -209,7 +219,7 @@ export default function MarketScreen() {
           }));
 
           setAllWatches(watchData);
-          setWatches(applyFiltersToWatches(watchData, filters));
+          setWatches(applyFiltersToWatches(watchData));
 
           const trending = watchData.filter((w: WatchMarketData) => w.trending).slice(0, 5);
           setTrendingWatches(trending);

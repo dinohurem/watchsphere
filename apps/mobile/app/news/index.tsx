@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft, Newspaper } from '@/components/icons';
+import { BackArrow, Newspaper } from '@/components/icons';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
@@ -184,7 +184,7 @@ export default function NewsListScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft size={24} color="#212121" />
+            <BackArrow size={24} color="#212121" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>News</Text>
         </View>
@@ -199,7 +199,7 @@ export default function NewsListScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#212121" />
+          <BackArrow size={24} color="#212121" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>News</Text>
       </View>

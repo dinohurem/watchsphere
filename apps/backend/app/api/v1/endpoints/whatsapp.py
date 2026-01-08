@@ -7,10 +7,10 @@ import re
 import zipfile
 import io
 
-from app.core.deps import get_current_admin_user
+from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
 from app.models.whatsapp_import import (
-    WhatsAppImport, WhatsAppMessage, ExtractedWatchListing, ImportStatus
+    WhatsAppImport, WhatsAppMessage, ExtractedWatchListing, ImportStatus, OfferType
 )
 
 router = APIRouter()
@@ -69,6 +69,30 @@ PRICE_PATTERNS = [
 
 # Condition patterns
 CONDITIONS = ["new", "used", "unworn", "nos", "mint", "excellent", "good", "brand new"]
+
+# Offer type patterns
+WTS_PATTERNS = ["wts", "want to sell", "for sale", "selling", "fs", "sale"]
+WTB_PATTERNS = ["wtb", "want to buy", "looking for", "buying", "wanted", "lf"]
+
+# Country patterns (common country codes and names)
+COUNTRY_PATTERNS = {
+    "US": ["usa", "united states", "america", "us"],
+    "UK": ["uk", "united kingdom", "england", "britain"],
+    "DE": ["germany", "deutschland", "de"],
+    "IT": ["italy", "italia", "it"],
+    "FR": ["france", "fr"],
+    "CH": ["switzerland", "swiss", "ch"],
+    "AE": ["uae", "dubai", "emirates", "abu dhabi"],
+    "HK": ["hong kong", "hk"],
+    "SG": ["singapore", "sg"],
+    "JP": ["japan", "jp"],
+    "AU": ["australia", "au"],
+    "CA": ["canada", "ca"],
+    "NL": ["netherlands", "holland", "nl"],
+    "ES": ["spain", "espana", "es"],
+    "AT": ["austria", "at"],
+    "BE": ["belgium", "be"],
+}
 
 
 def parse_whatsapp_message(line: str) -> Optional[dict]:
@@ -142,12 +166,39 @@ def extract_watch_data(content: str) -> Optional[dict]:
             condition = cond
             break
 
+    # Find offer type (WTS/WTB)
+    offer_type = OfferType.UNKNOWN
+    for pattern in WTS_PATTERNS:
+        if pattern in content_lower:
+            offer_type = OfferType.WTS
+            break
+    if offer_type == OfferType.UNKNOWN:
+        for pattern in WTB_PATTERNS:
+            if pattern in content_lower:
+                offer_type = OfferType.WTB
+                break
+
+    # Find country
+    country_code = None
+    country_name = None
+    for code, patterns in COUNTRY_PATTERNS.items():
+        for pattern in patterns:
+            if pattern in content_lower:
+                country_code = code
+                country_name = patterns[0].title() if patterns else code
+                break
+        if country_code:
+            break
+
     return {
         "brand": brand,
         "reference": reference,
         "price": price,
         "currency": currency,
         "condition": condition,
+        "offer_type": offer_type,
+        "country_code": country_code,
+        "country_name": country_name,
         "raw_text": content,
     }
 
@@ -239,6 +290,9 @@ async def admin_import_whatsapp(
                 condition=watch.get("condition"),
                 seller_name=watch.get("seller_name"),
                 raw_text=watch["raw_text"],
+                offer_type=watch.get("offer_type", OfferType.UNKNOWN),
+                country_code=watch.get("country_code"),
+                country_name=watch.get("country_name"),
                 message_timestamp=watch.get("message_timestamp"),
             )
             await listing.insert()
@@ -408,3 +462,125 @@ async def admin_search_whatsapp(
             for lst in listings
         ]
     }
+
+
+# ============== USER-FACING SOCIAL SEARCH ENDPOINTS ==============
+
+class SocialSearchResponse(BaseModel):
+    id: str
+    brand: Optional[str] = None
+    reference: Optional[str] = None
+    price: Optional[float] = None
+    currency: str
+    condition: Optional[str] = None
+    seller_name: str
+    seller_phone: Optional[str] = None
+    raw_text: str
+    offer_type: str
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+    message_timestamp: Optional[datetime] = None
+
+
+class SocialSearchFilters(BaseModel):
+    offer_type: Optional[str] = None  # "wts", "wtb", or None for all
+    reference: Optional[str] = None
+    country_code: Optional[str] = None
+    brand: Optional[str] = None
+
+
+@router.get("/social/search", response_model=dict)
+async def social_search(
+    current_user: User = Depends(get_current_user),
+    offer_type: Optional[str] = None,
+    reference: Optional[str] = None,
+    country_code: Optional[str] = None,
+    brand: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+) -> Any:
+    """
+    Search social media (WhatsApp) imported messages.
+    Filter by offer type (WTS/WTB), reference number, and country.
+    """
+    query_conditions = []
+
+    # Filter by offer type
+    if offer_type:
+        if offer_type.lower() == "wts":
+            query_conditions.append(ExtractedWatchListing.offer_type == OfferType.WTS)
+        elif offer_type.lower() == "wtb":
+            query_conditions.append(ExtractedWatchListing.offer_type == OfferType.WTB)
+
+    # Filter by reference number (partial match)
+    if reference:
+        query_conditions.append({"reference": {"$regex": reference, "$options": "i"}})
+
+    # Filter by country
+    if country_code:
+        query_conditions.append(ExtractedWatchListing.country_code == country_code.upper())
+
+    # Filter by brand (partial match)
+    if brand:
+        query_conditions.append({"brand": {"$regex": brand, "$options": "i"}})
+
+    # Execute query
+    if query_conditions:
+        listings = await ExtractedWatchListing.find(
+            *query_conditions
+        ).sort([("message_timestamp", -1)]).skip(skip).limit(limit).to_list()
+
+        # Get total count
+        total = await ExtractedWatchListing.find(*query_conditions).count()
+    else:
+        listings = await ExtractedWatchListing.find_all().sort(
+            [("message_timestamp", -1)]
+        ).skip(skip).limit(limit).to_list()
+
+        total = await ExtractedWatchListing.find_all().count()
+
+    return {
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "results": [
+            {
+                "id": str(lst.id),
+                "brand": lst.brand,
+                "reference": lst.reference,
+                "price": lst.price,
+                "currency": lst.currency,
+                "condition": lst.condition,
+                "seller_name": lst.seller_name,
+                "seller_phone": lst.seller_phone,
+                "raw_text": lst.raw_text,
+                "offer_type": lst.offer_type.value if lst.offer_type else "unknown",
+                "country_code": lst.country_code,
+                "country_name": lst.country_name,
+                "message_timestamp": lst.message_timestamp,
+            }
+            for lst in listings
+        ]
+    }
+
+
+@router.get("/social/countries")
+async def get_available_countries(
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Get list of countries available in the social search data"""
+    # Get distinct country codes from the database
+    pipeline = [
+        {"$match": {"country_code": {"$ne": None}}},
+        {"$group": {"_id": {"code": "$country_code", "name": "$country_name"}}},
+        {"$sort": {"_id.name": 1}}
+    ]
+
+    results = await ExtractedWatchListing.aggregate(pipeline).to_list()
+
+    countries = [
+        {"code": r["_id"]["code"], "name": r["_id"]["name"]}
+        for r in results if r["_id"]["code"]
+    ]
+
+    return {"countries": countries}

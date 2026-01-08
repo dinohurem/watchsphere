@@ -3,7 +3,6 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
-  UserCheck,
   Watch,
   Newspaper,
   Heart,
@@ -41,8 +40,7 @@ const adminNavigation: NavSection[] = [
   {
     title: 'User Management',
     items: [
-      { name: 'All Users', to: '/admin/users', icon: Users },
-      { name: 'Pending Approval', to: '/admin/users/pending', icon: UserCheck },
+      { name: 'Users', to: '/admin/users', icon: Users },
     ]
   },
   {
