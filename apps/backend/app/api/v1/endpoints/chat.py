@@ -7,6 +7,7 @@ from beanie import PydanticObjectId
 from app.core.deps import get_current_active_user, get_current_user
 from app.models.user import User
 from app.models.chat import Conversation, Message, ConversationType, MessageType
+from app.models.chat_group import ConversationMember
 from app.services.ai_chat import generate_ai_response
 
 router = APIRouter()
@@ -368,3 +369,431 @@ async def delete_ai_conversation(
     await conversation.delete()
 
     return {"message": "Conversation deleted successfully"}
+
+
+# ============== DIRECT CONVERSATIONS ENDPOINTS ==============
+
+class DirectConversationResponse(BaseModel):
+    id: str
+    name: str
+    lastMessage: Optional[str] = None
+    timestamp: Optional[str] = None
+    unread: int = 0
+    avatar: Optional[str] = None
+
+
+@router.get("/conversations", response_model=List[DirectConversationResponse])
+async def list_conversations(
+    current_user: User = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 50,
+) -> Any:
+    """List user's direct message conversations"""
+
+    # Find all DIRECT conversations where user is a participant
+    conversations = await Conversation.find(
+        Conversation.type == ConversationType.DIRECT,
+        {"participant_ids": str(current_user.id)},
+        Conversation.is_active == True,
+    ).sort([("updated_at", -1)]).skip(skip).limit(limit).to_list()
+
+    result = []
+    for conv in conversations:
+        # Get last message
+        last_msg = await Message.find(
+            Message.conversation_id == str(conv.id)
+        ).sort([("created_at", -1)]).first_or_none()
+
+        # Get unread count
+        unread_count = await Message.find(
+            Message.conversation_id == str(conv.id),
+            Message.sender_id != str(current_user.id),
+            Message.read == False,
+        ).count()
+
+        # Get the other participant's name
+        other_participant_id = next(
+            (pid for pid in conv.participant_ids if pid != str(current_user.id)),
+            None
+        )
+        conversation_name = conv.name or "Unknown"
+        other_avatar = None
+        if other_participant_id:
+            other_user = await User.get(PydanticObjectId(other_participant_id))
+            if other_user:
+                conversation_name = other_user.name
+                other_avatar = other_user.avatar
+
+        result.append({
+            "id": str(conv.id),
+            "name": conversation_name,
+            "lastMessage": last_msg.content if last_msg else None,
+            "timestamp": last_msg.created_at.strftime("%H:%M") if last_msg else None,
+            "unread": unread_count,
+            "avatar": other_avatar,
+        })
+
+    return result
+
+
+@router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
+async def get_conversation_messages(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 50,
+) -> Any:
+    """Get messages from a direct conversation"""
+
+    conversation = await Conversation.get(PydanticObjectId(conversation_id))
+
+    if not conversation or conversation.type != ConversationType.DIRECT:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    if str(current_user.id) not in conversation.participant_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a participant in this conversation"
+        )
+
+    messages = await Message.find(
+        Message.conversation_id == conversation_id
+    ).sort([("created_at", 1)]).skip(skip).limit(limit).to_list()
+
+    # Mark messages as read
+    for msg in messages:
+        if msg.sender_id != str(current_user.id) and not msg.read:
+            msg.read = True
+            await msg.save()
+
+    # Get participant names
+    participant_names = {}
+    for pid in conversation.participant_ids:
+        if pid == str(current_user.id):
+            participant_names[pid] = current_user.name
+        else:
+            other_user = await User.get(PydanticObjectId(pid))
+            if other_user:
+                participant_names[pid] = other_user.name
+            else:
+                participant_names[pid] = "Unknown"
+
+    return [
+        {
+            "id": str(msg.id),
+            "conversation_id": conversation_id,
+            "sender_id": msg.sender_id,
+            "sender_name": participant_names.get(msg.sender_id, "Unknown"),
+            "content": msg.content,
+            "type": msg.type,
+            "is_ai": False,
+            "read": msg.read,
+            "created_at": msg.created_at,
+        }
+        for msg in messages
+    ]
+
+
+@router.post("/conversations/{conversation_id}/messages", response_model=MessageResponse)
+async def send_conversation_message(
+    conversation_id: str,
+    data: MessageCreate,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Send a message to a direct conversation"""
+
+    conversation = await Conversation.get(PydanticObjectId(conversation_id))
+
+    if not conversation or conversation.type != ConversationType.DIRECT:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    if str(current_user.id) not in conversation.participant_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a participant in this conversation"
+        )
+
+    # Save message
+    message = Message(
+        conversation_id=conversation_id,
+        sender_id=str(current_user.id),
+        content=data.content,
+        type=MessageType.TEXT,
+        read=False,
+        created_at=datetime.utcnow(),
+    )
+    await message.insert()
+
+    # Update conversation
+    conversation.updated_at = datetime.utcnow()
+    await conversation.save()
+
+    return {
+        "id": str(message.id),
+        "conversation_id": conversation_id,
+        "sender_id": str(current_user.id),
+        "sender_name": current_user.name,
+        "content": data.content,
+        "type": MessageType.TEXT,
+        "is_ai": False,
+        "read": False,
+        "created_at": message.created_at,
+    }
+
+
+# ============== GROUP CHAT ENDPOINTS ==============
+
+class GroupResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    avatar: Optional[str] = None
+    lastMessage: Optional[str] = None
+    timestamp: Optional[str] = None
+    unread: int = 0
+    memberCount: int = 0
+
+
+@router.get("/groups", response_model=List[GroupResponse])
+async def list_user_groups(
+    current_user: User = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 50,
+) -> Any:
+    """List groups the current user is a member of"""
+
+    # Find all groups where user is an active member
+    memberships = await ConversationMember.find(
+        ConversationMember.user_id == str(current_user.id),
+        ConversationMember.is_active == True,
+    ).to_list()
+
+    group_ids = [m.conversation_id for m in memberships]
+
+    if not group_ids:
+        return []
+
+    # Get the group conversations
+    groups = await Conversation.find(
+        {"_id": {"$in": [PydanticObjectId(gid) for gid in group_ids]}},
+        Conversation.type == ConversationType.GROUP,
+        Conversation.is_active == True,
+    ).sort([("updated_at", -1)]).skip(skip).limit(limit).to_list()
+
+    result = []
+    for group in groups:
+        # Get last message
+        last_msg = await Message.find(
+            Message.conversation_id == str(group.id)
+        ).sort([("created_at", -1)]).first_or_none()
+
+        # Get unread count
+        unread_count = await Message.find(
+            Message.conversation_id == str(group.id),
+            Message.sender_id != str(current_user.id),
+            Message.read == False,
+        ).count()
+
+        # Get member count
+        member_count = await ConversationMember.find(
+            ConversationMember.conversation_id == str(group.id),
+            ConversationMember.is_active == True,
+        ).count()
+
+        result.append({
+            "id": str(group.id),
+            "name": group.name or "Unnamed Group",
+            "description": group.description,
+            "avatar": group.avatar,
+            "lastMessage": last_msg.content if last_msg else None,
+            "timestamp": last_msg.created_at.strftime("%H:%M") if last_msg else None,
+            "unread": unread_count,
+            "memberCount": member_count,
+        })
+
+    return result
+
+
+class GroupDetailResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    avatar: Optional[str] = None
+    memberCount: int = 0
+    members: List[dict] = []
+
+
+@router.get("/groups/{group_id}", response_model=GroupDetailResponse)
+async def get_group_details(
+    group_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Get group details"""
+
+    group = await Conversation.get(PydanticObjectId(group_id))
+
+    if not group or group.type != ConversationType.GROUP:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found"
+        )
+
+    # Check if user is a member
+    membership = await ConversationMember.find_one(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.user_id == str(current_user.id),
+        ConversationMember.is_active == True,
+    )
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group"
+        )
+
+    # Get members
+    members = await ConversationMember.find(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.is_active == True,
+    ).to_list()
+
+    return {
+        "id": str(group.id),
+        "name": group.name or "Unnamed Group",
+        "description": group.description,
+        "avatar": group.avatar,
+        "memberCount": len(members),
+        "members": [
+            {
+                "id": m.user_id,
+                "name": m.user_name,
+                "role": m.role.value if m.role else "member",
+            }
+            for m in members
+        ],
+    }
+
+
+@router.get("/groups/{group_id}/messages", response_model=List[MessageResponse])
+async def get_group_messages(
+    group_id: str,
+    current_user: User = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 50,
+) -> Any:
+    """Get messages from a group conversation"""
+
+    group = await Conversation.get(PydanticObjectId(group_id))
+
+    if not group or group.type != ConversationType.GROUP:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found"
+        )
+
+    # Check if user is a member
+    membership = await ConversationMember.find_one(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.user_id == str(current_user.id),
+        ConversationMember.is_active == True,
+    )
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group"
+        )
+
+    messages = await Message.find(
+        Message.conversation_id == group_id
+    ).sort([("created_at", 1)]).skip(skip).limit(limit).to_list()
+
+    # Mark messages as read
+    for msg in messages:
+        if msg.sender_id != str(current_user.id) and not msg.read:
+            msg.read = True
+            await msg.save()
+
+    # Get member names for sender lookup
+    members = await ConversationMember.find(
+        ConversationMember.conversation_id == group_id,
+    ).to_list()
+    member_names = {m.user_id: m.user_name for m in members}
+
+    return [
+        {
+            "id": str(msg.id),
+            "conversation_id": group_id,
+            "sender_id": msg.sender_id,
+            "sender_name": member_names.get(msg.sender_id, "Unknown"),
+            "content": msg.content,
+            "type": msg.type,
+            "is_ai": False,
+            "read": msg.read,
+            "created_at": msg.created_at,
+        }
+        for msg in messages
+    ]
+
+
+@router.post("/groups/{group_id}/messages", response_model=MessageResponse)
+async def send_group_message(
+    group_id: str,
+    data: MessageCreate,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Send a message to a group conversation"""
+
+    group = await Conversation.get(PydanticObjectId(group_id))
+
+    if not group or group.type != ConversationType.GROUP:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found"
+        )
+
+    # Check if user is a member
+    membership = await ConversationMember.find_one(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.user_id == str(current_user.id),
+        ConversationMember.is_active == True,
+    )
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group"
+        )
+
+    # Save message
+    message = Message(
+        conversation_id=group_id,
+        sender_id=str(current_user.id),
+        content=data.content,
+        type=MessageType.TEXT,
+        read=False,
+        created_at=datetime.utcnow(),
+    )
+    await message.insert()
+
+    # Update conversation
+    group.updated_at = datetime.utcnow()
+    await group.save()
+
+    return {
+        "id": str(message.id),
+        "conversation_id": group_id,
+        "sender_id": str(current_user.id),
+        "sender_name": current_user.name,
+        "content": data.content,
+        "type": MessageType.TEXT,
+        "is_ai": False,
+        "read": False,
+        "created_at": message.created_at,
+    }

@@ -1,13 +1,13 @@
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { FlashList } from '@shopify/flash-list';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ChatBubble } from '@/components/ChatBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
-import { BackArrow, ChevronRight } from '@/components/icons';
+import { BackArrow, Users } from '@/components/icons';
 import { api } from '@/services/api';
 
 interface Message {
@@ -22,18 +22,25 @@ interface Message {
   created_at: string;
 }
 
-interface ConversationDetails {
+interface GroupDetails {
   id: string;
   name: string;
+  description?: string;
   avatar?: string;
+  memberCount: number;
+  members: Array<{
+    id: string;
+    name: string;
+    role: string;
+  }>;
 }
 
-export default function ChatDetailScreen() {
-  const { id, name, avatar } = useLocalSearchParams<{ id: string; name?: string; avatar?: string }>();
+export default function GroupChatScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { colors, fonts } = useTheme();
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversation, setConversation] = useState<ConversationDetails | null>(null);
+  const [group, setGroup] = useState<GroupDetails | null>(null);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -42,10 +49,7 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     if (id) {
-      // Set conversation from params if available
-      if (name) {
-        setConversation({ id, name, avatar: avatar || undefined });
-      }
+      loadGroupDetails();
       loadMessages();
       loadCurrentUser();
     }
@@ -62,10 +66,21 @@ export default function ChatDetailScreen() {
     }
   };
 
+  const loadGroupDetails = async () => {
+    try {
+      const response = await api.get(`/chat/groups/${id}`);
+      if (response.data) {
+        setGroup(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading group details:', error);
+    }
+  };
+
   const loadMessages = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get(`/chat/conversations/${id}/messages`);
+      const response = await api.get(`/chat/groups/${id}/messages`);
       if (response.data) {
         setMessages(response.data);
       }
@@ -98,7 +113,7 @@ export default function ChatDetailScreen() {
     setMessages(prev => [...prev, tempMessage]);
 
     try {
-      const response = await api.post(`/chat/conversations/${id}/messages`, {
+      const response = await api.post(`/chat/groups/${id}/messages`, {
         content: messageContent,
       });
 
@@ -124,11 +139,6 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const handleImageSelect = async (uri: string) => {
-    // TODO: Implement image upload and send
-    console.log('Image selected:', uri);
-  };
-
   const formatTime = (dateStr: string) => {
     const now = new Date();
     const messageDate = new Date(dateStr);
@@ -151,7 +161,16 @@ export default function ChatDetailScreen() {
     });
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  // Group consecutive messages from same sender
+  const groupedMessages = messages.map((msg, index) => {
+    const prevMsg = messages[index - 1];
+    const showSender = msg.sender_id !== currentUserId.current &&
+      (!prevMsg || prevMsg.sender_id !== msg.sender_id);
+
+    return { ...msg, showSender };
+  });
+
+  const renderMessage = ({ item }: { item: Message & { showSender: boolean } }) => {
     const isUser = item.sender_id === currentUserId.current;
 
     return (
@@ -161,7 +180,7 @@ export default function ChatDetailScreen() {
         timestamp={formatTime(item.created_at)}
         status={item.read ? 'read' : 'sent'}
         senderName={item.sender_name}
-        showSender={false}
+        showSender={item.showSender}
         isAI={false}
       />
     );
@@ -196,28 +215,24 @@ export default function ChatDetailScreen() {
     headerAvatar: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: 8,
     },
-    avatar: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: colors.primary,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    avatarText: {
-      fontSize: 16,
-      fontFamily: fonts.semiBold,
-      color: '#FFFFFF',
+    headerInfo: {
+      alignItems: 'flex-start',
     },
     headerName: {
       fontSize: 16,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
+    headerSubtitle: {
+      fontSize: 12,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+    },
     headerRight: {
       width: 40,
+      alignItems: 'center',
     },
     messagesContainer: {
       flex: 1,
@@ -253,38 +268,6 @@ export default function ChatDetailScreen() {
       color: colors.textSecondary,
       textAlign: 'center',
     },
-    watchCard: {
-      flexDirection: 'row',
-      backgroundColor: colors.backgroundSecondary,
-      marginHorizontal: 16,
-      marginTop: 8,
-      padding: 12,
-      borderRadius: 12,
-      gap: 12,
-    },
-    watchImage: {
-      width: 60,
-      height: 60,
-      borderRadius: 8,
-    },
-    watchInfo: {
-      flex: 1,
-      justifyContent: 'center',
-      gap: 4,
-    },
-    watchTitle: {
-      fontSize: 15,
-      fontFamily: fonts.semiBold,
-      color: colors.text,
-    },
-    watchPrice: {
-      fontSize: 14,
-      fontFamily: fonts.regular,
-      color: colors.textSecondary,
-    },
-    watchChevron: {
-      justifyContent: 'center',
-    },
   });
 
   return (
@@ -301,32 +284,23 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerCenter}>
-            {conversation?.avatar ? (
-              <Image source={{ uri: conversation.avatar }} style={styles.headerAvatar} />
+            {group?.avatar ? (
+              <Image source={{ uri: group.avatar }} style={styles.headerAvatar} />
             ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {conversation?.name?.charAt(0).toUpperCase() || 'C'}
-                </Text>
-              </View>
+              <ImagePlaceholder size={36} borderRadius={8} />
             )}
-            <Text style={styles.headerName}>{conversation?.name || name || 'Chat'}</Text>
+            <View style={styles.headerInfo}>
+              <Text style={styles.headerName}>{group?.name || 'Group Chat'}</Text>
+              <Text style={styles.headerSubtitle}>
+                {group?.memberCount || 0} members
+              </Text>
+            </View>
           </View>
 
-          <View style={styles.headerRight} />
+          <View style={styles.headerRight}>
+            <Users size={20} color={colors.textSecondary} />
+          </View>
         </View>
-
-        {/* Watch Card - Only shown for direct chats about watches */}
-        <TouchableOpacity style={styles.watchCard} onPress={() => router.push('/watch/1' as any)}>
-          <ImagePlaceholder size={60} borderRadius={8} />
-          <View style={styles.watchInfo}>
-            <Text style={styles.watchTitle}>Audemars Piguet Royal Oak</Text>
-            <Text style={styles.watchPrice}>€132,352</Text>
-          </View>
-          <View style={styles.watchChevron}>
-            <ChevronRight size={20} color={colors.textSecondary} />
-          </View>
-        </TouchableOpacity>
 
         {/* Messages List */}
         <KeyboardAvoidingView
@@ -338,19 +312,19 @@ export default function ChatDetailScreen() {
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
-          ) : messages.length === 0 ? (
+          ) : groupedMessages.length === 0 ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>Start the conversation</Text>
                 <Text style={styles.emptySubtitle}>
-                  Ask about pricing, availability, or condition.
+                  Be the first to send a message in this group.
                 </Text>
               </View>
             </View>
           ) : (
             <FlashList
               ref={flashListRef}
-              data={messages}
+              data={groupedMessages}
               renderItem={renderMessage}
               keyExtractor={(item) => item.id}
               estimatedItemSize={80}
@@ -365,7 +339,7 @@ export default function ChatDetailScreen() {
             value={inputText}
             onChangeText={setInputText}
             onSend={handleSend}
-            onImageSelect={handleImageSelect}
+            onImageSelect={(uri) => console.log('Image selected:', uri)}
           />
         </KeyboardAvoidingView>
       </SafeAreaView>

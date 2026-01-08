@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessageSquare, Users, AISparkle, Plus } from '@/components/icons';
 import { SwipeableChatItem } from '@/components/SwipeableChatItem';
+import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import { router } from 'expo-router';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,6 +54,7 @@ interface Group {
   id: string;
   name: string;
   description?: string;
+  avatar?: string;
   lastMessage?: string;
   timestamp?: string;
   unread?: number;
@@ -185,10 +187,12 @@ export default function ChatScreen() {
       onDelete={() => console.log('Delete:', item.id)}
       isGroup={true}
     >
-      <TouchableOpacity style={styles.conversationItem} onPress={() => router.push(`/chat/group/${item.id}` as any)}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
-        </View>
+      <TouchableOpacity style={styles.conversationItem} onPress={() => router.push({ pathname: '/chat/group/[id]', params: { id: item.id } } as any)}>
+        {item.avatar ? (
+          <Image source={{ uri: item.avatar }} style={styles.groupAvatar} />
+        ) : (
+          <ImagePlaceholder size={sp(44)} borderRadius={sp(8)} />
+        )}
         <View style={styles.conversationContent}>
           <Text style={styles.conversationName}>{item.name}</Text>
           <Text style={styles.lastMessage} numberOfLines={1}>
@@ -367,6 +371,11 @@ export default function ChatScreen() {
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: wp(10),
+    },
+    groupAvatar: {
+      width: sp(44),
+      height: sp(44),
+      borderRadius: sp(8),
     },
     aiAvatar: {
       backgroundColor: colors.primaryLight,

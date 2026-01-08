@@ -61,6 +61,16 @@ class ResendCodeRequest(BaseModel):
     email: EmailStr
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+
 class CompleteOnboardingRequest(BaseModel):
     first_name: str
     last_name: str
@@ -361,3 +371,74 @@ async def get_current_user_info(
 def logout() -> Any:
     """Logout (client should remove token)"""
     return {"message": "Successfully logged out"}
+
+
+@router.post("/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest) -> Any:
+    """Request password reset code"""
+    user = await User.find_one(User.email == request.email)
+
+    # Always return success to prevent email enumeration
+    if not user:
+        return {"message": "If an account exists with this email, a reset code has been sent."}
+
+    # Generate reset code
+    if settings.ENVIRONMENT == "development":
+        code = settings.TEST_VERIFICATION_CODE
+    else:
+        code = VerificationCode.generate_code()
+
+    await VerificationCode.create_for_email(
+        email=request.email,
+        code=code,
+        expires_minutes=15
+    )
+
+    # Send password reset email
+    await email_service.send_password_reset_email(
+        to_email=request.email,
+        reset_code=code,
+        user_name=user.name
+    )
+
+    return {"message": "If an account exists with this email, a reset code has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(request: ResetPasswordRequest) -> Any:
+    """Reset password using verification code"""
+    # Find the user
+    user = await User.find_one(User.email == request.email)
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid email or code",
+        )
+
+    # Find the verification code
+    verification = await VerificationCode.find_one(
+        VerificationCode.email == request.email,
+        VerificationCode.code == request.code,
+        VerificationCode.used == False,
+    )
+
+    if not verification:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset code",
+        )
+
+    if not verification.is_valid():
+        raise HTTPException(
+            status_code=400,
+            detail="Reset code has expired. Please request a new one.",
+        )
+
+    # Mark the code as used
+    await verification.mark_used()
+
+    # Update user password
+    user.hashed_password = get_password_hash(request.new_password)
+    await user.save()
+
+    return {"message": "Password reset successfully. You can now log in with your new password."}

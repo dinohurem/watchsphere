@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft, FileCheckIcon, ClipboardList } from '@/components/icons';
+import { BackArrow, FileCheckIcon, ClipboardList } from '@/components/icons';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path } from 'react-native-svg';
@@ -301,7 +301,7 @@ export default function OrdersScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#212121" />
+          <BackArrow size={24} color="#212121" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{pageTitle}</Text>
       </View>

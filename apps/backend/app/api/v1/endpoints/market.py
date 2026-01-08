@@ -464,9 +464,20 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
 
 @router.get("/{watch_id}", response_model=WatchResponse)
 async def get_watch(watch_id: str) -> Any:
-    """Get watch by ID (public - only active watches)"""
+    """Get watch by ID or reference (public - only active watches)"""
 
-    watch = await Watch.get(PydanticObjectId(watch_id))
+    watch = None
+
+    # First try to find by reference (e.g., "5167R-001")
+    watch = await Watch.find_one(Watch.reference == watch_id, Watch.status == WatchStatus.ACTIVE)
+
+    # If not found by reference, try by MongoDB ID
+    if not watch:
+        try:
+            watch = await Watch.get(PydanticObjectId(watch_id))
+        except Exception:
+            # Invalid ObjectId format, that's fine
+            pass
 
     if not watch:
         raise HTTPException(

@@ -591,6 +591,97 @@ async def admin_get_orders_by_reference(
     ]
 
 
+class AdminOrderCreate(BaseModel):
+    order_type: OrderType
+    brand: str
+    model: str
+    reference: str
+    watch_id: Optional[str] = None
+    price: float
+    currency: str = "EUR"
+    condition: OrderCondition = OrderCondition.UNWORN
+    country_code: str
+    country_name: Optional[str] = None
+    has_box: bool = False
+    has_papers: bool = False
+    notes: Optional[str] = None
+    user_id: Optional[str] = None
+    user_name: Optional[str] = None
+
+
+@router.post("/admin/create", response_model=OrderResponse)
+async def admin_create_order(
+    order_data: AdminOrderCreate,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Create an order as admin (Admin only)"""
+
+    # If no user specified, use admin as the user
+    user_id = order_data.user_id or str(current_admin.id)
+    user_name = order_data.user_name or current_admin.name
+    user_email = current_admin.email if not order_data.user_id else None
+
+    # If user_id provided, try to get user's email
+    if order_data.user_id:
+        try:
+            user = await User.get(PydanticObjectId(order_data.user_id))
+            if user:
+                user_email = user.email
+                if not order_data.user_name:
+                    user_name = user.name
+        except Exception:
+            pass
+
+    order = Order(
+        order_type=order_data.order_type,
+        brand=order_data.brand,
+        model=order_data.model,
+        reference=order_data.reference,
+        watch_id=order_data.watch_id,
+        price=order_data.price,
+        currency=order_data.currency,
+        condition=order_data.condition,
+        country_code=order_data.country_code,
+        country_name=order_data.country_name,
+        user_id=user_id,
+        user_name=user_name,
+        user_email=user_email,
+        has_box=order_data.has_box,
+        has_papers=order_data.has_papers,
+        notes=order_data.notes,
+    )
+
+    await order.insert()
+
+    # Update order count on related watch models
+    watches = await Watch.find(Watch.reference == order_data.reference).to_list()
+    for watch in watches:
+        watch.order_count += 1
+        await watch.save()
+
+    return OrderResponse(
+        id=str(order.id),
+        order_type=order.order_type,
+        brand=order.brand,
+        model=order.model,
+        reference=order.reference,
+        watch_id=order.watch_id,
+        price=order.price,
+        currency=order.currency,
+        condition=order.condition,
+        country_code=order.country_code,
+        country_name=order.country_name,
+        user_id=order.user_id,
+        user_name=order.user_name,
+        status=order.status,
+        has_box=order.has_box,
+        has_papers=order.has_papers,
+        notes=order.notes,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+    )
+
+
 @router.patch("/admin/{order_id}", response_model=OrderResponse)
 async def admin_update_order(
     order_id: str,

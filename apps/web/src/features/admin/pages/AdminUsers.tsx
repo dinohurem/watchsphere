@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, Check, X, Trash2 } from 'lucide-react'
+import { Search, Check, X, Trash2, UserPlus, Mail } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 
@@ -12,6 +12,11 @@ interface User {
   approved: boolean
   is_active: boolean
   created_at: string
+}
+
+interface InviteFormData {
+  email: string
+  name: string
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -43,6 +48,12 @@ export function AdminUsers() {
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteFormData, setInviteFormData] = useState<InviteFormData>({ email: '', name: '' })
+  const [inviting, setInviting] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null)
+  const [reinviting, setReinviting] = useState<string | null>(null)
 
   useEffect(() => {
     fetchUsers()
@@ -100,6 +111,42 @@ export function AdminUsers() {
     setActionMenuOpen(null)
   }
 
+  const handleInviteAdmin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setInviting(true)
+    setInviteError(null)
+    setInviteSuccess(null)
+
+    try {
+      await api.post('/admin/invite-admin', inviteFormData)
+      setInviteSuccess(`Invitation sent to ${inviteFormData.email}`)
+      setInviteFormData({ email: '', name: '' })
+      fetchUsers()
+      setTimeout(() => {
+        setShowInviteModal(false)
+        setInviteSuccess(null)
+      }, 2000)
+    } catch (error: any) {
+      setInviteError(error.response?.data?.detail || 'Failed to send invitation')
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  const handleReinvite = async (user: User) => {
+    setReinviting(user.id)
+    setActionMenuOpen(null)
+
+    try {
+      await api.post('/admin/reinvite-admin', { email: user.email })
+      alert(`Re-invitation sent to ${user.email}`)
+    } catch (error: any) {
+      alert(error.response?.data?.detail || 'Failed to send re-invitation')
+    } finally {
+      setReinviting(null)
+    }
+  }
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -117,9 +164,18 @@ export function AdminUsers() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">All Users</h1>
-        <p className="text-gray-600">Manage all registered users ({users.length} total)</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+          <p className="text-gray-600">Manage all registered users ({users.length} total)</p>
+        </div>
+        <button
+          onClick={() => setShowInviteModal(true)}
+          className="flex items-center px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+        >
+          <UserPlus className="w-4 h-4 mr-2" />
+          Invite User
+        </button>
       </div>
 
       <div className="bg-white rounded-lg border shadow-sm">
@@ -207,6 +263,15 @@ export function AdminUsers() {
                           Reject
                         </ActionMenuItem>
                       )}
+                      {user.role === 'admin' && (
+                        <ActionMenuItem
+                          onClick={() => handleReinvite(user)}
+                          icon={<Mail className="w-4 h-4" />}
+                          disabled={reinviting === user.id}
+                        >
+                          {reinviting === user.id ? 'Sending...' : 'Re-invite'}
+                        </ActionMenuItem>
+                      )}
                       <ActionMenuItem onClick={() => handleToggleActive(user.id, user.is_active)}>
                         {user.is_active ? 'Deactivate' : 'Activate'}
                       </ActionMenuItem>
@@ -233,6 +298,79 @@ export function AdminUsers() {
           </div>
         )}
       </div>
+
+      {/* Invite Admin Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Invite User</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Send an invitation email with temporary login credentials
+              </p>
+            </div>
+
+            <form onSubmit={handleInviteAdmin} className="p-6 space-y-4">
+              {inviteError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {inviteError}
+                </div>
+              )}
+              {inviteSuccess && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                  {inviteSuccess}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={inviteFormData.name}
+                  onChange={(e) => setInviteFormData({ ...inviteFormData, name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  placeholder="John Doe"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={inviteFormData.email}
+                  onChange={(e) => setInviteFormData({ ...inviteFormData, email: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  placeholder="admin@example.com"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowInviteModal(false)
+                    setInviteFormData({ email: '', name: '' })
+                    setInviteError(null)
+                    setInviteSuccess(null)
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={inviting || !inviteFormData.email || !inviteFormData.name}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {inviting ? 'Sending...' : 'Send Invitation'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

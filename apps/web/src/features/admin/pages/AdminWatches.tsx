@@ -55,6 +55,19 @@ interface OrderFormData {
   status: string
 }
 
+interface NewOrderFormData {
+  order_type: 'buy' | 'sell'
+  price: number
+  currency: string
+  condition: 'Unworn' | 'Used'
+  country_code: string
+  country_name: string
+  has_box: boolean
+  has_papers: boolean
+  notes: string
+  user_name: string
+}
+
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
   active: 'bg-green-100 text-green-800',
@@ -135,6 +148,37 @@ const emptyOrderForm: OrderFormData = {
   status: 'active',
 }
 
+const emptyNewOrderForm: NewOrderFormData = {
+  order_type: 'sell',
+  price: 0,
+  currency: 'EUR',
+  condition: 'Unworn',
+  country_code: 'US',
+  country_name: 'United States',
+  has_box: false,
+  has_papers: false,
+  notes: '',
+  user_name: '',
+}
+
+const COUNTRIES = [
+  { code: 'US', name: 'United States' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'FR', name: 'France' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'CH', name: 'Switzerland' },
+  { code: 'AE', name: 'United Arab Emirates' },
+  { code: 'HK', name: 'Hong Kong' },
+  { code: 'SG', name: 'Singapore' },
+  { code: 'JP', name: 'Japan' },
+  { code: 'AU', name: 'Australia' },
+  { code: 'CA', name: 'Canada' },
+  { code: 'NL', name: 'Netherlands' },
+  { code: 'ES', name: 'Spain' },
+  { code: 'BE', name: 'Belgium' },
+]
+
 export function AdminWatches() {
   const [watches, setWatches] = useState<Watch[]>([])
   const [loading, setLoading] = useState(true)
@@ -157,6 +201,9 @@ export function AdminWatches() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [orderFormData, setOrderFormData] = useState<OrderFormData>(emptyOrderForm)
   const [savingOrder, setSavingOrder] = useState(false)
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false)
+  const [newOrderFormData, setNewOrderFormData] = useState<NewOrderFormData>(emptyNewOrderForm)
+  const [creatingOrder, setCreatingOrder] = useState(false)
 
   useEffect(() => {
     fetchWatches()
@@ -308,6 +355,45 @@ export function AdminWatches() {
       console.error('Failed to update order:', error)
     } finally {
       setSavingOrder(false)
+    }
+  }
+
+  const handleOpenNewOrderModal = () => {
+    setNewOrderFormData({
+      ...emptyNewOrderForm,
+      order_type: orderTab,
+    })
+    setShowNewOrderModal(true)
+  }
+
+  const handleSubmitNewOrder = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!orderBookWatch?.reference) return
+    setCreatingOrder(true)
+
+    try {
+      await api.post('/orders/admin/create', {
+        order_type: newOrderFormData.order_type,
+        brand: orderBookWatch.brand,
+        model: orderBookWatch.model,
+        reference: orderBookWatch.reference,
+        watch_id: orderBookWatch.id,
+        price: newOrderFormData.price,
+        currency: newOrderFormData.currency,
+        condition: newOrderFormData.condition,
+        country_code: newOrderFormData.country_code,
+        country_name: newOrderFormData.country_name,
+        has_box: newOrderFormData.has_box,
+        has_papers: newOrderFormData.has_papers,
+        notes: newOrderFormData.notes || undefined,
+        user_name: newOrderFormData.user_name || undefined,
+      })
+      setShowNewOrderModal(false)
+      fetchOrders(orderBookWatch.reference)
+    } catch (error) {
+      console.error('Failed to create order:', error)
+    } finally {
+      setCreatingOrder(false)
     }
   }
 
@@ -708,26 +794,35 @@ export function AdminWatches() {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b">
+            <div className="flex border-b justify-between items-center">
+              <div className="flex">
+                <button
+                  onClick={() => setOrderTab('sell')}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    orderTab === 'sell'
+                      ? 'border-red-500 text-red-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Sell Orders ({orders.filter(o => o.order_type === 'sell').length})
+                </button>
+                <button
+                  onClick={() => setOrderTab('buy')}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    orderTab === 'buy'
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Buy Orders ({orders.filter(o => o.order_type === 'buy').length})
+                </button>
+              </div>
               <button
-                onClick={() => setOrderTab('sell')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  orderTab === 'sell'
-                    ? 'border-red-500 text-red-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                onClick={handleOpenNewOrderModal}
+                className="mr-4 flex items-center px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
               >
-                Sell Orders ({orders.filter(o => o.order_type === 'sell').length})
-              </button>
-              <button
-                onClick={() => setOrderTab('buy')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  orderTab === 'buy'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Buy Orders ({orders.filter(o => o.order_type === 'buy').length})
+                <Plus className="w-4 h-4 mr-1" />
+                Add Order
               </button>
             </div>
 
@@ -945,6 +1040,177 @@ export function AdminWatches() {
                   className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
                 >
                   {savingOrder ? 'Saving...' : 'Update Order'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Order Modal */}
+      {showNewOrderModal && orderBookWatch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Add New Order</h2>
+              <p className="text-sm text-gray-500">
+                {orderBookWatch.brand} {orderBookWatch.model} - Ref: {orderBookWatch.reference}
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmitNewOrder} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Order Type *</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="order_type"
+                      value="sell"
+                      checked={newOrderFormData.order_type === 'sell'}
+                      onChange={() => setNewOrderFormData({ ...newOrderFormData, order_type: 'sell' })}
+                      className="h-4 w-4 text-red-600 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Sell Order</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="order_type"
+                      value="buy"
+                      checked={newOrderFormData.order_type === 'buy'}
+                      onChange={() => setNewOrderFormData({ ...newOrderFormData, order_type: 'buy' })}
+                      className="h-4 w-4 text-green-600 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Buy Order</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={newOrderFormData.price || ''}
+                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, price: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="e.g., 12500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                  <select
+                    value={newOrderFormData.currency}
+                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, currency: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                    <option value="GBP">GBP</option>
+                    <option value="CHF">CHF</option>
+                    <option value="HKD">HKD</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Condition *</label>
+                  <select
+                    value={newOrderFormData.condition}
+                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, condition: e.target.value as 'Unworn' | 'Used' })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    <option value="Unworn">Unworn</option>
+                    <option value="Used">Used</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
+                  <select
+                    value={newOrderFormData.country_code}
+                    onChange={(e) => {
+                      const country = COUNTRIES.find(c => c.code === e.target.value)
+                      setNewOrderFormData({
+                        ...newOrderFormData,
+                        country_code: e.target.value,
+                        country_name: country?.name || e.target.value,
+                      })
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    {COUNTRIES.map(country => (
+                      <option key={country.code} value={country.code}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">User Name (optional)</label>
+                <input
+                  type="text"
+                  value={newOrderFormData.user_name}
+                  onChange={(e) => setNewOrderFormData({ ...newOrderFormData, user_name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  placeholder="Leave empty to use admin account"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="new_has_box"
+                    checked={newOrderFormData.has_box}
+                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, has_box: e.target.checked })}
+                    className="h-4 w-4 text-primary border-gray-300 rounded"
+                  />
+                  <label htmlFor="new_has_box" className="ml-2 text-sm text-gray-700">Has Box</label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="new_has_papers"
+                    checked={newOrderFormData.has_papers}
+                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, has_papers: e.target.checked })}
+                    className="h-4 w-4 text-primary border-gray-300 rounded"
+                  />
+                  <label htmlFor="new_has_papers" className="ml-2 text-sm text-gray-700">Has Papers</label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={newOrderFormData.notes}
+                  onChange={(e) => setNewOrderFormData({ ...newOrderFormData, notes: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  placeholder="Optional notes..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowNewOrderModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingOrder || !newOrderFormData.price}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {creatingOrder ? 'Creating...' : 'Create Order'}
                 </button>
               </div>
             </form>
