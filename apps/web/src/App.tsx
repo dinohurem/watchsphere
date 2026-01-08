@@ -10,10 +10,12 @@ import { AdminRoute } from './features/auth/components/AdminRoute'
 import { HomePage } from './features/home/pages/HomePage'
 import { MarketPage } from './features/market/pages/MarketPage'
 import { WatchDetailsPage } from './features/market/pages/WatchDetailsPage'
+import { OrderDetailPage } from './features/market/pages/OrderDetailPage'
 import { WatchlistPage } from './features/watchlist/pages/WatchlistPage'
 import { ChatPage } from './features/chat/pages/ChatPage'
 import { AIChatPage } from './features/chat/pages/AIChatPage'
 import { ProfilePage } from './features/profile/pages/ProfilePage'
+import { SocialSearchPage } from './features/social/pages/SocialSearchPage'
 import { LandingPage } from './features/landing/pages/LandingPage'
 import { useAuthStore } from '@watchsphere/shared/stores'
 import { api } from './services/api'
@@ -152,9 +154,11 @@ function App() {
         <Route index element={<HomePage />} />
         <Route path="market" element={<MarketPage />} />
         <Route path="watch/:watchId" element={<WatchDetailsPage />} />
+        <Route path="order/:orderId" element={<OrderDetailPage />} />
         <Route path="watchlist" element={<WatchlistPage />} />
         <Route path="chat" element={<ChatPage />} />
         <Route path="ai-assistant" element={<AIChatPage />} />
+        <Route path="social-search" element={<SocialSearchPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Routes>

@@ -18,6 +18,7 @@ import { wp, hp, sp, fp } from '@/utils/responsive';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
+import { api } from '@/services/api';
 
 // Photo icon for image picker (matches Figma)
 function PhotoIcon() {
@@ -54,6 +55,7 @@ interface Message {
   isUser: boolean;
   timestamp: Date;
   imageUri?: string;
+  quickReplies?: string[];
 }
 
 interface FormattedTextPart {
@@ -149,35 +151,56 @@ export default function AIChatScreen() {
 
   // Handle initial message from new chat
   useEffect(() => {
-    if (initialMessage && !hasInitialized.current && !isLoadingHistory) {
-      hasInitialized.current = true;
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        content: initialMessage,
-        isUser: true,
-        timestamp: new Date(),
-      };
-      setMessages([userMessage]);
-      setConversationTitle(
-        initialMessage.slice(0, 25) + (initialMessage.length > 25 ? '...' : '')
-      );
-      setIsLoading(true);
-
-      // Save chat metadata to storage
-      saveChatMetadata(initialMessage);
-
-      // Simulate AI response
-      setTimeout(() => {
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          content: generateMockResponse(initialMessage),
-          isUser: false,
+    const processInitialMessage = async () => {
+      if (initialMessage && !hasInitialized.current && !isLoadingHistory) {
+        hasInitialized.current = true;
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          content: initialMessage,
+          isUser: true,
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, aiResponse]);
-        setIsLoading(false);
-      }, 2000);
-    }
+        setMessages([userMessage]);
+        setConversationTitle(
+          initialMessage.slice(0, 25) + (initialMessage.length > 25 ? '...' : '')
+        );
+        setIsLoading(true);
+
+        // Save chat metadata to storage
+        saveChatMetadata(initialMessage);
+
+        try {
+          // Call the AI assistant API
+          const response = await api.post('/assistant/query', {
+            message: initialMessage,
+          });
+
+          const data = response.data;
+          const aiResponse: Message = {
+            id: (Date.now() + 1).toString(),
+            content: data.suggested_response,
+            isUser: false,
+            timestamp: new Date(),
+            quickReplies: data.requires_clarification ? data.clarification_options : undefined,
+          };
+          setMessages((prev) => [...prev, aiResponse]);
+        } catch (error) {
+          console.error('Error calling assistant API:', error);
+          // Fallback to mock response
+          const aiResponse: Message = {
+            id: (Date.now() + 1).toString(),
+            content: generateMockResponse(initialMessage),
+            isUser: false,
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, aiResponse]);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    processInitialMessage();
   }, [initialMessage, isLoadingHistory]);
 
   // Extract title from first user message
@@ -211,12 +234,13 @@ export default function AIChatScreen() {
     }
   };
 
-  const handleSend = useCallback(async () => {
-    if (!inputText.trim() || isLoading) return;
+  const handleSend = useCallback(async (messageContent?: string) => {
+    const content = messageContent || inputText.trim();
+    if (!content || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: inputText.trim(),
+      content,
       isUser: true,
       timestamp: new Date(),
     };
@@ -229,26 +253,58 @@ export default function AIChatScreen() {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // Call the AI assistant API
+      const response = await api.post('/assistant/query', {
+        message: content,
+      });
+
+      const data = response.data;
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: generateMockResponse(userMessage.content),
+        content: data.suggested_response,
+        isUser: false,
+        timestamp: new Date(),
+        quickReplies: data.requires_clarification ? data.clarification_options : undefined,
+      };
+      setMessages((prev) => [...prev, aiResponse]);
+    } catch (error) {
+      console.error('Error calling assistant API:', error);
+      // Fallback to mock response if API fails
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        content: generateMockResponse(content),
         isUser: false,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiResponse]);
+    } finally {
       setIsLoading(false);
-
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
-    }, 2000);
+    }
   }, [inputText, isLoading]);
+
+  const handleQuickReply = useCallback((reply: string) => {
+    // Remove quick replies from the last message
+    setMessages((prev) => {
+      const lastMessage = prev[prev.length - 1];
+      if (lastMessage && !lastMessage.isUser && lastMessage.quickReplies) {
+        return [
+          ...prev.slice(0, -1),
+          { ...lastMessage, quickReplies: undefined },
+        ];
+      }
+      return prev;
+    });
+    // Send the quick reply as a message
+    handleSend(reply);
+  }, [handleSend]);
 
   const handleImagePick = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.8,
       allowsEditing: true,
     });
@@ -534,6 +590,26 @@ export default function AIChatScreen() {
       borderRadius: sp(12),
       marginBottom: hp(8),
     },
+    quickRepliesContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: wp(8),
+      marginTop: hp(12),
+    },
+    quickReplyButton: {
+      paddingHorizontal: wp(16),
+      paddingVertical: hp(10),
+      borderRadius: sp(20),
+      backgroundColor: '#F6F6F6',
+      borderWidth: 1,
+      borderColor: '#212121',
+    },
+    quickReplyText: {
+      fontSize: fp(14),
+      fontFamily: fonts.medium,
+      color: '#212121',
+      letterSpacing: 0.07,
+    },
   });
 
   return (
@@ -583,6 +659,20 @@ export default function AIChatScreen() {
                 ) : (
                   <View style={styles.aiMessageContent}>
                     {renderFormattedText(message.content)}
+                    {message.quickReplies && message.quickReplies.length > 0 && (
+                      <View style={styles.quickRepliesContainer}>
+                        {message.quickReplies.map((reply, index) => (
+                          <TouchableOpacity
+                            key={index}
+                            style={styles.quickReplyButton}
+                            onPress={() => handleQuickReply(reply)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.quickReplyText}>{reply}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -613,13 +703,13 @@ export default function AIChatScreen() {
                   placeholderTextColor="rgba(33, 33, 33, 0.5)"
                   multiline={false}
                   returnKeyType="send"
-                  onSubmitEditing={handleSend}
+                  onSubmitEditing={() => handleSend()}
                   editable={!isLoading}
                 />
               </View>
               <TouchableOpacity
                 style={[styles.sendButton, (!inputText.trim() || isLoading) && styles.sendButtonDisabled]}
-                onPress={handleSend}
+                onPress={() => handleSend()}
                 disabled={!inputText.trim() || isLoading}
               >
                 <SendIcon />

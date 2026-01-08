@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
-import { Search, SlidersHorizontal, Grid3x3, List, Heart, TrendingUp, TrendingDown } from 'lucide-react';
+import { SlidersHorizontal, Heart, X, ChevronDown } from 'lucide-react';
+import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
 interface WatchData {
   id: string;
@@ -9,22 +11,323 @@ interface WatchData {
   model: string;
   price: number;
   priceChange: number;
+  priceHistory?: number[];
+  image_url?: string;
   condition?: string;
   year?: number;
   location?: string;
-  dealer?: {
-    name: string;
-    verified: boolean;
+}
+
+interface FilterState {
+  priceMin: string;
+  priceMax: string;
+  brands: string[];
+  conditions: string[];
+}
+
+const AVAILABLE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Omega', 'Cartier', 'Tudor'];
+const AVAILABLE_CONDITIONS = ['Unworn', 'Used'];
+
+// Mini chart component for price trend visualization
+function MiniChart({ data, positive }: { data: number[]; positive: boolean }) {
+  if (!data || data.length < 2) {
+    // Generate placeholder data
+    data = positive
+      ? [40, 45, 42, 50, 48, 55, 52, 60]
+      : [60, 55, 58, 50, 52, 45, 48, 40];
+  }
+
+  const height = 32;
+  const width = 80;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  const points = data.map((value, index) => {
+    const x = (index / (data.length - 1)) * width;
+    const y = height - ((value - min) / range) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const color = positive ? '#22C55E' : '#EF4444';
+
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// Trending watch card component
+function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
+  watch: WatchData;
+  onAddToWatchlist: (id: string) => void;
+  onClick: () => void;
+}) {
+  const isPositive = (watch.priceChange || 0) >= 0;
+
+  return (
+    <div
+      className="bg-white rounded-2xl p-4 border border-gray-200 min-w-[220px] cursor-pointer hover:shadow-md transition-shadow"
+      onClick={onClick}
+    >
+      <div className="flex justify-between items-start mb-3">
+        <div className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden">
+          {watch.image_url ? (
+            <img src={watch.image_url} alt={watch.model} className="w-full h-full object-cover" />
+          ) : (
+            <ImagePlaceholder size={48} />
+          )}
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddToWatchlist(watch.id);
+          }}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <Heart className="w-5 h-5 text-gray-400" />
+        </button>
+      </div>
+
+      <div className="mb-2">
+        <p className="text-sm text-gray-500">{watch.brand}</p>
+        <p className="font-semibold text-gray-900 truncate">{watch.model}</p>
+        <p className="text-xs text-gray-400">{watch.reference}</p>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="font-bold text-lg text-gray-900">€{watch.price?.toLocaleString() || '0'}</p>
+        <span className={`text-sm font-medium ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
+          {isPositive ? '+' : ''}{watch.priceChange?.toFixed(1) || '0.0'}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Market activity row component
+function MarketActivityRow({ watch, onClick }: { watch: WatchData; onClick: () => void }) {
+  const isPositive = (watch.priceChange || 0) >= 0;
+
+  return (
+    <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={onClick}>
+      <td className="py-4 px-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+            {watch.image_url ? (
+              <img src={watch.image_url} alt={watch.model} className="w-full h-full object-cover" />
+            ) : (
+              <ImagePlaceholder size={32} />
+            )}
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">{watch.brand} {watch.model}</p>
+            <p className="text-sm text-gray-500">{watch.reference}</p>
+          </div>
+        </div>
+      </td>
+      <td className="py-4 px-4">
+        <MiniChart data={watch.priceHistory || []} positive={isPositive} />
+      </td>
+      <td className="py-4 px-4">
+        <span className={`font-medium ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
+          {isPositive ? '+' : ''}{watch.priceChange?.toFixed(2) || '0.00'}%
+        </span>
+      </td>
+      <td className="py-4 px-4">
+        <span className="font-semibold text-gray-900">€{watch.price?.toLocaleString() || '0'}</span>
+      </td>
+      <td className="py-4 px-4">
+        <button
+          className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+        >
+          View details
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+// Filter modal component
+function FilterModal({
+  isOpen,
+  onClose,
+  filters,
+  onApplyFilters,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  filters: FilterState;
+  onApplyFilters: (filters: FilterState) => void;
+}) {
+  const [localFilters, setLocalFilters] = useState<FilterState>(filters);
+
+  // Sync with external filters when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setLocalFilters(filters);
+    }
+  }, [isOpen, filters]);
+
+  if (!isOpen) return null;
+
+  const toggleBrand = (brand: string) => {
+    setLocalFilters(prev => ({
+      ...prev,
+      brands: prev.brands.includes(brand)
+        ? prev.brands.filter(b => b !== brand)
+        : [...prev.brands, brand]
+    }));
   };
+
+  const toggleCondition = (condition: string) => {
+    setLocalFilters(prev => ({
+      ...prev,
+      conditions: prev.conditions.includes(condition)
+        ? prev.conditions.filter(c => c !== condition)
+        : [...prev.conditions, condition]
+    }));
+  };
+
+  const handleReset = () => {
+    setLocalFilters({
+      priceMin: '',
+      priceMax: '',
+      brands: [],
+      conditions: [],
+    });
+  };
+
+  const handleApply = () => {
+    onApplyFilters(localFilters);
+    onClose();
+  };
+
+  const activeFilterCount =
+    (localFilters.priceMin || localFilters.priceMax ? 1 : 0) +
+    localFilters.brands.length +
+    localFilters.conditions.length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl w-full max-w-md mx-4 p-6 max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-900">Filters</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        {/* Price Range */}
+        <div className="mb-6">
+          <h3 className="font-semibold text-gray-900 mb-3">Price Range</h3>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              placeholder="Min"
+              value={localFilters.priceMin}
+              onChange={(e) => setLocalFilters(prev => ({ ...prev, priceMin: e.target.value }))}
+              className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+            />
+            <span className="text-gray-400">—</span>
+            <input
+              type="number"
+              placeholder="Max"
+              value={localFilters.priceMax}
+              onChange={(e) => setLocalFilters(prev => ({ ...prev, priceMax: e.target.value }))}
+              className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+            />
+          </div>
+        </div>
+
+        {/* Brands */}
+        <div className="mb-6">
+          <h3 className="font-semibold text-gray-900 mb-3">Brand</h3>
+          <div className="flex flex-wrap gap-2">
+            {AVAILABLE_BRANDS.map(brand => (
+              <button
+                key={brand}
+                onClick={() => toggleBrand(brand)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  localFilters.brands.includes(brand)
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {brand}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Condition */}
+        <div className="mb-6">
+          <h3 className="font-semibold text-gray-900 mb-3">Condition</h3>
+          <div className="flex flex-wrap gap-2">
+            {AVAILABLE_CONDITIONS.map(condition => (
+              <button
+                key={condition}
+                onClick={() => toggleCondition(condition)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  localFilters.conditions.includes(condition)
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {condition}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-3">
+          <button
+            onClick={handleReset}
+            className="flex-1 py-3 px-4 border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Reset {activeFilterCount > 0 && `(${activeFilterCount})`}
+          </button>
+          <button
+            onClick={handleApply}
+            className="flex-1 py-3 px-4 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            Apply Filters
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function MarketPage() {
+  const navigate = useNavigate();
   const [watches, setWatches] = useState<WatchData[]>([]);
+  const [trendingWatches, setTrendingWatches] = useState<WatchData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('hot');
+
+  // Filter state
+  const [filters, setFilters] = useState<FilterState>({
+    priceMin: '',
+    priceMax: '',
+    brands: [],
+    conditions: [],
+  });
 
   const categories = [
     { key: 'hot', label: 'Hot' },
@@ -41,7 +344,6 @@ export function MarketPage() {
   const loadWatches = async () => {
     setLoading(true);
     try {
-      // Use aggregated endpoint with proper pricing logic
       const response = await api.get('/market/aggregated', {
         params: {
           category: selectedCategory,
@@ -55,230 +357,235 @@ export function MarketPage() {
           reference: item.reference,
           brand: item.brand,
           model: item.model,
-          // display_price is lowest order price OR admin price
           price: item.display_price || 0,
           priceChange: item.price_change || 0,
+          priceHistory: item.price_history || [],
+          image_url: item.image_url,
+          condition: item.condition,
         }));
         setWatches(watchData);
+        // Use first 4 watches for trending section
+        setTrendingWatches(watchData.slice(0, 4));
       } else {
-        // Fallback to old endpoint
         const fallbackResponse = await api.get('/market');
-        setWatches(fallbackResponse.data || []);
+        const fallbackData = (fallbackResponse.data || []).map((item: any) => ({
+          id: item.reference || item.id,
+          reference: item.reference,
+          brand: item.brand,
+          model: item.model,
+          price: item.price || item.display_price || 0,
+          priceChange: item.price_change || 0,
+          priceHistory: item.price_history || [],
+          image_url: item.image_url || item.cover_image,
+          condition: item.condition,
+        }));
+        setWatches(fallbackData);
+        setTrendingWatches(fallbackData.slice(0, 4));
       }
     } catch (error) {
       console.error('Failed to load watches:', error);
       setWatches([]);
+      setTrendingWatches([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // Apply filters to watches
+  const filteredWatches = useMemo(() => {
+    return watches.filter(watch => {
+      // Price filter
+      if (filters.priceMin && watch.price < parseFloat(filters.priceMin)) {
+        return false;
+      }
+      if (filters.priceMax && watch.price > parseFloat(filters.priceMax)) {
+        return false;
+      }
+
+      // Brand filter
+      if (filters.brands.length > 0 && !filters.brands.includes(watch.brand)) {
+        return false;
+      }
+
+      // Condition filter
+      if (filters.conditions.length > 0 && watch.condition && !filters.conditions.includes(watch.condition)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [watches, filters]);
+
   const handleAddToWatchlist = async (watchId: string) => {
     try {
       await api.post('/watchlist', { watchId });
-      // Show success notification
     } catch (error) {
       console.error('Failed to add to watchlist:', error);
     }
   };
 
-  const filteredWatches = watches.filter(watch =>
-    watch.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    watch.model?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    watch.reference?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleWatchClick = (watch: WatchData) => {
+    navigate(`/app/watch/${watch.reference}`);
+  };
+
+  const handleApplyFilters = (newFilters: FilterState) => {
+    setFilters(newFilters);
+  };
+
+  // Count active filters
+  const activeFilterCount =
+    (filters.priceMin || filters.priceMax ? 1 : 0) +
+    filters.brands.length +
+    filters.conditions.length;
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Market</h1>
-          <p className="text-gray-600">Browse watches from verified dealers worldwide</p>
+        {/* Trending Watches Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Trending Watches</h2>
+            <button className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+              View all
+              <ChevronDown className="w-4 h-4 rotate-[-90deg]" />
+            </button>
+          </div>
+
+          <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2">
+            {loading ? (
+              // Loading skeleton
+              [...Array(4)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl p-4 border border-gray-200 min-w-[220px] animate-pulse">
+                  <div className="w-20 h-20 bg-gray-200 rounded-xl mb-3" />
+                  <div className="h-4 bg-gray-200 rounded w-16 mb-2" />
+                  <div className="h-5 bg-gray-200 rounded w-32 mb-1" />
+                  <div className="h-3 bg-gray-200 rounded w-24 mb-3" />
+                  <div className="h-6 bg-gray-200 rounded w-20" />
+                </div>
+              ))
+            ) : (
+              trendingWatches.map((watch) => (
+                <TrendingWatchCard
+                  key={watch.id}
+                  watch={watch}
+                  onAddToWatchlist={handleAddToWatchlist}
+                  onClick={() => handleWatchClick(watch)}
+                />
+              ))
+            )}
+          </div>
         </div>
 
-        {/* Search and Filters */}
-        <div className="bg-white rounded-xl p-4 border border-gray-200 mb-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by brand, model, or reference..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-base"
-              />
-            </div>
+        {/* Market Activity Section */}
+        <div className="bg-white rounded-2xl border border-gray-200">
+          <div className="p-6 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <h2 className="text-xl font-bold text-gray-900">Market Activity</h2>
 
-            {/* Filters and View Toggle */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`px-5 py-3 rounded-lg flex items-center gap-2 font-medium transition-colors ${
-                  showFilters ? 'bg-primary text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                }`}
-              >
-                <SlidersHorizontal className="w-5 h-5" />
-                <span className="hidden sm:inline">Filters</span>
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Category Tabs */}
+                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                  {categories.map((category) => (
+                    <button
+                      key={category.key}
+                      onClick={() => setSelectedCategory(category.key)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        selectedCategory === category.key
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      {category.label}
+                    </button>
+                  ))}
+                </div>
 
-              <div className="flex bg-gray-100 rounded-lg p-1">
+                {/* Filter Button */}
                 <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-2.5 rounded transition-colors ${
-                    viewMode === 'grid' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                  onClick={() => setShowFilters(true)}
+                  className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                    activeFilterCount > 0
+                      ? 'border-gray-900 bg-gray-900 text-white'
+                      : 'border-gray-200 hover:bg-gray-50 text-gray-700'
                   }`}
-                  title="Grid view"
                 >
-                  <Grid3x3 className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-2.5 rounded transition-colors ${
-                    viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
-                  }`}
-                  title="List view"
-                >
-                  <List className="w-5 h-5" />
+                  <SlidersHorizontal className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    Filter {activeFilterCount > 0 && `(${activeFilterCount})`}
+                  </span>
                 </button>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Category Tabs */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {categories.map((category) => (
-            <button
-              key={category.key}
-              onClick={() => setSelectedCategory(category.key)}
-              className={`px-5 py-2.5 rounded-full font-medium whitespace-nowrap transition-colors ${
-                selectedCategory === category.key
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {category.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Results Count */}
-        <div className="mb-4">
-          <p className="text-sm text-gray-600">
-            {loading ? 'Loading...' : `${filteredWatches.length} watch${filteredWatches.length !== 1 ? 'es' : ''} found`}
-          </p>
-        </div>
-
-        {/* Watches Grid/List */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
-        ) : filteredWatches.length === 0 ? (
-          <div className="bg-white rounded-xl p-12 border border-gray-200 text-center">
-            <p className="text-gray-600">No watches found. Try adjusting your search.</p>
-          </div>
-        ) : (
-          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
-            {filteredWatches.map((watch) => {
-              const hasPositiveChange = (watch.priceChange || 0) > 0;
-
-              return (
-                <div
-                  key={watch.id}
-                  className={`bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-200 group ${
-                    viewMode === 'list' ? 'flex gap-6 p-6' : 'overflow-hidden'
-                  }`}
-                >
-                  {/* Watch Image Placeholder */}
-                  <div className={`bg-gray-100 flex items-center justify-center ${
-                    viewMode === 'list' ? 'w-32 h-32 rounded-lg flex-shrink-0' : 'w-full h-56'
-                  }`}>
-                    <span className="text-5xl">⌚</span>
-                  </div>
-
-                  {/* Watch Details */}
-                  <div className={`flex-1 ${viewMode === 'grid' ? 'p-6' : ''}`}>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h3 className="text-xl font-semibold text-gray-900 group-hover:text-primary transition-colors">
-                          {watch.brand}
-                        </h3>
-                        <p className="text-gray-600 font-medium">{watch.model}</p>
-                        <p className="text-sm text-gray-500 mt-1">{watch.reference}</p>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAddToWatchlist(watch.id);
-                        }}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="Add to watchlist"
-                      >
-                        <Heart className="w-5 h-5 text-gray-400 hover:text-red-500 transition-colors" />
-                      </button>
-                    </div>
-
-                    <div className="mb-3">
-                      <p className="text-3xl font-bold text-gray-900">
-                        €{watch.price?.toLocaleString() || 'N/A'}
-                      </p>
-                      {watch.priceChange !== undefined && (
-                        <div className="flex items-center gap-1 mt-1">
-                          {hasPositiveChange ? (
-                            <TrendingUp className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <TrendingDown className="w-4 h-4 text-red-600" />
-                          )}
-                          <span className={`text-sm font-medium ${
-                            hasPositiveChange ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {hasPositiveChange ? '+' : ''}{watch.priceChange.toFixed(1)}%
-                          </span>
+          {/* Market Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">Watch</th>
+                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">Chart</th>
+                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">% Change</th>
+                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">Price</th>
+                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  // Loading skeleton rows
+                  [...Array(5)].map((_, i) => (
+                    <tr key={i} className="border-b border-gray-100">
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-gray-200 rounded-lg animate-pulse" />
+                          <div>
+                            <div className="h-5 bg-gray-200 rounded w-32 mb-2 animate-pulse" />
+                            <div className="h-4 bg-gray-200 rounded w-24 animate-pulse" />
+                          </div>
                         </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {watch.condition && (
-                        <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700 capitalize">
-                          {watch.condition}
-                        </span>
-                      )}
-                      {watch.year && (
-                        <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
-                          {watch.year}
-                        </span>
-                      )}
-                      {watch.location && (
-                        <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
-                          {watch.location}
-                        </span>
-                      )}
-                    </div>
-
-                    {watch.dealer && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
-                        <span>Dealer: {watch.dealer.name}</span>
-                        {watch.dealer.verified && (
-                          <span className="text-xs text-green-600 font-medium">✓ Verified</span>
-                        )}
-                      </div>
-                    )}
-
-                    <button className="w-full py-2.5 px-4 bg-primary hover:bg-primary/90 text-white font-semibold rounded-lg transition-colors">
-                      View Details
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="w-20 h-8 bg-gray-200 rounded animate-pulse" />
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="h-5 bg-gray-200 rounded w-16 animate-pulse" />
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="h-5 bg-gray-200 rounded w-20 animate-pulse" />
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="h-10 bg-gray-200 rounded w-24 animate-pulse" />
+                      </td>
+                    </tr>
+                  ))
+                ) : filteredWatches.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-gray-500">
+                      {activeFilterCount > 0 ? 'No watches match your filters' : 'No watches found'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredWatches.map((watch) => (
+                    <MarketActivityRow
+                      key={watch.id}
+                      watch={watch}
+                      onClick={() => handleWatchClick(watch)}
+                    />
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Filter Modal */}
+      <FilterModal
+        isOpen={showFilters}
+        onClose={() => setShowFilters(false)}
+        filters={filters}
+        onApplyFilters={handleApplyFilters}
+      />
     </div>
   );
 }

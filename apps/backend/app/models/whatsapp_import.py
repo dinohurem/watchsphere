@@ -63,6 +63,12 @@ class WhatsAppMessage(Document):
         ]
 
 
+class OfferType(str, Enum):
+    WTS = "wts"  # Want to sell
+    WTB = "wtb"  # Want to buy
+    UNKNOWN = "unknown"
+
+
 class ExtractedWatchListing(Document):
     """Watch listings extracted from WhatsApp messages"""
     import_id: str = Field(..., index=True)
@@ -80,7 +86,15 @@ class ExtractedWatchListing(Document):
     # Details
     condition: Optional[str] = None
     seller_name: Optional[str] = None
+    seller_phone: Optional[str] = None
     raw_text: str  # Original message text
+
+    # Offer type (WTS/WTB)
+    offer_type: OfferType = OfferType.UNKNOWN
+
+    # Location/Country
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
 
     # Embedding for semantic search
     embedding: Optional[List[float]] = None
@@ -95,4 +109,6 @@ class ExtractedWatchListing(Document):
             "import_id",
             "brand",
             "reference",
+            "offer_type",
+            "country_code",
         ]

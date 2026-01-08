@@ -7,7 +7,15 @@ export default function MarketLayout() {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="[id]" />
+      {/* Static routes must come before dynamic [id] route */}
+      <Stack.Screen
+        name="filters"
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+          gestureDirection: 'vertical',
+        }}
+      />
       <Stack.Screen
         name="order-book"
         options={{
@@ -16,6 +24,21 @@ export default function MarketLayout() {
           gestureDirection: 'vertical',
         }}
       />
+      <Stack.Screen
+        name="watch-details"
+        options={{
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen
+        name="mark-sold"
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+          gestureDirection: 'vertical',
+        }}
+      />
+      <Stack.Screen name="[id]" />
     </Stack>
   );
 }

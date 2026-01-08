@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft } from '@/components/icons';
+import { BackArrow } from '@/components/icons';
 
 // Mock data for watch details
 const mockWatchDetails = {
@@ -285,7 +285,7 @@ export default function WatchDetailsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-          <ArrowLeft size={24} color={colors.text} />
+          <BackArrow size={24} color={colors.text} />
         </TouchableOpacity>
       </View>
 

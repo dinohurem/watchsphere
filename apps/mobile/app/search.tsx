@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft, Magnifier } from '@/components/icons';
+import { BackArrow, Magnifier } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path } from 'react-native-svg';
 
@@ -224,7 +224,7 @@ export default function SearchScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft size={24} color="#1D1D1F" />
+          <BackArrow size={24} color="#1D1D1F" />
         </TouchableOpacity>
 
         <View style={[

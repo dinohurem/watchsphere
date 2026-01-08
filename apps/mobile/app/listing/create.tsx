@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useMemo, useCallback } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft, ChevronDown, ChevronRight, Plus, X, Trash2, Check } from '@/components/icons';
+import { BackArrow, ChevronDown, ChevronRight, Plus, X, Trash2, Check } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path, Rect } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
@@ -201,7 +201,7 @@ export default function CreateListingScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 0.8,
       selectionLimit: 10 - formData.photos.length,
@@ -1269,7 +1269,7 @@ export default function CreateListingScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <ArrowLeft size={sp(24)} color="#212121" />
+          <BackArrow size={sp(24)} color="#212121" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {currentStep === 6 ? 'Listing overview' : 'Create new listing'}

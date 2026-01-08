@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     MONRI_SUBSCRIPTION_PRICE: float = 100.0  # 100€/month
     MONRI_CURRENCY: str = "EUR"
 
-    # Email (Mailchimp/Mandrill)
-    MAILCHIMP_API_KEY: str = ""
+    # Email (Postmark)
+    POSTMARK_API_KEY: str = ""
     EMAIL_FROM: str = "noreply@watchsphere.com"
     EMAIL_FROM_NAME: str = "WatchSphere"
 

@@ -96,6 +96,9 @@ export function WatchDetailsPage() {
   const [savingOrder, setSavingOrder] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
 
+  // Full Order Book Modal state
+  const [showFullOrderBook, setShowFullOrderBook] = useState(false);
+
   const periods = ['1d', '7d', '1m', '3m', '1y'] as const;
 
   useEffect(() => {
@@ -452,6 +455,13 @@ export function WatchDetailsPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Order Book</h2>
+              <button
+                onClick={() => setShowFullOrderBook(true)}
+                className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1 transition-colors"
+              >
+                See Order Book
+                <span className="text-lg">→</span>
+              </button>
             </div>
 
             {/* Order Book Tabs */}
@@ -498,7 +508,8 @@ export function WatchDetailsPage() {
                   filteredOrderBook.map((entry, index) => (
                     <div
                       key={entry.id}
-                      className={`flex items-center px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm ${
+                      onClick={() => navigate(`/app/order/${entry.id}`)}
+                      className={`flex items-center px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm cursor-pointer hover:bg-gray-50 transition-colors ${
                         index < filteredOrderBook.length - 1 ? 'border-b border-black/5' : ''
                       }`}
                     >
@@ -644,6 +655,111 @@ export function WatchDetailsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Full Order Book Modal */}
+      {showFullOrderBook && watchDetails && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 border-b flex items-center justify-between shrink-0">
+              <h2 className="text-xl font-semibold text-gray-900">Order Book</h2>
+              <button
+                onClick={() => setShowFullOrderBook(false)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Watch Info */}
+            <div className="px-6 py-4 border-b flex items-center gap-4 shrink-0">
+              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                {watchDetails.image ? (
+                  <img
+                    src={watchDetails.image}
+                    alt={watchDetails.model}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-2xl">⌚</span>
+                )}
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">{watchDetails.brand} {watchDetails.model}</p>
+                <p className="text-sm text-gray-500">
+                  €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            {/* Order Book Tabs */}
+            <div className="px-6 pt-4 shrink-0">
+              <div className="flex bg-gray-100 rounded-full p-1">
+                <button
+                  onClick={() => setOrderBookTab('buy')}
+                  className={`flex-1 py-2 text-sm font-medium rounded-full transition-colors ${
+                    orderBookTab === 'buy'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  Buy
+                </button>
+                <button
+                  onClick={() => setOrderBookTab('sell')}
+                  className={`flex-1 py-2 text-sm font-medium rounded-full transition-colors ${
+                    orderBookTab === 'sell'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  Sell
+                </button>
+              </div>
+            </div>
+
+            {/* Order Book Table */}
+            <div className="flex-1 overflow-hidden px-6 py-4">
+              {/* Table Header */}
+              <div className="flex items-center py-3 text-sm font-medium text-gray-500 border-b">
+                <span className="w-[120px]">Date</span>
+                <span className="flex-1">Condition</span>
+                <span className="w-[100px] text-right">Price</span>
+              </div>
+
+              {/* Table Rows */}
+              <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 280px)' }}>
+                {filteredOrderBook.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500 text-sm">
+                    No {orderBookTab} orders available
+                  </div>
+                ) : (
+                  filteredOrderBook.map((entry, index) => (
+                    <div
+                      key={entry.id}
+                      onClick={() => {
+                        setShowFullOrderBook(false);
+                        navigate(`/app/order/${entry.id}`);
+                      }}
+                      className={`flex items-center py-3 text-sm ${
+                        index < filteredOrderBook.length - 1 ? 'border-b border-gray-100' : ''
+                      } hover:bg-gray-50 cursor-pointer`}
+                    >
+                      <span className="w-[120px] text-gray-600">{entry.date}</span>
+                      <span className="flex-1 text-gray-900">{entry.condition}</span>
+                      <span className={`w-[100px] text-right font-semibold ${
+                        orderBookTab === 'buy' ? 'text-green-600' : 'text-red-500'
+                      }`}>
+                        €{entry.price.toLocaleString()}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -12,14 +12,37 @@ import {
   X,
   Shield,
   ArrowLeft,
-  Watch
+  Watch,
+  Sparkles,
+  Search
 } from 'lucide-react'
 import { useAuthStore } from '@watchsphere/shared/stores'
+
+// Custom Chat Icon matching Figma design
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg width="19" height="18" viewBox="0 0 19 18" fill="none" className={className}>
+      <path d="M5.83301 6.66632H12.4997" stroke="currentColor" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M5.83301 10.0003H9.99967" stroke="currentColor" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M9.16634 0.833313C4.56384 0.833313 0.833008 4.56415 0.833008 9.16665C0.833008 10.6675 1.22217 12.0741 1.90134 13.2975L0.833008 17.1666L4.70217 16.0983C5.92551 16.7775 7.33217 17.1666 8.83301 17.1666C13.4355 17.1666 17.1663 13.4358 17.1663 8.83331C17.1663 4.2308 13.769 0.833313 9.16634 0.833313Z" stroke="currentColor" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+// Custom Bell Icon matching Figma design
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className={className}>
+      <path d="M18.3327 15.0003C16.9518 15.0003 15.8327 13.8812 15.8327 12.5003V7.50033C15.8327 4.27866 13.221 1.66699 9.99935 1.66699C6.77768 1.66699 4.16602 4.27866 4.16602 7.50033V12.5003C4.16602 13.8812 3.04685 15.0003 1.66602 15.0003H18.3327Z" stroke="currentColor" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M8.56445 18.334C8.85279 18.8298 9.38445 19.1673 10.0003 19.1673C10.6161 19.1673 11.147 18.8298 11.4361 18.334H8.56445Z" fill="currentColor" stroke="currentColor" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
 
 const navigation = [
   { name: 'Home', to: '/app', icon: Home },
   { name: 'Market', to: '/app/market', icon: Store },
-  { name: 'AI Assistant', to: '/app/chat', icon: MessageSquare },
+  { name: 'AI Assistant', to: '/app/ai-assistant', icon: Sparkles },
 ]
 
 export function UserLayout() {
@@ -129,14 +152,17 @@ export function UserLayout() {
           <div className="flex items-center justify-end gap-4 w-[250px]">
             <div className="flex items-center gap-2">
               {/* Messages */}
-              <button className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors">
-                <MessageSquare className="w-5 h-5 text-gray-900" />
-                <span className="absolute top-1.5 right-0.5 w-[7px] h-[7px] bg-red-600 rounded-full"></span>
+              <button
+                onClick={() => navigate('/app/chat')}
+                className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <ChatIcon className="w-5 h-5 text-gray-900" />
+                <span className="absolute top-1.5 right-0.5 w-[7px] h-[7px] bg-[#C93927] rounded-full"></span>
               </button>
               {/* Notifications */}
               <button className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors">
-                <Bell className="w-5 h-5 text-gray-900" />
-                <span className="absolute top-1.5 right-0.5 w-[7px] h-[7px] bg-red-600 rounded-full"></span>
+                <BellIcon className="w-5 h-5 text-gray-900" />
+                <span className="absolute top-1.5 right-0.5 w-[7px] h-[7px] bg-[#C93927] rounded-full"></span>
               </button>
             </div>
 
@@ -182,6 +208,14 @@ export function UserLayout() {
                       >
                         <Watch className="w-4 h-4 text-gray-900" />
                         <span className="text-base font-medium text-gray-900 tracking-[0.08px]">Inventory</span>
+                      </NavLink>
+                      <NavLink
+                        to="/app/social-search"
+                        onClick={() => setProfileDropdownOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-gray-50 transition-colors"
+                      >
+                        <Search className="w-4 h-4 text-gray-900" />
+                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">Social Search</span>
                       </NavLink>
                     </div>
                   </div>
@@ -279,6 +313,14 @@ export function UserLayout() {
                 Favourites
               </NavLink>
               <NavLink
+                to="/app/social-search"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <Search className="w-5 h-5 mr-3" />
+                Social Search
+              </NavLink>
+              <NavLink
                 to="/app/profile"
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
@@ -309,7 +351,7 @@ export function UserLayout() {
       </nav>
 
       {/* Main Content */}
-      <main className="bg-white min-h-[calc(100vh-83px)]">
+      <main className={`bg-white flex-1 ${isAdmin ? 'h-[calc(100vh-123px)]' : 'h-[calc(100vh-83px)]'}`}>
         <Outlet />
       </main>
     </div>

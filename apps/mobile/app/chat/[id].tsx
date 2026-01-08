@@ -1,125 +1,137 @@
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FlashList } from '@shopify/flash-list';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useChat } from '@/contexts/ChatContext';
 import { ChatBubble } from '@/components/ChatBubble';
 import { ChatInput } from '@/components/ChatInput';
-import { TypingIndicator } from '@/components/TypingIndicator';
-import { ArrowLeft, ChevronRight } from '@/components/icons';
-import { Message } from '@/services/chatService';
+import { ImagePlaceholder } from '@/components/ImagePlaceholder';
+import { BackArrow, ChevronRight } from '@/components/icons';
+import { api } from '@/services/api';
+
+interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender_name: string;
+  content: string;
+  type: string;
+  is_ai: boolean;
+  read: boolean;
+  created_at: string;
+}
+
+interface ConversationDetails {
+  id: string;
+  name: string;
+  avatar?: string;
+}
 
 export default function ChatDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, name, avatar } = useLocalSearchParams<{ id: string; name?: string; avatar?: string }>();
   const { colors, fonts } = useTheme();
-  const {
-    getConversation,
-    getMessages,
-    loadMessages,
-    sendMessage,
-    markAsRead,
-    startTyping,
-    stopTyping,
-    loadingMessages,
-  } = useChat();
 
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversation, setConversation] = useState<ConversationDetails | null>(null);
   const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const flashListRef = useRef<FlashList<Message>>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-
-  const conversation = useMemo(() => getConversation(id), [id, getConversation]);
-  const messages = useMemo(() => getMessages(id), [id, getMessages]);
-  const isLoading = loadingMessages.get(id) ?? false;
+  const currentUserId = useRef<string>('');
 
   useEffect(() => {
     if (id) {
-      loadMessages(id);
+      // Set conversation from params if available
+      if (name) {
+        setConversation({ id, name, avatar: avatar || undefined });
+      }
+      loadMessages();
+      loadCurrentUser();
     }
   }, [id]);
 
-  useEffect(() => {
-    // Mark messages as read when viewing
-    if (messages.length > 0) {
-      const unreadMessages = messages
-        .filter(m => m.status !== 'read' && m.senderId !== 'current_user')
-        .map(m => m.id);
-
-      if (unreadMessages.length > 0) {
-        markAsRead(id, unreadMessages);
+  const loadCurrentUser = async () => {
+    try {
+      const response = await api.get('/profile/me');
+      if (response.data) {
+        currentUserId.current = response.data.id;
       }
+    } catch (error) {
+      console.error('Error loading current user:', error);
     }
-  }, [messages, id]);
+  };
 
-  const handleSend = () => {
-    if (inputText.trim().length === 0) return;
+  const loadMessages = async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/chat/conversations/${id}/messages`);
+      if (response.data) {
+        setMessages(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    sendMessage(id, inputText.trim());
+  const handleSend = async () => {
+    if (inputText.trim().length === 0 || isSending) return;
+
+    const messageContent = inputText.trim();
     setInputText('');
+    setIsSending(true);
 
-    // Scroll to bottom after sending
-    setTimeout(() => {
-      flashListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    // Optimistic update
+    const tempMessage: Message = {
+      id: `temp-${Date.now()}`,
+      conversation_id: id,
+      sender_id: currentUserId.current,
+      sender_name: 'You',
+      content: messageContent,
+      type: 'text',
+      is_ai: false,
+      read: true,
+      created_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, tempMessage]);
+
+    try {
+      const response = await api.post(`/chat/conversations/${id}/messages`, {
+        content: messageContent,
+      });
+
+      if (response.data) {
+        // Replace temp message with real one
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === tempMessage.id ? response.data : msg
+          )
+        );
+      }
+
+      // Scroll to bottom
+      setTimeout(() => {
+        flashListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Remove temp message on error
+      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
+    } finally {
+      setIsSending(false);
+    }
   };
 
-  const handleTypingStart = () => {
-    startTyping(id);
+  const handleImageSelect = async (uri: string) => {
+    // TODO: Implement image upload and send
+    console.log('Image selected:', uri);
   };
 
-  const handleTypingStop = () => {
-    stopTyping(id);
-  };
-
-  // Get typing users (excluding current user)
-  const typingUsers = useMemo(() => {
-    if (!conversation) return [];
-
-    return conversation.participants
-      .filter(p => conversation.typing.includes(p.id) && p.id !== 'current_user')
-      .map(p => p.name);
-  }, [conversation]);
-
-  // Check if we should show sender name (for group chats)
-  const shouldShowSender = conversation?.type === 'group';
-
-  // Group consecutive messages from same sender
-  const groupedMessages = useMemo(() => {
-    const grouped: Array<Message & { showSender: boolean }> = [];
-
-    messages.forEach((msg, index) => {
-      const prevMsg = messages[index - 1];
-      const showSender = shouldShowSender &&
-        msg.senderId !== 'current_user' &&
-        (!prevMsg || prevMsg.senderId !== msg.senderId);
-
-      grouped.push({ ...msg, showSender });
-    });
-
-    return grouped;
-  }, [messages, shouldShowSender]);
-
-  const renderMessage = ({ item }: { item: Message & { showSender: boolean } }) => {
-    const isUser = item.senderId === 'current_user';
-    const isAI = item.senderId === 'ai_assistant' || id.startsWith('ai');
-
-    return (
-      <ChatBubble
-        message={item.content}
-        isUser={isUser}
-        timestamp={formatTime(item.timestamp)}
-        status={item.status}
-        senderName={item.senderName}
-        showSender={item.showSender}
-        isAI={isAI}
-      />
-    );
-  };
-
-  const formatTime = (date: Date) => {
+  const formatTime = (dateStr: string) => {
     const now = new Date();
-    const messageDate = new Date(date);
+    const messageDate = new Date(dateStr);
 
     const isToday = now.toDateString() === messageDate.toDateString();
 
@@ -137,6 +149,22 @@ export default function ChatDetailScreen() {
       hour: 'numeric',
       minute: '2-digit',
     });
+  };
+
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isUser = item.sender_id === currentUserId.current;
+
+    return (
+      <ChatBubble
+        message={item.content}
+        isUser={isUser}
+        timestamp={formatTime(item.created_at)}
+        status={item.read ? 'read' : 'sent'}
+        senderName={item.sender_name}
+        showSender={false}
+        isAI={false}
+      />
+    );
   };
 
   const styles = StyleSheet.create({
@@ -165,10 +193,15 @@ export default function ChatDetailScreen() {
       justifyContent: 'center',
       gap: 12,
     },
+    headerAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+    },
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: 8,
+      borderRadius: 18,
       backgroundColor: colors.primary,
       justifyContent: 'center',
       alignItems: 'center',
@@ -233,7 +266,6 @@ export default function ChatDetailScreen() {
       width: 60,
       height: 60,
       borderRadius: 8,
-      backgroundColor: colors.background,
     },
     watchInfo: {
       flex: 1,
@@ -255,26 +287,6 @@ export default function ChatDetailScreen() {
     },
   });
 
-  const getHeaderStatus = () => {
-    if (typingUsers.length > 0) {
-      if (typingUsers.length === 1) {
-        return `${typingUsers[0]} is typing...`;
-      } else if (typingUsers.length === 2) {
-        return `${typingUsers[0]} and ${typingUsers[1]} are typing...`;
-      } else {
-        return `${typingUsers[0]} and ${typingUsers.length - 1} others are typing...`;
-      }
-    }
-
-    if (conversation?.type === 'group') {
-      const onlineCount = conversation.participants.filter(p => p.online).length;
-      return `${conversation.participants.length} members, ${onlineCount} online`;
-    }
-
-    const participant = conversation?.participants[0];
-    return participant?.online ? 'Online' : 'Offline';
-  };
-
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -285,27 +297,31 @@ export default function ChatDetailScreen() {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <ArrowLeft size={24} color={colors.text} />
+            <BackArrow size={24} color={colors.text} />
           </TouchableOpacity>
 
           <View style={styles.headerCenter}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {conversation?.name?.charAt(0).toUpperCase() || 'C'}
-              </Text>
-            </View>
-            <Text style={styles.headerName}>{conversation?.name || 'Chat'}</Text>
+            {conversation?.avatar ? (
+              <Image source={{ uri: conversation.avatar }} style={styles.headerAvatar} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {conversation?.name?.charAt(0).toUpperCase() || 'C'}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.headerName}>{conversation?.name || name || 'Chat'}</Text>
           </View>
 
           <View style={styles.headerRight} />
         </View>
 
-        {/* Watch Card */}
+        {/* Watch Card - Only shown for direct chats about watches */}
         <TouchableOpacity style={styles.watchCard} onPress={() => router.push('/watch/1' as any)}>
-          <View style={styles.watchImage} />
+          <ImagePlaceholder size={60} borderRadius={8} />
           <View style={styles.watchInfo}>
-            <Text style={styles.watchTitle}>Rolex Submariner Date</Text>
-            <Text style={styles.watchPrice}>€12,352</Text>
+            <Text style={styles.watchTitle}>Audemars Piguet Royal Oak</Text>
+            <Text style={styles.watchPrice}>€132,352</Text>
           </View>
           <View style={styles.watchChevron}>
             <ChevronRight size={20} color={colors.textSecondary} />
@@ -316,13 +332,13 @@ export default function ChatDetailScreen() {
         <KeyboardAvoidingView
           style={styles.messagesContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          keyboardVerticalOffset={0}
         >
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
-          ) : groupedMessages.length === 0 ? (
+          ) : messages.length === 0 ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>Start the conversation</Text>
@@ -334,19 +350,13 @@ export default function ChatDetailScreen() {
           ) : (
             <FlashList
               ref={flashListRef}
-              data={groupedMessages}
+              data={messages}
               renderItem={renderMessage}
               keyExtractor={(item) => item.id}
               estimatedItemSize={80}
               contentContainerStyle={{ paddingVertical: 8 }}
               inverted={false}
               showsVerticalScrollIndicator={false}
-              onEndReachedThreshold={0.5}
-              ListFooterComponent={
-                typingUsers.length > 0 ? (
-                  <TypingIndicator names={typingUsers} isGroup={conversation?.type === 'group'} />
-                ) : null
-              }
             />
           )}
 
@@ -355,8 +365,7 @@ export default function ChatDetailScreen() {
             value={inputText}
             onChangeText={setInputText}
             onSend={handleSend}
-            onTypingStart={handleTypingStart}
-            onTypingStop={handleTypingStop}
+            onImageSelect={handleImageSelect}
           />
         </KeyboardAvoidingView>
       </SafeAreaView>

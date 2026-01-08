@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft, ChevronRight } from '@/components/icons';
+import { BackArrow, ChevronRight } from '@/components/icons';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
@@ -275,7 +275,7 @@ export default function AccountDetailsScreen() {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <ArrowLeft size={24} color={colors.text} />
+            <BackArrow size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Account Details</Text>
         </View>
@@ -294,7 +294,7 @@ export default function AccountDetailsScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackArrow size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Account Details</Text>
       </View>

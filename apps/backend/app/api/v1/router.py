@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, market, inventory, chat, profile, admin, news,
     chat_groups, billing, watchlist_admin, default_watchlist_admin,
-    activity, whatsapp, ai_insights, upload, orders
+    activity, whatsapp, ai_insights, upload, orders, assistant
 )
 
 api_router = APIRouter()
@@ -24,6 +24,7 @@ api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["whatsapp"]
 api_router.include_router(ai_insights.router, prefix="/insights", tags=["ai-insights"])
 api_router.include_router(upload.router, prefix="/upload", tags=["upload"])
 api_router.include_router(orders.router, prefix="/orders", tags=["orders"])
+api_router.include_router(assistant.router, tags=["assistant"])
 
 
 @api_router.get("/status")

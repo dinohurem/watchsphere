@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft, ChevronRight, User } from '@/components/icons';
+import { BackArrow, ChevronRight, User } from '@/components/icons';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
@@ -69,7 +69,7 @@ export default function ProfileSettingsScreen() {
 
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -242,7 +242,7 @@ export default function ProfileSettingsScreen() {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <ArrowLeft size={24} color={colors.text} />
+            <BackArrow size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile Settings</Text>
         </View>
@@ -261,7 +261,7 @@ export default function ProfileSettingsScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackArrow size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile Settings</Text>
       </View>

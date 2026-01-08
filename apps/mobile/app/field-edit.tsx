@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ArrowLeft } from '@/components/icons';
+import { BackArrow } from '@/components/icons';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
@@ -177,7 +177,7 @@ export default function FieldEditScreen() {
           onPress={() => router.back()}
           disabled={saving}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackArrow size={24} color={colors.text} />
         </TouchableOpacity>
       </View>
 
