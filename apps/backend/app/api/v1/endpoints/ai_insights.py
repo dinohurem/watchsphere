@@ -42,7 +42,7 @@ async def admin_list_ai_chats(
 ) -> Any:
     """List all AI chat conversations (Admin only)"""
 
-    query_conditions = [Conversation.conversation_type == ConversationType.AI_CHAT]
+    query_conditions = [Conversation.type == ConversationType.AI_CHAT]
 
     if user_id:
         query_conditions.append(Conversation.participants.contains([user_id]))
@@ -109,7 +109,7 @@ async def admin_get_ai_chat_messages(
             detail="Conversation not found"
         )
 
-    if conversation.conversation_type != ConversationType.AI_CHAT:
+    if conversation.type != ConversationType.AI_CHAT:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This is not an AI chat conversation"
@@ -153,18 +153,18 @@ async def admin_ai_chat_stats(
 
     # Total AI conversations
     total_conversations = await Conversation.find(
-        Conversation.conversation_type == ConversationType.AI_CHAT
+        Conversation.type == ConversationType.AI_CHAT
     ).count()
 
     # Recent AI conversations
     recent_conversations = await Conversation.find(
-        Conversation.conversation_type == ConversationType.AI_CHAT,
+        Conversation.type == ConversationType.AI_CHAT,
         Conversation.created_at >= cutoff
     ).count()
 
     # Get all recent AI chat IDs
     recent_chats = await Conversation.find(
-        Conversation.conversation_type == ConversationType.AI_CHAT,
+        Conversation.type == ConversationType.AI_CHAT,
         Conversation.created_at >= cutoff
     ).to_list()
 

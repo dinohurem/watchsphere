@@ -14,6 +14,7 @@ from app.services.storage import (
     upload_news_image,
     upload_market_image,
     upload_chat_image,
+    upload_watchlist_image,
     delete_image_with_thumbnail
 )
 
@@ -129,6 +130,25 @@ async def upload_market_picture(
 
     try:
         result = await upload_market_image(content, reference)
+        return ImageUploadResponse(**result)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload image: {str(e)}"
+        )
+
+
+@router.post("/watchlist", response_model=ImageUploadResponse)
+async def upload_watchlist_picture(
+    file: UploadFile = File(...),
+    item_id: Optional[str] = None,
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Upload a watchlist item image (admin only)"""
+    content = await validate_image(file)
+
+    try:
+        result = await upload_watchlist_image(content, item_id)
         return ImageUploadResponse(**result)
     except Exception as e:
         raise HTTPException(

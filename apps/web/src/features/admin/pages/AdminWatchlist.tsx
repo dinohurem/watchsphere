@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Search, Trash2, Bell, BellOff, Eye, X, Plus, Edit2 } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
+import { ImageUpload } from '@/components/ui/ImageUpload'
 
 interface WatchlistRecord {
   id: string
@@ -35,6 +36,7 @@ interface DefaultWatchlistItem {
   brand: string
   model: string
   reference?: string
+  image_url?: string
   item_type: 'want_to_buy' | 'want_to_sell' | 'watching'
   target_price?: number
   currency: string
@@ -51,6 +53,7 @@ interface DefaultWatchlistFormData {
   brand: string
   model: string
   reference: string
+  image_url: string
   item_type: 'want_to_buy' | 'want_to_sell' | 'watching'
   target_price: number | null
   currency: string
@@ -75,6 +78,7 @@ const emptyDefaultForm: DefaultWatchlistFormData = {
   brand: '',
   model: '',
   reference: '',
+  image_url: '',
   item_type: 'watching',
   target_price: null,
   currency: 'EUR',
@@ -174,6 +178,7 @@ export function AdminWatchlist() {
       brand: item.brand,
       model: item.model,
       reference: item.reference || '',
+      image_url: item.image_url || '',
       item_type: item.item_type,
       target_price: item.target_price || null,
       currency: item.currency,
@@ -216,6 +221,7 @@ export function AdminWatchlist() {
         brand: defaultFormData.brand,
         model: defaultFormData.model,
         reference: defaultFormData.reference || undefined,
+        image_url: defaultFormData.image_url || undefined,
         item_type: defaultFormData.item_type,
         target_price: defaultFormData.target_price || undefined,
         currency: defaultFormData.currency,
@@ -550,12 +556,21 @@ export function AdminWatchlist() {
                         <span className="text-sm font-medium text-gray-900">{item.display_order}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{item.brand}</p>
-                          <p className="text-sm text-gray-500">{item.model}</p>
-                          {item.reference && (
-                            <p className="text-xs text-gray-400">Ref: {item.reference}</p>
-                          )}
+                        <div className="flex items-center">
+                          <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                            {item.image_url ? (
+                              <img src={item.image_url} alt={item.model} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-gray-400 text-xs">No img</span>
+                            )}
+                          </div>
+                          <div className="ml-3">
+                            <p className="text-sm font-medium text-gray-900">{item.brand}</p>
+                            <p className="text-sm text-gray-500">{item.model}</p>
+                            {item.reference && (
+                              <p className="text-xs text-gray-400">Ref: {item.reference}</p>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -706,6 +721,13 @@ export function AdminWatchlist() {
                   placeholder="e.g., 126610LN"
                 />
               </div>
+
+              <ImageUpload
+                value={defaultFormData.image_url || undefined}
+                onChange={(url) => setDefaultFormData({ ...defaultFormData, image_url: url || '' })}
+                uploadEndpoint="/upload/watchlist"
+                label="Watch Image"
+              />
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

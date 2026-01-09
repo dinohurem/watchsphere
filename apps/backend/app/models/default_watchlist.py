@@ -13,6 +13,9 @@ class DefaultWatchlistItem(Document):
     model: str
     reference: Optional[str] = None
 
+    # Image URL (first/primary image displayed to users)
+    image_url: Optional[str] = None
+
     # Item type (default to watching for new users)
     item_type: WatchlistItemType = WatchlistItemType.WATCHING
 

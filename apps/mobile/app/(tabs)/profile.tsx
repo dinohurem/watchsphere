@@ -8,6 +8,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
+import { LogoIcon } from '@/components/LogoIcon';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -139,14 +140,6 @@ interface FavoriteWatch {
   image: string;
 }
 
-// Placeholder watch images (high-quality watch images)
-const WATCH_IMAGES = {
-  apRoyalOak: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?w=400&h=400&fit=crop',
-  patekNautilus: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=400&h=400&fit=crop',
-  rolexGmt: 'https://images.unsplash.com/photo-1548171915-e79a380a2a4b?w=400&h=400&fit=crop',
-  rolexDayDate: 'https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=400&h=400&fit=crop',
-};
-
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
   const [favoriteWatches, setFavoriteWatches] = useState<FavoriteWatch[]>([]);
@@ -169,7 +162,8 @@ export default function ProfileScreen() {
           price: item.target_price ? `${item.target_price.toLocaleString('de-DE')}€` : '0€',
           change: item.price_change ? `${Math.abs(item.price_change).toFixed(1).replace('.', ',')}%` : '0%',
           isPositive: (item.price_change || 0) >= 0,
-          image: item.cover_image || WATCH_IMAGES.apRoyalOak,
+          // Use image from API, or empty string to trigger placeholder
+          image: item.image || item.cover_image || '',
         }));
         setFavoriteWatches(formattedWatches);
       }
@@ -186,7 +180,8 @@ export default function ProfileScreen() {
       onPress={() => router.push({
         pathname: '/market/[id]',
         params: {
-          id: watch.id,
+          // Use reference as id for market lookup (aggregated endpoint uses reference)
+          id: watch.reference || watch.id,
           reference: watch.reference,
           brand: watch.brand,
         },
@@ -199,11 +194,15 @@ export default function ProfileScreen() {
           colors={['#FFFFFF', '#F4F4F4']}
           style={styles.watchImageGradient}
         >
-          <Image
-            source={{ uri: watch.image }}
-            style={styles.watchImage}
-            resizeMode="contain"
-          />
+          {watch.image ? (
+            <Image
+              source={{ uri: watch.image }}
+              style={styles.watchImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <LogoIcon size={sp(48)} color="rgba(33, 33, 33, 0.15)" />
+          )}
         </LinearGradient>
       </View>
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
+import { ImageUpload } from '@/components/ui/ImageUpload'
 
 interface Watch {
   id: string
@@ -718,16 +719,12 @@ export function AdminWatches() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cover Image URL</label>
-                <input
-                  type="url"
-                  value={formData.cover_image}
-                  onChange={(e) => setFormData({ ...formData, cover_image: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="https://..."
-                />
-              </div>
+              <ImageUpload
+                value={formData.cover_image || undefined}
+                onChange={(url) => setFormData({ ...formData, cover_image: url || '' })}
+                uploadEndpoint="/upload/market"
+                label="Cover Image"
+              />
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>

@@ -143,11 +143,20 @@ export default function RegisterScreen() {
 
     try {
       // Create account - this will send verification email
-      await api.post('/auth/register', {
+      const response = await api.post('/auth/register', {
         name: username,
         email,
         password,
       });
+
+      // Store tokens from registration response so we can verify email
+      const { access_token, refresh_token } = response.data;
+      if (access_token) {
+        await AsyncStorage.setItem('auth_token', access_token);
+      }
+      if (refresh_token) {
+        await AsyncStorage.setItem('refresh_token', refresh_token);
+      }
 
       // Move to verification step
       setStep(2);

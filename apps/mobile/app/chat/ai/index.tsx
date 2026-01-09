@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { AISparkle, Plus, ChevronLeft } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { api } from '@/services/api';
 import Svg, { Path } from 'react-native-svg';
 
 // Sparkle icon for chat items (smaller, matches Figma)
@@ -37,31 +38,33 @@ function SparkleIcon() {
 interface AIChat {
   id: string;
   title: string;
-  lastMessage?: string;
-  createdAt: string;
+  last_message?: string;
+  created_at: string;
+  message_count: number;
 }
 
 export default function AskAIScreen() {
   const { fonts } = useTheme();
   const [chats, setChats] = useState<AIChat[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Load chats from storage
-  useEffect(() => {
-    loadChats();
-  }, []);
+  // Load chats from backend every time the screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadChats();
+    }, [])
+  );
 
   const loadChats = async () => {
     try {
-      const savedChats = await AsyncStorage.getItem('ai_chats');
-      if (savedChats) {
-        const parsedChats = JSON.parse(savedChats);
-        setChats(parsedChats);
-      } else {
-        setChats([]);
-      }
+      setLoading(true);
+      const response = await api.get('/ai-chats');
+      setChats(response.data);
     } catch (error) {
       console.error('Error loading AI chats:', error);
       setChats([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -179,6 +182,11 @@ export default function AskAIScreen() {
       textAlign: 'center',
       lineHeight: fp(22),
     },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
   });
 
   return (
@@ -202,10 +210,14 @@ export default function AskAIScreen() {
         {/* Chat List */}
         <ScrollView
           style={styles.content}
-          contentContainerStyle={chats.length === 0 ? { flex: 1 } : styles.chatList}
+          contentContainerStyle={chats.length === 0 && !loading ? { flex: 1 } : styles.chatList}
           showsVerticalScrollIndicator={false}
         >
-          {chats.length === 0 ? (
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#9747FF" />
+            </View>
+          ) : chats.length === 0 ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIcon}>
                 <AISparkle size={32} color="#9747FF" />
@@ -228,7 +240,7 @@ export default function AskAIScreen() {
                 </View>
                 <View style={styles.chatTextContainer}>
                   <Text style={styles.chatTitle} numberOfLines={2}>
-                    {chat.title}
+                    {chat.title || 'New Chat'}
                   </Text>
                 </View>
               </TouchableOpacity>
