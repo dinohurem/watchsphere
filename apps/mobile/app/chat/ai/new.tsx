@@ -38,10 +38,11 @@ export default function NewChatScreen() {
     if (!inputText.trim()) return;
 
     // Navigate to AI chat with initial message
+    // Use 'new' as id to indicate this is a new chat that needs to be created
     router.replace({
       pathname: '/chat/ai/[id]',
       params: {
-        id: `ai-${Date.now()}`,
+        id: 'new',
         initialMessage: inputText.trim(),
       },
     });

@@ -168,6 +168,17 @@ async def upload_market_image(image_data: bytes, reference: Optional[str] = None
     )
 
 
+async def upload_watchlist_image(image_data: bytes, item_id: Optional[str] = None) -> dict:
+    """Upload a watchlist item image"""
+    filename = f"watchlist_{item_id}" if item_id else None
+    return await upload_image(
+        image_data,
+        folder="watchlist",
+        filename=filename,
+        create_thumb=True
+    )
+
+
 async def upload_chat_image(image_data: bytes, chat_id: str) -> dict:
     """Upload a chat/message image"""
     return await upload_image(

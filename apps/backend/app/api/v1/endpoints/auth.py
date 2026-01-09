@@ -122,12 +122,8 @@ async def register(user_in: UserCreate) -> Any:
     # Assign default watchlist items to the new user
     await assign_default_watchlist_to_user(user)
 
-    # Generate and send verification code
-    # Use test code in development, random code in production
-    if settings.ENVIRONMENT == "development":
-        code = settings.TEST_VERIFICATION_CODE
-    else:
-        code = VerificationCode.generate_code()
+    # Generate and send verification code (always random)
+    code = VerificationCode.generate_code()
 
     verification = await VerificationCode.create_for_email(
         email=user_in.email,
@@ -188,13 +184,15 @@ async def verify_email(
     # Mark the code as used
     await verification.mark_used()
 
-    # Mark the user as verified
+    # Mark the user as verified AND approved (email verification = approval)
     current_user.verified = True
+    current_user.approved = True
     await current_user.save()
 
     return {
         "message": "Email verified successfully",
         "verified": True,
+        "approved": True,
     }
 
 
@@ -209,11 +207,8 @@ async def resend_verification_code(
             detail="Email is already verified",
         )
 
-    # Generate new verification code
-    if settings.ENVIRONMENT == "development":
-        code = settings.TEST_VERIFICATION_CODE
-    else:
-        code = VerificationCode.generate_code()
+    # Generate new verification code (always random)
+    code = VerificationCode.generate_code()
 
     await VerificationCode.create_for_email(
         email=current_user.email,
@@ -382,11 +377,8 @@ async def forgot_password(request: ForgotPasswordRequest) -> Any:
     if not user:
         return {"message": "If an account exists with this email, a reset code has been sent."}
 
-    # Generate reset code
-    if settings.ENVIRONMENT == "development":
-        code = settings.TEST_VERIFICATION_CODE
-    else:
-        code = VerificationCode.generate_code()
+    # Generate reset code (always random)
+    code = VerificationCode.generate_code()
 
     await VerificationCode.create_for_email(
         email=request.email,

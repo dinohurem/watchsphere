@@ -1184,7 +1184,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   actionIconContainerActive: {
-    backgroundColor: 'rgba(255, 184, 0, 0.15)',
+    // No background change when active - only icon fill changes
   },
   filterBadge: {
     position: 'absolute',
