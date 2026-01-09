@@ -18,16 +18,15 @@ import { api } from '@/services/api';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
-const TOTAL_STEPS = 4; // Registration steps (2) + Onboarding steps (3 shown as 3-4)
+const TOTAL_STEPS = 4; // Registration steps (2) + Onboarding steps (2 shown as 3-4)
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2;
 
 interface OnboardingData {
   firstName: string;
   lastName: string;
   gender: string;
   role: string;
-  watchCount: string;
 }
 
 const ROLES = [
@@ -82,7 +81,6 @@ export default function OnboardingScreen() {
     lastName: '',
     gender: '',
     role: '',
-    watchCount: '',
   });
 
   const user = useAuthStore((state) => state.user);
@@ -108,16 +106,33 @@ export default function OnboardingScreen() {
         Alert.alert('Error', 'Please select your role');
         return;
       }
-      setStep(3);
-    } else if (step === 3) {
       await completeOnboarding();
     }
   };
 
-  const handleRoleSelect = (roleId: string) => {
+  const handleRoleSelect = async (roleId: string) => {
     setData({ ...data, role: roleId });
-    // Automatically advance to next step when role is selected
-    setTimeout(() => setStep(3), 300);
+    // Complete onboarding when role is selected
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/complete-onboarding', {
+        first_name: data.firstName,
+        last_name: data.lastName,
+        gender: data.gender || undefined,
+        role: roleId,
+        watch_count: 0,
+      });
+
+      if (response.data.user) {
+        setUser(response.data.user);
+      }
+
+      router.replace('/(auth)/notifications');
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to complete onboarding');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const completeOnboarding = async () => {
@@ -128,7 +143,7 @@ export default function OnboardingScreen() {
         last_name: data.lastName,
         gender: data.gender || undefined,
         role: data.role,
-        watch_count: data.watchCount ? parseInt(data.watchCount) : 0,
+        watch_count: 0,
       });
 
       if (response.data.user) {
@@ -145,11 +160,10 @@ export default function OnboardingScreen() {
   };
 
   const renderProgressBar = () => {
-    // Map onboarding steps to overall progress (3/4, 4/4, 4/4 for steps 1, 2, 3)
+    // Map onboarding steps to overall progress (3/4, 4/4 for steps 1, 2)
     const progressMap: Record<Step, number> = {
       1: 3,
-      2: 3.5,
-      3: 4,
+      2: 4,
     };
     const progress = progressMap[step] / TOTAL_STEPS;
     return (
@@ -273,31 +287,6 @@ export default function OnboardingScreen() {
     </ScrollView>
   );
 
-  const renderStep3 = () => (
-    <ScrollView
-      style={styles.scrollView}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.title}>How many watches do you own?</Text>
-      <Text style={styles.subtitle}>
-        Our users have added more than one million watches to the Watch Collection. Each WatchSphere user owns an average of 3 watches.
-      </Text>
-
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="0"
-          placeholderTextColor="#999999"
-          keyboardType="number-pad"
-          value={data.watchCount}
-          onChangeText={(text) => setData({ ...data, watchCount: text.replace(/[^0-9]/g, '') })}
-        />
-      </View>
-    </ScrollView>
-  );
-
   const canProceed = () => {
     if (step === 1) {
       return data.firstName.trim().length > 0 && data.lastName.trim().length > 0;
@@ -305,7 +294,7 @@ export default function OnboardingScreen() {
     if (step === 2) {
       return data.role.length > 0;
     }
-    return true; // Watch count is optional
+    return true;
   };
 
   return (
@@ -325,7 +314,6 @@ export default function OnboardingScreen() {
       >
         {step === 1 && renderStep1()}
         {step === 2 && renderStep2()}
-        {step === 3 && renderStep3()}
 
         {/* Bottom Button - not shown for step 2 (role selection auto-advances) */}
         {step !== 2 && (

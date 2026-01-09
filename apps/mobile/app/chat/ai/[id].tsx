@@ -13,10 +13,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ChevronLeft, AISparkle, Image } from '@/components/icons';
+import { ChevronLeft, AISparkle } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { api } from '@/services/api';
 
@@ -91,61 +90,76 @@ export default function AIChatScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [conversationTitle, setConversationTitle] = useState(passedTitle || 'New Chat');
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [chatId, setChatId] = useState<string | null>(id === 'new' ? null : id);
   const scrollViewRef = useRef<ScrollView>(null);
   const hasInitialized = useRef(false);
+  const previousIdRef = useRef(id);
+  // Use a ref to track chatId for immediate access in callbacks (avoids stale closures)
+  const chatIdRef = useRef<string | null>(id === 'new' ? null : id);
 
-  // Load existing messages when opening a chat
+  // Sync chatId with id param when navigating to a different chat
+  // Only reset if we're actually navigating to a different chat (not on re-renders)
   useEffect(() => {
-    loadChatHistory();
+    // Skip if the id hasn't actually changed (prevents unwanted resets)
+    if (previousIdRef.current === id) {
+      return;
+    }
+    previousIdRef.current = id;
+
+    if (id !== 'new') {
+      setChatId(id);
+      chatIdRef.current = id;
+      hasInitialized.current = false; // Reset so we can load new chat history
+    } else {
+      setChatId(null);
+      chatIdRef.current = null;
+      hasInitialized.current = false;
+    }
+    setMessages([]);
   }, [id]);
 
+  // Load existing messages when opening a chat (not new)
+  useEffect(() => {
+    if (id !== 'new' && chatId) {
+      loadChatHistory();
+    } else {
+      setIsLoadingHistory(false);
+    }
+  }, [chatId]);
+
   const loadChatHistory = async () => {
+    if (!chatId) return;
+
     try {
       setIsLoadingHistory(true);
-      const savedMessages = await AsyncStorage.getItem(`ai_chat_messages_${id}`);
-      if (savedMessages) {
-        const parsedMessages = JSON.parse(savedMessages);
-        // Restore Date objects
-        const messagesWithDates = parsedMessages.map((msg: Message) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp),
-        }));
-        setMessages(messagesWithDates);
+      const response = await api.get(`/ai-chats/${chatId}/messages`);
+      const messagesData = response.data;
 
-        // Set title from first message
-        const firstUserMessage = messagesWithDates.find((m: Message) => m.isUser);
-        if (firstUserMessage && !passedTitle) {
-          const title = firstUserMessage.content.slice(0, 25);
-          setConversationTitle(title + (firstUserMessage.content.length > 25 ? '...' : ''));
-        }
+      const messagesWithDates = messagesData.map((msg: any) => ({
+        id: msg.id,
+        content: msg.content,
+        isUser: msg.is_user,
+        timestamp: new Date(msg.created_at),
+      }));
+      setMessages(messagesWithDates);
 
-        // Mark as initialized since we loaded history
-        hasInitialized.current = true;
-
-        // Scroll to bottom after loading
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: false });
-        }, 100);
+      // Set title from first message if not passed
+      const firstUserMessage = messagesWithDates.find((m: Message) => m.isUser);
+      if (firstUserMessage && !passedTitle) {
+        const title = firstUserMessage.content.slice(0, 25);
+        setConversationTitle(title + (firstUserMessage.content.length > 25 ? '...' : ''));
       }
+
+      hasInitialized.current = true;
+
+      // Scroll to bottom after loading
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 100);
     } catch (error) {
       console.error('Error loading chat history:', error);
     } finally {
       setIsLoadingHistory(false);
-    }
-  };
-
-  // Save messages whenever they change
-  useEffect(() => {
-    if (messages.length > 0 && !isLoadingHistory) {
-      saveChatMessages();
-    }
-  }, [messages, isLoadingHistory]);
-
-  const saveChatMessages = async () => {
-    try {
-      await AsyncStorage.setItem(`ai_chat_messages_${id}`, JSON.stringify(messages));
-    } catch (error) {
-      console.error('Error saving chat messages:', error);
     }
   };
 
@@ -154,22 +168,30 @@ export default function AIChatScreen() {
     const processInitialMessage = async () => {
       if (initialMessage && !hasInitialized.current && !isLoadingHistory) {
         hasInitialized.current = true;
-        const userMessage: Message = {
-          id: Date.now().toString(),
-          content: initialMessage,
-          isUser: true,
-          timestamp: new Date(),
-        };
-        setMessages([userMessage]);
-        setConversationTitle(
-          initialMessage.slice(0, 25) + (initialMessage.length > 25 ? '...' : '')
-        );
-        setIsLoading(true);
 
-        // Save chat metadata to storage
-        saveChatMetadata(initialMessage);
-
+        // Create new chat on backend
         try {
+          const createResponse = await api.post('/ai-chats', {
+            title: initialMessage.slice(0, 50) + (initialMessage.length > 50 ? '...' : ''),
+            initial_message: initialMessage,
+          });
+
+          const newChatId = createResponse.data.id;
+          setChatId(newChatId);
+          chatIdRef.current = newChatId; // Update ref immediately for subsequent messages
+
+          const userMessage: Message = {
+            id: Date.now().toString(),
+            content: initialMessage,
+            isUser: true,
+            timestamp: new Date(),
+          };
+          setMessages([userMessage]);
+          setConversationTitle(
+            initialMessage.slice(0, 25) + (initialMessage.length > 25 ? '...' : '')
+          );
+          setIsLoading(true);
+
           // Call the AI assistant API
           const response = await api.post('/assistant/query', {
             message: initialMessage,
@@ -184,9 +206,14 @@ export default function AIChatScreen() {
             quickReplies: data.requires_clarification ? data.clarification_options : undefined,
           };
           setMessages((prev) => [...prev, aiResponse]);
+
+          // Save AI response to backend
+          await api.post(`/ai-chats/${newChatId}/messages`, {
+            content: data.suggested_response,
+            is_ai: true,
+          });
         } catch (error) {
-          console.error('Error calling assistant API:', error);
-          // Fallback to mock response
+          console.error('Error creating chat or calling assistant API:', error);
           const aiResponse: Message = {
             id: (Date.now() + 1).toString(),
             content: generateMockResponse(initialMessage),
@@ -214,26 +241,6 @@ export default function AIChatScreen() {
     }
   }, [messages, passedTitle]);
 
-  const saveChatMetadata = async (title: string) => {
-    try {
-      const savedChats = await AsyncStorage.getItem('ai_chats');
-      const chats = savedChats ? JSON.parse(savedChats) : [];
-      // Check if chat already exists
-      const existingIndex = chats.findIndex((c: any) => c.id === id);
-      if (existingIndex === -1) {
-        const newChat = {
-          id,
-          title,
-          createdAt: new Date().toISOString(),
-        };
-        chats.unshift(newChat);
-        await AsyncStorage.setItem('ai_chats', JSON.stringify(chats.slice(0, 50)));
-      }
-    } catch (error) {
-      console.error('Error saving chat:', error);
-    }
-  };
-
   const handleSend = useCallback(async (messageContent?: string) => {
     const content = messageContent || inputText.trim();
     if (!content || isLoading) return;
@@ -254,6 +261,26 @@ export default function AIChatScreen() {
     }, 100);
 
     try {
+      // Use ref for immediate access (avoids stale closure issues)
+      let currentChatId = chatIdRef.current;
+
+      // If no chat exists yet, create one first
+      if (!currentChatId) {
+        const createResponse = await api.post('/ai-chats', {
+          title: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
+          initial_message: content,
+        });
+        currentChatId = createResponse.data.id;
+        setChatId(currentChatId);
+        chatIdRef.current = currentChatId; // Update ref immediately
+      } else {
+        // Save user message to backend
+        await api.post(`/ai-chats/${currentChatId}/messages`, {
+          content,
+          is_ai: false,
+        });
+      }
+
       // Call the AI assistant API
       const response = await api.post('/assistant/query', {
         message: content,
@@ -268,9 +295,14 @@ export default function AIChatScreen() {
         quickReplies: data.requires_clarification ? data.clarification_options : undefined,
       };
       setMessages((prev) => [...prev, aiResponse]);
+
+      // Save AI response to backend
+      await api.post(`/ai-chats/${currentChatId}/messages`, {
+        content: data.suggested_response,
+        is_ai: true,
+      });
     } catch (error) {
       console.error('Error calling assistant API:', error);
-      // Fallback to mock response if API fails
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         content: generateMockResponse(content),

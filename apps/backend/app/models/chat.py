@@ -15,15 +15,18 @@ class ConversationType(str, Enum):
     DIRECT = "direct"
     GROUP = "group"
     AI = "ai"
+    AI_CHAT = "ai_chat"  # User-to-AI assistant chats
 
 
 class Conversation(Document):
     type: ConversationType
     name: Optional[str] = None  # For group chats
+    title: Optional[str] = None  # For AI chats - conversation title
     description: Optional[str] = None  # Group description
     avatar: Optional[str] = None  # Group avatar URL
     created_by: Optional[str] = None  # Admin who created the group
     participant_ids: List[str] = Field(default_factory=list)  # For direct chats
+    participants: List[str] = Field(default_factory=list)  # User IDs participating in conversation
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None

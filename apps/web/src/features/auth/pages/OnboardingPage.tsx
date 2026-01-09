@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3;
 
 interface OnboardingData {
   verificationCode: string;
@@ -11,7 +11,6 @@ interface OnboardingData {
   lastName: string;
   gender: string;
   role: string;
-  watchCount: string;
 }
 
 const ROLES = [
@@ -33,7 +32,6 @@ export function OnboardingPage() {
     lastName: '',
     gender: '',
     role: '',
-    watchCount: '',
   });
 
   const navigate = useNavigate();
@@ -101,14 +99,11 @@ export function OnboardingPage() {
       }
       setStep(3);
     } else if (step === 3) {
-      // Validate role selection
+      // Validate role selection and complete onboarding
       if (!data.role) {
         setError('Please select your role');
         return;
       }
-      setStep(4);
-    } else if (step === 4) {
-      // Complete onboarding
       setLoading(true);
       try {
         const response = await api.post('/auth/complete-onboarding', {
@@ -116,7 +111,7 @@ export function OnboardingPage() {
           last_name: data.lastName,
           gender: data.gender || undefined,
           role: data.role,
-          watch_count: data.watchCount ? parseInt(data.watchCount) : 0,
+          watch_count: 0,
         });
 
         if (response.data.user) {
@@ -129,13 +124,6 @@ export function OnboardingPage() {
       } finally {
         setLoading(false);
       }
-    }
-  };
-
-  const handleSkip = () => {
-    if (step === 4) {
-      // Skip watch count and complete
-      handleNext();
     }
   };
 
@@ -350,64 +338,8 @@ export function OnboardingPage() {
                 disabled={loading || !data.role}
                 className="w-full py-3.5 bg-[#1D1D1F] text-white text-[16px] font-semibold rounded-2xl hover:bg-[#1D1D1F]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1D1D1F] disabled:opacity-50 transition-colors"
               >
-                Continue
+                {loading ? 'Completing...' : 'Complete'}
               </button>
-            </form>
-          </div>
-        );
-
-      case 4:
-        return (
-          <div className="space-y-8">
-            <div>
-              <h1 className="text-[32px] font-bold text-[#1D1D1F] tracking-wide">
-                Watch Count
-              </h1>
-              <p className="mt-2 text-[15px] text-black/60">
-                How many watches do you currently own?
-              </p>
-            </div>
-
-            {error && (
-              <div className="rounded-2xl bg-red-50 p-4 border border-red-100">
-                <p className="text-sm text-red-800">{error}</p>
-              </div>
-            )}
-
-            <form onSubmit={handleNext} className="space-y-6">
-              <div className="space-y-1.5">
-                <label htmlFor="watchCount" className="block text-[15px] font-semibold text-[#1D1D1F]">
-                  Number of Watches
-                </label>
-                <input
-                  id="watchCount"
-                  type="number"
-                  min="0"
-                  value={data.watchCount}
-                  onChange={(e) => setData({ ...data, watchCount: e.target.value })}
-                  className="w-full px-4 py-3.5 border border-[#1D1D1F]/10 rounded-2xl text-[15px] text-[#1D1D1F] placeholder:text-[#1D1D1F]/60 focus:outline-none focus:ring-2 focus:ring-[#1D1D1F]/20 focus:border-[#1D1D1F]/20"
-                  placeholder="Enter a number"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3.5 bg-[#1D1D1F] text-white text-[16px] font-semibold rounded-2xl hover:bg-[#1D1D1F]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1D1D1F] disabled:opacity-50 transition-colors"
-                >
-                  {loading ? 'Completing...' : 'Complete'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSkip}
-                  disabled={loading}
-                  className="w-full py-3.5 text-[16px] font-semibold text-[#1D1D1F] hover:bg-gray-50 rounded-2xl transition-colors"
-                >
-                  Skip for now
-                </button>
-              </div>
             </form>
           </div>
         );
@@ -442,7 +374,7 @@ export function OnboardingPage() {
         {/* Footer */}
         <div className="p-8 flex items-center justify-center">
           <div className="flex gap-2">
-            {[1, 2, 3, 4].map((s) => (
+            {[1, 2, 3].map((s) => (
               <div
                 key={s}
                 className={`w-2 h-2 rounded-full transition-colors ${
@@ -473,7 +405,7 @@ export function OnboardingPage() {
 
           {/* Step indicators */}
           <div className="absolute top-10 right-10 flex gap-2">
-            {[1, 2, 3, 4].map((s) => (
+            {[1, 2, 3].map((s) => (
               <div
                 key={s}
                 className={`w-8 h-1 rounded-full transition-colors ${

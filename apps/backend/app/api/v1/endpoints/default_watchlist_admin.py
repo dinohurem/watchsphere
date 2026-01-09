@@ -18,6 +18,7 @@ class DefaultWatchlistResponse(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
+    image_url: Optional[str] = None
     item_type: WatchlistItemType
     target_price: Optional[float] = None
     currency: str
@@ -35,6 +36,7 @@ class DefaultWatchlistCreate(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
+    image_url: Optional[str] = None
     item_type: WatchlistItemType = WatchlistItemType.WATCHING
     target_price: Optional[float] = None
     currency: str = "EUR"
@@ -47,6 +49,7 @@ class DefaultWatchlistUpdate(BaseModel):
     brand: Optional[str] = None
     model: Optional[str] = None
     reference: Optional[str] = None
+    image_url: Optional[str] = None
     item_type: Optional[WatchlistItemType] = None
     target_price: Optional[float] = None
     currency: Optional[str] = None
@@ -79,6 +82,7 @@ async def admin_list_default_watchlist(
             "brand": item.brand,
             "model": item.model,
             "reference": item.reference,
+            "image_url": item.image_url,
             "item_type": item.item_type,
             "target_price": item.target_price,
             "currency": item.currency,
@@ -114,6 +118,7 @@ async def admin_get_default_watchlist_item(
         "brand": item.brand,
         "model": item.model,
         "reference": item.reference,
+        "image_url": item.image_url,
         "item_type": item.item_type,
         "target_price": item.target_price,
         "currency": item.currency,
@@ -138,6 +143,7 @@ async def admin_create_default_watchlist_item(
         brand=item_data.brand,
         model=item_data.model,
         reference=item_data.reference,
+        image_url=item_data.image_url,
         item_type=item_data.item_type,
         target_price=item_data.target_price,
         currency=item_data.currency,
@@ -155,6 +161,7 @@ async def admin_create_default_watchlist_item(
         "brand": item.brand,
         "model": item.model,
         "reference": item.reference,
+        "image_url": item.image_url,
         "item_type": item.item_type,
         "target_price": item.target_price,
         "currency": item.currency,
@@ -198,6 +205,7 @@ async def admin_update_default_watchlist_item(
         "brand": item.brand,
         "model": item.model,
         "reference": item.reference,
+        "image_url": item.image_url,
         "item_type": item.item_type,
         "target_price": item.target_price,
         "currency": item.currency,
