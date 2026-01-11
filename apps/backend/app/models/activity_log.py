@@ -35,6 +35,17 @@ class ActivityType(str, Enum):
     GROUP_CREATED = "group_created"
     AI_CHAT_SESSION = "ai_chat_session"
 
+    # Review events
+    REVIEW_CREATED = "review_created"
+    REVIEW_UPDATED = "review_updated"
+    REVIEW_DELETED = "review_deleted"
+
+    # Support events
+    DISPUTE_CREATED = "dispute_created"
+    DISPUTE_UPDATED = "dispute_updated"
+    ISSUE_CREATED = "issue_created"
+    ISSUE_UPDATED = "issue_updated"
+
     # Admin events
     ADMIN_ACTION = "admin_action"
 
@@ -48,6 +59,15 @@ class EntityType(str, Enum):
     CONVERSATION = "conversation"
     NEWS = "news"
     BILLING = "billing"
+    REVIEW = "review"
+    DISPUTE = "dispute"
+    ISSUE = "issue"
+
+
+class Platform(str, Enum):
+    WEB = "web"
+    MOBILE = "mobile"
+    ADMIN = "admin"
 
 
 class ActivityLog(Document):
@@ -69,6 +89,7 @@ class ActivityLog(Document):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
+    platform: Optional[str] = None  # "web", "mobile", or "admin"
 
     # Timestamp
     created_at: datetime = Field(default_factory=datetime.utcnow)

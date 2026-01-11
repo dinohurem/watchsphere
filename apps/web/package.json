@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.0.1",
+    "@react-oauth/google": "^0.12.1",
     "@tabler/icons-react": "^3.35.0",
     "@tanstack/react-query": "^5.17.19",
     "@watchsphere/shared": "file:../../packages/shared",

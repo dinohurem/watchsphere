@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
 
-from app.core.deps import get_current_admin_user
+from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
 from app.models.default_watchlist import DefaultWatchlistItem
 from app.models.watchlist import WatchlistItemType
@@ -56,6 +56,40 @@ class DefaultWatchlistUpdate(BaseModel):
     notes: Optional[str] = None
     is_active: Optional[bool] = None
     display_order: Optional[int] = None
+
+
+# ============== PUBLIC ENDPOINTS ==============
+
+@router.get("/public", response_model=List[DefaultWatchlistResponse])
+async def get_public_default_watchlist(
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Get active default watchlist items for regular users"""
+
+    items = await DefaultWatchlistItem.find(
+        DefaultWatchlistItem.is_active == True
+    ).sort([("display_order", 1), ("created_at", -1)]).to_list()
+
+    return [
+        {
+            "id": str(item.id),
+            "brand": item.brand,
+            "model": item.model,
+            "reference": item.reference,
+            "image_url": item.image_url,
+            "item_type": item.item_type,
+            "target_price": item.target_price,
+            "currency": item.currency,
+            "notes": item.notes,
+            "is_active": item.is_active,
+            "display_order": item.display_order,
+            "created_by_id": item.created_by_id,
+            "created_by_name": item.created_by_name,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+        }
+        for item in items
+    ]
 
 
 # ============== ADMIN ENDPOINTS ==============

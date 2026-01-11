@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { BackArrow, ExternalLink } from '@/components/icons';
+import { BackArrow } from '@/components/icons';
 import { api } from '@/services/api';
 
 interface NewsArticle {
@@ -60,16 +60,9 @@ export default function NewsArticleScreen() {
 
   const title = article?.title || '';
   const source = article?.author_name || 'WatchSphere';
-  const url = article?.source_url || '';
   const date = formatDate(article?.published_at || article?.created_at);
   const fullText = article?.content || '';
   const imageUrl = article?.cover_image || '';
-
-  const handleOpenSource = () => {
-    if (url) {
-      Linking.openURL(url);
-    }
-  };
 
   const styles = StyleSheet.create({
     container: {
@@ -144,21 +137,6 @@ export default function NewsArticleScreen() {
       color: colors.text,
       lineHeight: 26,
       marginBottom: 24,
-    },
-    sourceButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'flex-start',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      backgroundColor: colors.backgroundSecondary,
-      borderRadius: 10,
-      gap: 8,
-    },
-    sourceButtonText: {
-      fontSize: 15,
-      fontFamily: fonts.medium,
-      color: colors.text,
     },
     loadingContainer: {
       flex: 1,
@@ -258,12 +236,6 @@ export default function NewsArticleScreen() {
 
           {/* Body */}
           <Text style={styles.body}>{fullText}</Text>
-
-          {/* Source Link */}
-          <TouchableOpacity style={styles.sourceButton} onPress={handleOpenSource}>
-            <ExternalLink size={18} color={colors.text} />
-            <Text style={styles.sourceButtonText}>Read original article</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>

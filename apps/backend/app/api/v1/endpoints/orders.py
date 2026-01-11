@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
@@ -8,6 +8,8 @@ from app.core.deps import get_current_active_user, get_current_admin_user
 from app.models.user import User
 from app.models.order import Order, OrderType, OrderCondition, OrderStatus
 from app.models.watch import Watch, WatchStatus
+from app.api.v1.endpoints.activity import log_activity
+from app.models.activity_log import ActivityType, EntityType
 
 router = APIRouter()
 
@@ -131,8 +133,22 @@ async def get_order_book(
     brand = watch.brand if watch else ""
     model = watch.model if watch else ""
 
+    # Collect all user IDs that need name lookup
+    all_orders = buy_orders + sell_orders
+    user_ids_needing_names = [o.user_id for o in all_orders if not o.user_name]
+
+    # Fetch user names in batch
+    user_names_map = {}
+    if user_ids_needing_names:
+        users = await User.find(
+            {"_id": {"$in": [PydanticObjectId(uid) for uid in user_ids_needing_names]}}
+        ).to_list()
+        user_names_map = {str(u.id): u.name for u in users}
+
     # Format orders for response
     def format_order(order: Order) -> OrderBookEntry:
+        # Use order.user_name if available, otherwise lookup from user_names_map
+        user_name = order.user_name or user_names_map.get(order.user_id)
         return OrderBookEntry(
             id=str(order.id),
             date=order.created_at.strftime("%m.%d.%y"),
@@ -144,7 +160,7 @@ async def get_order_book(
             has_box=order.has_box,
             has_papers=order.has_papers,
             user_id=order.user_id,
-            user_name=order.user_name,
+            user_name=user_name,
         )
 
     formatted_buy = [format_order(o) for o in buy_orders]
@@ -222,6 +238,7 @@ async def get_market_price(reference: str) -> Any:
 async def create_order(
     order_data: OrderCreate,
     current_user: User = Depends(get_current_active_user),
+    x_platform: Optional[str] = Header(None, alias="X-Platform"),
 ) -> Any:
     """Create a new buy/sell order"""
 
@@ -251,6 +268,27 @@ async def create_order(
     for watch in watches:
         watch.order_count += 1
         await watch.save()
+
+    # Log activity
+    platform = x_platform or "web"
+    activity_type = ActivityType.BUY_ORDER_PLACED if order_data.order_type == OrderType.BUY else ActivityType.SELL_ORDER_PLACED
+    await log_activity(
+        activity_type=activity_type,
+        description=f"{current_user.name} placed a {order_data.order_type.value} order for {order_data.brand} {order_data.model} at {order_data.price} {order_data.currency}",
+        user=current_user,
+        entity_type=EntityType.ORDER,
+        entity_id=str(order.id),
+        metadata={
+            "order_type": order_data.order_type.value,
+            "brand": order_data.brand,
+            "model": order_data.model,
+            "reference": order_data.reference,
+            "price": order_data.price,
+            "currency": order_data.currency,
+            "platform": platform,
+        },
+        platform=platform,
+    )
 
     return OrderResponse(
         id=str(order.id),
@@ -316,6 +354,89 @@ async def get_my_orders(
         )
         for order in orders
     ]
+
+
+class OrderDetailResponse(BaseModel):
+    """Detailed order response with user rating info"""
+    id: str
+    order_type: OrderType
+    brand: str
+    model: str
+    reference: str
+    watch_id: Optional[str] = None
+    price: float
+    currency: str
+    condition: OrderCondition
+    country_code: str
+    country_name: Optional[str] = None
+    user_id: str
+    user_name: Optional[str] = None
+    user_profile_image: Optional[str] = None
+    user_rating: float = 0.0
+    user_review_count: int = 0
+    status: OrderStatus
+    has_box: bool
+    has_papers: bool
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+@router.get("/{order_id}", response_model=OrderDetailResponse)
+async def get_order(
+    order_id: str,
+) -> Any:
+    """Get a single order by ID (public)"""
+    order = await Order.get(PydanticObjectId(order_id))
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    # Get user info for rating and name
+    user_profile_image = None
+    user_rating = 0.0
+    user_review_count = 0
+    user_name = order.user_name  # Try from order first
+
+    try:
+        user = await User.get(PydanticObjectId(order.user_id))
+        if user:
+            user_profile_image = user.profile_image_url
+            user_rating = user.average_rating
+            user_review_count = user.review_count
+            # If user_name not stored in order, get from user profile
+            if not user_name:
+                user_name = user.name
+    except Exception:
+        pass
+
+    return OrderDetailResponse(
+        id=str(order.id),
+        order_type=order.order_type,
+        brand=order.brand,
+        model=order.model,
+        reference=order.reference,
+        watch_id=order.watch_id,
+        price=order.price,
+        currency=order.currency,
+        condition=order.condition,
+        country_code=order.country_code,
+        country_name=order.country_name,
+        user_id=order.user_id,
+        user_name=user_name,
+        user_profile_image=user_profile_image,
+        user_rating=user_rating,
+        user_review_count=user_review_count,
+        status=order.status,
+        has_box=order.has_box,
+        has_papers=order.has_papers,
+        notes=order.notes,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+    )
 
 
 @router.patch("/{order_id}", response_model=OrderResponse)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit2, Trash2, Users, UserPlus, UserMinus, Shield } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
@@ -45,6 +46,7 @@ const emptyForm: GroupFormData = {
 }
 
 export function AdminChatGroups() {
+  const navigate = useNavigate()
   const [groups, setGroups] = useState<ChatGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -398,13 +400,16 @@ export function AdminChatGroups() {
             <div className="overflow-y-auto max-h-[60vh]">
               {selectedGroup.members?.filter(m => m.is_active).map((member) => (
                 <div key={member.id} className="flex items-center justify-between px-6 py-3 border-b last:border-b-0 hover:bg-gray-50">
-                  <div className="flex items-center">
+                  <button
+                    onClick={() => navigate(`/app/user/${member.user_id}`)}
+                    className="flex items-center hover:opacity-70 transition-opacity"
+                  >
                     <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                       <span className="text-gray-600 text-sm font-medium">
                         {member.user_name.charAt(0).toUpperCase()}
                       </span>
                     </div>
-                    <div className="ml-3">
+                    <div className="ml-3 text-left">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900">{member.user_name}</span>
                         {member.role === 'admin' && (
@@ -413,7 +418,7 @@ export function AdminChatGroups() {
                       </div>
                       <span className="text-xs text-gray-500">{member.user_email}</span>
                     </div>
-                  </div>
+                  </button>
                   {member.role !== 'admin' && (
                     <button
                       onClick={() => handleRemoveMember(member.user_id)}

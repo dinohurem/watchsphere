@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getStorage } from '../lib/storage';
 
+export type AuthProvider = 'email' | 'google' | 'apple';
+
 export interface User {
   id: string;
   email: string;
@@ -9,6 +11,7 @@ export interface User {
   role: 'dealer' | 'collector' | 'admin';
   verified: boolean;
   approved: boolean;
+  auth_provider?: AuthProvider;
 }
 
 interface AuthState {

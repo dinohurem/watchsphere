@@ -9,7 +9,8 @@ import {
   CheckCircle,
   Trash2,
   X,
-  Check
+  Check,
+  User
 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
@@ -29,6 +30,9 @@ interface OrderDetail {
   country_name?: string;
   user_id: string;
   user_name?: string;
+  user_profile_image?: string;
+  user_rating: number;
+  user_review_count: number;
   status: string;
   notes?: string;
   has_box: boolean;
@@ -427,6 +431,27 @@ export function OrderDetailPage() {
                 label="Location"
                 value={`${getFlagEmoji(order.country_code)} ${order.country_name || order.country_code}`}
               />
+              {/* Seller/Buyer Row */}
+              <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                <span className="text-gray-500 text-sm">{order.order_type === 'sell' ? 'Seller' : 'Buyer'}</span>
+                <button
+                  onClick={() => navigate(`/app/user/${order.user_id}`)}
+                  className="flex items-center gap-2 hover:opacity-70 transition-opacity"
+                >
+                  <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                    {order.user_profile_image ? (
+                      <img src={order.user_profile_image} alt={order.user_name || ''} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-3 h-3 text-gray-500" />
+                    )}
+                  </div>
+                  <span className="text-gray-900 text-sm font-medium">{order.user_name || 'Unknown'}</span>
+                  <Star className="w-3.5 h-3.5 text-gray-900 fill-gray-900" />
+                  <span className="text-gray-900 text-sm font-medium">
+                    {order.user_rating?.toFixed(1) || '0.0'} ({order.user_review_count || 0})
+                  </span>
+                </button>
+              </div>
               <SpecRow label="Price" value={`€${order.price.toLocaleString()}`} />
               <SpecRow label="Availability" value={order.status === 'active' ? 'Item is in stock' : order.status} />
             </div>
