@@ -16,7 +16,10 @@ import {
   ChevronDown,
   Store,
   MessageCircle,
-  ExternalLink
+  ExternalLink,
+  List,
+  SlidersHorizontal,
+  Headphones
 } from 'lucide-react'
 
 interface NavItem {
@@ -49,6 +52,8 @@ const adminNavigation: NavSection[] = [
       { name: 'Market (Watches)', to: '/admin/watches', icon: Watch },
       { name: 'News', to: '/admin/news', icon: Newspaper },
       { name: 'Watchlist Records', to: '/admin/watchlist', icon: Heart },
+      { name: 'Listing Fields', to: '/admin/listing-fields', icon: List },
+      { name: 'Filters', to: '/admin/filters', icon: SlidersHorizontal },
     ]
   },
   {
@@ -64,6 +69,12 @@ const adminNavigation: NavSection[] = [
       { name: 'WhatsApp Import', to: '/admin/whatsapp', icon: Upload },
       { name: 'Activity Log', to: '/admin/activity', icon: Activity },
       { name: 'Billing', to: '/admin/billing', icon: CreditCard },
+    ]
+  },
+  {
+    title: 'Support',
+    items: [
+      { name: 'Disputes & Issues', to: '/admin/support', icon: Headphones },
     ]
   },
 ]

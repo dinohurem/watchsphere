@@ -9,6 +9,7 @@ import { wp, hp, sp, fp } from '@/utils/responsive';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { LogoIcon } from '@/components/LogoIcon';
+import { User } from '@/components/icons';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -140,16 +141,134 @@ interface FavoriteWatch {
   image: string;
 }
 
+interface Order {
+  id: string;
+  brand: string;
+  model: string;
+  reference: string;
+  price: number;
+  priceChange: number;
+  image: string;
+  status: string;
+}
+
+// Shopping Bag Icon for Buy Orders
+function ShoppingBagIcon() {
+  return (
+    <Svg width={sp(28)} height={sp(28)} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 2L3 6V20C3 20.5304 3.21071 21.0391 3.58579 21.4142C3.96086 21.7893 4.46957 22 5 22H19C19.5304 22 20.0391 21.7893 20.4142 21.4142C20.7893 21.0391 21 20.5304 21 20V6L18 2H6Z"
+        stroke="rgba(33, 33, 33, 0.4)"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 6H21"
+        stroke="rgba(33, 33, 33, 0.4)"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 10C16 11.0609 15.5786 12.0783 14.8284 12.8284C14.0783 13.5786 13.0609 14 12 14C10.9391 14 9.92172 13.5786 9.17157 12.8284C8.42143 12.0783 8 11.0609 8 10"
+        stroke="rgba(33, 33, 33, 0.4)"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// Tag/Sell Icon for Sell Orders
+function TagIcon() {
+  return (
+    <Svg width={sp(28)} height={sp(28)} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M20.59 13.41L13.42 20.58C13.2343 20.766 13.0137 20.9135 12.7709 21.0141C12.5281 21.1148 12.2678 21.1666 12.005 21.1666C11.7422 21.1666 11.4819 21.1148 11.2391 21.0141C10.9963 20.9135 10.7757 20.766 10.59 20.58L2 12V2H12L20.59 10.59C20.9625 10.9647 21.1716 11.4716 21.1716 12C21.1716 12.5284 20.9625 13.0353 20.59 13.41Z"
+        stroke="rgba(33, 33, 33, 0.4)"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7 7H7.01"
+        stroke="rgba(33, 33, 33, 0.4)"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
   const [favoriteWatches, setFavoriteWatches] = useState<FavoriteWatch[]>([]);
+  const [buyOrders, setBuyOrders] = useState<Order[]>([]);
+  const [sellOrders, setSellOrders] = useState<Order[]>([]);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
 
-  // Load watchlist when screen comes into focus
+  // Load data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
+      loadProfile();
       loadWatchlist();
+      loadOrders();
     }, [])
   );
+
+  const loadProfile = async () => {
+    try {
+      const response = await api.get('/profile/me');
+      console.log('Profile API response:', JSON.stringify(response.data, null, 2));
+      if (response.data?.profile_image_url) {
+        console.log('Setting profile image URL:', response.data.profile_image_url);
+        setProfileImageUrl(response.data.profile_image_url);
+      } else {
+        console.log('No profile_image_url in response');
+      }
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
+
+  const loadOrders = async () => {
+    try {
+      const response = await api.get('/orders/my-orders');
+      if (response.data && Array.isArray(response.data)) {
+        const buyOrdersData: Order[] = [];
+        const sellOrdersData: Order[] = [];
+
+        response.data.forEach((order: any) => {
+          const formattedOrder: Order = {
+            id: order.id || order._id,
+            brand: order.brand || '',
+            model: order.model || '',
+            reference: order.reference || '',
+            price: order.price || 0,
+            priceChange: order.price_change || 0,
+            image: order.cover_image || '',
+            status: order.status || 'active',
+          };
+
+          if (order.order_type === 'buy') {
+            buyOrdersData.push(formattedOrder);
+          } else if (order.order_type === 'sell') {
+            sellOrdersData.push(formattedOrder);
+          }
+        });
+
+        setBuyOrders(buyOrdersData);
+        setSellOrders(sellOrdersData);
+      }
+    } catch (error) {
+      console.error('Failed to load orders:', error);
+      setBuyOrders([]);
+      setSellOrders([]);
+    }
+  };
 
   const loadWatchlist = async () => {
     try {
@@ -173,10 +292,10 @@ export default function ProfileScreen() {
     }
   };
 
-  const renderWatchCard = (watch: FavoriteWatch) => (
+  const renderWatchCard = (watch: FavoriteWatch, isSingleItem: boolean = false) => (
     <TouchableOpacity
       key={watch.id}
-      style={styles.watchCard}
+      style={[styles.watchCard, isSingleItem && styles.watchCardHalf]}
       onPress={() => router.push({
         pathname: '/market/[id]',
         params: {
@@ -209,7 +328,7 @@ export default function ProfileScreen() {
       {/* Watch Info */}
       <View style={styles.watchInfo}>
         <View style={styles.watchNameContainer}>
-          <Text style={styles.watchBrand}>{watch.brand}</Text>
+          <Text style={styles.watchBrand} numberOfLines={1}>{watch.brand}</Text>
           <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
         </View>
 
@@ -229,6 +348,97 @@ export default function ProfileScreen() {
       </View>
     </TouchableOpacity>
   );
+
+  const renderOrderCard = (order: Order, isSingleItem: boolean = false) => {
+    const isPositive = order.priceChange >= 0;
+    return (
+      <TouchableOpacity
+        key={order.id}
+        style={[styles.watchCard, isSingleItem && styles.watchCardHalf]}
+        onPress={() => router.push({
+          pathname: '/market/[id]',
+          params: {
+            id: order.reference || order.id,
+            reference: order.reference,
+            brand: order.brand,
+          },
+        } as any)}
+        activeOpacity={0.8}
+      >
+        {/* Watch Image with Gradient Background */}
+        <View style={styles.watchImageContainer}>
+          <LinearGradient
+            colors={['#FFFFFF', '#F4F4F4']}
+            style={styles.watchImageGradient}
+          >
+            {order.image ? (
+              <Image
+                source={{ uri: order.image }}
+                style={styles.watchImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <LogoIcon size={sp(48)} color="rgba(33, 33, 33, 0.15)" />
+            )}
+          </LinearGradient>
+        </View>
+
+        {/* Watch Info */}
+        <View style={styles.watchInfo}>
+          <View style={styles.watchNameContainer}>
+            <Text style={styles.watchBrand} numberOfLines={1}>{`${order.brand} ${order.model}`.trim()}</Text>
+            <Text style={styles.watchReference} numberOfLines={1}>{order.reference}</Text>
+          </View>
+
+          <View style={styles.watchPriceRow}>
+            <Text style={styles.watchPrice}>{order.price.toLocaleString('de-DE')}€</Text>
+            <View style={[
+              styles.changeBadge,
+              { backgroundColor: isPositive ? 'rgba(74, 160, 120, 0.05)' : 'rgba(201, 57, 39, 0.05)' }
+            ]}>
+              {isPositive ? <TrendUpIcon /> : <TrendDownIcon />}
+              <Text style={[
+                styles.changeText,
+                { color: isPositive ? '#4AA078' : '#C93927' }
+              ]}>{Math.abs(order.priceChange).toFixed(1).replace('.', ',')}%</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderOrdersGrid = (orders: Order[]) => {
+    if (orders.length === 0) return null;
+
+    const rows = [];
+    for (let i = 0; i < orders.length; i += 2) {
+      const isSingleInRow = i + 1 >= orders.length;
+      rows.push(
+        <View key={i} style={styles.watchRow}>
+          {renderOrderCard(orders[i], isSingleInRow)}
+          {orders[i + 1] && renderOrderCard(orders[i + 1], false)}
+        </View>
+      );
+    }
+    return rows;
+  };
+
+  const renderFavoritesGrid = (watches: FavoriteWatch[]) => {
+    if (watches.length === 0) return null;
+
+    const rows = [];
+    for (let i = 0; i < watches.length; i += 2) {
+      const isSingleInRow = i + 1 >= watches.length;
+      rows.push(
+        <View key={i} style={styles.watchRow}>
+          {renderWatchCard(watches[i], isSingleInRow)}
+          {watches[i + 1] && renderWatchCard(watches[i + 1], false)}
+        </View>
+      );
+    }
+    return rows;
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -263,11 +473,15 @@ export default function ProfileScreen() {
           {/* Avatar with Edit Button */}
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face' }}
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
+              {profileImageUrl ? (
+                <Image
+                  source={{ uri: profileImageUrl }}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <User size={sp(40)} color="rgba(33, 33, 33, 0.4)" />
+              )}
             </View>
             <TouchableOpacity
               style={styles.editButton}
@@ -278,11 +492,76 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* User Name and Customer ID */}
+          {/* User Name */}
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{user?.name || 'Fabian Wirtz'}</Text>
-            <Text style={styles.customerId}>Customer ID: 009 978 333</Text>
           </View>
+        </View>
+
+        {/* Buy Orders Section */}
+        <View style={styles.favoritesSection}>
+          <View style={styles.favoritesHeader}>
+            <Text style={styles.favoritesTitle}>Buy Orders</Text>
+            {buyOrders.length > 0 && (
+              <TouchableOpacity
+                style={styles.seeAllButton}
+                activeOpacity={0.7}
+                onPress={() => router.push('/profile/buy-orders' as any)}
+              >
+                <Text style={styles.seeAllText}>See All</Text>
+                <ChevronRightSmall />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {buyOrders.length > 0 ? (
+            <View style={styles.watchGrid}>
+              {renderOrdersGrid(buyOrders.slice(0, 4))}
+            </View>
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <View style={styles.emptyIconContainer}>
+                <ShoppingBagIcon />
+              </View>
+              <Text style={styles.emptyTitle}>No buy orders yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Create buy orders to see them here
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Sell Orders Section */}
+        <View style={styles.favoritesSection}>
+          <View style={styles.favoritesHeader}>
+            <Text style={styles.favoritesTitle}>Sell Orders</Text>
+            {sellOrders.length > 0 && (
+              <TouchableOpacity
+                style={styles.seeAllButton}
+                activeOpacity={0.7}
+                onPress={() => router.push('/profile/sell-orders' as any)}
+              >
+                <Text style={styles.seeAllText}>See All</Text>
+                <ChevronRightSmall />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {sellOrders.length > 0 ? (
+            <View style={styles.watchGrid}>
+              {renderOrdersGrid(sellOrders.slice(0, 4))}
+            </View>
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <View style={styles.emptyIconContainer}>
+                <TagIcon />
+              </View>
+              <Text style={styles.emptyTitle}>No sell orders yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Create sell orders to see them here
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Favorites Section */}
@@ -293,6 +572,7 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={styles.seeAllButton}
                 activeOpacity={0.7}
+                onPress={() => router.push('/profile/favorites' as any)}
               >
                 <Text style={styles.seeAllText}>See All</Text>
                 <ChevronRightSmall />
@@ -303,14 +583,7 @@ export default function ProfileScreen() {
           {/* Watch Cards Grid or Empty State */}
           {favoriteWatches.length > 0 ? (
             <View style={styles.watchGrid}>
-              <View style={styles.watchRow}>
-                {favoriteWatches.slice(0, 2).map(renderWatchCard)}
-              </View>
-              {favoriteWatches.length > 2 && (
-                <View style={styles.watchRow}>
-                  {favoriteWatches.slice(2, 4).map(renderWatchCard)}
-                </View>
-              )}
+              {renderFavoritesGrid(favoriteWatches.slice(0, 4))}
             </View>
           ) : (
             <View style={styles.emptyStateContainer}>
@@ -377,6 +650,8 @@ const styles = StyleSheet.create({
     borderRadius: sp(43.5),
     overflow: 'hidden',
     backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarImage: {
     width: '100%',
@@ -405,17 +680,11 @@ const styles = StyleSheet.create({
     color: '#1D1D1F',
     lineHeight: fp(26),
   },
-  customerId: {
-    fontFamily: 'HankenGrotesk_400Regular',
-    fontSize: fp(12),
-    fontWeight: '400',
-    color: 'rgba(33, 33, 33, 0.6)',
-    letterSpacing: 0.06,
-    lineHeight: fp(20),
-  },
   favoritesSection: {
     paddingHorizontal: wp(16),
-    gap: hp(20),
+    paddingTop: hp(16),
+    paddingBottom: hp(8),
+    gap: hp(16),
   },
   favoritesHeader: {
     flexDirection: 'row',
@@ -458,6 +727,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(33, 33, 33, 0.05)',
     overflow: 'hidden',
   },
+  watchCardHalf: {
+    flex: 0,
+    width: '48%',
+  },
   watchImageContainer: {
     height: hp(140),
     borderTopLeftRadius: sp(12),
@@ -475,7 +748,7 @@ const styles = StyleSheet.create({
   },
   watchInfo: {
     padding: wp(16),
-    paddingTop: 0,
+    paddingTop: hp(12),
     gap: hp(12),
   },
   watchNameContainer: {

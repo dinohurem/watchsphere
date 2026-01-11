@@ -1,9 +1,26 @@
-import { View, TextInput, TouchableOpacity, StyleSheet, Animated, Keyboard, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, Keyboard, Platform } from 'react-native';
 import { useState, useRef, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Photo, ArrowUp } from './icons';
 import * as ImagePicker from 'expo-image-picker';
+import Svg, { Path } from 'react-native-svg';
+import type { QuotedMessage } from './ChatBubble';
+
+// Close Icon for reply cancel
+function CloseIcon({ size = 20, color = "#666" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M18 6L6 18M6 6l12 12"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 interface ChatInputProps {
   value: string;
@@ -12,9 +29,11 @@ interface ChatInputProps {
   onImageSelect?: (uri: string) => void;
   onTypingStart?: () => void;
   onTypingStop?: () => void;
+  replyingTo?: QuotedMessage | null;
+  onCancelReply?: () => void;
 }
 
-export function ChatInput({ value, onChangeText, onSend, onImageSelect, onTypingStart, onTypingStop }: ChatInputProps) {
+export function ChatInput({ value, onChangeText, onSend, onImageSelect, onTypingStart, onTypingStop, replyingTo, onCancelReply }: ChatInputProps) {
   const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
   const [isFocused, setIsFocused] = useState(false);
@@ -97,7 +116,6 @@ export function ChatInput({ value, onChangeText, onSend, onImageSelect, onTyping
 
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.8,
       });
@@ -114,11 +132,48 @@ export function ChatInput({ value, onChangeText, onSend, onImageSelect, onTyping
   const bottomPadding = isKeyboardVisible ? 10 : Math.max(insets.bottom, 10);
 
   const styles = StyleSheet.create({
+    wrapper: {
+      backgroundColor: colors.background,
+    },
+    replyPreview: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 8,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    replyContent: {
+      flex: 1,
+      backgroundColor: 'rgba(33, 33, 33, 0.04)',
+      borderLeftWidth: 3,
+      borderLeftColor: colors.primary,
+      borderRadius: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    replySender: {
+      fontSize: 13,
+      fontFamily: fonts.semiBold,
+      color: colors.primary,
+      marginBottom: 2,
+    },
+    replyText: {
+      fontSize: 13,
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
+    replyCancelButton: {
+      padding: 8,
+      marginLeft: 8,
+    },
     container: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 16,
-      paddingTop: 16,
+      paddingTop: replyingTo ? 8 : 16,
       paddingBottom: bottomPadding,
       backgroundColor: colors.background,
       gap: 8,
@@ -166,37 +221,56 @@ export function ChatInput({ value, onChangeText, onSend, onImageSelect, onTyping
   });
 
   return (
-    <View style={styles.container}>
-      {/* Image picker button */}
-      <TouchableOpacity style={styles.imageButton} onPress={handleImagePress}>
-        <Photo size={18} color="#212121" />
-      </TouchableOpacity>
+    <View style={styles.wrapper}>
+      {/* Reply preview */}
+      {replyingTo && (
+        <View style={styles.replyPreview}>
+          <View style={styles.replyContent}>
+            <Text style={styles.replySender} numberOfLines={1}>
+              Replying to {replyingTo.senderName}
+            </Text>
+            <Text style={styles.replyText} numberOfLines={2}>
+              {replyingTo.content}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.replyCancelButton} onPress={onCancelReply}>
+            <CloseIcon size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      )}
 
-      {/* Text input */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={value}
-          onChangeText={handleTextChange}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          placeholder="Send message..."
-          placeholderTextColor="rgba(33, 33, 33, 0.5)"
-          multiline
-          maxLength={2000}
-        />
-      </View>
-
-      {/* Send button */}
-      <Animated.View style={{ opacity: sendButtonOpacity }}>
-        <TouchableOpacity
-          style={styles.sendButton}
-          onPress={handleSend}
-          disabled={value.trim().length === 0}
-        >
-          <ArrowUp size={20} color="#FFFFFF" />
+      <View style={styles.container}>
+        {/* Image picker button */}
+        <TouchableOpacity style={styles.imageButton} onPress={handleImagePress}>
+          <Photo size={18} color="#212121" />
         </TouchableOpacity>
-      </Animated.View>
+
+        {/* Text input */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            value={value}
+            onChangeText={handleTextChange}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder="Send message..."
+            placeholderTextColor="rgba(33, 33, 33, 0.5)"
+            multiline
+            maxLength={2000}
+          />
+        </View>
+
+        {/* Send button */}
+        <Animated.View style={{ opacity: sendButtonOpacity }}>
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={handleSend}
+            disabled={value.trim().length === 0}
+          >
+            <ArrowUp size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
     </View>
   );
 }

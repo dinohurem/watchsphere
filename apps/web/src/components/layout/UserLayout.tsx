@@ -52,7 +52,34 @@ export function UserLayout() {
   const logout = useAuthStore((state) => state.logout)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Fetch profile image on mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) return
+
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/profile/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.profile_image_url) {
+            setProfileImageUrl(data.profile_image_url)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile:', error)
+      }
+    }
+    fetchProfile()
+  }, [])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -68,6 +95,20 @@ export function UserLayout() {
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      navigate(`/app/search?q=${encodeURIComponent(searchQuery.trim())}`)
+      setSearchQuery('')
+    } else {
+      navigate('/app/search')
+    }
+  }
+
+  const handleSearchFocus = () => {
+    navigate('/app/search')
   }
 
   return (
@@ -138,15 +179,18 @@ export function UserLayout() {
           </div>
 
           {/* Center: Search Bar */}
-          <div className="hidden lg:flex flex-1 max-w-[539px] mx-auto">
+          <form onSubmit={handleSearchSubmit} className="hidden lg:flex flex-1 max-w-[539px] mx-auto">
             <div className="w-full bg-gray-100 rounded-full px-6 py-3 flex items-center">
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={handleSearchFocus}
                 placeholder="Search watches..."
                 className="w-full bg-transparent text-[15px] text-gray-900 placeholder-gray-900/50 outline-none"
               />
             </div>
-          </div>
+          </form>
 
           {/* Right: Icons and Profile */}
           <div className="flex items-center justify-end gap-4 w-[250px]">
@@ -172,9 +216,17 @@ export function UserLayout() {
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center"
               >
-                <span className="text-gray-600 text-sm font-medium">
-                  {user?.name?.charAt(0).toUpperCase() || 'U'}
-                </span>
+                {profileImageUrl ? (
+                  <img
+                    src={profileImageUrl}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-gray-600 text-sm font-medium">
+                    {user?.name?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                )}
               </button>
 
               {/* Profile Dropdown - Figma Design */}
@@ -277,15 +329,21 @@ export function UserLayout() {
           <div className="md:hidden border-t bg-white">
             <div className="px-4 py-3 space-y-1">
               {/* Search bar for mobile */}
-              <div className="mb-4">
+              <form onSubmit={handleSearchSubmit} className="mb-4">
                 <div className="w-full bg-gray-100 rounded-full px-4 py-2.5 flex items-center">
                   <input
                     type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => {
+                      setMobileMenuOpen(false)
+                      navigate('/app/search')
+                    }}
                     placeholder="Search watches..."
                     className="w-full bg-transparent text-sm text-gray-900 placeholder-gray-900/50 outline-none"
                   />
                 </div>
-              </div>
+              </form>
               {navigation.map((item) => (
                 <NavLink
                   key={item.name}

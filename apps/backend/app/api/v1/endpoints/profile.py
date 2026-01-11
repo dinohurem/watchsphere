@@ -67,6 +67,8 @@ class NotificationPreferencesRequest(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    whatsapp_phone: Optional[str] = None
+    telegram_username: Optional[str] = None
 
 
 class PasswordChangeRequest(BaseModel):
@@ -84,6 +86,8 @@ async def get_profile(
         "email": current_user.email,
         "name": current_user.name,
         "phone": current_user.phone,
+        "whatsapp_phone": current_user.whatsapp_phone,
+        "telegram_username": current_user.telegram_username,
         "role": current_user.role,
         "is_active": current_user.is_active,
         "verified": current_user.verified,
@@ -399,3 +403,15 @@ async def remove_from_watchlist(
     await item.delete()
 
     return {"message": "Item removed from watchlist"}
+
+
+@router.post("/deactivate")
+async def deactivate_account(
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Deactivate current user's account"""
+    current_user.is_active = False
+    current_user.updated_at = datetime.utcnow()
+    await current_user.save()
+
+    return {"message": "Account deactivated successfully"}

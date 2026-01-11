@@ -16,6 +16,7 @@ router = APIRouter()
 # Request/Response Models
 class MessageCreate(BaseModel):
     content: str
+    reply_to_id: Optional[str] = None
 
 
 class MessageResponse(BaseModel):
@@ -28,6 +29,10 @@ class MessageResponse(BaseModel):
     is_ai: bool
     read: bool
     created_at: datetime
+    reply_to_id: Optional[str] = None
+    reply_to_content: Optional[str] = None
+    reply_to_sender_name: Optional[str] = None
+    reply_to_sender_id: Optional[str] = None
 
 
 class ConversationResponse(BaseModel):
@@ -382,6 +387,69 @@ class DirectConversationResponse(BaseModel):
     avatar: Optional[str] = None
 
 
+class CreateDirectConversationRequest(BaseModel):
+    recipient_id: str
+
+
+class CreateDirectConversationResponse(BaseModel):
+    id: str
+    name: str
+    is_new: bool = False
+
+
+@router.post("/conversations/direct", response_model=CreateDirectConversationResponse)
+async def create_or_get_direct_conversation(
+    data: CreateDirectConversationRequest,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Create or get an existing direct conversation with a user"""
+
+    # Check if recipient exists
+    recipient = await User.get(PydanticObjectId(data.recipient_id))
+    if not recipient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Recipient user not found"
+        )
+
+    # Check if they're trying to message themselves
+    if str(current_user.id) == data.recipient_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot start a conversation with yourself"
+        )
+
+    # Look for existing conversation between these two users
+    existing_conversation = await Conversation.find_one(
+        Conversation.type == ConversationType.DIRECT,
+        {"participant_ids": {"$all": [str(current_user.id), data.recipient_id]}},
+        Conversation.is_active == True,
+    )
+
+    if existing_conversation:
+        return {
+            "id": str(existing_conversation.id),
+            "name": recipient.name,
+            "is_new": False,
+        }
+
+    # Create new direct conversation
+    conversation = Conversation(
+        type=ConversationType.DIRECT,
+        name=None,  # Name is determined by the other participant
+        participant_ids=[str(current_user.id), data.recipient_id],
+        is_active=True,
+        created_at=datetime.utcnow(),
+    )
+    await conversation.insert()
+
+    return {
+        "id": str(conversation.id),
+        "name": recipient.name,
+        "is_new": True,
+    }
+
+
 @router.get("/conversations", response_model=List[DirectConversationResponse])
 async def list_conversations(
     current_user: User = Depends(get_current_user),
@@ -422,7 +490,7 @@ async def list_conversations(
             other_user = await User.get(PydanticObjectId(other_participant_id))
             if other_user:
                 conversation_name = other_user.name
-                other_avatar = other_user.avatar
+                other_avatar = other_user.profile_image_url
 
         result.append({
             "id": str(conv.id),
@@ -492,6 +560,10 @@ async def get_conversation_messages(
             "is_ai": False,
             "read": msg.read,
             "created_at": msg.created_at,
+            "reply_to_id": msg.reply_to_id,
+            "reply_to_content": msg.reply_to_content,
+            "reply_to_sender_name": msg.reply_to_sender_name,
+            "reply_to_sender_id": msg.reply_to_sender_id,
         }
         for msg in messages
     ]
@@ -519,6 +591,25 @@ async def send_conversation_message(
             detail="You are not a participant in this conversation"
         )
 
+    # Handle reply - get the original message details if reply_to_id is provided
+    reply_to_content = None
+    reply_to_sender_name = None
+    reply_to_sender_id = None
+    if data.reply_to_id:
+        try:
+            original_msg = await Message.get(PydanticObjectId(data.reply_to_id))
+            if original_msg and original_msg.conversation_id == conversation_id:
+                reply_to_content = original_msg.content
+                reply_to_sender_id = original_msg.sender_id
+                # Get sender name
+                if original_msg.sender_id == str(current_user.id):
+                    reply_to_sender_name = current_user.name
+                else:
+                    sender = await User.get(PydanticObjectId(original_msg.sender_id))
+                    reply_to_sender_name = sender.name if sender else "Unknown"
+        except Exception:
+            pass  # If we can't find the original message, just skip the reply info
+
     # Save message
     message = Message(
         conversation_id=conversation_id,
@@ -527,6 +618,10 @@ async def send_conversation_message(
         type=MessageType.TEXT,
         read=False,
         created_at=datetime.utcnow(),
+        reply_to_id=data.reply_to_id,
+        reply_to_content=reply_to_content,
+        reply_to_sender_name=reply_to_sender_name,
+        reply_to_sender_id=reply_to_sender_id,
     )
     await message.insert()
 
@@ -544,6 +639,10 @@ async def send_conversation_message(
         "is_ai": False,
         "read": False,
         "created_at": message.created_at,
+        "reply_to_id": message.reply_to_id,
+        "reply_to_content": message.reply_to_content,
+        "reply_to_sender_name": message.reply_to_sender_name,
+        "reply_to_sender_id": message.reply_to_sender_id,
     }
 
 
@@ -663,20 +762,96 @@ async def get_group_details(
         ConversationMember.is_active == True,
     ).to_list()
 
+    # Fetch user profiles to get profile_image_url
+    member_list = []
+    for m in members:
+        user = await User.get(PydanticObjectId(m.user_id))
+        member_list.append({
+            "id": m.user_id,
+            "name": m.user_name,
+            "role": m.role.value if m.role else "member",
+            "profile_image_url": user.profile_image_url if user else None,
+        })
+
     return {
         "id": str(group.id),
         "name": group.name or "Unnamed Group",
         "description": group.description,
         "avatar": group.avatar,
         "memberCount": len(members),
-        "members": [
-            {
-                "id": m.user_id,
-                "name": m.user_name,
-                "role": m.role.value if m.role else "member",
-            }
-            for m in members
-        ],
+        "members": member_list,
+    }
+
+
+class MemberProfileResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str
+    profile_image_url: Optional[str] = None
+    whatsapp_phone: Optional[str] = None
+    telegram_username: Optional[str] = None
+
+
+@router.get("/groups/{group_id}/members/{user_id}", response_model=MemberProfileResponse)
+async def get_group_member_profile(
+    group_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Get profile info for a group member (for contact options)"""
+
+    group = await Conversation.get(PydanticObjectId(group_id))
+
+    if not group or group.type != ConversationType.GROUP:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found"
+        )
+
+    # Check if current user is a member
+    current_membership = await ConversationMember.find_one(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.user_id == str(current_user.id),
+        ConversationMember.is_active == True,
+    )
+
+    if not current_membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group"
+        )
+
+    # Check if target user is a member
+    target_membership = await ConversationMember.find_one(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.user_id == user_id,
+        ConversationMember.is_active == True,
+    )
+
+    if not target_membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found in this group"
+        )
+
+    # Get full user profile
+    target_user = await User.get(PydanticObjectId(user_id))
+
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return {
+        "id": str(target_user.id),
+        "name": target_user.name,
+        "email": target_user.email,
+        "role": target_membership.role.value if target_membership.role else "member",
+        "profile_image_url": target_user.profile_image_url,
+        "whatsapp_phone": target_user.whatsapp_phone,
+        "telegram_username": target_user.telegram_username,
     }
 
 
@@ -737,6 +912,10 @@ async def get_group_messages(
             "is_ai": False,
             "read": msg.read,
             "created_at": msg.created_at,
+            "reply_to_id": msg.reply_to_id,
+            "reply_to_content": msg.reply_to_content,
+            "reply_to_sender_name": msg.reply_to_sender_name,
+            "reply_to_sender_id": msg.reply_to_sender_id,
         }
         for msg in messages
     ]
@@ -771,6 +950,25 @@ async def send_group_message(
             detail="You are not a member of this group"
         )
 
+    # Handle reply - get the original message details if reply_to_id is provided
+    reply_to_content = None
+    reply_to_sender_name = None
+    reply_to_sender_id = None
+    if data.reply_to_id:
+        try:
+            original_msg = await Message.get(PydanticObjectId(data.reply_to_id))
+            if original_msg and original_msg.conversation_id == group_id:
+                reply_to_content = original_msg.content
+                reply_to_sender_id = original_msg.sender_id
+                # Get sender name from members
+                members = await ConversationMember.find(
+                    ConversationMember.conversation_id == group_id,
+                ).to_list()
+                member_names = {m.user_id: m.user_name for m in members}
+                reply_to_sender_name = member_names.get(original_msg.sender_id, "Unknown")
+        except Exception:
+            pass  # If we can't find the original message, just skip the reply info
+
     # Save message
     message = Message(
         conversation_id=group_id,
@@ -779,6 +977,10 @@ async def send_group_message(
         type=MessageType.TEXT,
         read=False,
         created_at=datetime.utcnow(),
+        reply_to_id=data.reply_to_id,
+        reply_to_content=reply_to_content,
+        reply_to_sender_name=reply_to_sender_name,
+        reply_to_sender_id=reply_to_sender_id,
     )
     await message.insert()
 
@@ -796,4 +998,8 @@ async def send_group_message(
         "is_ai": False,
         "read": False,
         "created_at": message.created_at,
+        "reply_to_id": message.reply_to_id,
+        "reply_to_content": message.reply_to_content,
+        "reply_to_sender_name": message.reply_to_sender_name,
+        "reply_to_sender_id": message.reply_to_sender_id,
     }

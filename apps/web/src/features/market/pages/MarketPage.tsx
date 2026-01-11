@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/services/api';
-import { SlidersHorizontal, Heart, X, ChevronDown } from 'lucide-react';
+import { SlidersHorizontal, Heart, ChevronDown } from 'lucide-react';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
 interface WatchData {
@@ -18,15 +18,10 @@ interface WatchData {
   location?: string;
 }
 
-interface FilterState {
-  priceMin: string;
-  priceMax: string;
-  brands: string[];
-  conditions: string[];
+// Dynamic filter state based on filter keys
+interface DynamicFilterState {
+  [key: string]: string[];
 }
-
-const AVAILABLE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Omega', 'Cartier', 'Tudor'];
-const AVAILABLE_CONDITIONS = ['Unworn', 'Used'];
 
 // Mini chart component for price trend visualization
 function MiniChart({ data, positive }: { data: number[]; positive: boolean }) {
@@ -160,174 +155,25 @@ function MarketActivityRow({ watch, onClick }: { watch: WatchData; onClick: () =
   );
 }
 
-// Filter modal component
-function FilterModal({
-  isOpen,
-  onClose,
-  filters,
-  onApplyFilters,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  filters: FilterState;
-  onApplyFilters: (filters: FilterState) => void;
-}) {
-  const [localFilters, setLocalFilters] = useState<FilterState>(filters);
-
-  // Sync with external filters when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setLocalFilters(filters);
-    }
-  }, [isOpen, filters]);
-
-  if (!isOpen) return null;
-
-  const toggleBrand = (brand: string) => {
-    setLocalFilters(prev => ({
-      ...prev,
-      brands: prev.brands.includes(brand)
-        ? prev.brands.filter(b => b !== brand)
-        : [...prev.brands, brand]
-    }));
-  };
-
-  const toggleCondition = (condition: string) => {
-    setLocalFilters(prev => ({
-      ...prev,
-      conditions: prev.conditions.includes(condition)
-        ? prev.conditions.filter(c => c !== condition)
-        : [...prev.conditions, condition]
-    }));
-  };
-
-  const handleReset = () => {
-    setLocalFilters({
-      priceMin: '',
-      priceMax: '',
-      brands: [],
-      conditions: [],
-    });
-  };
-
-  const handleApply = () => {
-    onApplyFilters(localFilters);
-    onClose();
-  };
-
-  const activeFilterCount =
-    (localFilters.priceMin || localFilters.priceMax ? 1 : 0) +
-    localFilters.brands.length +
-    localFilters.conditions.length;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl w-full max-w-md mx-4 p-6 max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Filters</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        {/* Price Range */}
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Price Range</h3>
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              placeholder="Min"
-              value={localFilters.priceMin}
-              onChange={(e) => setLocalFilters(prev => ({ ...prev, priceMin: e.target.value }))}
-              className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-            />
-            <span className="text-gray-400">—</span>
-            <input
-              type="number"
-              placeholder="Max"
-              value={localFilters.priceMax}
-              onChange={(e) => setLocalFilters(prev => ({ ...prev, priceMax: e.target.value }))}
-              className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-            />
-          </div>
-        </div>
-
-        {/* Brands */}
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Brand</h3>
-          <div className="flex flex-wrap gap-2">
-            {AVAILABLE_BRANDS.map(brand => (
-              <button
-                key={brand}
-                onClick={() => toggleBrand(brand)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  localFilters.brands.includes(brand)
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {brand}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Condition */}
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Condition</h3>
-          <div className="flex flex-wrap gap-2">
-            {AVAILABLE_CONDITIONS.map(condition => (
-              <button
-                key={condition}
-                onClick={() => toggleCondition(condition)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  localFilters.conditions.includes(condition)
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {condition}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <button
-            onClick={handleReset}
-            className="flex-1 py-3 px-4 border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Reset {activeFilterCount > 0 && `(${activeFilterCount})`}
-          </button>
-          <button
-            onClick={handleApply}
-            className="flex-1 py-3 px-4 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            Apply Filters
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function MarketPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [watches, setWatches] = useState<WatchData[]>([]);
   const [trendingWatches, setTrendingWatches] = useState<WatchData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('hot');
 
-  // Filter state
-  const [filters, setFilters] = useState<FilterState>({
-    priceMin: '',
-    priceMax: '',
-    brands: [],
-    conditions: [],
-  });
+  // Dynamic filter state (from URL params)
+  const [filters, setFilters] = useState<DynamicFilterState>({});
+
+  // Initialize filters from URL params
+  useEffect(() => {
+    const initialFilters: DynamicFilterState = {};
+    searchParams.forEach((value, key) => {
+      initialFilters[key] = value.split(',');
+    });
+    setFilters(initialFilters);
+  }, [searchParams]);
 
   const categories = [
     { key: 'hot', label: 'Hot' },
@@ -394,24 +240,19 @@ export function MarketPage() {
   // Apply filters to watches
   const filteredWatches = useMemo(() => {
     return watches.filter(watch => {
-      // Price filter
-      if (filters.priceMin && watch.price < parseFloat(filters.priceMin)) {
-        return false;
-      }
-      if (filters.priceMax && watch.price > parseFloat(filters.priceMax)) {
-        return false;
-      }
-
-      // Brand filter
-      if (filters.brands.length > 0 && !filters.brands.includes(watch.brand)) {
+      // Check brand filter
+      const brandFilter = filters['brand'] || [];
+      if (brandFilter.length > 0 && !brandFilter.includes(watch.brand)) {
         return false;
       }
 
-      // Condition filter
-      if (filters.conditions.length > 0 && watch.condition && !filters.conditions.includes(watch.condition)) {
+      // Check condition filter
+      const conditionFilter = filters['condition'] || [];
+      if (conditionFilter.length > 0 && watch.condition && !conditionFilter.includes(watch.condition)) {
         return false;
       }
 
+      // Add more filter checks as needed based on dynamic filter keys
       return true;
     });
   }, [watches, filters]);
@@ -428,15 +269,22 @@ export function MarketPage() {
     navigate(`/app/watch/${watch.reference}`);
   };
 
-  const handleApplyFilters = (newFilters: FilterState) => {
-    setFilters(newFilters);
+  const handleOpenFilters = () => {
+    // Navigate to filters page with current filters as params
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, values]) => {
+      if (values.length > 0) {
+        params.set(key, values.join(','));
+      }
+    });
+    navigate(`/app/market/filters${params.toString() ? `?${params.toString()}` : ''}`);
   };
 
   // Count active filters
-  const activeFilterCount =
-    (filters.priceMin || filters.priceMax ? 1 : 0) +
-    filters.brands.length +
-    filters.conditions.length;
+  const activeFilterCount = Object.values(filters).reduce(
+    (sum, arr) => sum + (arr?.length || 0),
+    0
+  );
 
   return (
     <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
@@ -502,7 +350,7 @@ export function MarketPage() {
 
                 {/* Filter Button */}
                 <button
-                  onClick={() => setShowFilters(true)}
+                  onClick={handleOpenFilters}
                   className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
                     activeFilterCount > 0
                       ? 'border-gray-900 bg-gray-900 text-white'
@@ -578,14 +426,6 @@ export function MarketPage() {
           </div>
         </div>
       </div>
-
-      {/* Filter Modal */}
-      <FilterModal
-        isOpen={showFilters}
-        onClose={() => setShowFilters(false)}
-        filters={filters}
-        onApplyFilters={handleApplyFilters}
-      />
     </div>
   );
 }

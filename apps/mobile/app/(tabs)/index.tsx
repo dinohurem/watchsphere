@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
+import { User } from '@/components/icons';
 import {
   Magnifier,
   UserCircleFilled,
@@ -75,6 +76,7 @@ export default function HomeScreen() {
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [loadingNews, setLoadingNews] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
 
   // Quick Access items (static - these are navigation items)
   const quickAccessItems: QuickAccessItem[] = [
@@ -135,7 +137,18 @@ export default function HomeScreen() {
   );
 
   const loadAllData = async () => {
-    await Promise.all([loadWatchlist(), loadActivity(), loadNews()]);
+    await Promise.all([loadWatchlist(), loadActivity(), loadNews(), loadProfile()]);
+  };
+
+  const loadProfile = async () => {
+    try {
+      const response = await api.get('/profile/me');
+      if (response.data?.profile_image_url) {
+        setProfileImageUrl(response.data.profile_image_url);
+      }
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
   };
 
   const onRefresh = useCallback(async () => {
@@ -320,9 +333,15 @@ export default function HomeScreen() {
       width: sp(44),
       height: sp(44),
       backgroundColor: '#F6F7F9',
-      borderRadius: sp(99),
+      borderRadius: sp(22),
       justifyContent: 'center',
       alignItems: 'center',
+      overflow: 'hidden',
+    },
+    profileImage: {
+      width: sp(44),
+      height: sp(44),
+      borderRadius: sp(22),
     },
     // Section header styles
     sectionHeader: {
@@ -386,15 +405,15 @@ export default function HomeScreen() {
     },
     // Activity section styles
     activitySection: {
-      marginBottom: hp(32),
+      marginBottom: hp(16),
     },
     activityEmptyState: {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: wp(16),
-      paddingVertical: hp(24),
-      gap: hp(12),
+      paddingVertical: hp(16),
+      gap: hp(8),
     },
     activityEmptyIconContainer: {
       width: sp(48),
@@ -414,7 +433,7 @@ export default function HomeScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: wp(16),
-      paddingVertical: hp(16),
+      paddingVertical: hp(10),
       gap: wp(12),
     },
     activityIconContainer: {
@@ -685,7 +704,11 @@ export default function HomeScreen() {
 
           {/* Profile Button */}
           <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-            <UserCircleFilled size={32} color="#212121" />
+            {profileImageUrl ? (
+              <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
+            ) : (
+              <User size={24} color="#212121" />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -795,7 +818,7 @@ export default function HomeScreen() {
                     </View>
                     <View style={styles.watchCardContent}>
                       <View>
-                        <Text style={styles.watchName}>{watch.brand} {watch.model}</Text>
+                        <Text style={styles.watchName} numberOfLines={1}>{watch.brand} {watch.model}</Text>
                         <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
                       </View>
                       <View style={styles.watchPriceRow}>
