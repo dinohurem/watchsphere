@@ -352,9 +352,15 @@ class MarketData(BaseModel):
     whatsapp_listings_count: int = 0
 
 
+class ConversationMessage(BaseModel):
+    content: str
+    is_user: bool
+
+
 class AssistantQueryRequest(BaseModel):
     message: str
     intent: Optional[str] = None  # "buy", "sell", or None for detection
+    conversation_history: Optional[List[ConversationMessage]] = None  # Previous messages for context
 
 
 class AssistantQueryResponse(BaseModel):
@@ -454,9 +460,9 @@ def detect_intent(text: str) -> Optional[str]:
     """Detect if user wants to buy or sell"""
     text_lower = text.lower()
 
-    buy_keywords = ["buy", "buying", "purchase", "looking for", "want to get", "interested in buying", "where can i find", "looking to buy", "want a", "i need", "available", "in stock", "any available", "is available", "can i get", "can i find", "do you have", "have any", "got any"]
-    sell_keywords = ["sell", "selling", "list", "want to sell", "looking to sell", "get rid of"]
-    info_keywords = ["price", "worth", "value", "market", "trend", "how much", "what's the", "tell me about", "info about", "information"]
+    buy_keywords = ["buy", "buying", "purchase", "looking for", "want to get", "interested in buying", "where can i find", "looking to buy", "want a", "i need", "available", "in stock", "any available", "is available", "can i get", "can i find", "do you have", "have any", "got any", "i want to buy"]
+    sell_keywords = ["sell", "selling", "list", "want to sell", "looking to sell", "get rid of", "i want to sell"]
+    info_keywords = ["price", "worth", "value", "market", "trend", "how much", "what's the", "tell me about", "info about", "information", "just want information"]
 
     for keyword in sell_keywords:
         if keyword in text_lower:
@@ -473,6 +479,17 @@ def detect_intent(text: str) -> Optional[str]:
     return None
 
 
+def detect_affirmative_response(text: str) -> bool:
+    """Detect if user is giving an affirmative response"""
+    text_lower = text.lower().strip()
+    affirmative_keywords = ["yes", "yeah", "yep", "sure", "ok", "okay", "please", "go ahead", "do it", "sounds good", "great", "perfect", "absolutely", "definitely", "of course", "yes please", "yea", "ya", "yup"]
+
+    for keyword in affirmative_keywords:
+        if text_lower == keyword or text_lower.startswith(keyword + " ") or text_lower.startswith(keyword + ",") or text_lower.startswith(keyword + "."):
+            return True
+    return False
+
+
 @router.post("/assistant/query", response_model=AssistantQueryResponse)
 async def query_assistant(
     request: AssistantQueryRequest,
@@ -483,6 +500,35 @@ async def query_assistant(
     message = request.message
     intent = request.intent or detect_intent(message)
     watch_ref = detect_watch_reference(message)
+
+    # If no watch detected in current message, check conversation history for context
+    if not watch_ref and request.conversation_history:
+        for prev_msg in request.conversation_history:
+            if prev_msg.is_user:
+                watch_ref = detect_watch_reference(prev_msg.content)
+                if watch_ref:
+                    break
+
+    # If no intent detected but user gave an affirmative response, check conversation history for context
+    if not intent and detect_affirmative_response(message) and request.conversation_history:
+        # Check if the last AI message asked about buy/sell/info
+        for prev_msg in reversed(request.conversation_history):
+            if not prev_msg.is_user:
+                msg_lower = prev_msg.content.lower()
+                # Check if AI asked about buying or selling
+                if "are you looking to buy or sell" in msg_lower or "would you like to buy" in msg_lower:
+                    # Default to info if just saying yes to the question
+                    intent = "info"
+                    break
+                elif "add this watch to your watchlist" in msg_lower or "add it to your watchlist" in msg_lower:
+                    intent = "info"
+                    break
+            else:
+                # Check if user previously mentioned buy/sell intent
+                user_intent = detect_intent(prev_msg.content)
+                if user_intent:
+                    intent = user_intent
+                    break
 
     # If no watch detected and no clear intent, ask for clarification
     if not watch_ref and not intent:
@@ -612,7 +658,7 @@ async def query_assistant(
 
             response += "\n\nWould you like me to help you connect with any of these sellers?"
         else:
-            response = f"I don't have any active listings for the **{watch_ref.brand if watch_ref else 'watch'}** at the moment, but I can keep you posted if anything comes up. Would you like to set up an alert?"
+            response = f"I don't have any active listings for the **{watch_ref.brand if watch_ref else 'watch'}** at the moment, but I can keep you posted if anything comes up. Would you like to add this watch to your watchlist?"
 
     elif intent == "sell":
         watch_name = f"{watch_ref.brand if watch_ref else 'your watch'}"
@@ -632,7 +678,7 @@ async def query_assistant(
         if market_data.avg_price:
             response = f"Here's what I know about the **{watch_name}**:\n\n**Market Data:**\n• Average price: €{market_data.avg_price:,.0f}\n• Price range: €{market_data.min_price:,.0f} - €{market_data.max_price:,.0f}\n• Active listings: {market_data.active_orders_count}\n• WhatsApp market activity: {market_data.whatsapp_listings_count} recent mentions"
         else:
-            response = f"I have the **{watch_name}** on record, but I don't have current market data available. Would you like me to search for more information or set up a price alert?"
+            response = f"I have the **{watch_name}** on record, but I don't have current market data available. Would you like me to search for more information or add it to your watchlist?"
 
     return {
         "detected_intent": intent,

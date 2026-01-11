@@ -23,6 +23,10 @@ export default function FieldEditScreen() {
         return 'Contact Information';
       case 'email':
         return 'Email Address';
+      case 'whatsapp_phone':
+        return 'WhatsApp Info';
+      case 'telegram_username':
+        return 'Telegram Info';
       default:
         return 'Edit Field';
     }
@@ -36,6 +40,10 @@ export default function FieldEditScreen() {
         return 'Please enter your phone number.';
       case 'email':
         return 'Please enter your email address.';
+      case 'whatsapp_phone':
+        return 'Please enter your WhatsApp phone number.';
+      case 'telegram_username':
+        return 'Please enter your Telegram username (with @).';
       default:
         return 'Enter value';
     }
@@ -49,6 +57,10 @@ export default function FieldEditScreen() {
         return '+1 234 567 8900';
       case 'email':
         return 'email@example.com';
+      case 'whatsapp_phone':
+        return '+1 234 567 8900';
+      case 'telegram_username':
+        return '@username';
       default:
         return 'Enter value';
     }
@@ -57,6 +69,7 @@ export default function FieldEditScreen() {
   const getKeyboardType = () => {
     switch (field) {
       case 'phone':
+      case 'whatsapp_phone':
         return 'phone-pad' as const;
       case 'email':
         return 'email-address' as const;

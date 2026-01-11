@@ -1,8 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useConfig } from '@/contexts/ConfigContext';
 import { BackArrow, Search, Filter, MapPin, Calendar, User } from '@/components/icons';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
@@ -30,8 +31,13 @@ interface Country {
 
 export default function SocialSearchScreen() {
   const { colors, fonts } = useTheme();
+  const { getFilterOptions, getFilterByKey, loadSocialFilters } = useConfig();
+
+  // Lazy load social filters when component mounts
+  useEffect(() => {
+    loadSocialFilters();
+  }, [loadSocialFilters]);
   const [messages, setMessages] = useState<SocialMessage[]>([]);
-  const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [total, setTotal] = useState(0);
@@ -42,37 +48,30 @@ export default function SocialSearchScreen() {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
+  // Get countries from dynamic config
+  const countries = useMemo(() => {
+    const options = getFilterOptions('social', 'country_code');
+    if (options.length > 0) {
+      return options.map(opt => ({ code: opt.value, name: opt.label }));
+    }
+    // Fallback if config not loaded yet
+    return [
+      { code: 'US', name: 'United States' },
+      { code: 'UK', name: 'United Kingdom' },
+      { code: 'DE', name: 'Germany' },
+      { code: 'CH', name: 'Switzerland' },
+      { code: 'IT', name: 'Italy' },
+      { code: 'FR', name: 'France' },
+    ];
+  }, [getFilterOptions]);
+
   useEffect(() => {
-    loadCountries();
     loadMessages();
   }, []);
 
   useEffect(() => {
     loadMessages();
   }, [offerType, selectedCountry]);
-
-  const loadCountries = async () => {
-    try {
-      const response = await api.get('/whatsapp/social/countries');
-      if (response.data?.countries) {
-        setCountries(response.data.countries);
-      }
-    } catch (error) {
-      console.log('Countries not available:', error);
-      setCountries([
-        { code: 'US', name: 'United States' },
-        { code: 'UK', name: 'United Kingdom' },
-        { code: 'DE', name: 'Germany' },
-        { code: 'CH', name: 'Switzerland' },
-        { code: 'IT', name: 'Italy' },
-        { code: 'FR', name: 'France' },
-        { code: 'AE', name: 'UAE' },
-        { code: 'HK', name: 'Hong Kong' },
-        { code: 'SG', name: 'Singapore' },
-        { code: 'JP', name: 'Japan' },
-      ]);
-    }
-  };
 
   const loadMessages = async () => {
     setLoading(true);

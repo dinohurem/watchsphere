@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
@@ -8,6 +8,7 @@ import { BackArrow, ChevronRight } from '@/components/icons';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ProfileData {
   id: string;
@@ -18,9 +19,10 @@ interface ProfileData {
 
 export default function AccountDetailsScreen() {
   const { colors, fonts } = useTheme();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // Password change modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -93,6 +95,42 @@ export default function AccountDetailsScreen() {
     } finally {
       setChangingPassword(false);
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This will deactivate your account and you will no longer be able to log in.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingAccount(true);
+            try {
+              await api.post('/profile/deactivate');
+              // Clear auth tokens and logout
+              await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth-storage']);
+              logout();
+              router.replace('/(auth)');
+            } catch (error: any) {
+              console.error('Error deleting account:', error);
+              Alert.alert(
+                'Error',
+                error.response?.data?.detail || 'Failed to delete account. Please try again.'
+              );
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const styles = StyleSheet.create({
@@ -201,15 +239,20 @@ export default function AccountDetailsScreen() {
     // Modal styles
     modalOverlay: {
       flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalBackdrop: {
+      ...StyleSheet.absoluteFillObject,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
     },
     modalContent: {
       backgroundColor: colors.background,
-      borderTopLeftRadius: sp(24),
-      borderTopRightRadius: sp(24),
+      borderRadius: sp(24),
       padding: wp(24),
-      paddingBottom: hp(40),
+      paddingBottom: hp(24),
+      width: '90%',
+      maxWidth: 400,
     },
     modalTitle: {
       fontSize: fp(20),
@@ -264,6 +307,31 @@ export default function AccountDetailsScreen() {
       fontSize: fp(16),
       fontFamily: fonts.semiBold,
       color: colors.background,
+    },
+    deleteSection: {
+      paddingHorizontal: wp(16),
+      paddingTop: hp(32),
+      paddingBottom: hp(40),
+    },
+    deleteButton: {
+      backgroundColor: 'rgba(201, 57, 39, 0.1)',
+      borderRadius: sp(12),
+      paddingVertical: hp(14),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    deleteButtonText: {
+      fontSize: fp(15),
+      fontFamily: fonts.semiBold,
+      color: '#C93927',
+    },
+    deleteHint: {
+      fontSize: fp(13),
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: hp(12),
+      lineHeight: fp(18),
     },
   });
 
@@ -341,16 +409,57 @@ export default function AccountDetailsScreen() {
             <ChevronRight size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
+
+        {/* Delete Account Section */}
+        <View style={styles.deleteSection}>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDeleteAccount}
+            disabled={deletingAccount}
+            activeOpacity={0.7}
+          >
+            {deletingAccount ? (
+              <ActivityIndicator size="small" color="#C93927" />
+            ) : (
+              <Text style={styles.deleteButtonText}>Delete Account</Text>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.deleteHint}>
+            This will deactivate your account. You will not be able to log in anymore.
+          </Text>
+        </View>
       </ScrollView>
 
       {/* Password Change Modal */}
       <Modal
         visible={showPasswordModal}
         transparent
-        animationType="slide"
-        onRequestClose={() => setShowPasswordModal(false)}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (!changingPassword) {
+            setShowPasswordModal(false);
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+          }
+        }}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => {
+              if (!changingPassword) {
+                setShowPasswordModal(false);
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+              }
+            }}
+          />
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Change Password</Text>
 
@@ -410,7 +519,7 @@ export default function AccountDetailsScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

@@ -79,23 +79,26 @@ function SendIcon({ color = '#FFFFFF' }: { color?: string }) {
 }
 
 export default function AIChatScreen() {
-  const { id, initialMessage, title: passedTitle } = useLocalSearchParams<{
+  const { id, initialMessage, title: passedTitle, skipLoad } = useLocalSearchParams<{
     id: string;
     initialMessage?: string;
     title?: string;
+    skipLoad?: string;
   }>();
   const { fonts } = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationTitle, setConversationTitle] = useState(passedTitle || 'New Chat');
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(id !== 'new');
   const [chatId, setChatId] = useState<string | null>(id === 'new' ? null : id);
   const scrollViewRef = useRef<ScrollView>(null);
   const hasInitialized = useRef(false);
   const previousIdRef = useRef(id);
   // Use a ref to track chatId for immediate access in callbacks (avoids stale closures)
   const chatIdRef = useRef<string | null>(id === 'new' ? null : id);
+  // Track if initial message has been processed (use ref to persist across renders)
+  const initialMessageProcessed = useRef(false);
 
   // Sync chatId with id param when navigating to a different chat
   // Only reset if we're actually navigating to a different chat (not on re-renders)
@@ -104,28 +107,54 @@ export default function AIChatScreen() {
     if (previousIdRef.current === id) {
       return;
     }
+
+    // Skip if we already have a chatId and the new id is 'new'
+    // (this means we're re-navigating to the same new chat flow somehow)
+    if (chatIdRef.current && id === 'new') {
+      return;
+    }
+
+    // Skip if the chatIdRef already matches the new id
+    // (this means we already processed this ID internally)
+    if (chatIdRef.current === id) {
+      previousIdRef.current = id;
+      return;
+    }
+
     previousIdRef.current = id;
 
     if (id !== 'new') {
       setChatId(id);
       chatIdRef.current = id;
-      hasInitialized.current = false; // Reset so we can load new chat history
+
+      // If we have an initialMessage, don't load history - we're showing the new message
+      if (initialMessage) {
+        hasInitialized.current = false;
+        initialMessageProcessed.current = false;
+        setIsLoadingHistory(false);
+        setMessages([]);
+      } else {
+        hasInitialized.current = false; // Reset so we can load new chat history
+        setIsLoadingHistory(true);
+        setMessages([]);
+      }
     } else {
       setChatId(null);
       chatIdRef.current = null;
       hasInitialized.current = false;
+      initialMessageProcessed.current = false;
+      setIsLoadingHistory(false);
+      setMessages([]);
     }
-    setMessages([]);
-  }, [id]);
+  }, [id, initialMessage]);
 
   // Load existing messages when opening a chat (not new)
   useEffect(() => {
-    if (id !== 'new' && chatId) {
+    // Don't load history if we have an initial message - we'll show that instead
+    if (id !== 'new' && chatId && !initialMessage) {
       loadChatHistory();
-    } else {
-      setIsLoadingHistory(false);
     }
-  }, [chatId]);
+  }, [chatId, initialMessage]);
 
   const loadChatHistory = async () => {
     if (!chatId) return;
@@ -163,72 +192,76 @@ export default function AIChatScreen() {
     }
   };
 
-  // Handle initial message from new chat
+  // Handle initial message from new chat (chat is already created in new.tsx)
   useEffect(() => {
     const processInitialMessage = async () => {
-      if (initialMessage && !hasInitialized.current && !isLoadingHistory) {
-        hasInitialized.current = true;
+      // Only process if we have an initial message and haven't processed it yet
+      if (!initialMessage || initialMessageProcessed.current || isLoadingHistory) {
+        return;
+      }
 
-        // Create new chat on backend
-        try {
-          const createResponse = await api.post('/ai-chats', {
-            title: initialMessage.slice(0, 50) + (initialMessage.length > 50 ? '...' : ''),
-            initial_message: initialMessage,
-          });
+      // Skip if id is 'new' - this shouldn't happen anymore but guard against it
+      if (id === 'new') {
+        return;
+      }
 
-          const newChatId = createResponse.data.id;
-          setChatId(newChatId);
-          chatIdRef.current = newChatId; // Update ref immediately for subsequent messages
+      // Mark as processed immediately to prevent double processing
+      initialMessageProcessed.current = true;
+      hasInitialized.current = true;
 
-          const userMessage: Message = {
-            id: Date.now().toString(),
-            content: initialMessage,
-            isUser: true,
-            timestamp: new Date(),
-          };
-          setMessages([userMessage]);
-          setConversationTitle(
-            initialMessage.slice(0, 25) + (initialMessage.length > 25 ? '...' : '')
-          );
-          setIsLoading(true);
+      // Show user message immediately
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        content: initialMessage,
+        isUser: true,
+        timestamp: new Date(),
+      };
+      setMessages([userMessage]);
+      setConversationTitle(
+        initialMessage.slice(0, 25) + (initialMessage.length > 25 ? '...' : '')
+      );
+      setIsLoading(true);
 
-          // Call the AI assistant API
-          const response = await api.post('/assistant/query', {
-            message: initialMessage,
-          });
+      // Chat is already created in new.tsx, so just call the AI assistant API
+      try {
+        const currentChatId = chatIdRef.current || id;
 
-          const data = response.data;
-          const aiResponse: Message = {
-            id: (Date.now() + 1).toString(),
-            content: data.suggested_response,
-            isUser: false,
-            timestamp: new Date(),
-            quickReplies: data.requires_clarification ? data.clarification_options : undefined,
-          };
-          setMessages((prev) => [...prev, aiResponse]);
+        // Call the AI assistant API
+        const response = await api.post('/assistant/query', {
+          message: initialMessage,
+        });
 
-          // Save AI response to backend
-          await api.post(`/ai-chats/${newChatId}/messages`, {
-            content: data.suggested_response,
-            is_ai: true,
-          });
-        } catch (error) {
-          console.error('Error creating chat or calling assistant API:', error);
-          const aiResponse: Message = {
-            id: (Date.now() + 1).toString(),
-            content: generateMockResponse(initialMessage),
-            isUser: false,
-            timestamp: new Date(),
-          };
-          setMessages((prev) => [...prev, aiResponse]);
-        } finally {
-          setIsLoading(false);
-        }
+        const data = response.data;
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          content: data.suggested_response,
+          isUser: false,
+          timestamp: new Date(),
+          quickReplies: data.requires_clarification ? data.clarification_options : undefined,
+        };
+        setMessages((prev) => [...prev, aiResponse]);
+
+        // Save AI response to backend
+        await api.post(`/ai-chats/${currentChatId}/messages`, {
+          content: data.suggested_response,
+          is_ai: true,
+        });
+      } catch (error) {
+        console.error('Error calling assistant API:', error);
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          content: generateMockResponse(initialMessage),
+          isUser: false,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, aiResponse]);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     processInitialMessage();
-  }, [initialMessage, isLoadingHistory]);
+  }, [initialMessage, isLoadingHistory, id]);
 
   // Extract title from first user message
   useEffect(() => {
@@ -262,7 +295,7 @@ export default function AIChatScreen() {
 
     try {
       // Use ref for immediate access (avoids stale closure issues)
-      let currentChatId = chatIdRef.current;
+      let currentChatId: string = chatIdRef.current || '';
 
       // If no chat exists yet, create one first
       if (!currentChatId) {
@@ -273,6 +306,9 @@ export default function AIChatScreen() {
         currentChatId = createResponse.data.id;
         setChatId(currentChatId);
         chatIdRef.current = currentChatId; // Update ref immediately
+        previousIdRef.current = currentChatId; // Update previous ID ref
+        // Note: We intentionally don't update the URL here to avoid navigation issues
+        // The chatIdRef is used for all subsequent API calls
       } else {
         // Save user message to backend
         await api.post(`/ai-chats/${currentChatId}/messages`, {
@@ -281,9 +317,16 @@ export default function AIChatScreen() {
         });
       }
 
-      // Call the AI assistant API
+      // Build conversation history from messages state (need fresh reference)
+      const conversationHistory = messages.map(msg => ({
+        content: msg.content,
+        is_user: msg.isUser,
+      }));
+
+      // Call the AI assistant API with conversation history for context
       const response = await api.post('/assistant/query', {
         message: content,
+        conversation_history: conversationHistory,
       });
 
       const data = response.data;
@@ -336,7 +379,6 @@ export default function AIChatScreen() {
 
   const handleImagePick = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
       quality: 0.8,
       allowsEditing: true,
     });
@@ -769,7 +811,9 @@ function generateMockResponse(userMessage: string): string {
 4. **Speculation:** Collectors and investors treated it like an asset, driving up resale values.
 5. **Brand strategy:** Patek replaced it with the costlier gold 5811, reinforcing the 5711's exclusivity.
 
-In short: *limited supply + massive hype + discontinuation* = price explosion.`;
+In short: *limited supply + massive hype + discontinuation* = price explosion.
+
+Would you like me to add this watch to your watchlist so you can track price changes?`;
   }
 
   if (lowerMessage.includes('rolex') || lowerMessage.includes('submariner')) {
@@ -781,7 +825,7 @@ In short: *limited supply + massive hype + discontinuation* = price explosion.`;
 2. **Availability:** Still very limited at authorized dealers, often requiring waitlists.
 3. **Investment potential:** Historically strong value retention, especially for vintage references.
 
-Would you like me to provide more specific pricing data or compare different references?`;
+Would you like me to add this watch to your watchlist to track market prices?`;
   }
 
   if (lowerMessage.includes('reference') || lowerMessage.includes('number')) {
@@ -809,5 +853,7 @@ I'd be happy to help you with information about luxury watches. Here's what I ca
 3. **Investment advice:** Which models hold value best
 4. **Buying guidance:** Where and how to purchase safely
 
-What specific aspect would you like me to elaborate on?`;
+What specific aspect would you like me to elaborate on?
+
+Would you like me to add any watches to your watchlist for tracking?`;
 }

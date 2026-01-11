@@ -4,12 +4,11 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
-import Svg, { Path, Rect, Circle } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
@@ -23,29 +22,29 @@ function BackArrow() {
 }
 
 // WS Logo Icon for notification
-function WSLogoSmall() {
+function WSLogoSmall({ size = 'large' }: { size?: 'large' | 'small' }) {
+  const iconSize = size === 'large' ? sp(33) : sp(24);
+  const svgSize = size === 'large' ? 20 : 14;
+
   return (
-    <View style={styles.notificationIcon}>
-      <Svg width={24} height={24} viewBox="0 0 40 40" fill="none">
-        {/* W shape */}
+    <View style={[styles.notificationIcon, { width: iconSize, height: iconSize, borderRadius: sp(8) }]}>
+      <Svg width={svgSize} height={svgSize} viewBox="0 0 24 24" fill="none">
+        {/* WS stylized logo */}
         <Path
-          d="M5 10 L11 27 L17 15 L23 27 L29 10"
+          d="M3 6L6 18L9 10L12 18L15 6"
           stroke="#FFFFFF"
           strokeWidth={2}
           fill="none"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Horizontal lines */}
-        <Path d="M3 14 H35" stroke="#FFFFFF" strokeWidth={1.5} />
-        <Path d="M3 21 H35" stroke="#FFFFFF" strokeWidth={1.5} />
-        {/* S */}
         <Path
-          d="M28 11 C35 11 35 16 28 16 C21 16 21 21 28 21 C35 21 35 26 28 26"
+          d="M15 8C17 8 19 9 19 11C19 13 17 13 15 13C17 13 19 14 19 16C19 18 17 18 15 18"
           stroke="#FFFFFF"
           strokeWidth={2}
           fill="none"
           strokeLinecap="round"
+          strokeLinejoin="round"
         />
       </Svg>
     </View>
@@ -112,7 +111,7 @@ export default function NotificationsPermissionScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Turn on notifications</Text>
         <Text style={styles.subtitle}>
-          Stay informed about new watches, price drops, and activity from your followed sellers and collections.
+          Stay on top of new offers, order matches, price changes, and chat messages – so you never miss a deal.
         </Text>
 
         {/* Notification Preview Card */}
@@ -134,7 +133,7 @@ export default function NotificationsPermissionScreen() {
                   <Text style={styles.notificationTime}>9:41 AM</Text>
                 </View>
                 <Text style={styles.notificationText}>
-                  New listing available for a watch you're tracking. Take a look before it's gone.
+                  New offer received for your 126610LN at €12,300.
                 </Text>
               </View>
             </View>
@@ -142,9 +141,7 @@ export default function NotificationsPermissionScreen() {
             {/* Mock collapsed notifications */}
             <View style={styles.mockList}>
               <View style={styles.mockListItem}>
-                <View style={styles.mockIconPlaceholder}>
-                  <WSLogoSmall />
-                </View>
+                <WSLogoSmall size="small" />
                 <View style={styles.mockTextLines}>
                   <View style={styles.mockLineRow}>
                     <View style={[styles.mockLine, { flex: 1 }]} />
@@ -154,9 +151,7 @@ export default function NotificationsPermissionScreen() {
                 </View>
               </View>
               <View style={styles.mockListItem}>
-                <View style={styles.mockIconPlaceholder}>
-                  <WSLogoSmall />
-                </View>
+                <WSLogoSmall size="small" />
                 <View style={styles.mockTextLines}>
                   <View style={styles.mockLineRow}>
                     <View style={[styles.mockLine, { flex: 1 }]} />
@@ -305,7 +300,7 @@ const styles = StyleSheet.create({
     width: sp(33),
     height: sp(33),
     borderRadius: sp(8),
-    backgroundColor: '#1D1D1F',
+    backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: wp(9),
@@ -349,15 +344,6 @@ const styles = StyleSheet.create({
     padding: wp(8),
     width: wp(233),
     height: hp(42),
-  },
-  mockIconPlaceholder: {
-    width: sp(24),
-    height: sp(24),
-    borderRadius: sp(6),
-    backgroundColor: '#1D1D1F',
-    marginRight: wp(6),
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   mockTextLines: {
     flex: 1,

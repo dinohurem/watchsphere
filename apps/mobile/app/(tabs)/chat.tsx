@@ -9,7 +9,6 @@ import { SwipeableChatItem } from '@/components/SwipeableChatItem';
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import { router } from 'expo-router';
 import { wp, hp, sp, fp } from '@/utils/responsive';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { api } from '@/services/api';
 
@@ -135,10 +134,10 @@ export default function ChatScreen() {
   const loadAiChats = async () => {
     try {
       setLoading(true);
-      const savedChats = await AsyncStorage.getItem('ai_chats');
-      if (savedChats) {
-        const parsedChats = JSON.parse(savedChats);
-        setAiChats(parsedChats);
+      // Load from backend API to match Ask AI screen
+      const response = await api.get('/ai-chats');
+      if (response.data) {
+        setAiChats(response.data);
       } else {
         setAiChats([]);
       }
@@ -159,9 +158,13 @@ export default function ChatScreen() {
       isGroup={false}
     >
       <TouchableOpacity style={styles.conversationItem} onPress={() => router.push(`/chat/${item.id}` as any)}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
-        </View>
+        {item.avatar ? (
+          <Image source={{ uri: item.avatar }} style={styles.conversationAvatar} />
+        ) : (
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+          </View>
+        )}
         <View style={styles.conversationContent}>
           <Text style={styles.conversationName}>{item.name}</Text>
           <Text style={styles.lastMessage} numberOfLines={1}>
@@ -366,16 +369,23 @@ export default function ChatScreen() {
     avatar: {
       width: sp(44),
       height: sp(44),
-      borderRadius: sp(8),
+      borderRadius: sp(22),
       backgroundColor: '#F4F4F4',
       justifyContent: 'center',
       alignItems: 'center',
+      marginRight: wp(10),
+    },
+    conversationAvatar: {
+      width: sp(44),
+      height: sp(44),
+      borderRadius: sp(22),
       marginRight: wp(10),
     },
     groupAvatar: {
       width: sp(44),
       height: sp(44),
       borderRadius: sp(8),
+      marginRight: wp(10),
     },
     aiAvatar: {
       backgroundColor: colors.primaryLight,

@@ -73,6 +73,12 @@ async def upload_profile_picture(
 
     try:
         result = await upload_profile_image(content, str(current_user.id))
+
+        # Update user profile with new image URLs
+        current_user.profile_image_url = result['url']
+        current_user.profile_image_thumbnail_url = result.get('thumbnail_url')
+        await current_user.save()
+
         return ImageUploadResponse(**result)
     except Exception as e:
         raise HTTPException(

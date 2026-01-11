@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { useFilters, FilterState } from '@/contexts/FilterContext';
+import { useConfig } from '@/contexts/ConfigContext';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
 // Back Arrow Icon
@@ -87,7 +88,11 @@ function FilterItemRow({ name, selected, onPress }: FilterItemProps) {
 
 // Map URL type to FilterState key
 const TYPE_TO_FILTER_KEY: Record<string, keyof FilterState> = {
+  brand: 'brands',
   model: 'models',
+  year: 'years',
+  location: 'locations',
+  price: 'priceMin',
   reference: 'references',
   delivery: 'deliveryContents',
   availability: 'availability',
@@ -113,307 +118,69 @@ const TYPE_TO_FILTER_KEY: Record<string, keyof FilterState> = {
   'clasp-type': 'claspType',
 };
 
-// Filter type configurations
-const FILTER_CONFIG: Record<string, { title: string; items: string[]; searchable?: boolean }> = {
-  model: {
-    title: 'Model',
-    searchable: true,
-    items: [
-      'Nautilus',
-      'Royal Oak',
-      'Overseas',
-      'Datograph',
-      'Tradition',
-      'Submariner',
-      'Speedmaster',
-      'Reverso',
-      'Fifty Fathoms',
-      '1966',
-      'RM 011',
-      'Big Bang',
-      'Portugieser',
-      'Luminor',
-    ],
-  },
-  price: {
-    title: 'Price',
-    items: [
-      'Under $1,000',
-      '$1,000 - $5,000',
-      '$5,000 - $10,000',
-      '$10,000 - $25,000',
-      '$25,000 - $50,000',
-      '$50,000 - $100,000',
-      '$100,000 - $250,000',
-      '$250,000 - $500,000',
-      'Over $500,000',
-    ],
-  },
-  reference: {
-    title: 'Reference Number',
-    searchable: true,
-    items: [
-      '5711/1A',
-      '15202ST',
-      '4500V',
-      '403.035',
-      '7097BB',
-      '126610LN',
-      '310.30.42.50.01.002',
-      'Q3858520',
-      '5000-1110-B52A',
-      '49555-11-131-BB6A',
-    ],
-  },
-  delivery: {
-    title: 'Delivery Contents',
-    items: [
-      'Watch only',
-      'Watch with original box',
-      'Watch with original papers',
-      'Full set (box and papers)',
-      'Full set with original receipt',
-    ],
-  },
-  availability: {
-    title: 'Availability',
-    items: [
-      'In stock',
-      'Available on request',
-      'Coming soon',
-      'Pre-order',
-    ],
-  },
-  'condition-type': {
-    title: 'New/Used',
-    items: [
-      'New',
-      'Unworn',
-      'Pre-owned',
-    ],
-  },
-  condition: {
-    title: 'Condition',
-    items: [
-      'Mint',
-      'Excellent',
-      'Very Good',
-      'Good',
-      'Fair',
-    ],
-  },
-  'case-diameter': {
-    title: 'Case diameter/width',
-    items: [
-      'Under 36mm',
-      '36mm - 38mm',
-      '38mm - 40mm',
-      '40mm - 42mm',
-      '42mm - 44mm',
-      '44mm - 46mm',
-      'Over 46mm',
-    ],
-  },
-  'lug-width': {
-    title: 'Lug width',
-    items: [
-      '18mm',
-      '19mm',
-      '20mm',
-      '21mm',
-      '22mm',
-      '24mm',
-    ],
-  },
-  'case-thickness': {
-    title: 'Case thickness',
-    items: [
-      'Under 8mm',
-      '8mm - 10mm',
-      '10mm - 12mm',
-      '12mm - 14mm',
-      'Over 14mm',
-    ],
-  },
-  gender: {
-    title: 'Gender',
-    items: [
-      "Men's watch",
-      "Women's watch",
-      'Unisex',
-    ],
-  },
-  'watch-type': {
-    title: 'Watch type',
-    items: [
-      'Wristwatch',
-      'Pocket watch',
-    ],
-  },
-  'watch-style': {
-    title: 'Style of watch',
-    items: [
-      'Dress watch',
-      'Sports watch',
-      'Diving watch',
-      'Pilot watch',
-      'Field watch',
-      'Chronograph',
-      'GMT/World time',
-    ],
-  },
-  movement: {
-    title: 'Movement',
-    items: [
-      'Automatic',
-      'Manual winding',
-      'Quartz',
-      'Solar',
-      'Kinetic',
-    ],
-  },
-  functions: {
-    title: 'Functions',
-    items: [
-      'Date',
-      'Day-Date',
-      'Chronograph',
-      'GMT/Second time zone',
-      'Power reserve indicator',
-      'Moon phase',
-      'Annual calendar',
-      'Perpetual calendar',
-      'Minute repeater',
-      'Tourbillon',
-    ],
-  },
-  'dial-style': {
-    title: 'Dial style',
-    items: [
-      'Arabic numerals',
-      'Roman numerals',
-      'Index',
-      'Mixed',
-      'No numerals',
-    ],
-  },
-  'dial-color': {
-    title: 'Dial color',
-    items: [
-      'Black',
-      'White',
-      'Silver',
-      'Blue',
-      'Green',
-      'Brown',
-      'Champagne/Gold',
-      'Grey',
-      'Mother of pearl',
-    ],
-  },
-  'case-material': {
-    title: 'Case material',
-    items: [
-      'Stainless steel',
-      'Yellow gold',
-      'Rose gold',
-      'White gold',
-      'Platinum',
-      'Titanium',
-      'Ceramic',
-      'Carbon',
-      'Bronze',
-    ],
-  },
-  'bezel-material': {
-    title: 'Bezel material',
-    items: [
-      'Stainless steel',
-      'Yellow gold',
-      'Rose gold',
-      'White gold',
-      'Platinum',
-      'Ceramic',
-      'Diamonds',
-    ],
-  },
-  'crystal-type': {
-    title: 'Crystal type',
-    items: [
-      'Sapphire crystal',
-      'Mineral glass',
-      'Hesalite/Plexiglass',
-    ],
-  },
-  'water-resistance': {
-    title: 'Water resistance',
-    items: [
-      'Not water resistant',
-      '30m / 3 ATM',
-      '50m / 5 ATM',
-      '100m / 10 ATM',
-      '200m / 20 ATM',
-      '300m / 30 ATM',
-      '500m+',
-    ],
-  },
-  'band-material': {
-    title: 'Band material',
-    items: [
-      'Leather',
-      'Stainless steel',
-      'Yellow gold',
-      'Rose gold',
-      'White gold',
-      'Platinum',
-      'Titanium',
-      'Rubber',
-      'NATO/Fabric',
-    ],
-  },
-  'band-color': {
-    title: 'Band color',
-    items: [
-      'Black',
-      'Brown',
-      'Blue',
-      'Green',
-      'Silver',
-      'Gold',
-      'Rose gold',
-      'White',
-    ],
-  },
-  'clasp-material': {
-    title: 'Clasp material',
-    items: [
-      'Stainless steel',
-      'Yellow gold',
-      'Rose gold',
-      'White gold',
-      'Platinum',
-      'Titanium',
-    ],
-  },
-  'clasp-type': {
-    title: 'Clasp type',
-    items: [
-      'Fold clasp',
-      'Deployant clasp',
-      'Butterfly clasp',
-      'Pin buckle',
-      'Hidden clasp',
-    ],
-  },
+// Map URL type to filter key in the backend
+const TYPE_TO_BACKEND_KEY: Record<string, string> = {
+  brand: 'brand',
+  model: 'model',
+  year: 'year',
+  location: 'location',
+  price: 'price',
+  reference: 'reference',
+  delivery: 'delivery',
+  availability: 'availability',
+  'condition-type': 'condition_type',
+  condition: 'condition',
+  'case-diameter': 'case_diameter',
+  'lug-width': 'lug_width',
+  'case-thickness': 'case_thickness',
+  gender: 'gender',
+  'watch-type': 'watch_type',
+  'watch-style': 'watch_style',
+  movement: 'movement',
+  functions: 'functions',
+  'dial-style': 'dial_style',
+  'dial-color': 'dial_color',
+  'case-material': 'case_material',
+  'bezel-material': 'bezel_material',
+  'crystal-type': 'crystal_type',
+  'water-resistance': 'water_resistance',
+  'band-material': 'band_material',
+  'band-color': 'band_color',
+  'clasp-material': 'clasp_material',
+  'clasp-type': 'clasp_type',
 };
 
 export default function GenericFilterScreen() {
   const { type } = useLocalSearchParams<{ type: string }>();
-  const config = FILTER_CONFIG[type || ''] || { title: 'Filter', items: [] };
   const filterKey = TYPE_TO_FILTER_KEY[type || ''];
+  const backendKey = TYPE_TO_BACKEND_KEY[type || ''];
 
   const { filters, toggleFilterItem, resetFilterCategory } = useFilters();
+  const { getFilterByKey, getFilterOptions, loadMarketFilters, isLoadingMarketFilters } = useConfig();
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Lazy load market filters when component mounts
+  useEffect(() => {
+    loadMarketFilters();
+  }, [loadMarketFilters]);
+
+  // Get filter config from backend
+  const filterConfig = backendKey ? getFilterByKey('market', backendKey) : undefined;
+
+  // Build config object from dynamic data
+  const config = useMemo(() => {
+    if (!filterConfig) {
+      return { title: 'Filter', items: [], searchable: false };
+    }
+    return {
+      title: filterConfig.name,
+      items: filterConfig.values
+        .filter(v => v.is_enabled)
+        .sort((a, b) => a.display_order - b.display_order)
+        .map(v => v.label),
+      searchable: filterConfig.is_searchable,
+    };
+  }, [filterConfig]);
 
   // Get selected items from context (handle both string[] arrays)
   const selectedItems = filterKey && Array.isArray(filters[filterKey])
@@ -443,6 +210,24 @@ export default function GenericFilterScreen() {
     // Filter already persisted via context, just go back
     router.back();
   };
+
+  // Show loading state while market filters are loading
+  if (isLoadingMarketFilters) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <BackArrow />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Filter</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#212121" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

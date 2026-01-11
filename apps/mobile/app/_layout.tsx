@@ -11,6 +11,8 @@ import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { ChatProvider } from '@/contexts/ChatContext';
 import { AIButtonProvider } from '@/contexts/AIButtonContext';
 import { FilterProvider } from '@/contexts/FilterContext';
+import { ConfigProvider } from '@/contexts/ConfigContext';
+import { GuideProvider, useGuide } from '@/contexts/GuideContext';
 import { AnimatedSplashScreen } from '@/components/AnimatedSplashScreen';
 import { useFonts } from 'expo-font';
 import {
@@ -42,8 +44,10 @@ function RootLayoutNav() {
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
   const login = useAuthStore((state) => state.login);
   const { colorScheme } = useTheme();
+  const { checkFirstLogin, startGuide } = useGuide();
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [hasAttemptedRestore, setHasAttemptedRestore] = useState(false);
+  const [hasCheckedFirstLogin, setHasCheckedFirstLogin] = useState(false);
 
   // Try to restore session from stored tokens on app startup
   useEffect(() => {
@@ -125,11 +129,24 @@ function RootLayoutNav() {
     if (isAuthenticated) {
       // User is authenticated, go to main tabs
       router.replace('/(tabs)');
+
+      // Check if this is the first login and show guide
+      if (!hasCheckedFirstLogin) {
+        setHasCheckedFirstLogin(true);
+        checkFirstLogin().then((isFirstLogin) => {
+          if (isFirstLogin) {
+            // Delay guide start to allow navigation to complete
+            setTimeout(() => {
+              startGuide();
+            }, 1000);
+          }
+        });
+      }
     } else {
       // Not authenticated, go to auth screen
       router.replace('/(auth)');
     }
-  }, [isAuthenticated, hasHydrated, isRestoringSession]);
+  }, [isAuthenticated, hasHydrated, isRestoringSession, hasCheckedFirstLogin, checkFirstLogin, startGuide]);
 
   // Show nothing while hydrating or restoring session
   if (!hasHydrated || isRestoringSession) {
@@ -195,13 +212,17 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <FilterProvider>
-          <AIButtonProvider>
-            <ChatProvider>
-              <RootLayoutNav />
-            </ChatProvider>
-          </AIButtonProvider>
-        </FilterProvider>
+        <ConfigProvider>
+          <FilterProvider>
+            <AIButtonProvider>
+              <ChatProvider>
+                <GuideProvider>
+                  <RootLayoutNav />
+                </GuideProvider>
+              </ChatProvider>
+            </AIButtonProvider>
+          </FilterProvider>
+        </ConfigProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

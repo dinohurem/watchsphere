@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { Plus, Image, ArrowUp, Sparkles } from 'lucide-react'
+import { Plus, Image, ArrowUp } from 'lucide-react'
+import { api } from '@/services/api'
 
 interface Message {
   id: string
@@ -23,22 +24,6 @@ const SUGGESTIONS = [
   'What are the most popular luxury watch brands right now?',
 ]
 
-// Mock conversations
-const MOCK_CONVERSATIONS: Conversation[] = [
-  {
-    id: '1',
-    title: "What's the reason for the price spike...",
-    preview: "What's the reason for the price spike of Nautilus 5711?",
-    timestamp: new Date(),
-  },
-  {
-    id: '2',
-    title: "What's the reference number of this n...",
-    preview: "What's the reference number of this nautilus?",
-    timestamp: new Date(Date.now() - 86400000), // 1 day ago
-  },
-]
-
 interface FormattedTextPart {
   text: string
   bold?: boolean
@@ -46,11 +31,12 @@ interface FormattedTextPart {
 }
 
 export function AIChatPage() {
-  const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS)
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [inputText, setInputText] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -61,80 +47,134 @@ export function AIChatPage() {
     scrollToBottom()
   }, [messages])
 
+  // Load conversations on mount
+  useEffect(() => {
+    loadConversations()
+  }, [])
+
+  // Load messages when active conversation changes
+  useEffect(() => {
+    if (activeConversation) {
+      loadMessages(activeConversation)
+    }
+  }, [activeConversation])
+
+  const loadConversations = async () => {
+    setIsLoadingConversations(true)
+    try {
+      const response = await api.get('/ai-chats')
+      const convs = response.data.map((conv: any) => ({
+        id: conv.id,
+        // Use first_user_message as the title (it's what the user first asked)
+        title: conv.first_user_message || conv.title || 'New conversation',
+        preview: conv.first_user_message || conv.title || 'No messages yet',
+        timestamp: new Date(conv.created_at),
+      }))
+      setConversations(convs)
+    } catch (error) {
+      console.error('Failed to load conversations:', error)
+    } finally {
+      setIsLoadingConversations(false)
+    }
+  }
+
+  const loadMessages = async (chatId: string) => {
+    try {
+      const response = await api.get(`/ai-chats/${chatId}/messages`)
+      const msgs = response.data.map((msg: any) => ({
+        id: msg.id,
+        content: msg.content,
+        isUser: msg.is_user,
+        timestamp: new Date(msg.created_at),
+      }))
+      setMessages(msgs)
+    } catch (error) {
+      console.error('Failed to load messages:', error)
+      setMessages([])
+    }
+  }
+
   const handleSend = useCallback(async () => {
     if (!inputText.trim() || isLoading) return
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: inputText.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    }
-
-    setMessages((prev) => [...prev, userMessage])
+    const userMessageContent = inputText.trim()
     setInputText('')
     setIsLoading(true)
 
-    // Create new conversation if none active
-    if (!activeConversation) {
-      const newConv: Conversation = {
-        id: `conv-${Date.now()}`,
-        title: userMessage.content.slice(0, 40) + '...',
-        preview: userMessage.content,
-        timestamp: new Date(),
-      }
-      setConversations((prev) => [newConv, ...prev])
-      setActiveConversation(newConv.id)
-    }
+    try {
+      let chatId = activeConversation
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: generateMockResponse(userMessage.content),
-        isUser: false,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, aiResponse])
-      setIsLoading(false)
-    }, 2000)
-  }, [inputText, isLoading, activeConversation])
+      // Create new conversation if none active
+      if (!chatId) {
+        const createResponse = await api.post('/ai-chats', {
+          initial_message: userMessageContent,
+        })
+        chatId = createResponse.data.id
+        setActiveConversation(chatId)
 
-  const handleSuggestionClick = (suggestion: string) => {
-    setInputText(suggestion)
-    // Auto-send after a brief delay
-    setTimeout(() => {
+        // Add to conversations list
+        const newConv: Conversation = {
+          id: chatId,
+          title: userMessageContent.slice(0, 40) + '...',
+          preview: userMessageContent,
+          timestamp: new Date(),
+        }
+        setConversations((prev) => [newConv, ...prev])
+      } else {
+        // Add user message to existing conversation
+        await api.post(`/ai-chats/${chatId}/messages`, {
+          content: userMessageContent,
+          is_ai: false,
+        })
+      }
+
+      // Add user message to local state
       const userMessage: Message = {
         id: Date.now().toString(),
-        content: suggestion,
+        content: userMessageContent,
         isUser: true,
         timestamp: new Date(),
       }
-
       setMessages((prev) => [...prev, userMessage])
-      setIsLoading(true)
 
-      const newConv: Conversation = {
-        id: `conv-${Date.now()}`,
-        title: suggestion.slice(0, 40) + '...',
-        preview: suggestion,
-        timestamp: new Date(),
-      }
-      setConversations((prev) => [newConv, ...prev])
-      setActiveConversation(newConv.id)
+      // Simulate AI response (in a real app, this would call an AI service)
+      setTimeout(async () => {
+        const aiResponseContent = generateMockResponse(userMessageContent)
 
-      setTimeout(() => {
+        // Save AI response to backend
+        try {
+          await api.post(`/ai-chats/${chatId}/messages`, {
+            content: aiResponseContent,
+            is_ai: true,
+          })
+        } catch (error) {
+          console.error('Failed to save AI response:', error)
+        }
+
         const aiResponse: Message = {
           id: (Date.now() + 1).toString(),
-          content: generateMockResponse(suggestion),
+          content: aiResponseContent,
           isUser: false,
           timestamp: new Date(),
         }
         setMessages((prev) => [...prev, aiResponse])
         setIsLoading(false)
-        setInputText('')
+
+        // Update conversation preview
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === chatId ? { ...c, preview: aiResponseContent.slice(0, 50) } : c
+          )
+        )
       }, 2000)
-    }, 100)
+    } catch (error) {
+      console.error('Failed to send message:', error)
+      setIsLoading(false)
+    }
+  }, [inputText, isLoading, activeConversation])
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setInputText(suggestion)
   }
 
   const handleNewChat = () => {
@@ -144,8 +184,6 @@ export function AIChatPage() {
 
   const handleSelectConversation = (convId: string) => {
     setActiveConversation(convId)
-    // In real app, load messages for this conversation
-    setMessages([])
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -264,17 +302,25 @@ export function AIChatPage() {
 
         {/* Conversation List */}
         <div className="flex-1 overflow-y-auto px-4">
-          {conversations.map((conv) => (
-            <button
-              key={conv.id}
-              onClick={() => handleSelectConversation(conv.id)}
-              className={`w-full text-left px-4 py-3 rounded-2xl mb-1 transition-colors ${
-                activeConversation === conv.id ? 'bg-gray-100' : 'hover:bg-gray-50'
-              }`}
-            >
-              <p className="text-[15px] text-[#212121] truncate tracking-[0.075px]">{conv.preview}</p>
-            </button>
-          ))}
+          {isLoadingConversations ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
+            </div>
+          ) : conversations.length === 0 ? (
+            <p className="text-center text-gray-500 py-8 text-sm">No conversations yet</p>
+          ) : (
+            conversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => handleSelectConversation(conv.id)}
+                className={`w-full text-left px-4 py-3 rounded-2xl mb-1 transition-colors ${
+                  activeConversation === conv.id ? 'bg-gray-100' : 'hover:bg-gray-50'
+                }`}
+              >
+                <p className="text-[15px] text-[#212121] truncate tracking-[0.075px]">{conv.preview}</p>
+              </button>
+            ))
+          )}
         </div>
       </div>
 

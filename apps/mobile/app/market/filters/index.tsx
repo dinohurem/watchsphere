@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useEffect, useMemo } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { useFilters, FilterState } from '@/contexts/FilterContext';
+import { useConfig } from '@/contexts/ConfigContext';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
 // Back Arrow Icon
@@ -72,6 +74,8 @@ interface FilterSectionProps {
 }
 
 function FilterSection({ title, items }: FilterSectionProps) {
+  if (items.length === 0) return null;
+
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -89,73 +93,164 @@ function FilterSection({ title, items }: FilterSectionProps) {
   );
 }
 
+// Map backend filter key to FilterState key
+const BACKEND_KEY_TO_FILTER_KEY: Record<string, keyof FilterState> = {
+  brand: 'brands',
+  model: 'models',
+  year: 'years',
+  location: 'locations',
+  price: 'priceMin',
+  reference: 'references',
+  delivery: 'deliveryContents',
+  availability: 'availability',
+  condition_type: 'conditionType',
+  condition: 'condition',
+  case_diameter: 'caseDiameter',
+  lug_width: 'lugWidth',
+  case_thickness: 'caseThickness',
+  gender: 'gender',
+  watch_type: 'watchType',
+  watch_style: 'watchStyle',
+  movement: 'movement',
+  functions: 'functions',
+  dial_style: 'dialStyle',
+  dial_color: 'dialColor',
+  case_material: 'caseMaterial',
+  bezel_material: 'bezelMaterial',
+  crystal_type: 'crystalType',
+  water_resistance: 'waterResistance',
+  band_material: 'bandMaterial',
+  band_color: 'bandColor',
+  clasp_material: 'claspMaterial',
+  clasp_type: 'claspType',
+};
+
+// Map backend filter key to URL route segment
+const BACKEND_KEY_TO_ROUTE: Record<string, string> = {
+  brand: 'brand',
+  model: 'model',
+  year: 'year',
+  location: 'location',
+  price: 'price',
+  reference: 'reference',
+  delivery: 'delivery',
+  availability: 'availability',
+  condition_type: 'condition-type',
+  condition: 'condition',
+  case_diameter: 'case-diameter',
+  lug_width: 'lug-width',
+  case_thickness: 'case-thickness',
+  gender: 'gender',
+  watch_type: 'watch-type',
+  watch_style: 'watch-style',
+  movement: 'movement',
+  functions: 'functions',
+  dial_style: 'dial-style',
+  dial_color: 'dial-color',
+  case_material: 'case-material',
+  bezel_material: 'bezel-material',
+  crystal_type: 'crystal-type',
+  water_resistance: 'water-resistance',
+  band_material: 'band-material',
+  band_color: 'band-color',
+  clasp_material: 'clasp-material',
+  clasp_type: 'clasp-type',
+};
+
 export default function FiltersScreen() {
   const { resetFilters, getTotalFilterCount } = useFilters();
+  const { marketFilters, loadMarketFilters, isLoadingMarketFilters } = useConfig();
   const totalCount = getTotalFilterCount();
+
+  // Load market filters on mount
+  useEffect(() => {
+    loadMarketFilters();
+  }, [loadMarketFilters]);
+
+  // Convert filters to UI format and group by section
+  const filtersBySection = useMemo(() => {
+    const sections: Record<string, { label: string; filterKey: keyof FilterState; route: string }[]> = {
+      basic: [], // watch + price sections go here
+      condition: [],
+      case_size: [],
+      watch_type: [],
+      caliber: [],
+      dial: [],
+      case: [],
+      band: [],
+      clasp: [],
+    };
+
+    // Sort filters by display_order
+    const sortedFilters = [...marketFilters].sort((a, b) => a.display_order - b.display_order);
+
+    for (const filter of sortedFilters) {
+      const filterKey = BACKEND_KEY_TO_FILTER_KEY[filter.key];
+      const routeSegment = BACKEND_KEY_TO_ROUTE[filter.key];
+
+      if (!filterKey || !routeSegment) continue;
+
+      const item = {
+        label: filter.name,
+        filterKey,
+        route: `/market/filters/${routeSegment}`,
+      };
+
+      // Map ui_section to our section keys
+      const uiSection = filter.ui_section || 'watch';
+
+      if (uiSection === 'watch' || uiSection === 'price') {
+        sections.basic.push(item);
+      } else if (uiSection === 'condition') {
+        sections.condition.push(item);
+      } else if (uiSection === 'case_size') {
+        sections.case_size.push(item);
+      } else if (uiSection === 'watch_type') {
+        sections.watch_type.push(item);
+      } else if (uiSection === 'caliber') {
+        sections.caliber.push(item);
+      } else if (uiSection === 'dial') {
+        sections.dial.push(item);
+      } else if (uiSection === 'case') {
+        sections.case.push(item);
+      } else if (uiSection === 'band') {
+        sections.band.push(item);
+      } else if (uiSection === 'clasp') {
+        sections.clasp.push(item);
+      } else {
+        // Default to basic if unknown section
+        sections.basic.push(item);
+      }
+    }
+
+    return sections;
+  }, [marketFilters]);
 
   const handleReset = () => {
     resetFilters();
   };
 
   const handleApply = () => {
-    // Apply filters and go back
     router.back();
   };
 
-  const basicFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Brand', filterKey: 'brands', route: '/market/filters/brand' },
-    { label: 'Model', filterKey: 'models', route: '/market/filters/model' },
-    { label: 'Price', filterKey: 'priceMin', route: '/market/filters/price' },
-    { label: 'Year of production', filterKey: 'years', route: '/market/filters/year' },
-    { label: 'Location', filterKey: 'locations', route: '/market/filters/location' },
-    { label: 'Reference Number', filterKey: 'references', route: '/market/filters/reference' },
-  ];
-
-  const conditionFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Delivery Contents', filterKey: 'deliveryContents', route: '/market/filters/delivery' },
-    { label: 'Availability', filterKey: 'availability', route: '/market/filters/availability' },
-    { label: 'New/Used', filterKey: 'conditionType', route: '/market/filters/condition-type' },
-    { label: 'Condition', filterKey: 'condition', route: '/market/filters/condition' },
-  ];
-
-  const caseSizeFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Case diameter/width', filterKey: 'caseDiameter', route: '/market/filters/case-diameter' },
-    { label: 'Lug width', filterKey: 'lugWidth', route: '/market/filters/lug-width' },
-    { label: 'Case thickness', filterKey: 'caseThickness', route: '/market/filters/case-thickness' },
-  ];
-
-  const watchTypeFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Gender', filterKey: 'gender', route: '/market/filters/gender' },
-    { label: 'Watch type', filterKey: 'watchType', route: '/market/filters/watch-type' },
-    { label: 'Style of watch', filterKey: 'watchStyle', route: '/market/filters/watch-style' },
-  ];
-
-  const movementFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Movement', filterKey: 'movement', route: '/market/filters/movement' },
-    { label: 'Functions', filterKey: 'functions', route: '/market/filters/functions' },
-  ];
-
-  const dialFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Dial style', filterKey: 'dialStyle', route: '/market/filters/dial-style' },
-    { label: 'Dial color', filterKey: 'dialColor', route: '/market/filters/dial-color' },
-  ];
-
-  const caseFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Case material', filterKey: 'caseMaterial', route: '/market/filters/case-material' },
-    { label: 'Bezel material', filterKey: 'bezelMaterial', route: '/market/filters/bezel-material' },
-    { label: 'Crystal type', filterKey: 'crystalType', route: '/market/filters/crystal-type' },
-    { label: 'Water resistance', filterKey: 'waterResistance', route: '/market/filters/water-resistance' },
-  ];
-
-  const strapFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Band material', filterKey: 'bandMaterial', route: '/market/filters/band-material' },
-    { label: 'Band color', filterKey: 'bandColor', route: '/market/filters/band-color' },
-  ];
-
-  const claspFilters: { label: string; filterKey: keyof FilterState; route: string }[] = [
-    { label: 'Clasp material', filterKey: 'claspMaterial', route: '/market/filters/clasp-material' },
-    { label: 'Clasp type', filterKey: 'claspType', route: '/market/filters/clasp-type' },
-  ];
+  // Show loading state
+  if (isLoadingMarketFilters && marketFilters.length === 0) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <BackArrow />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Filter</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#212121" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -174,41 +269,43 @@ export default function FiltersScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Basic Filters */}
-        <View style={styles.basicFilters}>
-          {basicFilters.map((item, index) => (
-            <FilterItem
-              key={index}
-              label={item.label}
-              filterKey={item.filterKey}
-              onPress={() => router.push(item.route as any)}
-            />
-          ))}
-        </View>
+        {/* Basic Filters (watch + price sections) */}
+        {filtersBySection.basic.length > 0 && (
+          <View style={styles.basicFilters}>
+            {filtersBySection.basic.map((item, index) => (
+              <FilterItem
+                key={index}
+                label={item.label}
+                filterKey={item.filterKey}
+                onPress={() => router.push(item.route as any)}
+              />
+            ))}
+          </View>
+        )}
 
         {/* Condition & Delivery Contents */}
-        <FilterSection title="Condition & Delivery Contents" items={conditionFilters} />
+        <FilterSection title="Condition & Delivery Contents" items={filtersBySection.condition} />
 
         {/* Case size */}
-        <FilterSection title="Case size" items={caseSizeFilters} />
+        <FilterSection title="Case size" items={filtersBySection.case_size} />
 
         {/* Watch Type */}
-        <FilterSection title="Watch Type" items={watchTypeFilters} />
+        <FilterSection title="Watch Type" items={filtersBySection.watch_type} />
 
         {/* Movement & Functions */}
-        <FilterSection title="Movement & Functions" items={movementFilters} />
+        <FilterSection title="Movement & Functions" items={filtersBySection.caliber} />
 
         {/* Dial */}
-        <FilterSection title="Dial" items={dialFilters} />
+        <FilterSection title="Dial" items={filtersBySection.dial} />
 
         {/* Case */}
-        <FilterSection title="Case" items={caseFilters} />
+        <FilterSection title="Case" items={filtersBySection.case} />
 
         {/* Strap / bracelet */}
-        <FilterSection title="Strap / bracelet" items={strapFilters} />
+        <FilterSection title="Strap / bracelet" items={filtersBySection.band} />
 
         {/* Clasp */}
-        <FilterSection title="Clasp" items={claspFilters} />
+        <FilterSection title="Clasp" items={filtersBySection.clasp} />
       </ScrollView>
 
       {/* Bottom Buttons */}
@@ -255,6 +352,11 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: sp(44),
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,

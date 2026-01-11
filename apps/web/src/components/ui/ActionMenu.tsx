@@ -107,9 +107,10 @@ interface ActionMenuItemProps {
   onClick: () => void
   variant?: 'default' | 'danger' | 'success'
   icon?: React.ReactNode
+  disabled?: boolean
 }
 
-export function ActionMenuItem({ children, onClick, variant = 'default', icon }: ActionMenuItemProps) {
+export function ActionMenuItem({ children, onClick, variant = 'default', icon, disabled }: ActionMenuItemProps) {
   const variantClasses = {
     default: 'text-gray-700 hover:bg-gray-50',
     danger: 'text-red-600 hover:bg-red-50',
@@ -119,7 +120,8 @@ export function ActionMenuItem({ children, onClick, variant = 'default', icon }:
   return (
     <button
       onClick={onClick}
-      className={`flex items-center w-full px-4 py-2 text-sm ${variantClasses[variant]}`}
+      disabled={disabled}
+      className={`flex items-center w-full px-4 py-2 text-sm ${variantClasses[variant]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       {icon && <span className="mr-2">{icon}</span>}
       {children}

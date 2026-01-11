@@ -1,14 +1,31 @@
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
 import { FlashList } from '@shopify/flash-list';
+import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ChatBubble } from '@/components/ChatBubble';
+import { ChatBubble, QuotedMessage } from '@/components/ChatBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import { BackArrow, ChevronRight } from '@/components/icons';
 import { api } from '@/services/api';
+import { wp, hp, sp, fp } from '@/utils/responsive';
+
+// Reply Icon
+function ReplyIcon({ size = 24, color = "#212121" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M9 17l-5-5 5-5M4 12h11a4 4 0 0 1 4 4v4"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 interface Message {
   id: string;
@@ -20,6 +37,10 @@ interface Message {
   is_ai: boolean;
   read: boolean;
   created_at: string;
+  reply_to_id?: string;
+  reply_to_content?: string;
+  reply_to_sender_name?: string;
+  reply_to_sender_id?: string;
 }
 
 interface ConversationDetails {
@@ -28,17 +49,45 @@ interface ConversationDetails {
   avatar?: string;
 }
 
+interface WatchInfo {
+  id: string;
+  brand: string;
+  model: string;
+  price: number;
+  imageUrl?: string;
+}
+
 export default function ChatDetailScreen() {
-  const { id, name, avatar } = useLocalSearchParams<{ id: string; name?: string; avatar?: string }>();
+  const { id, name, avatar, watchId, watchBrand, watchModel, watchPrice, watchImageUrl, replyToId, replyToContent, replyToSenderName, replyToSenderId } = useLocalSearchParams<{
+    id: string;
+    name?: string;
+    avatar?: string;
+    watchId?: string;
+    watchBrand?: string;
+    watchModel?: string;
+    watchPrice?: string;
+    watchImageUrl?: string;
+    replyToId?: string;
+    replyToContent?: string;
+    replyToSenderName?: string;
+    replyToSenderId?: string;
+  }>();
   const { colors, fonts } = useTheme();
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [watchInfo, setWatchInfo] = useState<WatchInfo | null>(null);
   const [conversation, setConversation] = useState<ConversationDetails | null>(null);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [showMessageOptions, setShowMessageOptions] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [replyingTo, setReplyingTo] = useState<QuotedMessage | null>(null);
   const flashListRef = useRef<FlashList<Message>>(null);
   const currentUserId = useRef<string>('');
+
+  // Check if this is a new/demo conversation
+  const isNewConversation = id === 'new';
 
   useEffect(() => {
     if (id) {
@@ -46,7 +95,31 @@ export default function ChatDetailScreen() {
       if (name) {
         setConversation({ id, name, avatar: avatar || undefined });
       }
-      loadMessages();
+      // Set watch info from params if available
+      if (watchId && watchBrand && watchModel && watchPrice) {
+        setWatchInfo({
+          id: watchId,
+          brand: watchBrand,
+          model: watchModel,
+          price: parseFloat(watchPrice),
+          imageUrl: watchImageUrl || undefined,
+        });
+      }
+      // Set reply if coming from group chat "Reply privately"
+      if (replyToId && replyToContent && replyToSenderName && replyToSenderId) {
+        setReplyingTo({
+          id: replyToId,
+          content: replyToContent,
+          senderName: replyToSenderName,
+          senderId: replyToSenderId,
+        });
+      }
+      // Only load messages if this is a real conversation (not 'new')
+      if (!isNewConversation) {
+        loadMessages();
+      } else {
+        setIsLoading(false);
+      }
       loadCurrentUser();
     }
   }, [id]);
@@ -79,8 +152,29 @@ export default function ChatDetailScreen() {
   const handleSend = async () => {
     if (inputText.trim().length === 0 || isSending) return;
 
+    // For demo/new conversations, just show the message locally
+    if (isNewConversation) {
+      const messageContent = inputText.trim();
+      setInputText('');
+      const demoMessage: Message = {
+        id: `demo-${Date.now()}`,
+        conversation_id: 'new',
+        sender_id: currentUserId.current || 'user',
+        sender_name: 'You',
+        content: messageContent,
+        type: 'text',
+        is_ai: false,
+        read: true,
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, demoMessage]);
+      return;
+    }
+
     const messageContent = inputText.trim();
+    const currentReply = replyingTo;
     setInputText('');
+    setReplyingTo(null);
     setIsSending(true);
 
     // Optimistic update
@@ -94,19 +188,30 @@ export default function ChatDetailScreen() {
       is_ai: false,
       read: true,
       created_at: new Date().toISOString(),
+      reply_to_id: currentReply?.id,
+      reply_to_content: currentReply?.content,
+      reply_to_sender_name: currentReply?.senderName,
+      reply_to_sender_id: currentReply?.senderId,
     };
     setMessages(prev => [...prev, tempMessage]);
 
     try {
       const response = await api.post(`/chat/conversations/${id}/messages`, {
         content: messageContent,
+        reply_to_id: currentReply?.id,
       });
 
       if (response.data) {
-        // Replace temp message with real one
+        // Replace temp message with real one, preserving reply info if not returned by API
         setMessages(prev =>
           prev.map(msg =>
-            msg.id === tempMessage.id ? response.data : msg
+            msg.id === tempMessage.id ? {
+              ...response.data,
+              reply_to_id: response.data.reply_to_id || tempMessage.reply_to_id,
+              reply_to_content: response.data.reply_to_content || tempMessage.reply_to_content,
+              reply_to_sender_name: response.data.reply_to_sender_name || tempMessage.reply_to_sender_name,
+              reply_to_sender_id: response.data.reply_to_sender_id || tempMessage.reply_to_sender_id,
+            } : msg
           )
         );
       }
@@ -122,6 +227,28 @@ export default function ChatDetailScreen() {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleMessageLongPress = (message: Message) => {
+    setSelectedMessage(message);
+    setShowMessageOptions(true);
+  };
+
+  const handleReply = () => {
+    if (selectedMessage) {
+      setReplyingTo({
+        id: selectedMessage.id,
+        content: selectedMessage.content,
+        senderName: selectedMessage.sender_name,
+        senderId: selectedMessage.sender_id,
+      });
+    }
+    setShowMessageOptions(false);
+    setSelectedMessage(null);
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
   };
 
   const handleImageSelect = async (uri: string) => {
@@ -154,6 +281,16 @@ export default function ChatDetailScreen() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.sender_id === currentUserId.current;
 
+    // Build quoted message if this is a reply
+    const quotedMessage: QuotedMessage | undefined = item.reply_to_id
+      ? {
+          id: item.reply_to_id,
+          content: item.reply_to_content || '',
+          senderName: item.reply_to_sender_name || 'Unknown',
+          senderId: item.reply_to_sender_id || '',
+        }
+      : undefined;
+
     return (
       <ChatBubble
         message={item.content}
@@ -163,6 +300,10 @@ export default function ChatDetailScreen() {
         senderName={item.sender_name}
         showSender={false}
         isAI={false}
+        messageId={item.id}
+        senderId={item.sender_id}
+        quotedMessage={quotedMessage}
+        onLongPress={() => handleMessageLongPress(item)}
       />
     );
   };
@@ -267,7 +408,7 @@ export default function ChatDetailScreen() {
       height: 60,
       borderRadius: 8,
     },
-    watchInfo: {
+    watchInfoSection: {
       flex: 1,
       justifyContent: 'center',
       gap: 4,
@@ -284,6 +425,39 @@ export default function ChatDetailScreen() {
     },
     watchChevron: {
       justifyContent: 'center',
+    },
+    // Message options modal
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    modalContent: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: sp(20),
+      borderTopRightRadius: sp(20),
+      paddingTop: hp(8),
+      paddingBottom: hp(34),
+    },
+    modalHandle: {
+      width: sp(36),
+      height: sp(4),
+      backgroundColor: colors.border,
+      borderRadius: sp(2),
+      alignSelf: 'center',
+      marginBottom: hp(16),
+    },
+    modalOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: hp(14),
+      paddingHorizontal: wp(20),
+      gap: wp(16),
+    },
+    modalOptionText: {
+      fontSize: fp(16),
+      fontFamily: fonts.medium,
+      color: colors.text,
     },
   });
 
@@ -317,16 +491,25 @@ export default function ChatDetailScreen() {
         </View>
 
         {/* Watch Card - Only shown for direct chats about watches */}
-        <TouchableOpacity style={styles.watchCard} onPress={() => router.push('/watch/1' as any)}>
-          <ImagePlaceholder size={60} borderRadius={8} />
-          <View style={styles.watchInfo}>
-            <Text style={styles.watchTitle}>Audemars Piguet Royal Oak</Text>
-            <Text style={styles.watchPrice}>€132,352</Text>
-          </View>
-          <View style={styles.watchChevron}>
-            <ChevronRight size={20} color={colors.textSecondary} />
-          </View>
-        </TouchableOpacity>
+        {watchInfo && (
+          <TouchableOpacity
+            style={styles.watchCard}
+            onPress={() => router.push(`/market/${watchInfo.id}` as any)}
+          >
+            {watchInfo.imageUrl ? (
+              <Image source={{ uri: watchInfo.imageUrl }} style={styles.watchImage} />
+            ) : (
+              <ImagePlaceholder size={60} borderRadius={8} />
+            )}
+            <View style={styles.watchInfoSection}>
+              <Text style={styles.watchTitle}>{watchInfo.brand} {watchInfo.model}</Text>
+              <Text style={styles.watchPrice}>€{watchInfo.price.toLocaleString()}</Text>
+            </View>
+            <View style={styles.watchChevron}>
+              <ChevronRight size={20} color={colors.textSecondary} />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Messages List */}
         <KeyboardAvoidingView
@@ -366,8 +549,32 @@ export default function ChatDetailScreen() {
             onChangeText={setInputText}
             onSend={handleSend}
             onImageSelect={handleImageSelect}
+            replyingTo={replyingTo}
+            onCancelReply={handleCancelReply}
           />
         </KeyboardAvoidingView>
+
+        {/* Message Options Modal */}
+        <Modal
+          visible={showMessageOptions}
+          animationType="none"
+          transparent={true}
+          onRequestClose={() => setShowMessageOptions(false)}
+        >
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => setShowMessageOptions(false)}
+          >
+            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.modalHandle} />
+
+              <TouchableOpacity style={styles.modalOption} onPress={handleReply}>
+                <ReplyIcon size={sp(24)} color={colors.text} />
+                <Text style={styles.modalOptionText}>Reply</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </SafeAreaView>
     </>
   );

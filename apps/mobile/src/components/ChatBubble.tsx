@@ -1,6 +1,13 @@
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity, Pressable } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
+
+export interface QuotedMessage {
+  id: string;
+  content: string;
+  senderName: string;
+  senderId: string;
+}
 
 interface ChatBubbleProps {
   message: string;
@@ -10,9 +17,13 @@ interface ChatBubbleProps {
   senderName?: string;
   showSender?: boolean;
   isAI?: boolean;
+  quotedMessage?: QuotedMessage;
+  onLongPress?: () => void;
+  messageId?: string;
+  senderId?: string;
 }
 
-export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender, isAI = false }: ChatBubbleProps) {
+export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender, isAI = false, quotedMessage, onLongPress, messageId, senderId }: ChatBubbleProps) {
   const { colors, fonts } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -80,29 +91,75 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
     userText: {
       color: '#FFFFFF',
     },
-    footer: {
+    timestampRow: {
       flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
+      justifyContent: isUser ? 'flex-end' : 'flex-start',
       marginTop: 4,
     },
     timestamp: {
-      fontSize: 11,
-      color: colors.textTertiary,
+      fontSize: 10,
+      color: isUser ? 'rgba(255, 255, 255, 0.5)' : colors.textTertiary,
+    },
+    quotedContainer: {
+      backgroundColor: isUser ? 'rgba(255, 255, 255, 0.15)' : 'rgba(33, 33, 33, 0.08)',
+      borderLeftWidth: 3,
+      borderLeftColor: isUser ? 'rgba(255, 255, 255, 0.5)' : colors.primary,
+      borderRadius: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      marginBottom: 6,
+    },
+    quotedSender: {
+      fontSize: 12,
+      fontFamily: fonts.semiBold,
+      color: isUser ? 'rgba(255, 255, 255, 0.8)' : colors.primary,
+      marginBottom: 2,
+    },
+    quotedText: {
+      fontSize: 13,
+      fontFamily: fonts.regular,
+      color: isUser ? 'rgba(255, 255, 255, 0.7)' : colors.textSecondary,
+      lineHeight: 18,
     },
   });
+
+  const bubbleContent = (
+    <>
+      {quotedMessage && (
+        <View style={styles.quotedContainer}>
+          <Text style={styles.quotedSender} numberOfLines={1}>
+            {quotedMessage.senderName}
+          </Text>
+          <Text style={styles.quotedText} numberOfLines={2}>
+            {quotedMessage.content}
+          </Text>
+        </View>
+      )}
+      <Text style={[styles.text, isUser && styles.userText]}>{message}</Text>
+      {timestamp && (
+        <View style={styles.timestampRow}>
+          <Text style={styles.timestamp}>{timestamp}</Text>
+        </View>
+      )}
+    </>
+  );
 
   return (
     <Animated.View style={[styles.container, isUser && styles.userContainer]}>
       {showSender && senderName && !isUser && (
         <Text style={styles.senderName}>{senderName}</Text>
       )}
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.otherBubble]}>
-        <Text style={[styles.text, isUser && styles.userText]}>{message}</Text>
-      </View>
-      <View style={styles.footer}>
-        {timestamp && <Text style={styles.timestamp}>{timestamp}</Text>}
-      </View>
+      <Pressable
+        onLongPress={onLongPress}
+        delayLongPress={300}
+        style={({ pressed }) => [
+          styles.bubble,
+          isUser ? styles.userBubble : styles.otherBubble,
+          pressed && { opacity: 0.8 },
+        ]}
+      >
+        {bubbleContent}
+      </Pressable>
     </Animated.View>
   );
 }

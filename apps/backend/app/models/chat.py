@@ -58,6 +58,12 @@ class Message(Document):
     read: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Reply/quote fields
+    reply_to_id: Optional[str] = None
+    reply_to_content: Optional[str] = None
+    reply_to_sender_name: Optional[str] = None
+    reply_to_sender_id: Optional[str] = None
+
     class Settings:
         name = "messages"
         indexes = [

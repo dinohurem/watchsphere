@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
 import { Heart, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
+import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
 export function WatchlistPage() {
+  const navigate = useNavigate();
   const [watchlist, setWatchlist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -12,7 +15,7 @@ export function WatchlistPage() {
 
   const loadWatchlist = async () => {
     try {
-      const response = await api.get('/watchlist');
+      const response = await api.get('/profile/watchlist');
       setWatchlist(response.data);
     } catch (error) {
       console.error('Failed to load watchlist:', error);
@@ -82,8 +85,26 @@ export function WatchlistPage() {
                 >
                   <div className="flex items-center gap-6">
                     {/* Watch Image */}
-                    <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-5xl">⌚</span>
+                    <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {watch.image ? (
+                        <img
+                          src={watch.image}
+                          alt={`${watch.brand} ${watch.model}`}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              const placeholder = document.createElement('div');
+                              placeholder.className = 'w-full h-full flex items-center justify-center';
+                              parent.appendChild(placeholder);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <ImagePlaceholder width={128} height={128} borderRadius={8} />
+                      )}
                     </div>
 
                     {/* Watch Info */}
@@ -145,7 +166,10 @@ export function WatchlistPage() {
 
                     {/* Actions */}
                     <div className="flex flex-col gap-2">
-                      <button className="px-4 py-2 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors">
+                      <button
+                        onClick={() => watch.reference && navigate(`/app/watch/${watch.reference}`)}
+                        className="px-4 py-2 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors"
+                      >
                         View Details
                       </button>
                       <button

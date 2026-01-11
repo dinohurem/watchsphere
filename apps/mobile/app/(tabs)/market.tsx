@@ -1,4 +1,4 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -8,7 +8,7 @@ import { useFilters } from '@/contexts/FilterContext';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
-import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, Filter } from '@/components/icons';
+import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, Filter, User } from '@/components/icons';
 import Svg, { Path } from 'react-native-svg';
 
 // Category tabs
@@ -69,6 +69,7 @@ export default function MarketScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState(searchParam || '');
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
 
   // Update search query when param changes
   useEffect(() => {
@@ -141,14 +142,27 @@ export default function MarketScreen() {
 
   useEffect(() => {
     loadMarketData();
+    loadProfile();
   }, [selectedCategory]);
 
   // Refresh data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadMarketData();
+      loadProfile();
     }, [selectedCategory])
   );
+
+  const loadProfile = async () => {
+    try {
+      const response = await api.get('/profile/me');
+      if (response.data?.profile_image_url) {
+        setProfileImageUrl(response.data.profile_image_url);
+      }
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -356,9 +370,15 @@ export default function MarketScreen() {
       width: sp(44),
       height: sp(44),
       backgroundColor: '#FAFAFA',
-      borderRadius: sp(296),
+      borderRadius: sp(22),
       justifyContent: 'center',
       alignItems: 'center',
+      overflow: 'hidden',
+    },
+    profileImage: {
+      width: sp(44),
+      height: sp(44),
+      borderRadius: sp(22),
     },
     // Trending section
     trendingSection: {
@@ -391,7 +411,7 @@ export default function MarketScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      gap: wp(8),
+      gap: wp(12),
     },
     trendingBottomRow: {
       flexDirection: 'row',
@@ -417,6 +437,7 @@ export default function MarketScreen() {
       color: '#212121',
       letterSpacing: 0.075,
       textAlign: 'right',
+      flexShrink: 0,
     },
     trendingReference: {
       fontSize: fp(15),
@@ -625,7 +646,11 @@ export default function MarketScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-          <UserCircleFilled size={36} color="#212121" />
+          {profileImageUrl ? (
+            <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
+          ) : (
+            <User size={24} color="#212121" />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -660,7 +685,7 @@ export default function MarketScreen() {
                   >
                     <View style={styles.trendingCardContent}>
                       <View style={styles.trendingTopRow}>
-                        <Text style={styles.trendingName} numberOfLines={2}>{watch.brand} {watch.model}</Text>
+                        <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand} {watch.model}</Text>
                         <Text style={styles.trendingPrice}>{formatPrice(watch.price)}</Text>
                       </View>
                       <View style={styles.trendingBottomRow}>
@@ -702,7 +727,7 @@ export default function MarketScreen() {
                   >
                     <View style={styles.trendingCardContent}>
                       <View style={styles.trendingTopRow}>
-                        <Text style={styles.trendingName} numberOfLines={2}>{watch.brand} {watch.model}</Text>
+                        <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand} {watch.model}</Text>
                         <Text style={styles.trendingPrice}>{formatPrice(watch.price)}</Text>
                       </View>
                       <View style={styles.trendingBottomRow}>

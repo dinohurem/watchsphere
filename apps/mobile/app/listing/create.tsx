@@ -1,8 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useConfig } from '@/contexts/ConfigContext';
 import { BackArrow, ChevronDown, ChevronRight, Plus, X, Trash2, Check } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path, Rect } from 'react-native-svg';
@@ -21,34 +22,6 @@ function ImageUploadIcon({ size = 48, color = '#212121' }: { size?: number; colo
     </Svg>
   );
 }
-
-// Dropdown options
-const BRAND_OPTIONS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Omega', 'Cartier', 'IWC', 'Jaeger-LeCoultre', 'Vacheron Constantin'];
-const MODEL_OPTIONS: Record<string, string[]> = {
-  'Rolex': ['Submariner', 'Submariner Date', 'GMT-Master II', 'Daytona', 'Datejust', 'Day-Date', 'Explorer', 'Sea-Dweller'],
-  'Patek Philippe': ['Nautilus', 'Aquanaut', 'Calatrava', 'Grand Complications', 'Gondolo'],
-  'Audemars Piguet': ['Royal Oak', 'Royal Oak Offshore', 'Royal Oak Concept', 'Code 11.59', 'Millenary'],
-  'Omega': ['Speedmaster', 'Seamaster', 'Constellation', 'De Ville'],
-  'default': ['Model 1', 'Model 2', 'Model 3'],
-};
-const MOVEMENT_OPTIONS = ['Automatic', 'Manual', 'Quartz'];
-const CASE_MATERIAL_OPTIONS = ['Stainless Steel', 'Yellow Gold', 'Rose Gold', 'White Gold', 'Platinum', 'Titanium', 'Ceramic'];
-const BRACELET_MATERIAL_OPTIONS = ['Stainless Steel', 'Yellow Gold', 'Rose Gold', 'White Gold', 'Leather', 'Rubber', 'NATO Strap'];
-const CONDITION_OPTIONS = ['Unworn', 'Very Good', 'Good', 'Fair'];
-const BOX_PAPERS_OPTIONS = ['Box and Papers', 'Box Only', 'Papers Only', 'None'];
-const GENDER_OPTIONS = ['Men', 'Women', 'Unisex'];
-const LOCATION_OPTIONS = ['United States', 'United Kingdom', 'Germany', 'Italy', 'France', 'Switzerland', 'UAE', 'Japan', 'Singapore'];
-const CURRENCY_OPTIONS = ['EUR', 'USD', 'GBP', 'CHF'];
-const AVAILABILITY_OPTIONS = ['In Stock', 'Pre-order', 'Coming Soon'];
-const CASE_DIAMETER_OPTIONS = ['36mm', '38mm', '39mm', '40mm', '41mm', '42mm', '44mm', '46mm'];
-const WATER_RESISTANCE_OPTIONS = ['30m', '50m', '100m', '200m', '300m', '600m', '1000m'];
-const BEZEL_MATERIAL_OPTIONS = ['Stainless Steel', 'Ceramic', 'Gold', 'Platinum'];
-const CRYSTAL_OPTIONS = ['Sapphire', 'Mineral', 'Acrylic'];
-const DIAL_COLOR_OPTIONS = ['Black', 'White', 'Blue', 'Green', 'Silver', 'Grey', 'Gold', 'Mother of Pearl'];
-const DIAL_NUMBERS_OPTIONS = ['Arabic', 'Roman', 'Index', 'None'];
-const BRACELET_COLOR_OPTIONS = ['Silver', 'Gold', 'Rose Gold', 'Black', 'Brown', 'Blue'];
-const CLASP_TYPE_OPTIONS = ['Folding Clasp', 'Buckle', 'Deployment Clasp', 'Hidden Clasp'];
-const CLASP_MATERIAL_OPTIONS = ['Stainless Steel', 'Gold', 'Titanium'];
 
 // Form data type
 interface ListingFormData {
@@ -98,6 +71,12 @@ interface ListingFormData {
 
 export default function CreateListingScreen() {
   const { colors, fonts } = useTheme();
+  const { getFieldOptions, loadListingFields, isLoadingListingFields, isFieldEnabled, listingFields, error: configError } = useConfig();
+
+  // Load listing fields when component mounts
+  useEffect(() => {
+    loadListingFields();
+  }, [loadListingFields]);
   const params = useLocalSearchParams<{
     watchId?: string;
     brand?: string;
@@ -109,6 +88,12 @@ export default function CreateListingScreen() {
 
   // Current step (1-6)
   const [currentStep, setCurrentStep] = useState(1);
+
+  // Helper to get options as string array from config
+  const getOptionsForField = useCallback((fieldKey: string, parentValue?: string): string[] => {
+    const options = getFieldOptions(fieldKey, parentValue);
+    return options.map(opt => opt.label);
+  }, [getFieldOptions]);
 
   // Dropdown modal state
   const [showDropdown, setShowDropdown] = useState(false);
@@ -189,8 +174,8 @@ export default function CreateListingScreen() {
 
   // Get model options based on selected brand
   const getModelOptions = useCallback(() => {
-    return MODEL_OPTIONS[formData.brand] || MODEL_OPTIONS['default'];
-  }, [formData.brand]);
+    return getOptionsForField('model', formData.brand);
+  }, [formData.brand, getOptionsForField]);
 
   // Handle photo pick
   const handlePickPhotos = async () => {
@@ -201,7 +186,6 @@ export default function CreateListingScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 0.8,
       selectionLimit: 10 - formData.photos.length,
@@ -623,7 +607,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Brand</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('brand', BRAND_OPTIONS, 'Select Brand')}
+                onPress={() => openDropdown('brand', getOptionsForField('brand'), 'Select Brand')}
               >
                 {formData.brand ? (
                   <Text style={styles.fieldValue}>{formData.brand}</Text>
@@ -652,221 +636,249 @@ export default function CreateListingScreen() {
 
             {/* Reference & Year */}
             <View style={styles.rowFields}>
-              <View style={[styles.fieldContainer, styles.halfField]}>
-                <Text style={styles.fieldLabel}>Reference</Text>
-                <View style={styles.fieldInputContainer}>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={formData.reference}
-                    onChangeText={(text) => updateField('reference', text)}
-                    placeholder="e.g., 126610LN"
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                  />
+              {isFieldEnabled('reference') && (
+                <View style={[styles.fieldContainer, isFieldEnabled('year') ? styles.halfField : { flex: 1 }]}>
+                  <Text style={styles.fieldLabel}>Reference</Text>
+                  <View style={styles.fieldInputContainer}>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={formData.reference}
+                      onChangeText={(text) => updateField('reference', text)}
+                      placeholder="e.g., 126610LN"
+                      placeholderTextColor="rgba(29, 29, 31, 0.5)"
+                    />
+                  </View>
                 </View>
-              </View>
-              <View style={[styles.fieldContainer, styles.halfField]}>
-                <Text style={styles.fieldLabel}>Year</Text>
-                <View style={styles.fieldInputContainer}>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={formData.year}
-                    onChangeText={(text) => updateField('year', text)}
-                    placeholder="e.g.,2024"
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                    keyboardType="numeric"
-                    maxLength={4}
-                  />
+              )}
+              {isFieldEnabled('year') && (
+                <View style={[styles.fieldContainer, isFieldEnabled('reference') ? styles.halfField : { flex: 1 }]}>
+                  <Text style={styles.fieldLabel}>Year</Text>
+                  <View style={styles.fieldInputContainer}>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={formData.year}
+                      onChangeText={(text) => updateField('year', text)}
+                      placeholder="e.g.,2024"
+                      placeholderTextColor="rgba(29, 29, 31, 0.5)"
+                      keyboardType="numeric"
+                      maxLength={4}
+                    />
+                  </View>
                 </View>
-              </View>
+              )}
             </View>
 
             {/* Size */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Size</Text>
-              <View style={styles.fieldInputContainer}>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={formData.size}
-                  onChangeText={(text) => updateField('size', text)}
-                  placeholder="e.g., 41mm"
-                  placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                />
+            {isFieldEnabled('size') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Size</Text>
+                <View style={styles.fieldInputContainer}>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={formData.size}
+                    onChangeText={(text) => updateField('size', text)}
+                    placeholder="e.g., 41mm"
+                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
+                  />
+                </View>
               </View>
-            </View>
+            )}
 
             {/* Movement */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Movement</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('movement', MOVEMENT_OPTIONS, 'Select Movement')}
-              >
-                {formData.movement ? (
-                  <Text style={styles.fieldValue}>{formData.movement}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Select movement type</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('movement') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Movement</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('movement', getOptionsForField('movement'), 'Select Movement')}
+                >
+                  {formData.movement ? (
+                    <Text style={styles.fieldValue}>{formData.movement}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Select movement type</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Case Material */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Case Material</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('caseMaterial', CASE_MATERIAL_OPTIONS, 'Select Case Material')}
-              >
-                {formData.caseMaterial ? (
-                  <Text style={styles.fieldValue}>{formData.caseMaterial}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Select case material</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('case_material') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Case Material</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('caseMaterial', getOptionsForField('case_material'), 'Select Case Material')}
+                >
+                  {formData.caseMaterial ? (
+                    <Text style={styles.fieldValue}>{formData.caseMaterial}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Select case material</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Bracelet Material */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Bracelet material</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('braceletMaterial', BRACELET_MATERIAL_OPTIONS, 'Select Bracelet Material')}
-              >
-                {formData.braceletMaterial ? (
-                  <Text style={styles.fieldValue}>{formData.braceletMaterial}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select bracelet material</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('bracelet_material') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Bracelet material</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('braceletMaterial', getOptionsForField('bracelet_material'), 'Select Bracelet Material')}
+                >
+                  {formData.braceletMaterial ? (
+                    <Text style={styles.fieldValue}>{formData.braceletMaterial}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Please select bracelet material</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Condition */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Condition</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('condition', CONDITION_OPTIONS, 'Select Condition')}
-              >
-                {formData.condition ? (
-                  <Text style={styles.fieldValue}>{formData.condition}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select condition</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('condition') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Condition</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('condition', getOptionsForField('condition'), 'Select Condition')}
+                >
+                  {formData.condition ? (
+                    <Text style={styles.fieldValue}>{formData.condition}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Please select condition</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Condition Description */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Condition description</Text>
-              <View style={[styles.fieldInputContainer, { alignItems: 'flex-start' }]}>
-                <TextInput
-                  style={[styles.fieldInput, styles.textArea]}
-                  value={formData.conditionDescription}
-                  onChangeText={(text) => updateField('conditionDescription', text)}
-                  placeholder="Write a short description..."
-                  placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                  multiline
-                />
+            {isFieldEnabled('condition_description') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Condition description</Text>
+                <View style={[styles.fieldInputContainer, { alignItems: 'flex-start' }]}>
+                  <TextInput
+                    style={[styles.fieldInput, styles.textArea]}
+                    value={formData.conditionDescription}
+                    onChangeText={(text) => updateField('conditionDescription', text)}
+                    placeholder="Write a short description..."
+                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
+                    multiline
+                  />
+                </View>
               </View>
-            </View>
+            )}
 
             {/* Box and Papers */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Box and papers</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('boxAndPapers', BOX_PAPERS_OPTIONS, 'Select Box and Papers')}
-              >
-                {formData.boxAndPapers ? (
-                  <Text style={styles.fieldValue}>{formData.boxAndPapers}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select condition</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('box_papers') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Box and papers</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('boxAndPapers', getOptionsForField('box_papers'), 'Select Box and Papers')}
+                >
+                  {formData.boxAndPapers ? (
+                    <Text style={styles.fieldValue}>{formData.boxAndPapers}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Please select condition</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Gender */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Gender</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('gender', GENDER_OPTIONS, 'Select Gender')}
-              >
-                {formData.gender ? (
-                  <Text style={styles.fieldValue}>{formData.gender}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select condition</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('gender') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Gender</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('gender', getOptionsForField('gender'), 'Select Gender')}
+                >
+                  {formData.gender ? (
+                    <Text style={styles.fieldValue}>{formData.gender}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Please select condition</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Location */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Location</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('location', LOCATION_OPTIONS, 'Select Location')}
-              >
-                {formData.location ? (
-                  <Text style={styles.fieldValue}>{formData.location}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select location</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('location') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Location</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('location', getOptionsForField('location'), 'Select Location')}
+                >
+                  {formData.location ? (
+                    <Text style={styles.fieldValue}>{formData.location}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Please select location</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Price */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Price</Text>
-              <View style={styles.fieldInputContainer}>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={formData.price}
-                  onChangeText={(text) => updateField('price', formatPriceInput(text))}
-                  placeholder="e.g., 12,450"
-                  placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                  keyboardType="numeric"
-                />
+            {isFieldEnabled('price') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Price</Text>
+                <View style={styles.fieldInputContainer}>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={formData.price}
+                    onChangeText={(text) => updateField('price', formatPriceInput(text))}
+                    placeholder="e.g., 12,450"
+                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
+                    keyboardType="numeric"
+                  />
+                </View>
               </View>
-            </View>
+            )}
 
             {/* Currency */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Currency</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('currency', CURRENCY_OPTIONS, 'Select Currency')}
-              >
-                {formData.currency ? (
-                  <Text style={styles.fieldValue}>{formData.currency}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select currency for payments</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('currency') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Currency</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('currency', getOptionsForField('currency'), 'Select Currency')}
+                >
+                  {formData.currency ? (
+                    <Text style={styles.fieldValue}>{formData.currency}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Please select currency for payments</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Availability */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Availability</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('availability', AVAILABILITY_OPTIONS, 'Select Availability')}
-              >
-                {formData.availability ? (
-                  <Text style={styles.fieldValue}>{formData.availability}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select availability</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
+            {isFieldEnabled('availability') && (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Availability</Text>
+                <TouchableOpacity
+                  style={styles.fieldInputContainer}
+                  onPress={() => openDropdown('availability', getOptionsForField('availability'), 'Select Availability')}
+                >
+                  {formData.availability ? (
+                    <Text style={styles.fieldValue}>{formData.availability}</Text>
+                  ) : (
+                    <Text style={styles.fieldPlaceholder}>Please select availability</Text>
+                  )}
+                  <ChevronDown size={sp(18)} color="#1D1D1F" />
+                </TouchableOpacity>
+              </View>
+            )}
           </>
         );
 
@@ -880,7 +892,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Movement</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('movementType', MOVEMENT_OPTIONS, 'Select Movement')}
+                onPress={() => openDropdown('movementType', getOptionsForField('movement'), 'Select Movement')}
               >
                 {formData.movementType ? (
                   <Text style={styles.fieldValue}>{formData.movementType}</Text>
@@ -960,7 +972,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Case material</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('caseMaterialDetail', CASE_MATERIAL_OPTIONS, 'Select Case Material')}
+                onPress={() => openDropdown('caseMaterialDetail', getOptionsForField('case_material'), 'Select Case Material')}
               >
                 {formData.caseMaterialDetail ? (
                   <Text style={styles.fieldValue}>{formData.caseMaterialDetail}</Text>
@@ -976,7 +988,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Case diameter</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('caseDiameter', CASE_DIAMETER_OPTIONS, 'Select Case Diameter')}
+                onPress={() => openDropdown('caseDiameter', getOptionsForField('case_diameter'), 'Select Case Diameter')}
               >
                 {formData.caseDiameter ? (
                   <Text style={styles.fieldValue}>{formData.caseDiameter}</Text>
@@ -992,7 +1004,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Water resistance</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('waterResistance', WATER_RESISTANCE_OPTIONS, 'Select Water Resistance')}
+                onPress={() => openDropdown('waterResistance', getOptionsForField('water_resistance'), 'Select Water Resistance')}
               >
                 {formData.waterResistance ? (
                   <Text style={styles.fieldValue}>{formData.waterResistance}</Text>
@@ -1008,7 +1020,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Bezel material</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('bezelMaterial', BEZEL_MATERIAL_OPTIONS, 'Select Bezel Material')}
+                onPress={() => openDropdown('bezelMaterial', getOptionsForField('bezel_material'), 'Select Bezel Material')}
               >
                 {formData.bezelMaterial ? (
                   <Text style={styles.fieldValue}>{formData.bezelMaterial}</Text>
@@ -1024,7 +1036,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Crystal</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('crystal', CRYSTAL_OPTIONS, 'Select Crystal')}
+                onPress={() => openDropdown('crystal', getOptionsForField('crystal'), 'Select Crystal')}
               >
                 {formData.crystal ? (
                   <Text style={styles.fieldValue}>{formData.crystal}</Text>
@@ -1040,7 +1052,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Dial</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('dialColor', DIAL_COLOR_OPTIONS, 'Select Dial Color')}
+                onPress={() => openDropdown('dialColor', getOptionsForField('dial_color'), 'Select Dial Color')}
               >
                 {formData.dialColor ? (
                   <Text style={styles.fieldValue}>{formData.dialColor}</Text>
@@ -1056,7 +1068,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Dial Numbers</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('dialNumbers', DIAL_NUMBERS_OPTIONS, 'Select Dial Numbers')}
+                onPress={() => openDropdown('dialNumbers', getOptionsForField('dial_numbers'), 'Select Dial Numbers')}
               >
                 {formData.dialNumbers ? (
                   <Text style={styles.fieldValue}>{formData.dialNumbers}</Text>
@@ -1079,7 +1091,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Case material</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('braceletMaterialDetail', BRACELET_MATERIAL_OPTIONS, 'Select Material')}
+                onPress={() => openDropdown('braceletMaterialDetail', getOptionsForField('bracelet_material'), 'Select Material')}
               >
                 {formData.braceletMaterialDetail ? (
                   <Text style={styles.fieldValue}>{formData.braceletMaterialDetail}</Text>
@@ -1095,7 +1107,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Bracelet color</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('braceletColor', BRACELET_COLOR_OPTIONS, 'Select Color')}
+                onPress={() => openDropdown('braceletColor', getOptionsForField('bracelet_color'), 'Select Color')}
               >
                 {formData.braceletColor ? (
                   <Text style={styles.fieldValue}>{formData.braceletColor}</Text>
@@ -1111,7 +1123,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Clasp</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('claspType', CLASP_TYPE_OPTIONS, 'Select Clasp Type')}
+                onPress={() => openDropdown('claspType', getOptionsForField('clasp_type'), 'Select Clasp Type')}
               >
                 {formData.claspType ? (
                   <Text style={styles.fieldValue}>{formData.claspType}</Text>
@@ -1127,7 +1139,7 @@ export default function CreateListingScreen() {
               <Text style={styles.fieldLabel}>Clasp material</Text>
               <TouchableOpacity
                 style={styles.fieldInputContainer}
-                onPress={() => openDropdown('claspMaterial', CLASP_MATERIAL_OPTIONS, 'Select Clasp Material')}
+                onPress={() => openDropdown('claspMaterial', getOptionsForField('clasp_material'), 'Select Clasp Material')}
               >
                 {formData.claspMaterial ? (
                   <Text style={styles.fieldValue}>{formData.claspMaterial}</Text>
@@ -1263,6 +1275,55 @@ export default function CreateListingScreen() {
     if (currentStep === 5 && formData.photos.length === 0) return true;
     return false;
   };
+
+  // Show loading state while listing fields are loading or not yet loaded
+  // This prevents rendering the form before we know which fields are enabled
+  const isConfigReady = listingFields.length > 0;
+  const showLoading = isLoadingListingFields || (!isConfigReady && !configError);
+
+  if (showLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <BackArrow size={sp(24)} color="#212121" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Create new listing</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#212121" />
+          <Text style={{ marginTop: hp(16), fontFamily: fonts.medium, color: '#212121' }}>
+            Loading configuration...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show error state if config failed to load
+  if (configError && !isConfigReady) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <BackArrow size={sp(24)} color="#212121" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Create new listing</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: wp(24) }}>
+          <Text style={{ fontFamily: fonts.medium, color: '#212121', textAlign: 'center' }}>
+            Failed to load configuration. Please try again.
+          </Text>
+          <TouchableOpacity
+            onPress={() => loadListingFields()}
+            style={{ marginTop: hp(16), paddingVertical: hp(12), paddingHorizontal: wp(24), backgroundColor: '#212121', borderRadius: sp(8) }}
+          >
+            <Text style={{ fontFamily: fonts.medium, color: '#FFFFFF' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

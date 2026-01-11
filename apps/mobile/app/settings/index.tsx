@@ -5,6 +5,7 @@ import { useAuthStore } from '@watchsphere/shared/stores';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import Constants from 'expo-constants';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -57,6 +58,7 @@ function SettingsItem({ title, onPress }: SettingsItemProps) {
 
 export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
+  const appVersion = Constants.expoConfig?.version || '0.1.0';
 
   const handleLogout = () => {
     Alert.alert(
@@ -125,10 +127,17 @@ export default function SettingsScreen() {
             title="Terms and Privacy"
             onPress={() => router.push('/terms-privacy' as any)}
           />
+          <SettingsItem
+            title="Support"
+            onPress={() => router.push('/support' as any)}
+          />
         </View>
 
         {/* Spacer */}
         <View style={styles.spacer} />
+
+        {/* Version */}
+        <Text style={styles.versionText}>Version {appVersion}</Text>
 
         {/* Logout Button */}
         <TouchableOpacity
@@ -198,6 +207,13 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
+  },
+  versionText: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: fp(13),
+    color: '#999999',
+    textAlign: 'center',
+    marginBottom: hp(16),
   },
   logoutButton: {
     backgroundColor: '#FFFFFF',

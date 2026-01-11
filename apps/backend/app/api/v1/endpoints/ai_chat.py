@@ -28,6 +28,7 @@ class AIChatResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     last_message: Optional[str] = None
+    first_user_message: Optional[str] = None  # The first message sent by user (for display as title)
     message_count: int = 0
 
 
@@ -110,12 +111,19 @@ async def list_ai_chats(
             Message.conversation_id == str(conv.id)
         ).sort([("created_at", -1)]).first_or_none()
 
+        # Get first user message (for display as title)
+        first_user_msg = await Message.find(
+            Message.conversation_id == str(conv.id),
+            Message.sender_id != "ai_assistant",
+        ).sort([("created_at", 1)]).first_or_none()
+
         result.append({
             "id": str(conv.id),
             "title": conv.title,
             "created_at": conv.created_at,
             "updated_at": conv.updated_at,
             "last_message": last_msg.content[:100] if last_msg else None,
+            "first_user_message": first_user_msg.content if first_user_msg else None,
             "message_count": msg_count,
         })
 
