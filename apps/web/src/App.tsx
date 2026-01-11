@@ -16,8 +16,10 @@ import { WatchlistPage } from './features/watchlist/pages/WatchlistPage'
 import { ChatPage } from './features/chat/pages/ChatPage'
 import { AIChatPage } from './features/chat/pages/AIChatPage'
 import { ProfilePage } from './features/profile/pages/ProfilePage'
+import { UserProfilePage } from './features/profile/pages/UserProfilePage'
 import { SocialSearchPage } from './features/social/pages/SocialSearchPage'
 import { SocialFiltersPage } from './features/social/pages/SocialFiltersPage'
+import { NewsDetailsPage } from './features/news/pages/NewsDetailsPage'
 import { InventoryPage } from './features/inventory/pages/InventoryPage'
 import { SearchPage } from './features/search/pages/SearchPage'
 import { LandingPage } from './features/landing/pages/LandingPage'
@@ -174,6 +176,8 @@ function App() {
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="user/:userId" element={<UserProfilePage />} />
+        <Route path="news/:newsId" element={<NewsDetailsPage />} />
       </Route>
     </Routes>
   )

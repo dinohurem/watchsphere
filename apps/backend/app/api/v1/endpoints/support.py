@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
@@ -7,6 +7,8 @@ from beanie import PydanticObjectId
 from app.core.deps import get_current_active_user, get_current_admin_user
 from app.models.user import User
 from app.models.support import Dispute, DisputeStatus, Issue, IssueStatus
+from app.api.v1.endpoints.activity import log_activity
+from app.models.activity_log import ActivityType, EntityType
 
 router = APIRouter()
 
@@ -97,6 +99,7 @@ async def get_my_disputes(
 async def create_dispute(
     data: DisputeCreateRequest,
     current_user: User = Depends(get_current_active_user),
+    x_platform: Optional[str] = Header(None, alias="X-Platform"),
 ) -> Any:
     """Create a new dispute"""
     dispute = Dispute(
@@ -111,6 +114,23 @@ async def create_dispute(
         created_at=datetime.utcnow(),
     )
     await dispute.insert()
+
+    # Log activity
+    platform = x_platform or "web"
+    await log_activity(
+        activity_type=ActivityType.DISPUTE_CREATED,
+        description=f"{current_user.name} created a dispute for {data.watch_brand or ''} {data.watch_model or ''} ({data.watch_reference})",
+        user=current_user,
+        entity_type=EntityType.DISPUTE,
+        entity_id=str(dispute.id),
+        metadata={
+            "watch_reference": data.watch_reference,
+            "watch_brand": data.watch_brand,
+            "watch_model": data.watch_model,
+            "platform": platform,
+        },
+        platform=platform,
+    )
 
     return {
         "id": str(dispute.id),
@@ -158,6 +178,7 @@ async def get_my_issues(
 async def create_issue(
     data: IssueCreateRequest,
     current_user: User = Depends(get_current_active_user),
+    x_platform: Optional[str] = Header(None, alias="X-Platform"),
 ) -> Any:
     """Create a new issue report"""
     issue = Issue(
@@ -170,6 +191,21 @@ async def create_issue(
         created_at=datetime.utcnow(),
     )
     await issue.insert()
+
+    # Log activity
+    platform = x_platform or "web"
+    await log_activity(
+        activity_type=ActivityType.ISSUE_CREATED,
+        description=f"{current_user.name} reported an issue: {data.title}",
+        user=current_user,
+        entity_type=EntityType.ISSUE,
+        entity_id=str(issue.id),
+        metadata={
+            "title": data.title,
+            "platform": platform,
+        },
+        platform=platform,
+    )
 
     return {
         "id": str(issue.id),

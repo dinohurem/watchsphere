@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@watchsphere/shared/stores';
-import { Settings, Edit2, TrendingUp, TrendingDown, ChevronRight, Heart, ShoppingBag, Tag, User } from 'lucide-react';
+import { Settings, Edit2, TrendingUp, TrendingDown, ChevronRight, Heart, ShoppingBag, Tag, User, Star } from 'lucide-react';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
@@ -32,6 +32,8 @@ interface ProfileData {
   email: string;
   name: string;
   profile_image_url: string | null;
+  average_rating: number;
+  review_count: number;
 }
 
 export function ProfilePage() {
@@ -58,6 +60,8 @@ export function ProfilePage() {
             email: user.email,
             name: user.name,
             profile_image_url: null,
+            average_rating: 0,
+            review_count: 0,
           });
         }
       }
@@ -259,6 +263,17 @@ export function ProfilePage() {
           <h2 className="text-xl font-semibold text-gray-900">
             {profile?.name || user?.name || 'User'}
           </h2>
+
+          {/* Rating */}
+          <div className="flex items-center gap-1.5 mt-1">
+            <Star className="w-4 h-4 text-gray-900 fill-gray-900" />
+            <span className="text-sm text-gray-700 font-medium">
+              {profile?.average_rating?.toFixed(1) || '0.0'}
+            </span>
+            <span className="text-sm text-gray-500">
+              ({profile?.review_count || 0} reviews)
+            </span>
+          </div>
         </div>
 
         {/* Buy Orders Section */}

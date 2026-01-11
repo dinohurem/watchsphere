@@ -504,6 +504,57 @@ async def list_conversations(
     return result
 
 
+class ConversationDetailResponse(BaseModel):
+    id: str
+    name: str
+    avatar: Optional[str] = None
+    other_user_id: Optional[str] = None
+
+
+@router.get("/conversations/{conversation_id}", response_model=ConversationDetailResponse)
+async def get_conversation_details(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Get details of a single direct conversation including other user's info"""
+
+    conversation = await Conversation.get(PydanticObjectId(conversation_id))
+
+    if not conversation or conversation.type != ConversationType.DIRECT:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    if str(current_user.id) not in conversation.participant_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a participant in this conversation"
+        )
+
+    # Get the other participant's info
+    other_participant_id = next(
+        (pid for pid in conversation.participant_ids if pid != str(current_user.id)),
+        None
+    )
+
+    conversation_name = "Unknown"
+    other_avatar = None
+
+    if other_participant_id:
+        other_user = await User.get(PydanticObjectId(other_participant_id))
+        if other_user:
+            conversation_name = other_user.name
+            other_avatar = other_user.profile_image_url
+
+    return {
+        "id": str(conversation.id),
+        "name": conversation_name,
+        "avatar": other_avatar,
+        "other_user_id": other_participant_id,
+    }
+
+
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 async def get_conversation_messages(
     conversation_id: str,

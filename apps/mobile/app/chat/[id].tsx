@@ -91,7 +91,7 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     if (id) {
-      // Set conversation from params if available
+      // Set conversation from params if available (temporary, will be updated by API)
       if (name) {
         setConversation({ id, name, avatar: avatar || undefined });
       }
@@ -117,12 +117,29 @@ export default function ChatDetailScreen() {
       // Only load messages if this is a real conversation (not 'new')
       if (!isNewConversation) {
         loadMessages();
+        loadConversationDetails();
       } else {
         setIsLoading(false);
       }
       loadCurrentUser();
     }
   }, [id]);
+
+  const loadConversationDetails = async () => {
+    try {
+      const response = await api.get(`/chat/conversations/${id}`);
+      if (response.data) {
+        setConversation({
+          id: response.data.id,
+          name: response.data.name,
+          avatar: response.data.avatar || undefined,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading conversation details:', error);
+      // Keep using params if API fails
+    }
+  };
 
   const loadCurrentUser = async () => {
     try {

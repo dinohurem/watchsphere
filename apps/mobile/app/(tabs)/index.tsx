@@ -187,18 +187,17 @@ export default function HomeScreen() {
       } else {
         // User watchlist is empty, try to fetch default watchlist
         try {
-          const defaultResponse = await api.get('/default-watchlist/admin/default-watchlist');
+          const defaultResponse = await api.get('/default-watchlist/public');
           if (defaultResponse.data && defaultResponse.data.length > 0) {
-            // Filter only active items and map to watchlist format
-            const activeItems = defaultResponse.data.filter((item: any) => item.is_active);
-            setWatchlistItems(activeItems.slice(0, 4).map((item: any) => ({
+            // Map to watchlist format (items are already filtered by is_active on backend)
+            setWatchlistItems(defaultResponse.data.slice(0, 4).map((item: any) => ({
               id: item.id,
               brand: item.brand,
               model: item.model,
               reference: item.reference || '',
               price: item.target_price || 0,
               priceChange: 0,
-              image: null,
+              image: item.image_url || null,
             })));
           } else {
             setWatchlistItems([]);

@@ -11,15 +11,25 @@ class UserRole(str, Enum):
     ADMIN = "admin"
 
 
+class AuthProvider(str, Enum):
+    EMAIL = "email"
+    GOOGLE = "google"
+    APPLE = "apple"
+
+
 class User(Document):
     email: EmailStr = Field(..., unique=True)
-    hashed_password: str
+    hashed_password: Optional[str] = None  # Optional for OAuth users
     name: str
     phone: Optional[str] = None
     role: UserRole = UserRole.COLLECTOR
     verified: bool = False
     approved: bool = False  # Admin must approve before user can login
     is_active: bool = True
+
+    # OAuth provider info
+    auth_provider: AuthProvider = AuthProvider.EMAIL
+    oauth_provider_id: Optional[str] = None  # Provider's user ID (Google sub, Apple sub)
 
     # Profile image
     profile_image_url: Optional[str] = None
@@ -38,6 +48,10 @@ class User(Document):
     notify_buy_offers: bool = True
     notify_messages: bool = True
 
+    # Review stats (cached for performance)
+    average_rating: float = 0.0
+    review_count: int = 0
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
 
@@ -55,6 +69,7 @@ class User(Document):
                 "role": "dealer",
                 "verified": True,
                 "approved": True,
-                "is_active": True
+                "is_active": True,
+                "auth_provider": "email"
             }
         }

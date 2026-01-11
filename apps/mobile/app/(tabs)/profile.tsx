@@ -203,12 +203,30 @@ function TagIcon() {
   );
 }
 
+// Rating Star Icon (filled black)
+function RatingStarIcon() {
+  return (
+    <Svg width={sp(14)} height={sp(14)} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
+        fill="#1D1D1F"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
   const [favoriteWatches, setFavoriteWatches] = useState<FavoriteWatch[]>([]);
   const [buyOrders, setBuyOrders] = useState<Order[]>([]);
   const [sellOrders, setSellOrders] = useState<Order[]>([]);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [averageRating, setAverageRating] = useState<number>(0);
+  const [reviewCount, setReviewCount] = useState<number>(0);
 
   // Load data when screen comes into focus
   useFocusEffect(
@@ -229,6 +247,9 @@ export default function ProfileScreen() {
       } else {
         console.log('No profile_image_url in response');
       }
+      // Set rating data
+      setAverageRating(response.data?.average_rating || 0);
+      setReviewCount(response.data?.review_count || 0);
     } catch (error) {
       console.error('Failed to load profile:', error);
     }
@@ -495,6 +516,12 @@ export default function ProfileScreen() {
           {/* User Name */}
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{user?.name || 'Fabian Wirtz'}</Text>
+            {/* Rating */}
+            <View style={styles.ratingRow}>
+              <RatingStarIcon />
+              <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
+              <Text style={styles.reviewCountText}>({reviewCount} reviews)</Text>
+            </View>
           </View>
         </View>
 
@@ -679,6 +706,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1D1D1F',
     lineHeight: fp(26),
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(4),
+    marginTop: hp(4),
+  },
+  ratingText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(14),
+    fontWeight: '600',
+    color: '#1D1D1F',
+  },
+  reviewCountText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(14),
+    fontWeight: '500',
+    color: 'rgba(33, 33, 33, 0.5)',
   },
   favoritesSection: {
     paddingHorizontal: wp(16),

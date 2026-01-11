@@ -22,6 +22,7 @@ class ActivityResponse(BaseModel):
     entity_id: Optional[str] = None
     metadata: Dict[str, Any] = {}
     ip_address: Optional[str] = None
+    platform: Optional[str] = None
     created_at: datetime
 
 
@@ -33,6 +34,7 @@ async def admin_list_activity(
     user_id: Optional[str] = None,
     activity_type: Optional[ActivityType] = None,
     entity_type: Optional[EntityType] = None,
+    platform: Optional[str] = None,
     days: Optional[int] = None,
 ) -> Any:
     """List activity logs (Admin only)"""
@@ -45,6 +47,8 @@ async def admin_list_activity(
         query_conditions.append(ActivityLog.activity_type == activity_type)
     if entity_type:
         query_conditions.append(ActivityLog.entity_type == entity_type)
+    if platform:
+        query_conditions.append(ActivityLog.platform == platform)
     if days:
         cutoff = datetime.utcnow() - timedelta(days=days)
         query_conditions.append(ActivityLog.created_at >= cutoff)
@@ -66,6 +70,7 @@ async def admin_list_activity(
             "entity_id": log.entity_id,
             "metadata": log.metadata,
             "ip_address": log.ip_address,
+            "platform": log.platform,
             "created_at": log.created_at,
         }
         for log in logs
@@ -97,6 +102,7 @@ async def admin_get_user_activity(
             "entity_id": log.entity_id,
             "metadata": log.metadata,
             "ip_address": log.ip_address,
+            "platform": log.platform,
             "created_at": log.created_at,
         }
         for log in logs
@@ -154,6 +160,7 @@ async def log_activity(
     metadata: Optional[Dict[str, Any]] = None,
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> ActivityLog:
     """Helper function to create activity log entries"""
 
@@ -168,6 +175,7 @@ async def log_activity(
         metadata=metadata or {},
         ip_address=ip_address,
         user_agent=user_agent,
+        platform=platform,
     )
 
     await log.insert()

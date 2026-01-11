@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     FIREBASE_SERVICE_ACCOUNT_PATH: str = ""
     FIREBASE_STORAGE_BUCKET: str = ""
 
+    # OAuth Providers
+    GOOGLE_CLIENT_ID: str = ""  # Google OAuth client ID for web/mobile
+    APPLE_CLIENT_ID: str = ""  # Apple OAuth client ID (bundle ID or services ID)
+
     @property
     def cors_origins(self) -> List[str]:
         """Parse ALLOWED_ORIGINS string into a list"""

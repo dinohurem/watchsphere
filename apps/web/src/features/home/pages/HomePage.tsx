@@ -156,10 +156,10 @@ export function HomePage() {
       if (response.data && response.data.length > 0) {
         setNewsItems(response.data.map((item: any) => ({
           id: item.id,
-          source: item.source || 'WatchSphere',
+          source: item.author_name || 'WatchSphere',
           date: formatTimeAgo(item.published_at || item.created_at),
           title: item.title,
-          image: item.image_url || '',
+          image: item.cover_image || '',
         })));
       } else {
         setNewsItems([]);
@@ -478,7 +478,7 @@ export function HomePage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
             {newsItems.map((news) => (
-              <div key={news.id} className="cursor-pointer hover:shadow-lg transition-shadow rounded-2xl overflow-hidden">
+              <div key={news.id} onClick={() => navigate(`/app/news/${news.id}`)} className="cursor-pointer hover:shadow-lg transition-shadow rounded-2xl overflow-hidden">
                 {/* News Image */}
                 <div className="h-[160px] sm:h-[200px] bg-gray-200 overflow-hidden">
                   {news.image ? (

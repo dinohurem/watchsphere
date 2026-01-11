@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, User, Watch, ShoppingCart, MessageSquare, Shield, RefreshCw } from 'lucide-react'
+import { Search, User, Watch, ShoppingCart, MessageSquare, Shield, RefreshCw, Monitor, Smartphone, Star, AlertTriangle, HelpCircle } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface ActivityLog {
@@ -13,6 +13,7 @@ interface ActivityLog {
   entity_id?: string
   metadata: Record<string, unknown>
   ip_address?: string
+  platform?: string
   created_at: string
 }
 
@@ -40,6 +41,13 @@ const ACTIVITY_TYPE_ICONS: Record<string, React.ComponentType<{ className?: stri
   conversation_started: MessageSquare,
   ai_chat_session: MessageSquare,
   admin_action: Shield,
+  review_created: Star,
+  review_updated: Star,
+  review_deleted: Star,
+  dispute_created: AlertTriangle,
+  dispute_updated: AlertTriangle,
+  issue_created: HelpCircle,
+  issue_updated: HelpCircle,
 }
 
 const ACTIVITY_TYPE_COLORS: Record<string, string> = {
@@ -57,6 +65,19 @@ const ACTIVITY_TYPE_COLORS: Record<string, string> = {
   conversation_started: 'bg-indigo-100 text-indigo-800',
   ai_chat_session: 'bg-indigo-100 text-indigo-800',
   admin_action: 'bg-amber-100 text-amber-800',
+  review_created: 'bg-yellow-100 text-yellow-800',
+  review_updated: 'bg-yellow-100 text-yellow-800',
+  review_deleted: 'bg-red-100 text-red-800',
+  dispute_created: 'bg-orange-100 text-orange-800',
+  dispute_updated: 'bg-orange-100 text-orange-800',
+  issue_created: 'bg-pink-100 text-pink-800',
+  issue_updated: 'bg-pink-100 text-pink-800',
+}
+
+const PLATFORM_COLORS: Record<string, string> = {
+  web: 'bg-blue-100 text-blue-800',
+  mobile: 'bg-green-100 text-green-800',
+  admin: 'bg-purple-100 text-purple-800',
 }
 
 const ACTIVITY_TYPE_LABELS: Record<string, string> = {
@@ -77,6 +98,13 @@ const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   conversation_started: 'Chat Started',
   ai_chat_session: 'AI Chat',
   admin_action: 'Admin Action',
+  review_created: 'Review Created',
+  review_updated: 'Review Updated',
+  review_deleted: 'Review Deleted',
+  dispute_created: 'Dispute Created',
+  dispute_updated: 'Dispute Updated',
+  issue_created: 'Issue Created',
+  issue_updated: 'Issue Updated',
 }
 
 export function AdminActivity() {
@@ -85,17 +113,19 @@ export function AdminActivity() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<string>('')
+  const [filterPlatform, setFilterPlatform] = useState<string>('')
   const [filterDays, setFilterDays] = useState<number>(7)
 
   useEffect(() => {
     fetchLogs()
     fetchStats()
-  }, [filterType, filterDays])
+  }, [filterType, filterPlatform, filterDays])
 
   const fetchLogs = async () => {
     try {
       const params = new URLSearchParams()
       if (filterType) params.append('activity_type', filterType)
+      if (filterPlatform) params.append('platform', filterPlatform)
       if (filterDays) params.append('days', filterDays.toString())
       params.append('limit', '200')
 
@@ -281,6 +311,16 @@ export function AdminActivity() {
                 </optgroup>
               </select>
               <select
+                value={filterPlatform}
+                onChange={(e) => setFilterPlatform(e.target.value)}
+                className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">All Platforms</option>
+                <option value="web">Web</option>
+                <option value="mobile">Mobile</option>
+                <option value="admin">Admin</option>
+              </select>
+              <select
                 value={filterDays}
                 onChange={(e) => setFilterDays(Number(e.target.value))}
                 className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -325,6 +365,16 @@ export function AdminActivity() {
                       {log.entity_type && (
                         <span className="text-xs text-gray-400">
                           {log.entity_type}: {log.entity_id?.slice(0, 8)}...
+                        </span>
+                      )}
+                      {log.platform && (
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1 ${PLATFORM_COLORS[log.platform] || 'bg-gray-100 text-gray-800'}`}>
+                          {log.platform === 'mobile' ? (
+                            <Smartphone className="w-3 h-3" />
+                          ) : (
+                            <Monitor className="w-3 h-3" />
+                          )}
+                          {log.platform}
                         </span>
                       )}
                       {log.ip_address && (
