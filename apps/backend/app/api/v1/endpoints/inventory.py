@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
@@ -7,6 +7,8 @@ from beanie import PydanticObjectId
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.watch import Watch, WatchStatus, WatchCondition
+from app.api.v1.endpoints.activity import log_activity
+from app.models.activity_log import ActivityType, EntityType
 
 router = APIRouter()
 
@@ -162,6 +164,7 @@ async def get_inventory_item(
 async def create_inventory_item(
     request: CreateInventoryItemRequest,
     current_user: User = Depends(get_current_user),
+    x_platform: Optional[str] = Header(None, alias="X-Platform"),
 ) -> Any:
     """Create a new inventory item"""
 
@@ -182,6 +185,25 @@ async def create_inventory_item(
         created_at=datetime.utcnow(),
     )
     await watch.insert()
+
+    # Log activity
+    platform = x_platform or "web"
+    await log_activity(
+        activity_type=ActivityType.WATCH_LISTED,
+        description=f"{current_user.name} listed {request.brand} {request.model} at {request.price} {request.currency}",
+        user=current_user,
+        entity_type=EntityType.WATCH,
+        entity_id=str(watch.id),
+        metadata={
+            "brand": request.brand,
+            "model": request.model,
+            "reference": request.reference,
+            "price": request.price,
+            "currency": request.currency,
+            "platform": platform,
+        },
+        platform=platform,
+    )
 
     return {
         "id": str(watch.id),

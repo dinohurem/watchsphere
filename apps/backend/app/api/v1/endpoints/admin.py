@@ -7,7 +7,7 @@ import string
 
 from app.core.deps import get_current_admin_user
 from app.core.security import get_password_hash
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, AuthProvider
 from app.services.email import email_service
 
 router = APIRouter()
@@ -23,6 +23,9 @@ class UserListResponse(BaseModel):
     approved: bool
     is_active: bool
     created_at: datetime
+    auth_provider: AuthProvider = AuthProvider.EMAIL
+    average_rating: float = 0.0
+    review_count: int = 0
 
     class Config:
         from_attributes = True
@@ -80,6 +83,9 @@ async def list_users(
             "approved": user.approved,
             "is_active": user.is_active,
             "created_at": user.created_at,
+            "auth_provider": user.auth_provider,
+            "average_rating": user.average_rating,
+            "review_count": user.review_count,
         }
         for user in users
     ]
@@ -110,6 +116,9 @@ async def get_user(
         "approved": user.approved,
         "is_active": user.is_active,
         "created_at": user.created_at,
+        "auth_provider": user.auth_provider,
+        "average_rating": user.average_rating,
+        "review_count": user.review_count,
     }
 
 
@@ -159,6 +168,9 @@ async def update_user(
         "approved": user.approved,
         "is_active": user.is_active,
         "created_at": user.created_at,
+        "auth_provider": user.auth_provider,
+        "average_rating": user.average_rating,
+        "review_count": user.review_count,
     }
 
 
@@ -214,6 +226,9 @@ async def list_pending_users(
             "approved": user.approved,
             "is_active": user.is_active,
             "created_at": user.created_at,
+            "auth_provider": user.auth_provider,
+            "average_rating": user.average_rating,
+            "review_count": user.review_count,
         }
         for user in users
     ]

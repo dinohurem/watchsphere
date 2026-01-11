@@ -7,12 +7,16 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.core.config import settings
 from app.core.security import create_access_token, create_tokens, verify_refresh_token, get_password_hash, verify_password
 from app.core.deps import get_current_active_user, get_current_user
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, AuthProvider
 from app.models.verification import VerificationCode
 from app.models.billing import Subscription, SubscriptionPlan, SubscriptionStatus
 from app.services.email import email_service
 from app.services.watchlist import assign_default_watchlist_to_user
 from pydantic import BaseModel, EmailStr
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+import jwt as pyjwt
+import httpx
 
 router = APIRouter()
 
@@ -32,6 +36,7 @@ class UserResponse(BaseModel):
     role: UserRole
     verified: bool
     approved: bool
+    auth_provider: AuthProvider = AuthProvider.EMAIL
 
     class Config:
         from_attributes = True
@@ -80,6 +85,16 @@ class CompleteOnboardingRequest(BaseModel):
     notifications_enabled: bool = False
 
 
+class GoogleAuthRequest(BaseModel):
+    id_token: Optional[str] = None
+    access_token: Optional[str] = None
+
+
+class AppleAuthRequest(BaseModel):
+    id_token: str
+    user_name: Optional[str] = None  # Apple only provides name on first sign-in
+
+
 @router.post("/register", response_model=TokenData, status_code=status.HTTP_201_CREATED)
 async def register(user_in: UserCreate) -> Any:
     """Register a new user and send verification email"""
@@ -99,6 +114,7 @@ async def register(user_in: UserCreate) -> Any:
         role=user_in.role,
         verified=False,
         approved=False,
+        auth_provider=AuthProvider.EMAIL,
     )
     await user.insert()
 
@@ -149,6 +165,7 @@ async def register(user_in: UserCreate) -> Any:
             "role": user.role,
             "verified": user.verified,
             "approved": user.approved,
+            "auth_provider": user.auth_provider,
         },
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -259,6 +276,7 @@ async def complete_onboarding(
             "role": current_user.role,
             "verified": current_user.verified,
             "approved": current_user.approved,
+            "auth_provider": current_user.auth_provider,
         },
     }
 
@@ -268,7 +286,20 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
     """Login with email and password"""
     user = await User.find_one(User.email == form_data.username)
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+
+    # Check if user registered via OAuth - they should use OAuth login
+    if user.auth_provider != AuthProvider.EMAIL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"This account uses {user.auth_provider.value} sign-in. Please use the {user.auth_provider.value.title()} button to log in.",
+        )
+
+    if not user.hashed_password or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -295,6 +326,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
             "role": user.role,
             "verified": user.verified,
             "approved": user.approved,
+            "auth_provider": user.auth_provider,
         },
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -340,6 +372,7 @@ async def refresh_tokens(request: RefreshTokenRequest) -> Any:
             "role": user.role,
             "verified": user.verified,
             "approved": user.approved,
+            "auth_provider": user.auth_provider,
         },
         "access_token": access_token,
         "refresh_token": new_refresh_token,
@@ -359,6 +392,7 @@ async def get_current_user_info(
         role=current_user.role,
         verified=current_user.verified,
         approved=current_user.approved,
+        auth_provider=current_user.auth_provider,
     )
 
 
@@ -434,3 +468,302 @@ async def reset_password(request: ResetPasswordRequest) -> Any:
     await user.save()
 
     return {"message": "Password reset successfully. You can now log in with your new password."}
+
+
+async def _create_oauth_user_response(user: User, is_new_user: bool = False) -> dict:
+    """Helper to create OAuth response with tokens"""
+    access_token, refresh_token = create_tokens(str(user.id))
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "verified": user.verified,
+            "approved": user.approved,
+            "auth_provider": user.auth_provider,
+        },
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "is_new_user": is_new_user,
+    }
+
+
+@router.post("/google", response_model=TokenData)
+async def google_auth(request: GoogleAuthRequest) -> Any:
+    """Authenticate with Google ID token or access token"""
+    google_user_id = None
+    email = None
+    name = None
+    email_verified = False
+
+    # Validate that at least one token is provided
+    if not request.id_token and not request.access_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Either id_token or access_token must be provided",
+        )
+
+    try:
+        # If access_token is provided, use it directly
+        if request.access_token:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    "https://www.googleapis.com/oauth2/v3/userinfo",
+                    headers={"Authorization": f"Bearer {request.access_token}"}
+                )
+                if response.status_code == 200:
+                    userinfo = response.json()
+                    google_user_id = userinfo.get("sub")
+                    email = userinfo.get("email")
+                    name = userinfo.get("name", email.split("@")[0] if email else "User")
+                    email_verified = userinfo.get("email_verified", False)
+                else:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Invalid Google access token",
+                    )
+        # If id_token is provided, verify it
+        elif request.id_token:
+            try:
+                idinfo = id_token.verify_oauth2_token(
+                    request.id_token,
+                    google_requests.Request(),
+                    settings.GOOGLE_CLIENT_ID
+                )
+                google_user_id = idinfo["sub"]
+                email = idinfo.get("email")
+                name = idinfo.get("name", email.split("@")[0] if email else "User")
+                email_verified = idinfo.get("email_verified", False)
+            except ValueError:
+                # If ID token verification fails, try as access token (for backwards compatibility)
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        "https://www.googleapis.com/oauth2/v3/userinfo",
+                        headers={"Authorization": f"Bearer {request.id_token}"}
+                    )
+                    if response.status_code == 200:
+                        userinfo = response.json()
+                        google_user_id = userinfo.get("sub")
+                        email = userinfo.get("email")
+                        name = userinfo.get("name", email.split("@")[0] if email else "User")
+                        email_verified = userinfo.get("email_verified", False)
+                    else:
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Invalid Google token",
+                        )
+
+        if not email:
+            raise HTTPException(
+                status_code=400,
+                detail="Email not provided by Google",
+            )
+
+        # Check if user exists with this email
+        existing_user = await User.find_one(User.email == email)
+
+        if existing_user:
+            # User exists - check if they used a different auth method
+            if existing_user.auth_provider == AuthProvider.EMAIL:
+                raise HTTPException(
+                    status_code=400,
+                    detail="An account with this email already exists. Please login with your email and password.",
+                )
+            elif existing_user.auth_provider == AuthProvider.APPLE:
+                raise HTTPException(
+                    status_code=400,
+                    detail="An account with this email uses Apple Sign-In. Please use the Apple button to log in.",
+                )
+
+            # Check if user is active
+            if not existing_user.is_active:
+                raise HTTPException(status_code=400, detail="Account is inactive")
+
+            # Update OAuth provider ID if not set
+            if not existing_user.oauth_provider_id:
+                existing_user.oauth_provider_id = google_user_id
+                await existing_user.save()
+
+            return await _create_oauth_user_response(existing_user, is_new_user=False)
+
+        # Create new user
+        new_user = User(
+            email=email,
+            name=name,
+            auth_provider=AuthProvider.GOOGLE,
+            oauth_provider_id=google_user_id,
+            verified=email_verified,
+            approved=email_verified,  # Auto-approve if Google verified the email
+            is_active=True,
+        )
+        await new_user.insert()
+
+        # Create free trial subscription
+        trial_end_date = datetime.utcnow() + relativedelta(months=1)
+        subscription = Subscription(
+            user_id=str(new_user.id),
+            user_name=new_user.name,
+            user_email=new_user.email,
+            plan=SubscriptionPlan.BASIC,
+            status=SubscriptionStatus.ACTIVE,
+            price_monthly=0.0,
+            currency="EUR",
+            started_at=datetime.utcnow(),
+            expires_at=trial_end_date,
+            next_billing_date=trial_end_date,
+            auto_renew=False,
+        )
+        await subscription.insert()
+
+        # Assign default watchlist
+        await assign_default_watchlist_to_user(new_user)
+
+        # Send welcome email
+        await email_service.send_welcome_email(
+            to_email=new_user.email,
+            user_name=new_user.name.split()[0] if new_user.name else "there"
+        )
+
+        return await _create_oauth_user_response(new_user, is_new_user=True)
+
+    except ValueError as e:
+        # Invalid token
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Google token",
+        )
+
+
+@router.post("/apple", response_model=TokenData)
+async def apple_auth(request: AppleAuthRequest) -> Any:
+    """Authenticate with Apple ID token"""
+    try:
+        # Decode the Apple ID token (without full verification for now)
+        # In production, you should verify against Apple's public keys
+        # Get Apple's public keys
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://appleid.apple.com/auth/keys")
+            apple_keys = response.json()
+
+        # Decode the token header to get the key ID
+        unverified_header = pyjwt.get_unverified_header(request.id_token)
+        kid = unverified_header.get("kid")
+
+        # Find the matching key
+        rsa_key = None
+        for key in apple_keys.get("keys", []):
+            if key.get("kid") == kid:
+                rsa_key = key
+                break
+
+        if not rsa_key:
+            raise HTTPException(
+                status_code=401,
+                detail="Unable to find appropriate Apple key",
+            )
+
+        # Construct the public key
+        from jwt import algorithms
+        public_key = algorithms.RSAAlgorithm.from_jwk(rsa_key)
+
+        # Verify and decode the token
+        decoded = pyjwt.decode(
+            request.id_token,
+            public_key,
+            algorithms=["RS256"],
+            audience=settings.APPLE_CLIENT_ID,
+            issuer="https://appleid.apple.com",
+        )
+
+        apple_user_id = decoded.get("sub")
+        email = decoded.get("email")
+        email_verified = decoded.get("email_verified", "false") == "true"
+
+        if not email:
+            raise HTTPException(
+                status_code=400,
+                detail="Email not provided by Apple",
+            )
+
+        # Apple only provides the name on first sign-in, so we need to handle this
+        name = request.user_name or email.split("@")[0]
+
+        # Check if user exists with this email
+        existing_user = await User.find_one(User.email == email)
+
+        if existing_user:
+            # User exists - check if they used a different auth method
+            if existing_user.auth_provider == AuthProvider.EMAIL:
+                raise HTTPException(
+                    status_code=400,
+                    detail="An account with this email already exists. Please login with your email and password.",
+                )
+            elif existing_user.auth_provider == AuthProvider.GOOGLE:
+                raise HTTPException(
+                    status_code=400,
+                    detail="An account with this email uses Google Sign-In. Please use the Google button to log in.",
+                )
+
+            # Check if user is active
+            if not existing_user.is_active:
+                raise HTTPException(status_code=400, detail="Account is inactive")
+
+            # Update OAuth provider ID if not set
+            if not existing_user.oauth_provider_id:
+                existing_user.oauth_provider_id = apple_user_id
+                await existing_user.save()
+
+            return await _create_oauth_user_response(existing_user, is_new_user=False)
+
+        # Create new user
+        new_user = User(
+            email=email,
+            name=name,
+            auth_provider=AuthProvider.APPLE,
+            oauth_provider_id=apple_user_id,
+            verified=email_verified,
+            approved=email_verified,  # Auto-approve if Apple verified the email
+            is_active=True,
+        )
+        await new_user.insert()
+
+        # Create free trial subscription
+        trial_end_date = datetime.utcnow() + relativedelta(months=1)
+        subscription = Subscription(
+            user_id=str(new_user.id),
+            user_name=new_user.name,
+            user_email=new_user.email,
+            plan=SubscriptionPlan.BASIC,
+            status=SubscriptionStatus.ACTIVE,
+            price_monthly=0.0,
+            currency="EUR",
+            started_at=datetime.utcnow(),
+            expires_at=trial_end_date,
+            next_billing_date=trial_end_date,
+            auto_renew=False,
+        )
+        await subscription.insert()
+
+        # Assign default watchlist
+        await assign_default_watchlist_to_user(new_user)
+
+        # Send welcome email
+        await email_service.send_welcome_email(
+            to_email=new_user.email,
+            user_name=new_user.name.split()[0] if new_user.name else "there"
+        )
+
+        return await _create_oauth_user_response(new_user, is_new_user=True)
+
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Apple token has expired",
+        )
+    except pyjwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Apple token",
+        )

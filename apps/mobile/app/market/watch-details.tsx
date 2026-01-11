@@ -177,6 +177,44 @@ function SoldTagIcon() {
   );
 }
 
+// Rating Star Icon (small, filled black)
+function RatingStarIcon() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
+        fill="#1D1D1F"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// User Icon (for avatar placeholder)
+function UserIcon() {
+  return (
+    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21"
+        stroke="#666"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z"
+        stroke="#666"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 interface WatchDetailsParams {
   orderId?: string;
   reference?: string;
@@ -190,6 +228,9 @@ interface WatchDetailsParams {
   has_papers?: string;
   user_name?: string;
   user_id?: string;
+  user_profile_image?: string;
+  user_rating?: string;
+  user_review_count?: string;
   fromOrderBook?: string;
   order_type?: string;
 }
@@ -238,6 +279,10 @@ export default function WatchDetailsScreen() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [userProfileImage, setUserProfileImage] = useState<string | null>(null);
+  const [userRating, setUserRating] = useState<number>(0);
+  const [userReviewCount, setUserReviewCount] = useState<number>(0);
+  const [displayUserName, setDisplayUserName] = useState<string | null>(null);
 
   // Debug: log all params received
   console.log('WatchDetails params:', JSON.stringify(params, null, 2));
@@ -258,6 +303,32 @@ export default function WatchDetailsScreen() {
 
   // Check if this is the current user's order (either buy or sell)
   const isOwnOrder = orderUserId === user?.id;
+
+  // Fetch order details to get user rating info and name
+  useEffect(() => {
+    const fetchOrderDetails = async () => {
+      if (params.orderId) {
+        try {
+          const response = await api.get(`/orders/${params.orderId}`);
+          if (response.data) {
+            setUserProfileImage(response.data.user_profile_image || null);
+            setUserRating(response.data.user_rating || 0);
+            setUserReviewCount(response.data.user_review_count || 0);
+            // Use user_name from API response if available
+            if (response.data.user_name) {
+              setDisplayUserName(response.data.user_name);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch order details:', error);
+        }
+      }
+    };
+    fetchOrderDetails();
+  }, [params.orderId]);
+
+  // Use API-fetched name, or params name, or fallback
+  const effectiveUserName = displayUserName || userName;
 
   const formatPrice = (price: number) => {
     return `€${price.toLocaleString('de-DE')}`;
@@ -408,6 +479,27 @@ export default function WatchDetailsScreen() {
                 <Text style={styles.quickInfoValue}>{countryName}</Text>
               </View>
             </View>
+            {/* Seller/Buyer Row */}
+            <TouchableOpacity
+              style={styles.quickInfoRow}
+              onPress={() => orderUserId && router.push(`/user/${orderUserId}` as any)}
+              activeOpacity={0.7}
+              disabled={!orderUserId}
+            >
+              <Text style={styles.quickInfoLabel}>{orderType === 'sell' ? 'Seller' : 'Buyer'}</Text>
+              <View style={styles.sellerRow}>
+                <View style={styles.sellerAvatar}>
+                  {userProfileImage ? (
+                    <Image source={{ uri: userProfileImage }} style={styles.sellerAvatarImage} />
+                  ) : (
+                    <UserIcon />
+                  )}
+                </View>
+                <Text style={[styles.sellerName, orderUserId && styles.sellerNameClickable]}>{effectiveUserName}</Text>
+                <RatingStarIcon />
+                <Text style={styles.sellerRating}>{userRating.toFixed(1)} ({userReviewCount})</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -686,6 +778,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: wp(6),
+  },
+  sellerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(6),
+    flex: 1,
+  },
+  sellerAvatar: {
+    width: sp(24),
+    height: sp(24),
+    borderRadius: sp(12),
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  sellerAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  sellerName: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(15),
+    color: '#212121',
+    letterSpacing: 0.075,
+    lineHeight: fp(20),
+  },
+  sellerNameClickable: {
+    textDecorationLine: 'underline',
+  },
+  sellerRating: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(15),
+    color: '#212121',
+    letterSpacing: 0.075,
+    lineHeight: fp(20),
   },
   specsContainer: {
     paddingHorizontal: wp(16),

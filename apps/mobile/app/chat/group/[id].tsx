@@ -167,7 +167,7 @@ export default function GroupChatScreen() {
   const [showMessageOptions, setShowMessageOptions] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyingTo, setReplyingTo] = useState<QuotedMessage | null>(null);
-  const flashListRef = useRef<FlashList<Message & { showSender: boolean }>>(null);
+  const flashListRef = useRef<FlashList<Message & { showSender: boolean; showAvatar: boolean }>>(null);
   const currentUserId = useRef<string>('');
 
   useEffect(() => {
@@ -460,15 +460,24 @@ export default function GroupChatScreen() {
   };
 
   // Group consecutive messages from same sender
+  // showSender = true for first message in a block
+  // showAvatar = true for last message in a block (the most recent one in the group)
   const groupedMessages = messages.map((msg, index) => {
     const prevMsg = messages[index - 1];
+    const nextMsg = messages[index + 1];
+
+    // Show sender name on first message of a block from this sender
     const showSender = msg.sender_id !== currentUserId.current &&
       (!prevMsg || prevMsg.sender_id !== msg.sender_id);
 
-    return { ...msg, showSender };
+    // Show avatar on last message of a block from this sender (next message is from different sender or no next message)
+    const showAvatar = msg.sender_id !== currentUserId.current &&
+      (!nextMsg || nextMsg.sender_id !== msg.sender_id);
+
+    return { ...msg, showSender, showAvatar };
   });
 
-  const renderMessage = ({ item }: { item: Message & { showSender: boolean } }) => {
+  const renderMessage = ({ item }: { item: Message & { showSender: boolean; showAvatar: boolean } }) => {
     const isUser = item.sender_id === currentUserId.current;
 
     // Build quoted message if this is a reply
@@ -494,6 +503,8 @@ export default function GroupChatScreen() {
         senderId={item.sender_id}
         quotedMessage={quotedMessage}
         onLongPress={() => handleMessageLongPress(item)}
+        isGroupChat={true}
+        showAvatar={item.showAvatar}
       />
     );
   };
@@ -732,6 +743,20 @@ export default function GroupChatScreen() {
       fontFamily: fonts.medium,
       color: colors.text,
     },
+    viewProfileButton: {
+      backgroundColor: colors.text,
+      borderRadius: sp(999),
+      paddingVertical: hp(14),
+      paddingHorizontal: wp(24),
+      marginTop: hp(16),
+      width: '100%',
+      alignItems: 'center',
+    },
+    viewProfileButtonText: {
+      fontSize: fp(16),
+      fontFamily: fonts.semiBold,
+      color: colors.background,
+    },
     // Message options modal styles
     messageOptionsContent: {
       backgroundColor: colors.background,
@@ -966,6 +991,19 @@ export default function GroupChatScreen() {
                   <Text style={styles.contactLabel}>Telegram</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* View Profile Button */}
+              <TouchableOpacity
+                style={styles.viewProfileButton}
+                onPress={() => {
+                  setShowProfileModal(false);
+                  if (selectedMember?.id) {
+                    router.push(`/user/${selectedMember.id}` as any);
+                  }
+                }}
+              >
+                <Text style={styles.viewProfileButtonText}>View Profile</Text>
+              </TouchableOpacity>
             </Pressable>
           </Pressable>
         </Modal>

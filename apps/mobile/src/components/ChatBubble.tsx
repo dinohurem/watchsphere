@@ -21,12 +21,24 @@ interface ChatBubbleProps {
   onLongPress?: () => void;
   messageId?: string;
   senderId?: string;
+  isGroupChat?: boolean;
+  showAvatar?: boolean;
 }
 
-export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender, isAI = false, quotedMessage, onLongPress, messageId, senderId }: ChatBubbleProps) {
+export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender, isAI = false, quotedMessage, onLongPress, messageId, senderId, isGroupChat = false, showAvatar = false }: ChatBubbleProps) {
   const { colors, fonts } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+
+  // Get initials from sender name
+  const getInitials = (name: string) => {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.charAt(0).toUpperCase();
+  };
 
   useEffect(() => {
     // Entrance animation
@@ -45,6 +57,10 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
     ]).start();
   }, []);
 
+  // Determine if we should show the avatar for this message
+  const shouldShowAvatar = isGroupChat && !isUser && showAvatar;
+  const avatarSpacing = isGroupChat && !isUser ? 40 : 0; // Space for avatar column
+
   const styles = StyleSheet.create({
     container: {
       marginVertical: 4,
@@ -56,12 +72,35 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
     userContainer: {
       alignItems: 'flex-end',
     },
+    messageRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+    },
+    avatarColumn: {
+      width: 32,
+      marginRight: 8,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+    },
+    avatar: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.backgroundSecondary,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarText: {
+      fontSize: 11,
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+    },
     senderName: {
       fontSize: 12,
       fontFamily: fonts.semiBold,
       color: colors.textSecondary,
       marginBottom: 4,
-      marginLeft: 4,
+      marginLeft: isGroupChat ? 40 : 4,
     },
     bubble: {
       maxWidth: '75%',
@@ -149,17 +188,29 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
       {showSender && senderName && !isUser && (
         <Text style={styles.senderName}>{senderName}</Text>
       )}
-      <Pressable
-        onLongPress={onLongPress}
-        delayLongPress={300}
-        style={({ pressed }) => [
-          styles.bubble,
-          isUser ? styles.userBubble : styles.otherBubble,
-          pressed && { opacity: 0.8 },
-        ]}
-      >
-        {bubbleContent}
-      </Pressable>
+      <View style={isGroupChat && !isUser ? styles.messageRow : undefined}>
+        {/* Avatar column for group chat - only show avatar on last message of a block */}
+        {isGroupChat && !isUser && (
+          <View style={styles.avatarColumn}>
+            {shouldShowAvatar && (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{getInitials(senderName || '')}</Text>
+              </View>
+            )}
+          </View>
+        )}
+        <Pressable
+          onLongPress={onLongPress}
+          delayLongPress={300}
+          style={({ pressed }) => [
+            styles.bubble,
+            isUser ? styles.userBubble : styles.otherBubble,
+            pressed && { opacity: 0.8 },
+          ]}
+        >
+          {bubbleContent}
+        </Pressable>
+      </View>
     </Animated.View>
   );
 }

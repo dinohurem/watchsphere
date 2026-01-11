@@ -97,7 +97,35 @@ async def get_profile(
         "notify_price_changes": current_user.notify_price_changes,
         "notify_buy_offers": current_user.notify_buy_offers,
         "notify_messages": current_user.notify_messages,
+        "average_rating": current_user.average_rating,
+        "review_count": current_user.review_count,
         "created_at": current_user.created_at,
+    }
+
+
+@router.get("/user/{user_id}")
+async def get_user_profile(
+    user_id: str,
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Get another user's public profile"""
+    user = await User.get(PydanticObjectId(user_id))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return {
+        "id": str(user.id),
+        "name": user.name,
+        "email": user.email,  # May want to hide this for privacy
+        "role": user.role.value if hasattr(user.role, 'value') else user.role,
+        "profile_image_url": user.profile_image_url,
+        "profile_image_thumbnail_url": user.profile_image_thumbnail_url,
+        "average_rating": user.average_rating,
+        "review_count": user.review_count,
+        "created_at": user.created_at,
     }
 
 

@@ -28,6 +28,7 @@ async def connect_to_mongo():
     from app.models.listing_field import ListingField
     from app.models.filter import Filter
     from app.models.support import Dispute, Issue
+    from app.models.review import Review
 
     await init_beanie(
         database=mongodb_client[settings.MONGODB_DB_NAME],
@@ -39,7 +40,7 @@ async def connect_to_mongo():
             WhatsAppImport, WhatsAppMessage, ExtractedWatchListing,
             VerificationCode, Order,
             ListingField, Filter,
-            Dispute, Issue
+            Dispute, Issue, Review
         ]
     )
 

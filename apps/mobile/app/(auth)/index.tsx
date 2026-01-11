@@ -1,8 +1,18 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Svg, { Path, G, Rect } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { useAuthStore } from '@watchsphere/shared/stores';
+import { api } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+
+// Required for Google auth to work properly
+WebBrowser.maybeCompleteAuthSession();
 
 // WatchSphere Logo matching Figma design (77x64)
 function WSLogo() {
@@ -60,6 +70,126 @@ function GoogleLogo() {
 }
 
 export default function WelcomeScreen() {
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [isAppleLoginAvailable, setIsAppleLoginAvailable] = useState(false);
+
+  const login = useAuthStore((state) => state.login);
+
+  // Configure Google Sign In with expo-auth-session
+  const googleClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const [request, response, promptAsync] = Google.useAuthRequest(
+    googleClientId ? {
+      expoClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+      androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    } : undefined as any
+  );
+
+  // Check if Apple Sign In is available
+  useEffect(() => {
+    AppleAuthentication.isAvailableAsync().then(setIsAppleLoginAvailable);
+  }, []);
+
+  // Handle Google auth response
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      if (authentication?.accessToken) {
+        handleGoogleAuth(authentication.accessToken);
+      }
+    }
+  }, [response]);
+
+  // Handle OAuth success
+  const handleOAuthSuccess = async (user: any, access_token: string, refresh_token: string, isNewUser: boolean) => {
+    await AsyncStorage.setItem('auth_token', access_token);
+    await AsyncStorage.setItem('refresh_token', refresh_token);
+    login(user, access_token);
+
+    // Check if notification prompt has been shown before
+    const notificationPromptShown = await AsyncStorage.getItem('notification_prompt_shown');
+    if (!notificationPromptShown) {
+      router.replace('/(auth)/notifications');
+    } else if (isNewUser) {
+      router.replace('/(auth)/onboarding');
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
+
+  // Handle Google authentication with access token
+  const handleGoogleAuth = async (accessToken: string) => {
+    setGoogleLoading(true);
+    try {
+      const response = await api.post('/auth/google', {
+        access_token: accessToken,
+      });
+
+      const { user, access_token: authToken, refresh_token, is_new_user } = response.data;
+      await handleOAuthSuccess(user, authToken, refresh_token, is_new_user);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.detail || 'Google sign in failed';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Google Sign In handler
+  const handleGoogleSignIn = async () => {
+    if (!googleClientId) {
+      Alert.alert('Configuration Error', 'Google Sign In is not configured. Please set up the Google Client ID.');
+      return;
+    }
+    if (!request) {
+      Alert.alert('Error', 'Google Sign In is not ready. Please try again.');
+      return;
+    }
+    setGoogleLoading(true);
+    try {
+      await promptAsync();
+    } catch (error: any) {
+      Alert.alert('Error', 'Google sign in failed');
+      setGoogleLoading(false);
+    }
+  };
+
+  // Apple Sign In handler
+  const handleAppleSignIn = async () => {
+    setAppleLoading(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (credential.identityToken) {
+        const userName = credential.fullName
+          ? `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim()
+          : undefined;
+
+        const response = await api.post('/auth/apple', {
+          id_token: credential.identityToken,
+          user_name: userName,
+        });
+
+        const { user, access_token, refresh_token, is_new_user } = response.data;
+        await handleOAuthSuccess(user, access_token, refresh_token, is_new_user);
+      }
+    } catch (error: any) {
+      if (error.code !== 'ERR_REQUEST_CANCELED') {
+        const errorMessage = error.response?.data?.detail || 'Apple sign in failed';
+        Alert.alert('Error', errorMessage);
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
@@ -80,15 +210,31 @@ export default function WelcomeScreen() {
           {/* Buttons */}
           <View style={styles.buttonsContainer}>
             {/* Continue with Apple */}
-            <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-              <AppleLogo />
-              <Text style={styles.socialButtonText}>Continue with Apple</Text>
-            </TouchableOpacity>
+            {isAppleLoginAvailable && (
+              <TouchableOpacity
+                style={styles.socialButton}
+                activeOpacity={0.7}
+                onPress={handleAppleSignIn}
+                disabled={appleLoading || googleLoading}
+              >
+                <AppleLogo />
+                <Text style={styles.socialButtonText}>
+                  {appleLoading ? 'Signing in...' : 'Continue with Apple'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Continue with Google */}
-            <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.socialButton}
+              activeOpacity={0.7}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading || appleLoading}
+            >
               <GoogleLogo />
-              <Text style={styles.socialButtonText}>Continue with Google</Text>
+              <Text style={styles.socialButtonText}>
+                {googleLoading ? 'Signing in...' : 'Continue with Google'}
+              </Text>
             </TouchableOpacity>
 
             {/* Sign Up Button */}
@@ -96,6 +242,7 @@ export default function WelcomeScreen() {
               style={styles.signUpButton}
               onPress={() => router.push('/(auth)/register')}
               activeOpacity={0.8}
+              disabled={googleLoading || appleLoading}
             >
               <Text style={styles.signUpButtonText}>Sign Up</Text>
             </TouchableOpacity>
@@ -105,6 +252,7 @@ export default function WelcomeScreen() {
               style={styles.loginButton}
               onPress={() => router.push('/(auth)/login')}
               activeOpacity={0.7}
+              disabled={googleLoading || appleLoading}
             >
               <Text style={styles.loginButtonText}>Log in</Text>
             </TouchableOpacity>
