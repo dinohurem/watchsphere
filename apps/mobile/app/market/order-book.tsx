@@ -134,7 +134,8 @@ export default function OrderBookScreen() {
 
   const handleOrderPress = (order: OrderBookEntry, orderType: 'buy' | 'sell') => {
     // Navigate to watch details page with fromOrderBook flag
-    router.push({
+    // Use router.replace to close the order book and show watch details
+    router.replace({
       pathname: '/market/watch-details',
       params: {
         orderId: order.id,
@@ -405,22 +406,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(8),
   },
   marketCellContainer: {
-    flex: 0.6,
+    width: wp(60),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   marketCell: {
-    flex: 0.6,
+    width: wp(60),
     textAlign: 'center',
   },
   dateCell: {
-    flex: 1,
+    width: wp(70),
     textAlign: 'left',
+    marginLeft: wp(20),
   },
   dateCellData: {
-    flex: 1,
+    width: wp(70),
     textAlign: 'left',
+    marginLeft: wp(20),
   },
   conditionCell: {
     flex: 1,

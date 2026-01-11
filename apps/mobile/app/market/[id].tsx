@@ -126,21 +126,6 @@ function FilterIcon() {
   );
 }
 
-// Share Icon (exact Figma SVG - 24px_share-right-3 1)
-function ShareIcon() {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 22 22" fill="none">
-      {/* Share arrow shape */}
-      <Path
-        d="M11.9167 3.66675L20.1667 11.0001L11.9167 18.3334V13.7501H9.16667C5.62284 13.7501 2.75 16.6229 2.75 20.1667V16.5001C2.75 11.9437 6.44365 8.25008 11 8.25008H11.9167V3.66675Z"
-        stroke="#1D1D1F"
-        strokeWidth={1.83333}
-        strokeLinecap="square"
-      />
-    </Svg>
-  );
-}
-
 // Star Icon (exact Figma SVG - 24px_star-2 1)
 function StarIcon({ filled = false }: { filled?: boolean }) {
   return (
@@ -153,6 +138,30 @@ function StarIcon({ filled = false }: { filled?: boolean }) {
         strokeWidth={1.83333}
         strokeMiterlimit={10}
         strokeLinecap="square"
+      />
+    </Svg>
+  );
+}
+
+// Social Search Icon (users with search)
+function SocialSearchIcon() {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 22 22" fill="none">
+      {/* Two people */}
+      <Circle cx={8} cy={6} r={2.5} stroke="#1D1D1F" strokeWidth={1.5} />
+      <Path
+        d="M3 17.5C3 14.7386 5.23858 12.5 8 12.5C9.0599 12.5 10.0429 12.8243 10.8571 13.3757"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+      />
+      {/* Search magnifier */}
+      <Circle cx={15.5} cy={15.5} r={3.5} stroke="#1D1D1F" strokeWidth={1.5} />
+      <Path
+        d="M18.5 18.5L20.5 20.5"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
       />
     </Svg>
   );
@@ -761,12 +770,6 @@ export default function WatchDetailsScreen() {
             </View>
             <Text style={styles.actionLabel}>Filters</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <View style={styles.actionIconContainer}>
-              <ShareIcon />
-            </View>
-            <Text style={styles.actionLabel}>Share</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={toggleWatchlist}
@@ -776,6 +779,15 @@ export default function WatchDetailsScreen() {
               <StarIcon filled={isInWatchlist} />
             </View>
             <Text style={styles.actionLabel}>{isInWatchlist ? 'Saved' : 'Watchlist'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => router.push('/search')}
+          >
+            <View style={styles.actionIconContainer}>
+              <SocialSearchIcon />
+            </View>
+            <Text style={styles.actionLabel}>Social Search</Text>
           </TouchableOpacity>
         </View>
 
@@ -854,8 +866,8 @@ export default function WatchDetailsScreen() {
           <View style={styles.orderBookTable}>
             {/* Header */}
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderCell, { flex: 0.5, textAlign: 'center' }]}>Market</Text>
-              <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
+              <Text style={[styles.tableHeaderCell, { width: wp(80), textAlign: 'center' }]}>Market</Text>
+              <Text style={[styles.tableHeaderCell, { width: wp(70), marginLeft: wp(8) }]}>Date</Text>
               <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Condition</Text>
               <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'right' }]}>Price</Text>
             </View>
@@ -875,21 +887,28 @@ export default function WatchDetailsScreen() {
                   onPress={() => router.push({
                     pathname: '/market/watch-details',
                     params: {
+                      orderId: order.id,
                       reference: watch.reference,
                       brand: watch.brand,
                       model: watch.model,
                       price: order.price.toString(),
                       condition: order.condition,
                       country_code: order.country_code,
+                      country_name: order.country_name || '',
+                      has_box: (order.has_box || false).toString(),
+                      has_papers: (order.has_papers || false).toString(),
+                      user_name: order.user_name || '',
+                      user_id: order.user_id || '',
+                      order_type: selectedTab === 'Buy' ? 'buy' : 'sell',
                       fromOrderBook: 'true',
                     },
                   })}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.tableCell, { flex: 0.5, justifyContent: 'center', alignItems: 'center' }]}>
+                  <View style={[styles.tableCell, { width: wp(80), justifyContent: 'center', alignItems: 'center' }]}>
                     <CountryFlag countryCode={order.country_code} size={14} />
                   </View>
-                  <Text style={[styles.tableCell, styles.tableCellText, { flex: 1 }]}>{order.date}</Text>
+                  <Text style={[styles.tableCell, styles.tableCellText, { width: wp(70), marginLeft: wp(8) }]}>{order.date}</Text>
                   <Text style={[styles.tableCell, styles.tableCellText, { flex: 1, textAlign: 'center' }]}>{order.condition}</Text>
                   <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'right' }]}>
                     {formatPriceEurBefore(order.price)}

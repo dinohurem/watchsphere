@@ -47,7 +47,7 @@ def get_firebase_app() -> firebase_admin.App:
         # Try to get project ID from credentials and construct bucket name
         project_id = cred.project_id if hasattr(cred, 'project_id') else None
         if project_id:
-            storage_bucket = f"{project_id}.appspot.com"
+            storage_bucket = f"{project_id}.firebasestorage.app"
         else:
             raise ValueError("FIREBASE_STORAGE_BUCKET environment variable is required")
 

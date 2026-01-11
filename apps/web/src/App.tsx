@@ -9,6 +9,7 @@ import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 import { AdminRoute } from './features/auth/components/AdminRoute'
 import { HomePage } from './features/home/pages/HomePage'
 import { MarketPage } from './features/market/pages/MarketPage'
+import { FiltersPage } from './features/market/pages/FiltersPage'
 import { WatchDetailsPage } from './features/market/pages/WatchDetailsPage'
 import { OrderDetailPage } from './features/market/pages/OrderDetailPage'
 import { WatchlistPage } from './features/watchlist/pages/WatchlistPage'
@@ -16,6 +17,9 @@ import { ChatPage } from './features/chat/pages/ChatPage'
 import { AIChatPage } from './features/chat/pages/AIChatPage'
 import { ProfilePage } from './features/profile/pages/ProfilePage'
 import { SocialSearchPage } from './features/social/pages/SocialSearchPage'
+import { SocialFiltersPage } from './features/social/pages/SocialFiltersPage'
+import { InventoryPage } from './features/inventory/pages/InventoryPage'
+import { SearchPage } from './features/search/pages/SearchPage'
 import { LandingPage } from './features/landing/pages/LandingPage'
 import { useAuthStore } from '@watchsphere/shared/stores'
 import { api } from './services/api'
@@ -33,7 +37,10 @@ import {
   AdminWhatsAppImport,
   AdminActivity,
   AdminBilling,
-  AdminSettings
+  AdminSettings,
+  AdminListingFields,
+  AdminFilters,
+  AdminSupport
 } from './features/admin/pages'
 
 // Legal pages
@@ -140,6 +147,9 @@ function App() {
         <Route path="activity" element={<AdminActivity />} />
         <Route path="billing" element={<AdminBilling />} />
         <Route path="settings" element={<AdminSettings />} />
+        <Route path="listing-fields" element={<AdminListingFields />} />
+        <Route path="filters" element={<AdminFilters />} />
+        <Route path="support" element={<AdminSupport />} />
       </Route>
 
       {/* Protected user routes */}
@@ -153,12 +163,16 @@ function App() {
       >
         <Route index element={<HomePage />} />
         <Route path="market" element={<MarketPage />} />
+        <Route path="market/filters" element={<FiltersPage />} />
         <Route path="watch/:watchId" element={<WatchDetailsPage />} />
         <Route path="order/:orderId" element={<OrderDetailPage />} />
         <Route path="watchlist" element={<WatchlistPage />} />
         <Route path="chat" element={<ChatPage />} />
         <Route path="ai-assistant" element={<AIChatPage />} />
         <Route path="social-search" element={<SocialSearchPage />} />
+        <Route path="social-search/filters" element={<SocialFiltersPage />} />
+        <Route path="inventory" element={<InventoryPage />} />
+        <Route path="search" element={<SearchPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Routes>

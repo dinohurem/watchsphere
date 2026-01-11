@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
+import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
 interface PriceData {
   bestBid: number;
@@ -272,7 +273,8 @@ export function WatchDetailsPage() {
   }
 
   return (
-    <div className="max-w-[1000px] mx-auto px-4 sm:px-6 lg:px-0 py-6 sm:py-8">
+    <div className="p-6 lg:p-8">
+      <div className="max-w-[1000px] mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3 sm:gap-4">
@@ -283,7 +285,9 @@ export function WatchDetailsPage() {
             <ArrowLeft className="w-4 sm:w-5 h-4 sm:h-5 text-gray-900" />
           </button>
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">{watchDetails.brand}</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
+              {watchDetails.brand} {watchDetails.model}
+            </h1>
             <p className="text-sm sm:text-base text-gray-500">{watchDetails.reference}</p>
           </div>
         </div>
@@ -332,11 +336,10 @@ export function WatchDetailsPage() {
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
                   target.style.display = 'none';
-                  target.parentElement!.innerHTML = '<span class="text-6xl sm:text-8xl">⌚</span>';
                 }}
               />
             ) : (
-              <span className="text-6xl sm:text-8xl">⌚</span>
+              <ImagePlaceholder width={200} height={200} borderRadius={0} />
             )}
           </div>
 
@@ -684,7 +687,7 @@ export function WatchDetailsPage() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span className="text-2xl">⌚</span>
+                  <ImagePlaceholder width={48} height={48} borderRadius={8} />
                 )}
               </div>
               <div>
@@ -725,7 +728,8 @@ export function WatchDetailsPage() {
             <div className="flex-1 overflow-hidden px-6 py-4">
               {/* Table Header */}
               <div className="flex items-center py-3 text-sm font-medium text-gray-500 border-b">
-                <span className="w-[120px]">Date</span>
+                <span className="w-[100px]">Market</span>
+                <span className="w-[100px]">Date</span>
                 <span className="flex-1">Condition</span>
                 <span className="w-[100px] text-right">Price</span>
               </div>
@@ -748,7 +752,11 @@ export function WatchDetailsPage() {
                         index < filteredOrderBook.length - 1 ? 'border-b border-gray-100' : ''
                       } hover:bg-gray-50 cursor-pointer`}
                     >
-                      <span className="w-[120px] text-gray-600">{entry.date}</span>
+                      <span className="w-[100px] flex items-center gap-2">
+                        <span>{entry.flag}</span>
+                        <span className="text-gray-900">{entry.market}</span>
+                      </span>
+                      <span className="w-[100px] text-gray-600">{entry.date}</span>
                       <span className="flex-1 text-gray-900">{entry.condition}</span>
                       <span className={`w-[100px] text-right font-semibold ${
                         orderBookTab === 'buy' ? 'text-green-600' : 'text-red-500'
@@ -763,6 +771,7 @@ export function WatchDetailsPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

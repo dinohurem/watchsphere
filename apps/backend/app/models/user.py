@@ -25,6 +25,10 @@ class User(Document):
     profile_image_url: Optional[str] = None
     profile_image_thumbnail_url: Optional[str] = None
 
+    # Social contact info
+    whatsapp_phone: Optional[str] = None  # WhatsApp phone number
+    telegram_username: Optional[str] = None  # Telegram @username
+
     # FCM tokens for push notifications (multiple devices)
     fcm_tokens: List[str] = Field(default_factory=list)
 

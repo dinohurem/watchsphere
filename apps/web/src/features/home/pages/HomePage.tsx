@@ -14,6 +14,7 @@ import {
   Newspaper
 } from 'lucide-react';
 import { api } from '@/services/api';
+import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
 interface ActivityItem {
   id: string;
@@ -301,11 +302,10 @@ export function HomePage() {
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.style.display = 'none';
-                        target.parentElement!.innerHTML = '<span class="text-4xl sm:text-5xl">⌚</span>';
                       }}
                     />
                   ) : (
-                    <span className="text-4xl sm:text-5xl">⌚</span>
+                    <ImagePlaceholder width={100} height={100} borderRadius={0} />
                   )}
                 </div>
                 {/* Watch Info */}

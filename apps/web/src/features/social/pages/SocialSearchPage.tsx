@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/services/api';
-import { SlidersHorizontal, X, Search, MessageSquare, MapPin, Calendar, User } from 'lucide-react';
+import { useSocialFilters } from '@/hooks/useConfig';
+import { SlidersHorizontal, X, MessageSquare, MapPin, Calendar, User } from 'lucide-react';
 
 interface SocialMessage {
   id: string;
@@ -16,12 +18,6 @@ interface SocialMessage {
   country_code: string | null;
   country_name: string | null;
   message_timestamp: string | null;
-}
-
-interface FilterState {
-  offerType: string | null; // 'wts', 'wtb', or null for all
-  reference: string;
-  countryCode: string | null;
 }
 
 interface Country {
@@ -127,148 +123,6 @@ function SocialMessageCard({ message }: { message: SocialMessage }) {
   );
 }
 
-// Filter modal component
-function FilterModal({
-  isOpen,
-  onClose,
-  filters,
-  onApplyFilters,
-  countries,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  filters: FilterState;
-  onApplyFilters: (filters: FilterState) => void;
-  countries: Country[];
-}) {
-  const [localFilters, setLocalFilters] = useState<FilterState>(filters);
-
-  useEffect(() => {
-    if (isOpen) {
-      setLocalFilters(filters);
-    }
-  }, [isOpen, filters]);
-
-  if (!isOpen) return null;
-
-  const handleReset = () => {
-    setLocalFilters({
-      offerType: null,
-      reference: '',
-      countryCode: null,
-    });
-  };
-
-  const handleApply = () => {
-    onApplyFilters(localFilters);
-    onClose();
-  };
-
-  const activeFilterCount =
-    (localFilters.offerType ? 1 : 0) +
-    (localFilters.reference ? 1 : 0) +
-    (localFilters.countryCode ? 1 : 0);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl w-full max-w-md mx-4 p-6 max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Filters</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        {/* Offer Type */}
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Offer Type</h3>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setLocalFilters(prev => ({ ...prev, offerType: null }))}
-              className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                localFilters.offerType === null
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setLocalFilters(prev => ({ ...prev, offerType: 'wts' }))}
-              className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                localFilters.offerType === 'wts'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              WTS (Selling)
-            </button>
-            <button
-              onClick={() => setLocalFilters(prev => ({ ...prev, offerType: 'wtb' }))}
-              className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                localFilters.offerType === 'wtb'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              WTB (Buying)
-            </button>
-          </div>
-        </div>
-
-        {/* Reference Number */}
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Reference Number</h3>
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="e.g. 126610LN"
-              value={localFilters.reference}
-              onChange={(e) => setLocalFilters(prev => ({ ...prev, reference: e.target.value }))}
-              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-            />
-          </div>
-        </div>
-
-        {/* Country */}
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Country</h3>
-          <select
-            value={localFilters.countryCode || ''}
-            onChange={(e) => setLocalFilters(prev => ({ ...prev, countryCode: e.target.value || null }))}
-            className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white"
-          >
-            <option value="">All Countries</option>
-            {countries.map(country => (
-              <option key={country.code} value={country.code}>
-                {country.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <button
-            onClick={handleReset}
-            className="flex-1 py-3 px-4 border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Reset {activeFilterCount > 0 && `(${activeFilterCount})`}
-          </button>
-          <button
-            onClick={handleApply}
-            className="flex-1 py-3 px-4 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            Apply Filters
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Empty state component
 function EmptyState({ hasFilters }: { hasFilters: boolean }) {
   return (
@@ -289,66 +143,56 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
 }
 
 export function SocialSearchPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<SocialMessage[]>([]);
-  const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showFilters, setShowFilters] = useState(false);
   const [total, setTotal] = useState(0);
 
-  // Filter state
-  const [filters, setFilters] = useState<FilterState>({
-    offerType: null,
-    reference: '',
-    countryCode: null,
-  });
+  // Get social filters from config
+  const { data: socialFilters = [] } = useSocialFilters();
 
-  // Applied filters (for API calls)
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>(filters);
+  // Get countries from dynamic config
+  const countries: Country[] = useMemo(() => {
+    const countryFilter = socialFilters.find(f => f.key === 'country_code');
+    if (countryFilter && countryFilter.values.length > 0) {
+      return countryFilter.values
+        .filter(v => v.is_enabled)
+        .sort((a, b) => a.display_order - b.display_order)
+        .map(v => ({ code: v.value, name: v.label }));
+    }
+    // Fallback if config not loaded yet
+    return [
+      { code: 'US', name: 'United States' },
+      { code: 'UK', name: 'United Kingdom' },
+      { code: 'DE', name: 'Germany' },
+      { code: 'CH', name: 'Switzerland' },
+      { code: 'IT', name: 'Italy' },
+      { code: 'FR', name: 'France' },
+    ];
+  }, [socialFilters]);
 
-  useEffect(() => {
-    loadCountries();
-  }, []);
+  // Get filters from URL params
+  const offerType = searchParams.get('offer_type');
+  const countryCode = searchParams.get('country_code');
+  const reference = searchParams.get('reference');
 
   useEffect(() => {
     loadMessages();
-  }, [appliedFilters]);
-
-  const loadCountries = async () => {
-    try {
-      const response = await api.get('/whatsapp/social/countries');
-      if (response.data?.countries) {
-        setCountries(response.data.countries);
-      }
-    } catch (error) {
-      console.error('Failed to load countries:', error);
-      // Set some default countries
-      setCountries([
-        { code: 'US', name: 'United States' },
-        { code: 'UK', name: 'United Kingdom' },
-        { code: 'DE', name: 'Germany' },
-        { code: 'CH', name: 'Switzerland' },
-        { code: 'IT', name: 'Italy' },
-        { code: 'FR', name: 'France' },
-        { code: 'AE', name: 'United Arab Emirates' },
-        { code: 'HK', name: 'Hong Kong' },
-        { code: 'SG', name: 'Singapore' },
-        { code: 'JP', name: 'Japan' },
-      ]);
-    }
-  };
+  }, [searchParams]);
 
   const loadMessages = async () => {
     setLoading(true);
     try {
       const params: Record<string, string> = {};
-      if (appliedFilters.offerType) {
-        params.offer_type = appliedFilters.offerType;
+      if (offerType) {
+        params.offer_type = offerType;
       }
-      if (appliedFilters.reference) {
-        params.reference = appliedFilters.reference;
+      if (reference) {
+        params.reference = reference;
       }
-      if (appliedFilters.countryCode) {
-        params.country_code = appliedFilters.countryCode;
+      if (countryCode) {
+        params.country_code = countryCode;
       }
 
       const response = await api.get('/whatsapp/social/search', { params });
@@ -365,16 +209,32 @@ export function SocialSearchPage() {
     }
   };
 
-  const handleApplyFilters = (newFilters: FilterState) => {
-    setFilters(newFilters);
-    setAppliedFilters(newFilters);
+  const handleOfferTypeChange = (type: string | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (type) {
+      params.set('offer_type', type);
+    } else {
+      params.delete('offer_type');
+    }
+    setSearchParams(params);
   };
 
-  // Count active filters
+  const handleRemoveFilter = (key: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete(key);
+    setSearchParams(params);
+  };
+
+  const handleOpenFilters = () => {
+    // Build current filter params for the filter page
+    const params = new URLSearchParams(searchParams);
+    navigate(`/app/social-search/filters${params.toString() ? `?${params.toString()}` : ''}`);
+  };
+
+  // Count active filters (excluding offer_type since it has quick buttons)
   const activeFilterCount =
-    (appliedFilters.offerType ? 1 : 0) +
-    (appliedFilters.reference ? 1 : 0) +
-    (appliedFilters.countryCode ? 1 : 0);
+    (countryCode ? 1 : 0) +
+    (reference ? 1 : 0);
 
   return (
     <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
@@ -393,9 +253,9 @@ export function SocialSearchPage() {
             <div className="flex items-center gap-3">
               {/* Quick filter pills */}
               <button
-                onClick={() => handleApplyFilters({ ...appliedFilters, offerType: null })}
+                onClick={() => handleOfferTypeChange(null)}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  appliedFilters.offerType === null
+                  !offerType
                     ? 'bg-gray-900 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
@@ -403,9 +263,9 @@ export function SocialSearchPage() {
                 All
               </button>
               <button
-                onClick={() => handleApplyFilters({ ...appliedFilters, offerType: 'wts' })}
+                onClick={() => handleOfferTypeChange('wts')}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  appliedFilters.offerType === 'wts'
+                  offerType === 'wts'
                     ? 'bg-green-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
@@ -413,9 +273,9 @@ export function SocialSearchPage() {
                 WTS Offers
               </button>
               <button
-                onClick={() => handleApplyFilters({ ...appliedFilters, offerType: 'wtb' })}
+                onClick={() => handleOfferTypeChange('wtb')}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  appliedFilters.offerType === 'wtb'
+                  offerType === 'wtb'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
@@ -426,7 +286,7 @@ export function SocialSearchPage() {
 
             {/* Filter Button */}
             <button
-              onClick={() => setShowFilters(true)}
+              onClick={handleOpenFilters}
               className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
                 activeFilterCount > 0
                   ? 'border-gray-900 bg-gray-900 text-white'
@@ -441,25 +301,25 @@ export function SocialSearchPage() {
           </div>
 
           {/* Active filters display */}
-          {(appliedFilters.reference || appliedFilters.countryCode) && (
+          {(reference || countryCode) && (
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
               <span className="text-sm text-gray-500">Active filters:</span>
-              {appliedFilters.reference && (
+              {reference && (
                 <span className="px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-700 flex items-center gap-1">
-                  Ref: {appliedFilters.reference}
+                  Ref: {reference}
                   <button
-                    onClick={() => handleApplyFilters({ ...appliedFilters, reference: '' })}
+                    onClick={() => handleRemoveFilter('reference')}
                     className="ml-1 hover:text-gray-900"
                   >
                     <X className="w-3 h-3" />
                   </button>
                 </span>
               )}
-              {appliedFilters.countryCode && (
+              {countryCode && (
                 <span className="px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-700 flex items-center gap-1">
-                  {countries.find(c => c.code === appliedFilters.countryCode)?.name || appliedFilters.countryCode}
+                  {countries.find(c => c.code === countryCode)?.name || countryCode}
                   <button
-                    onClick={() => handleApplyFilters({ ...appliedFilters, countryCode: null })}
+                    onClick={() => handleRemoveFilter('country_code')}
                     className="ml-1 hover:text-gray-900"
                   >
                     <X className="w-3 h-3" />
@@ -514,15 +374,6 @@ export function SocialSearchPage() {
           )}
         </div>
       </div>
-
-      {/* Filter Modal */}
-      <FilterModal
-        isOpen={showFilters}
-        onClose={() => setShowFilters(false)}
-        filters={filters}
-        onApplyFilters={handleApplyFilters}
-        countries={countries}
-      />
     </div>
   );
 }

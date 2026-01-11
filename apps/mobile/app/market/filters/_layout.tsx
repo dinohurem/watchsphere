@@ -9,9 +9,6 @@ export default function FiltersLayout() {
       }}
     >
       <Stack.Screen name="index" />
-      <Stack.Screen name="brand" />
-      <Stack.Screen name="location" />
-      <Stack.Screen name="year" />
       <Stack.Screen name="[type]" />
     </Stack>
   );

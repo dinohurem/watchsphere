@@ -15,6 +15,8 @@ interface ProfileData {
   email: string;
   name: string;
   phone: string | null;
+  whatsapp_phone: string | null;
+  telegram_username: string | null;
   profile_image_url: string | null;
   profile_image_thumbnail_url: string | null;
 }
@@ -30,6 +32,8 @@ export default function ProfileSettingsScreen() {
     try {
       setLoading(true);
       const response = await api.get('/profile/me');
+      console.log('Profile Settings - API response:', JSON.stringify(response.data, null, 2));
+      console.log('Profile Settings - profile_image_url:', response.data?.profile_image_url);
       setProfile(response.data);
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -40,6 +44,8 @@ export default function ProfileSettingsScreen() {
           email: user.email,
           name: user.name,
           phone: null,
+          whatsapp_phone: null,
+          telegram_username: null,
           profile_image_url: null,
           profile_image_thumbnail_url: null,
         });
@@ -69,7 +75,6 @@ export default function ProfileSettingsScreen() {
 
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -102,7 +107,10 @@ export default function ProfileSettingsScreen() {
         },
       });
 
+      console.log('Upload response:', JSON.stringify(response.data, null, 2));
+
       if (response.data) {
+        console.log('New profile image URL:', response.data.url);
         // Update local profile with new image URL
         setProfile(prev => prev ? {
           ...prev,
@@ -329,6 +337,38 @@ export default function ProfileSettingsScreen() {
             <View style={styles.fieldRow}>
               <Text style={profile?.phone ? styles.fieldValue : styles.fieldPlaceholder}>
                 {profile?.phone || 'Enter phone number'}
+              </Text>
+              <ChevronRight size={20} color={colors.textSecondary} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.fieldItem}
+            onPress={() => router.push({
+              pathname: '/field-edit',
+              params: { field: 'whatsapp_phone', value: profile?.whatsapp_phone || '' }
+            } as any)}
+          >
+            <Text style={styles.fieldLabel}>WhatsApp Info</Text>
+            <View style={styles.fieldRow}>
+              <Text style={profile?.whatsapp_phone ? styles.fieldValue : styles.fieldPlaceholder}>
+                {profile?.whatsapp_phone || 'Enter WhatsApp phone number'}
+              </Text>
+              <ChevronRight size={20} color={colors.textSecondary} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.fieldItem}
+            onPress={() => router.push({
+              pathname: '/field-edit',
+              params: { field: 'telegram_username', value: profile?.telegram_username || '' }
+            } as any)}
+          >
+            <Text style={styles.fieldLabel}>Telegram Info</Text>
+            <View style={styles.fieldRow}>
+              <Text style={profile?.telegram_username ? styles.fieldValue : styles.fieldPlaceholder}>
+                {profile?.telegram_username || 'Enter @username'}
               </Text>
               <ChevronRight size={20} color={colors.textSecondary} />
             </View>
