@@ -516,12 +516,20 @@ export default function ProfileScreen() {
           {/* User Name */}
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{user?.name || 'Fabian Wirtz'}</Text>
-            {/* Rating */}
-            <View style={styles.ratingRow}>
+            {/* Rating - Clickable to go to user profile */}
+            <TouchableOpacity
+              style={styles.ratingRow}
+              onPress={() => {
+                if (user?.id) {
+                  router.push(`/user/${user.id}` as any);
+                }
+              }}
+              activeOpacity={0.7}
+            >
               <RatingStarIcon />
               <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
               <Text style={styles.reviewCountText}>({reviewCount} reviews)</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 

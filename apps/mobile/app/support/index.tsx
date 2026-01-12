@@ -117,21 +117,17 @@ function BugIcon() {
 
 interface SupportItemProps {
   title: string;
-  icon: React.ReactNode;
   onPress: () => void;
 }
 
-function SupportItem({ title, icon, onPress }: SupportItemProps) {
+function SupportItem({ title, onPress }: SupportItemProps) {
   return (
     <TouchableOpacity
       style={styles.supportItem}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={styles.supportItemLeft}>
-        {icon}
-        <Text style={styles.supportItemText}>{title}</Text>
-      </View>
+      <Text style={styles.supportItemText}>{title}</Text>
       <ChevronRightIcon />
     </TouchableOpacity>
   );
@@ -165,17 +161,14 @@ export default function SupportScreen() {
         <View style={styles.supportList}>
           <SupportItem
             title="Help Center"
-            icon={<HelpCircleIcon />}
             onPress={() => router.push('/support/help-center' as any)}
           />
           <SupportItem
             title="Disputes"
-            icon={<AlertTriangleIcon />}
             onPress={() => router.push('/support/disputes' as any)}
           />
           <SupportItem
             title="Report an Issue"
-            icon={<BugIcon />}
             onPress={() => router.push('/support/report-issue' as any)}
           />
         </View>
@@ -236,11 +229,6 @@ const styles = StyleSheet.create({
     borderRadius: sp(16),
     paddingHorizontal: wp(16),
     paddingVertical: hp(16),
-  },
-  supportItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: wp(12),
   },
   supportItemText: {
     fontFamily: 'HankenGrotesk_600SemiBold',

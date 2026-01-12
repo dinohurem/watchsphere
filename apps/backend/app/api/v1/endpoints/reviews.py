@@ -490,6 +490,158 @@ async def admin_delete_review(
     return {"message": "Review deleted successfully"}
 
 
+class AdminReviewCreateRequest(BaseModel):
+    reviewer_id: str
+    reviewed_user_id: str
+    rating: int  # 1-5 stars
+    comment: Optional[str] = None
+
+
+class AdminReviewUpdateRequest(BaseModel):
+    rating: Optional[int] = None
+    comment: Optional[str] = None
+
+
+@router.post("/admin", response_model=ReviewResponse)
+async def admin_create_review(
+    data: AdminReviewCreateRequest,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Create a review on behalf of any user (Admin only)"""
+    # Validate rating
+    if data.rating < 1 or data.rating > 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rating must be between 1 and 5"
+        )
+
+    # Can't review yourself
+    if data.reviewer_id == data.reviewed_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user cannot review themselves"
+        )
+
+    # Get reviewer
+    reviewer = await User.get(PydanticObjectId(data.reviewer_id))
+    if not reviewer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reviewer not found"
+        )
+
+    # Get reviewed user
+    reviewed_user = await User.get(PydanticObjectId(data.reviewed_user_id))
+    if not reviewed_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reviewed user not found"
+        )
+
+    # Check if reviewer already reviewed this user
+    existing_review = await Review.find_one(
+        Review.reviewer_id == data.reviewer_id,
+        Review.reviewed_user_id == data.reviewed_user_id
+    )
+    if existing_review:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This user has already reviewed this person"
+        )
+
+    # Create review
+    review = Review(
+        reviewer_id=data.reviewer_id,
+        reviewer_name=reviewer.name,
+        reviewer_email=reviewer.email,
+        reviewer_profile_image=reviewer.profile_image_thumbnail_url or reviewer.profile_image_url,
+        reviewed_user_id=data.reviewed_user_id,
+        reviewed_user_name=reviewed_user.name,
+        reviewed_user_email=reviewed_user.email,
+        rating=data.rating,
+        comment=data.comment,
+    )
+    await review.insert()
+
+    # Update reviewed user's rating stats
+    await update_user_rating_stats(data.reviewed_user_id)
+
+    # Log activity
+    await log_activity(
+        activity_type=ActivityType.REVIEW_CREATED,
+        description=f"Admin created review: {reviewer.name} reviewed {reviewed_user.name} ({data.rating} stars)",
+        user=current_admin,
+        entity_type=EntityType.REVIEW,
+        entity_id=str(review.id),
+        metadata={
+            "rating": data.rating,
+            "reviewer_id": data.reviewer_id,
+            "reviewer_name": reviewer.name,
+            "reviewed_user_id": data.reviewed_user_id,
+            "reviewed_user_name": reviewed_user.name,
+            "created_by_admin": True,
+        }
+    )
+
+    return {
+        "id": str(review.id),
+        "reviewer_id": review.reviewer_id,
+        "reviewer_name": review.reviewer_name,
+        "reviewer_profile_image": review.reviewer_profile_image,
+        "reviewed_user_id": review.reviewed_user_id,
+        "reviewed_user_name": review.reviewed_user_name,
+        "rating": review.rating,
+        "comment": review.comment,
+        "created_at": review.created_at,
+        "updated_at": review.updated_at,
+    }
+
+
+@router.patch("/admin/{review_id}", response_model=ReviewResponse)
+async def admin_update_review(
+    review_id: str,
+    data: AdminReviewUpdateRequest,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Update any review (Admin only)"""
+    review = await Review.get(PydanticObjectId(review_id))
+    if not review:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review not found"
+        )
+
+    # Validate rating if provided
+    if data.rating is not None and (data.rating < 1 or data.rating > 5):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rating must be between 1 and 5"
+        )
+
+    # Update fields
+    update_data = data.model_dump(exclude_unset=True)
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        await review.set(update_data)
+
+    # Update reviewed user's rating stats if rating changed
+    if data.rating is not None:
+        await update_user_rating_stats(review.reviewed_user_id)
+
+    return {
+        "id": str(review.id),
+        "reviewer_id": review.reviewer_id,
+        "reviewer_name": review.reviewer_name,
+        "reviewer_profile_image": review.reviewer_profile_image,
+        "reviewed_user_id": review.reviewed_user_id,
+        "reviewed_user_name": review.reviewed_user_name,
+        "rating": review.rating,
+        "comment": review.comment,
+        "created_at": review.created_at,
+        "updated_at": review.updated_at,
+    }
+
+
 @router.get("/admin/stats")
 async def admin_review_stats(
     current_admin: User = Depends(get_current_admin_user),

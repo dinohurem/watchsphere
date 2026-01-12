@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
@@ -11,6 +11,60 @@ import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import { BackArrow, ChevronRight } from '@/components/icons';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+
+// Chat Icon for in-app chat
+function ChatIcon({ size = 24, color = "#212121" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 11.5C21.0034 12.8199 20.6951 14.1219 20.1 15.3C19.3944 16.7118 18.3098 17.8992 16.9674 18.7293C15.6251 19.5594 14.0782 19.9994 12.5 20C11.1801 20.0035 9.87812 19.6951 8.7 19.1L3 21L4.9 15.3C4.30493 14.1219 3.99656 12.8199 4 11.5C4.00061 9.92179 4.44061 8.37488 5.27072 7.03258C6.10083 5.69028 7.28825 4.6056 8.7 3.90003C9.87812 3.30496 11.1801 2.99659 12.5 3.00003H13C15.0843 3.11502 17.053 3.99479 18.5291 5.47089C20.0052 6.94699 20.885 8.91568 21 11V11.5Z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// WhatsApp Icon
+function WhatsAppIcon({ size = 24, color = "#25D366" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+// Telegram Icon
+function TelegramIcon({ size = 24, color = "#0088CC" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.962 6.502-1.359 8.627-.168.9-.5 1.201-.82 1.23-.697.064-1.226-.461-1.901-.903-1.056-.692-1.653-1.123-2.678-1.799-1.185-.781-.417-1.21.258-1.911.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.139-5.062 3.345-.479.329-.913.489-1.302.481-.428-.009-1.252-.242-1.865-.442-.751-.244-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.831-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635.099-.002.321.023.465.141.121.1.155.234.171.328.015.094.035.309.02.476z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+// Close Icon
+function CloseIcon({ size = 24, color = "#212121" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M18 6L6 18M6 6l12 12"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 // Reply Icon
 function ReplyIcon({ size = 24, color = "#212121" }: { size?: number; color?: string }) {
@@ -47,6 +101,17 @@ interface ConversationDetails {
   id: string;
   name: string;
   avatar?: string;
+  participant_id?: string;
+}
+
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  profile_image_url?: string;
+  whatsapp_phone?: string;
+  telegram_username?: string;
 }
 
 interface WatchInfo {
@@ -58,10 +123,11 @@ interface WatchInfo {
 }
 
 export default function ChatDetailScreen() {
-  const { id, name, avatar, watchId, watchBrand, watchModel, watchPrice, watchImageUrl, replyToId, replyToContent, replyToSenderName, replyToSenderId } = useLocalSearchParams<{
+  const { id, name, avatar, participantId, watchId, watchBrand, watchModel, watchPrice, watchImageUrl, replyToId, replyToContent, replyToSenderName, replyToSenderId } = useLocalSearchParams<{
     id: string;
     name?: string;
     avatar?: string;
+    participantId?: string;
     watchId?: string;
     watchBrand?: string;
     watchModel?: string;
@@ -83,6 +149,9 @@ export default function ChatDetailScreen() {
   const [showMessageOptions, setShowMessageOptions] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyingTo, setReplyingTo] = useState<QuotedMessage | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const flashListRef = useRef<FlashList<Message>>(null);
   const currentUserId = useRef<string>('');
 
@@ -93,7 +162,7 @@ export default function ChatDetailScreen() {
     if (id) {
       // Set conversation from params if available (temporary, will be updated by API)
       if (name) {
-        setConversation({ id, name, avatar: avatar || undefined });
+        setConversation({ id, name, avatar: avatar || undefined, participant_id: participantId || undefined });
       }
       // Set watch info from params if available
       if (watchId && watchBrand && watchModel && watchPrice) {
@@ -133,11 +202,69 @@ export default function ChatDetailScreen() {
           id: response.data.id,
           name: response.data.name,
           avatar: response.data.avatar || undefined,
+          participant_id: response.data.participant_id || undefined,
         });
       }
     } catch (error) {
       console.error('Error loading conversation details:', error);
       // Keep using params if API fails
+    }
+  };
+
+  const loadUserProfile = async (userId: string) => {
+    try {
+      setLoadingProfile(true);
+      const response = await api.get(`/profile/user/${userId}`);
+      if (response.data) {
+        setUserProfile(response.data);
+        setShowProfileModal(true);
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      Alert.alert('Error', 'Failed to load user profile');
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  const handleOpenWhatsApp = () => {
+    if (!userProfile?.whatsapp_phone) {
+      Alert.alert('Not Available', 'This user has not set up their WhatsApp number');
+      return;
+    }
+    const phone = userProfile.whatsapp_phone.replace(/[^0-9+]/g, '');
+    const url = `whatsapp://send?phone=${phone}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'WhatsApp is not installed on your device');
+    });
+  };
+
+  const handleOpenTelegram = () => {
+    if (!userProfile?.telegram_username) {
+      Alert.alert('Not Available', 'This user has not set up their Telegram username');
+      return;
+    }
+    const username = userProfile.telegram_username.replace('@', '');
+    const url = `tg://resolve?domain=${username}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Telegram is not installed on your device');
+    });
+  };
+
+  const handleHeaderPress = () => {
+    // Try to get participant ID from conversation, or find it from messages
+    let targetUserId = conversation?.participant_id;
+
+    if (!targetUserId && messages.length > 0) {
+      // Find the other participant from messages
+      const otherUserMessage = messages.find(m => m.sender_id !== currentUserId.current);
+      if (otherUserMessage) {
+        targetUserId = otherUserMessage.sender_id;
+      }
+    }
+
+    if (targetUserId && targetUserId !== currentUserId.current) {
+      loadUserProfile(targetUserId);
     }
   };
 
@@ -476,6 +603,98 @@ export default function ChatDetailScreen() {
       fontFamily: fonts.medium,
       color: colors.text,
     },
+    // Profile modal styles
+    profileModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    profileModalContent: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: sp(20),
+      borderTopRightRadius: sp(20),
+      paddingHorizontal: wp(24),
+      paddingTop: hp(20),
+      paddingBottom: hp(40),
+      alignItems: 'center',
+    },
+    profileCloseButton: {
+      position: 'absolute',
+      top: hp(16),
+      right: wp(16),
+      padding: sp(4),
+      zIndex: 1,
+    },
+    profileImageContainer: {
+      marginTop: hp(20),
+      marginBottom: hp(16),
+    },
+    profileImage: {
+      width: sp(100),
+      height: sp(100),
+      borderRadius: sp(50),
+    },
+    profileImagePlaceholder: {
+      width: sp(100),
+      height: sp(100),
+      borderRadius: sp(50),
+      backgroundColor: colors.backgroundSecondary,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    profileImageText: {
+      fontSize: fp(36),
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+    },
+    profileName: {
+      fontSize: fp(22),
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      marginBottom: hp(4),
+    },
+    profileRole: {
+      fontSize: fp(14),
+      fontFamily: fonts.regular,
+      color: colors.textSecondary,
+      textTransform: 'capitalize',
+      marginBottom: hp(24),
+    },
+    contactButtons: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: wp(32),
+    },
+    contactButton: {
+      alignItems: 'center',
+    },
+    contactIconContainer: {
+      width: sp(56),
+      height: sp(56),
+      borderRadius: sp(28),
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: hp(8),
+    },
+    contactLabel: {
+      fontSize: fp(12),
+      fontFamily: fonts.medium,
+      color: colors.text,
+    },
+    viewProfileButton: {
+      backgroundColor: colors.text,
+      borderRadius: sp(999),
+      paddingVertical: hp(14),
+      paddingHorizontal: wp(24),
+      marginTop: hp(16),
+      width: '100%',
+      alignItems: 'center',
+    },
+    viewProfileButtonText: {
+      fontSize: fp(16),
+      fontFamily: fonts.semiBold,
+      color: colors.background,
+    },
   });
 
   return (
@@ -491,7 +710,12 @@ export default function ChatDetailScreen() {
             <BackArrow size={24} color={colors.text} />
           </TouchableOpacity>
 
-          <View style={styles.headerCenter}>
+          <TouchableOpacity
+            style={styles.headerCenter}
+            onPress={handleHeaderPress}
+            disabled={loadingProfile}
+            activeOpacity={0.7}
+          >
             {conversation?.avatar ? (
               <Image source={{ uri: conversation.avatar }} style={styles.headerAvatar} />
             ) : (
@@ -502,7 +726,8 @@ export default function ChatDetailScreen() {
               </View>
             )}
             <Text style={styles.headerName}>{conversation?.name || name || 'Chat'}</Text>
-          </View>
+            {loadingProfile && <ActivityIndicator size="small" color={colors.text} />}
+          </TouchableOpacity>
 
           <View style={styles.headerRight} />
         </View>
@@ -511,7 +736,16 @@ export default function ChatDetailScreen() {
         {watchInfo && (
           <TouchableOpacity
             style={styles.watchCard}
-            onPress={() => router.push(`/market/${watchInfo.id}` as any)}
+            onPress={() => router.push({
+              pathname: '/market/watch-details',
+              params: {
+                orderId: watchInfo.id,
+                brand: watchInfo.brand,
+                model: watchInfo.model,
+                price: watchInfo.price.toString(),
+                fromOrderBook: 'true',
+              },
+            } as any)}
           >
             {watchInfo.imageUrl ? (
               <Image source={{ uri: watchInfo.imageUrl }} style={styles.watchImage} />
@@ -588,6 +822,97 @@ export default function ChatDetailScreen() {
               <TouchableOpacity style={styles.modalOption} onPress={handleReply}>
                 <ReplyIcon size={sp(24)} color={colors.text} />
                 <Text style={styles.modalOptionText}>Reply</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* User Profile Modal */}
+        <Modal
+          visible={showProfileModal}
+          animationType="none"
+          transparent={true}
+          onRequestClose={() => setShowProfileModal(false)}
+        >
+          <Pressable
+            style={styles.profileModalOverlay}
+            onPress={() => setShowProfileModal(false)}
+          >
+            <Pressable style={styles.profileModalContent} onPress={(e) => e.stopPropagation()}>
+              <TouchableOpacity
+                onPress={() => setShowProfileModal(false)}
+                style={styles.profileCloseButton}
+              >
+                <CloseIcon size={24} color={colors.text} />
+              </TouchableOpacity>
+
+              {/* Profile Image */}
+              <View style={styles.profileImageContainer}>
+                {userProfile?.profile_image_url ? (
+                  <Image
+                    source={{ uri: userProfile.profile_image_url }}
+                    style={styles.profileImage}
+                  />
+                ) : (
+                  <View style={styles.profileImagePlaceholder}>
+                    <Text style={styles.profileImageText}>
+                      {userProfile?.name?.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Name */}
+              <Text style={styles.profileName}>{userProfile?.name}</Text>
+              <Text style={styles.profileRole}>{userProfile?.role}</Text>
+
+              {/* Contact Buttons */}
+              <View style={styles.contactButtons}>
+                <TouchableOpacity
+                  style={styles.contactButton}
+                  onPress={() => {
+                    setShowProfileModal(false);
+                    // Already in a chat with this user
+                  }}
+                >
+                  <View style={[styles.contactIconContainer, { backgroundColor: 'rgba(33, 33, 33, 0.1)' }]}>
+                    <ChatIcon size={sp(28)} color="#212121" />
+                  </View>
+                  <Text style={styles.contactLabel}>Chat</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.contactButton}
+                  onPress={handleOpenWhatsApp}
+                >
+                  <View style={[styles.contactIconContainer, { backgroundColor: 'rgba(37, 211, 102, 0.1)' }]}>
+                    <WhatsAppIcon size={sp(28)} />
+                  </View>
+                  <Text style={styles.contactLabel}>WhatsApp</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.contactButton}
+                  onPress={handleOpenTelegram}
+                >
+                  <View style={[styles.contactIconContainer, { backgroundColor: 'rgba(0, 136, 204, 0.1)' }]}>
+                    <TelegramIcon size={sp(28)} />
+                  </View>
+                  <Text style={styles.contactLabel}>Telegram</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* View Profile Button */}
+              <TouchableOpacity
+                style={styles.viewProfileButton}
+                onPress={() => {
+                  setShowProfileModal(false);
+                  if (userProfile?.id) {
+                    router.push(`/user/${userProfile.id}` as any);
+                  }
+                }}
+              >
+                <Text style={styles.viewProfileButtonText}>View Profile</Text>
               </TouchableOpacity>
             </Pressable>
           </Pressable>

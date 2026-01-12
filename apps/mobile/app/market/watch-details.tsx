@@ -275,8 +275,9 @@ const MOCK_SPECS = {
 
 export default function WatchDetailsScreen() {
   const params = useLocalSearchParams<WatchDetailsParams>();
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const [isFavorite, setIsFavorite] = useState(false);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [userProfileImage, setUserProfileImage] = useState<string | null>(null);
@@ -297,7 +298,7 @@ export default function WatchDetailsScreen() {
   const brand = params.brand || 'Audemars Piguet';
   const model = params.model || 'Royal Oak';
   const reference = params.reference || '26240OR Blue';
-  const userName = params.user_name || 'Seller';
+  const userName = params.user_name || 'N/A';
   const orderUserId = params.user_id;
   const orderType = params.order_type;
 
@@ -326,6 +327,53 @@ export default function WatchDetailsScreen() {
     };
     fetchOrderDetails();
   }, [params.orderId]);
+
+  // Check watchlist status on mount
+  useEffect(() => {
+    const checkWatchlistStatus = async () => {
+      if (!isAuthenticated) return;
+      try {
+        const response = await api.get('/profile/watchlist');
+        if (response.data && Array.isArray(response.data)) {
+          const isInList = response.data.some((item: any) =>
+            item.reference === reference || item.watch_id === params.orderId
+          );
+          setIsFavorite(isInList);
+        }
+      } catch (error) {
+        console.log('Could not check watchlist status');
+      }
+    };
+    checkWatchlistStatus();
+  }, [isAuthenticated, reference, params.orderId]);
+
+  const toggleWatchlist = async () => {
+    if (!isAuthenticated) {
+      router.push('/(auth)/login');
+      return;
+    }
+
+    setWatchlistLoading(true);
+    try {
+      if (isFavorite) {
+        // Remove from watchlist
+        await api.delete(`/profile/watchlist/${reference}`);
+        setIsFavorite(false);
+      } else {
+        // Add to watchlist
+        await api.post('/profile/watchlist', {
+          brand: brand,
+          model: model,
+          reference: reference,
+        });
+        setIsFavorite(true);
+      }
+    } catch (error) {
+      console.error('Failed to update watchlist:', error);
+    } finally {
+      setWatchlistLoading(false);
+    }
+  };
 
   // Use API-fetched name, or params name, or fallback
   const effectiveUserName = displayUserName || userName;
@@ -447,7 +495,8 @@ export default function WatchDetailsScreen() {
             {!isOwnOrder && (
               <TouchableOpacity
                 style={styles.priceStarButton}
-                onPress={() => setIsFavorite(!isFavorite)}
+                onPress={toggleWatchlist}
+                disabled={watchlistLoading}
               >
                 <StarIcon filled={isFavorite} />
               </TouchableOpacity>
@@ -488,16 +537,22 @@ export default function WatchDetailsScreen() {
             >
               <Text style={styles.quickInfoLabel}>{orderType === 'sell' ? 'Seller' : 'Buyer'}</Text>
               <View style={styles.sellerRow}>
-                <View style={styles.sellerAvatar}>
-                  {userProfileImage ? (
-                    <Image source={{ uri: userProfileImage }} style={styles.sellerAvatarImage} />
-                  ) : (
-                    <UserIcon />
-                  )}
-                </View>
+                {effectiveUserName !== 'N/A' && (
+                  <View style={styles.sellerAvatar}>
+                    {userProfileImage ? (
+                      <Image source={{ uri: userProfileImage }} style={styles.sellerAvatarImage} />
+                    ) : (
+                      <UserIcon />
+                    )}
+                  </View>
+                )}
                 <Text style={[styles.sellerName, orderUserId && styles.sellerNameClickable]}>{effectiveUserName}</Text>
-                <RatingStarIcon />
-                <Text style={styles.sellerRating}>{userRating.toFixed(1)} ({userReviewCount})</Text>
+                {effectiveUserName !== 'N/A' && (
+                  <>
+                    <RatingStarIcon />
+                    <Text style={styles.sellerRating}>{userRating.toFixed(1)} ({userReviewCount})</Text>
+                  </>
+                )}
               </View>
             </TouchableOpacity>
           </View>
