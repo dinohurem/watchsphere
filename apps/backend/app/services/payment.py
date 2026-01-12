@@ -10,6 +10,36 @@ from app.models.billing import (
     Subscription, SubscriptionPlan, SubscriptionStatus,
     Billing, BillingType, BillingStatus
 )
+from app.models.activity_log import ActivityLog, ActivityType, EntityType
+
+
+async def log_payment_activity(
+    activity_type: ActivityType,
+    description: str,
+    user_id: Optional[str] = None,
+    user_name: Optional[str] = None,
+    user_email: Optional[str] = None,
+    entity_type: Optional[EntityType] = None,
+    entity_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Log a payment-related activity"""
+    try:
+        activity = ActivityLog(
+            user_id=user_id,
+            user_name=user_name,
+            user_email=user_email,
+            activity_type=activity_type,
+            description=description,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            metadata=metadata or {},
+            platform="web",
+        )
+        await activity.insert()
+    except Exception as e:
+        # Don't fail the payment flow if logging fails
+        print(f"Failed to log activity: {e}")
 
 
 class MonriPaymentService:
@@ -19,8 +49,10 @@ class MonriPaymentService:
         self.merchant_key = settings.MONRI_MERCHANT_KEY
         self.authenticity_token = settings.MONRI_AUTHENTICITY_TOKEN
         self.api_url = settings.MONRI_API_URL
+        self.form_endpoint = getattr(settings, 'MONRI_FORM_ENDPOINT', f"{settings.MONRI_API_URL}/v2/form")
         self.subscription_price = settings.MONRI_SUBSCRIPTION_PRICE
         self.currency = settings.MONRI_CURRENCY
+        self.debug = getattr(settings, 'MONRI_DEBUG', False)
 
     def _generate_digest(self, order_number: str, amount: int, currency: str) -> str:
         """Generate digest for Monri API authentication"""
@@ -68,7 +100,7 @@ class MonriPaymentService:
         }
 
         return {
-            "form_url": f"{self.api_url}/v2/form",
+            "form_url": self.form_endpoint,
             "form_data": form_data,
             "subscription_details": {
                 "price": self.subscription_price,
@@ -113,14 +145,17 @@ class MonriPaymentService:
             billing.updated_at = datetime.utcnow()
             await billing.save()
 
-            # Update subscription
+            # Update or create subscription
             subscription = await Subscription.find_one(
                 Subscription.user_id == billing.user_id
             )
 
+            is_renewal = False
+            now = datetime.utcnow()
+
             if subscription:
-                # Activate/renew subscription
-                now = datetime.utcnow()
+                # Activate/renew existing subscription
+                is_renewal = subscription.plan == SubscriptionPlan.PREMIUM and subscription.status == SubscriptionStatus.ACTIVE
                 subscription.status = SubscriptionStatus.ACTIVE
                 subscription.plan = SubscriptionPlan.PREMIUM
                 subscription.price_monthly = self.subscription_price
@@ -138,6 +173,56 @@ class MonriPaymentService:
                 subscription.monri_subscription_id = transaction_id
                 subscription.updated_at = now
                 await subscription.save()
+            else:
+                # Create new subscription record
+                subscription = Subscription(
+                    user_id=billing.user_id,
+                    user_name=billing.user_name,
+                    user_email=billing.user_email,
+                    plan=SubscriptionPlan.PREMIUM,
+                    status=SubscriptionStatus.ACTIVE,
+                    price_monthly=self.subscription_price,
+                    currency=self.currency,
+                    started_at=now,
+                    expires_at=now + relativedelta(months=1),
+                    next_billing_date=now + relativedelta(months=1),
+                    auto_renew=True,
+                    monri_subscription_id=transaction_id,
+                )
+                await subscription.insert()
+
+            # Log the payment activity
+            await log_payment_activity(
+                activity_type=ActivityType.PAYMENT_COMPLETED,
+                description=f"Payment of {billing.amount} {billing.currency} completed for Premium subscription",
+                user_id=billing.user_id,
+                user_name=billing.user_name,
+                user_email=billing.user_email,
+                entity_type=EntityType.PAYMENT,
+                entity_id=str(billing.id),
+                metadata={
+                    "amount": billing.amount,
+                    "currency": billing.currency,
+                    "transaction_id": transaction_id,
+                    "order_number": order_number,
+                }
+            )
+
+            # Log subscription activation/renewal
+            await log_payment_activity(
+                activity_type=ActivityType.SUBSCRIPTION_RENEWED if is_renewal else ActivityType.SUBSCRIPTION_ACTIVATED,
+                description=f"Premium subscription {'renewed' if is_renewal else 'activated'} until {subscription.expires_at.strftime('%Y-%m-%d') if subscription else 'N/A'}",
+                user_id=billing.user_id,
+                user_name=billing.user_name,
+                user_email=billing.user_email,
+                entity_type=EntityType.SUBSCRIPTION,
+                entity_id=str(subscription.id) if subscription else None,
+                metadata={
+                    "plan": "premium",
+                    "expires_at": subscription.expires_at.isoformat() if subscription and subscription.expires_at else None,
+                    "is_renewal": is_renewal,
+                }
+            )
 
             return {
                 "success": True,
@@ -149,6 +234,24 @@ class MonriPaymentService:
             billing.status = BillingStatus.FAILED
             billing.updated_at = datetime.utcnow()
             await billing.save()
+
+            # Log failed payment
+            await log_payment_activity(
+                activity_type=ActivityType.PAYMENT_FAILED,
+                description=f"Payment of {billing.amount} {billing.currency} failed for Premium subscription",
+                user_id=billing.user_id,
+                user_name=billing.user_name,
+                user_email=billing.user_email,
+                entity_type=EntityType.PAYMENT,
+                entity_id=str(billing.id),
+                metadata={
+                    "amount": billing.amount,
+                    "currency": billing.currency,
+                    "transaction_id": transaction_id,
+                    "order_number": order_number,
+                    "reason": "declined",
+                }
+            )
 
             return {
                 "success": False,
@@ -215,7 +318,11 @@ async def check_subscription_status(user_id: str) -> Dict[str, Any]:
             "plan": None,
             "is_trial": False,
             "trial_days_remaining": 0,
+            "subscription_days_remaining": 0,
             "expires_at": None,
+            "price_monthly": settings.MONRI_SUBSCRIPTION_PRICE,
+            "currency": settings.MONRI_CURRENCY,
+            "auto_renew": None,
         }
 
     now = datetime.utcnow()

@@ -12,3 +12,4 @@ from .order import Order, OrderType, OrderCondition, OrderStatus
 from .listing_field import ListingField, ListingFieldValue, FieldType
 from .filter import Filter, FilterValue, FilterCategory, FilterType
 from .support import Dispute, DisputeStatus, Issue, IssueStatus
+from .auth_handoff import AuthHandoffToken

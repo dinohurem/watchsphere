@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ChevronLeft, AISparkle } from '@/components/icons';
+import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path } from 'react-native-svg';
@@ -687,7 +688,7 @@ export default function AIChatScreen() {
   });
 
   return (
-    <>
+    <SubscriptionOverlay feature="ai_chat" showBackButton>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
@@ -792,7 +793,7 @@ export default function AIChatScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </>
+    </SubscriptionOverlay>
   );
 }
 

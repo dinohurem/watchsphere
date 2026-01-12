@@ -1,6 +1,7 @@
 export const API_CONFIG = {
   baseURL: process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1',
   wsURL: process.env.EXPO_PUBLIC_WS_BASE_URL || 'ws://localhost:8000/ws',
+  webURL: process.env.EXPO_PUBLIC_WEB_URL || 'http://localhost:3000',
   timeout: 30000,
 };
 

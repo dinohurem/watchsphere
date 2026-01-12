@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { LogoIcon } from '@/components/LogoIcon';
 import { User } from '@/components/icons';
+import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -533,105 +534,110 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Buy Orders Section */}
-        <View style={styles.favoritesSection}>
-          <View style={styles.favoritesHeader}>
-            <Text style={styles.favoritesTitle}>Buy Orders</Text>
-            {buyOrders.length > 0 && (
-              <TouchableOpacity
-                style={styles.seeAllButton}
-                activeOpacity={0.7}
-                onPress={() => router.push('/profile/buy-orders' as any)}
-              >
-                <Text style={styles.seeAllText}>See All</Text>
-                <ChevronRightSmall />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {buyOrders.length > 0 ? (
-            <View style={styles.watchGrid}>
-              {renderOrdersGrid(buyOrders.slice(0, 4))}
-            </View>
-          ) : (
-            <View style={styles.emptyStateContainer}>
-              <View style={styles.emptyIconContainer}>
-                <ShoppingBagIcon />
+        {/* Orders and Favorites - wrapped in single subscription overlay */}
+        <SubscriptionOverlay feature="orders" compact>
+          <>
+            {/* Buy Orders Section */}
+            <View style={styles.favoritesSection}>
+              <View style={styles.favoritesHeader}>
+                <Text style={styles.favoritesTitle}>Buy Orders</Text>
+                {buyOrders.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.seeAllButton}
+                    activeOpacity={0.7}
+                    onPress={() => router.push('/profile/buy-orders' as any)}
+                  >
+                    <Text style={styles.seeAllText}>See All</Text>
+                    <ChevronRightSmall />
+                  </TouchableOpacity>
+                )}
               </View>
-              <Text style={styles.emptyTitle}>No buy orders yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Create buy orders to see them here
-              </Text>
-            </View>
-          )}
-        </View>
 
-        {/* Sell Orders Section */}
-        <View style={styles.favoritesSection}>
-          <View style={styles.favoritesHeader}>
-            <Text style={styles.favoritesTitle}>Sell Orders</Text>
-            {sellOrders.length > 0 && (
-              <TouchableOpacity
-                style={styles.seeAllButton}
-                activeOpacity={0.7}
-                onPress={() => router.push('/profile/sell-orders' as any)}
-              >
-                <Text style={styles.seeAllText}>See All</Text>
-                <ChevronRightSmall />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {sellOrders.length > 0 ? (
-            <View style={styles.watchGrid}>
-              {renderOrdersGrid(sellOrders.slice(0, 4))}
+              {buyOrders.length > 0 ? (
+                <View style={styles.watchGrid}>
+                  {renderOrdersGrid(buyOrders.slice(0, 4))}
+                </View>
+              ) : (
+                <View style={styles.emptyStateContainer}>
+                  <View style={styles.emptyIconContainer}>
+                    <ShoppingBagIcon />
+                  </View>
+                  <Text style={styles.emptyTitle}>No buy orders yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Create buy orders to see them here
+                  </Text>
+                </View>
+              )}
             </View>
-          ) : (
-            <View style={styles.emptyStateContainer}>
-              <View style={styles.emptyIconContainer}>
-                <TagIcon />
+
+            {/* Sell Orders Section */}
+            <View style={styles.favoritesSection}>
+              <View style={styles.favoritesHeader}>
+                <Text style={styles.favoritesTitle}>Sell Orders</Text>
+                {sellOrders.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.seeAllButton}
+                    activeOpacity={0.7}
+                    onPress={() => router.push('/profile/sell-orders' as any)}
+                  >
+                    <Text style={styles.seeAllText}>See All</Text>
+                    <ChevronRightSmall />
+                  </TouchableOpacity>
+                )}
               </View>
-              <Text style={styles.emptyTitle}>No sell orders yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Create sell orders to see them here
-              </Text>
-            </View>
-          )}
-        </View>
 
-        {/* Favorites Section */}
-        <View style={styles.favoritesSection}>
-          <View style={styles.favoritesHeader}>
-            <Text style={styles.favoritesTitle}>Favorites</Text>
-            {favoriteWatches.length > 0 && (
-              <TouchableOpacity
-                style={styles.seeAllButton}
-                activeOpacity={0.7}
-                onPress={() => router.push('/profile/favorites' as any)}
-              >
-                <Text style={styles.seeAllText}>See All</Text>
-                <ChevronRightSmall />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Watch Cards Grid or Empty State */}
-          {favoriteWatches.length > 0 ? (
-            <View style={styles.watchGrid}>
-              {renderFavoritesGrid(favoriteWatches.slice(0, 4))}
+              {sellOrders.length > 0 ? (
+                <View style={styles.watchGrid}>
+                  {renderOrdersGrid(sellOrders.slice(0, 4))}
+                </View>
+              ) : (
+                <View style={styles.emptyStateContainer}>
+                  <View style={styles.emptyIconContainer}>
+                    <TagIcon />
+                  </View>
+                  <Text style={styles.emptyTitle}>No sell orders yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Create sell orders to see them here
+                  </Text>
+                </View>
+              )}
             </View>
-          ) : (
-            <View style={styles.emptyStateContainer}>
-              <View style={styles.emptyIconContainer}>
-                <HeartIcon />
+
+            {/* Favorites Section */}
+            <View style={styles.favoritesSection}>
+              <View style={styles.favoritesHeader}>
+                <Text style={styles.favoritesTitle}>Favorites</Text>
+                {favoriteWatches.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.seeAllButton}
+                    activeOpacity={0.7}
+                    onPress={() => router.push('/profile/favorites' as any)}
+                  >
+                    <Text style={styles.seeAllText}>See All</Text>
+                    <ChevronRightSmall />
+                  </TouchableOpacity>
+                )}
               </View>
-              <Text style={styles.emptyTitle}>No favorites yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Add watches to your watchlist to see them here
-              </Text>
+
+              {/* Watch Cards Grid or Empty State */}
+              {favoriteWatches.length > 0 ? (
+                <View style={styles.watchGrid}>
+                  {renderFavoritesGrid(favoriteWatches.slice(0, 4))}
+                </View>
+              ) : (
+                <View style={styles.emptyStateContainer}>
+                  <View style={styles.emptyIconContainer}>
+                    <HeartIcon />
+                  </View>
+                  <Text style={styles.emptyTitle}>No favorites yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Add watches to your watchlist to see them here
+                  </Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
+          </>
+        </SubscriptionOverlay>
       </ScrollView>
     </SafeAreaView>
   );

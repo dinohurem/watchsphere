@@ -11,7 +11,8 @@ from app.models.billing import (
     Subscription, SubscriptionPlan, SubscriptionStatus,
     Transaction, TransactionStatus
 )
-from app.services.payment import monri_service, check_subscription_status
+from app.services.payment import monri_service, check_subscription_status, log_payment_activity
+from app.models.activity_log import ActivityType, EntityType
 
 router = APIRouter()
 
@@ -87,6 +88,7 @@ class BillingUpdate(BaseModel):
 class SubscriptionCreate(BaseModel):
     user_id: str
     plan: SubscriptionPlan
+    status: SubscriptionStatus = SubscriptionStatus.ACTIVE
     price_monthly: float = 0.0
     currency: str = "EUR"
     expires_at: Optional[datetime] = None
@@ -97,6 +99,7 @@ class SubscriptionUpdate(BaseModel):
     plan: Optional[SubscriptionPlan] = None
     status: Optional[SubscriptionStatus] = None
     price_monthly: Optional[float] = None
+    currency: Optional[str] = None
     expires_at: Optional[datetime] = None
     auto_renew: Optional[bool] = None
 
@@ -330,6 +333,7 @@ async def admin_create_subscription(
         user_name=user.name,
         user_email=user.email,
         plan=sub_data.plan,
+        status=sub_data.status,
         price_monthly=sub_data.price_monthly,
         currency=sub_data.currency,
         expires_at=sub_data.expires_at,
@@ -549,10 +553,136 @@ async def initiate_subscription(
         cancel_url=data.cancel_url,
     )
 
+    # Log payment initiation
+    await log_payment_activity(
+        activity_type=ActivityType.PAYMENT_INITIATED,
+        description=f"Payment initiated for Premium subscription ({billing.amount} {billing.currency})",
+        user_id=str(current_user.id),
+        user_name=current_user.name,
+        user_email=current_user.email,
+        entity_type=EntityType.PAYMENT,
+        entity_id=str(billing.id),
+        metadata={
+            "amount": billing.amount,
+            "currency": billing.currency,
+            "order_number": billing.invoice_number,
+        }
+    )
+
     return {
         "billing_id": str(billing.id),
         "order_number": billing.invoice_number,
         **payment_data,
+    }
+
+
+@router.post("/subscription/verify")
+async def verify_subscription_payment(
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Verify and activate subscription after payment return.
+    This endpoint is called when the user returns from Monri with approved status,
+    in case the webhook hasn't processed yet.
+    """
+    from dateutil.relativedelta import relativedelta
+
+    # Find the most recent pending billing record for this user
+    billing = await Billing.find_one(
+        Billing.user_id == str(current_user.id),
+        Billing.type == BillingType.SUBSCRIPTION,
+        Billing.status == BillingStatus.PENDING,
+    )
+
+    if not billing:
+        # Check if there's already a paid billing record (webhook already processed)
+        recent_paid = await Billing.find_one(
+            Billing.user_id == str(current_user.id),
+            Billing.type == BillingType.SUBSCRIPTION,
+            Billing.status == BillingStatus.PAID,
+        )
+        if recent_paid:
+            # Check subscription status
+            status_info = await check_subscription_status(str(current_user.id))
+            return {
+                "status": "already_processed",
+                "subscription": status_info,
+            }
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No pending payment found"
+        )
+
+    # Process the payment as approved (simulate webhook for development)
+    now = datetime.utcnow()
+
+    # Update billing record
+    billing.status = BillingStatus.PAID
+    billing.paid_at = now
+    billing.updated_at = now
+    await billing.save()
+
+    # Update or create subscription
+    subscription = await Subscription.find_one(
+        Subscription.user_id == str(current_user.id)
+    )
+
+    if subscription:
+        # Activate/renew existing subscription
+        subscription.status = SubscriptionStatus.ACTIVE
+        subscription.plan = SubscriptionPlan.PREMIUM
+        subscription.price_monthly = monri_service.subscription_price
+
+        # Set new expiration (1 month from now or from current expiration)
+        if subscription.expires_at and subscription.expires_at > now:
+            subscription.expires_at = subscription.expires_at + relativedelta(months=1)
+        else:
+            subscription.expires_at = now + relativedelta(months=1)
+
+        subscription.next_billing_date = subscription.expires_at
+        subscription.auto_renew = True
+        subscription.updated_at = now
+        await subscription.save()
+    else:
+        # Create new subscription record
+        subscription = Subscription(
+            user_id=str(current_user.id),
+            user_name=current_user.name,
+            user_email=current_user.email,
+            plan=SubscriptionPlan.PREMIUM,
+            status=SubscriptionStatus.ACTIVE,
+            price_monthly=monri_service.subscription_price,
+            currency=monri_service.currency,
+            started_at=now,
+            expires_at=now + relativedelta(months=1),
+            next_billing_date=now + relativedelta(months=1),
+            auto_renew=True,
+        )
+        await subscription.insert()
+
+    # Log the payment activity
+    await log_payment_activity(
+        activity_type=ActivityType.PAYMENT_COMPLETED,
+        description=f"Payment of {billing.amount} {billing.currency} completed for Premium subscription (verified)",
+        user_id=str(current_user.id),
+        user_name=current_user.name,
+        user_email=current_user.email,
+        entity_type=EntityType.PAYMENT,
+        entity_id=str(billing.id),
+        metadata={
+            "amount": billing.amount,
+            "currency": billing.currency,
+            "order_number": billing.invoice_number,
+            "verified_manually": True,
+        }
+    )
+
+    # Get updated subscription status
+    status_info = await check_subscription_status(str(current_user.id))
+
+    return {
+        "status": "activated",
+        "subscription": status_info,
     }
 
 
@@ -581,6 +711,21 @@ async def cancel_subscription(
     subscription.auto_renew = False
     subscription.updated_at = datetime.utcnow()
     await subscription.save()
+
+    # Log subscription cancellation
+    await log_payment_activity(
+        activity_type=ActivityType.SUBSCRIPTION_CANCELLED,
+        description=f"Subscription auto-renewal cancelled. Expires on {subscription.expires_at.strftime('%Y-%m-%d') if subscription.expires_at else 'N/A'}",
+        user_id=str(current_user.id),
+        user_name=current_user.name,
+        user_email=current_user.email,
+        entity_type=EntityType.SUBSCRIPTION,
+        entity_id=str(subscription.id),
+        metadata={
+            "plan": subscription.plan.value,
+            "expires_at": subscription.expires_at.isoformat() if subscription.expires_at else None,
+        }
+    )
 
     return {
         "message": "Subscription will not renew automatically",

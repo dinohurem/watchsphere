@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { Plus, Image, ArrowUp } from 'lucide-react'
 import { api } from '@/services/api'
+import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay'
 
 interface Message {
   id: string
@@ -284,6 +285,7 @@ export function AIChatPage() {
   }
 
   return (
+    <SubscriptionOverlay feature="ai_chat">
     <div className="flex h-full bg-white">
       {/* Left Sidebar - Conversation History */}
       <div className="w-[335px] border-r border-gray-200 flex flex-col">
@@ -410,6 +412,7 @@ export function AIChatPage() {
         </div>
       </div>
     </div>
+    </SubscriptionOverlay>
   )
 }
 

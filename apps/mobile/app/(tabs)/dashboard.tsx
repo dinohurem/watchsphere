@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
 import { LogoIcon } from '@/components/LogoIcon';
+import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 
 // Plus Icon
 function PlusIcon() {
@@ -351,7 +352,7 @@ export default function DashboardScreen() {
   );
 
   return (
-    <>
+    <SubscriptionOverlay feature="orders">
       <SafeAreaView style={styles.container} edges={['top']}>
         {/* Header */}
         {inventory.length === 0 ? (
@@ -400,7 +401,7 @@ export default function DashboardScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
-    </>
+    </SubscriptionOverlay>
   );
 }
 
