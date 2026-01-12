@@ -3,6 +3,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { LockedSection } from '@/components/SubscriptionOverlay';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -74,16 +76,18 @@ export default function OrdersMenuScreen() {
         </View>
 
         {/* Menu Items */}
-        <View style={styles.menuList}>
-          <MenuItem
-            title="Buy Orders"
-            onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'buy' } } as any)}
-          />
-          <MenuItem
-            title="Sell Orders"
-            onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'sell' } } as any)}
-          />
-        </View>
+        <LockedSection message="Premium feature">
+          <View style={styles.menuList}>
+            <MenuItem
+              title="Buy Orders"
+              onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'buy' } } as any)}
+            />
+            <MenuItem
+              title="Sell Orders"
+              onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'sell' } } as any)}
+            />
+          </View>
+        </LockedSection>
       </View>
     </SafeAreaView>
   );

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/services/api';
 import { SlidersHorizontal, Heart, ChevronDown } from 'lucide-react';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
 
 interface WatchData {
   id: string;
@@ -287,6 +288,7 @@ export function MarketPage() {
   );
 
   return (
+    <SubscriptionOverlay feature="market">
     <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         {/* Trending Watches Section */}
@@ -427,5 +429,6 @@ export function MarketPage() {
         </div>
       </div>
     </div>
+    </SubscriptionOverlay>
   );
 }

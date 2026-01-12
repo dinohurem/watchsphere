@@ -7,6 +7,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { User } from '@/components/icons';
+import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import {
   Magnifier,
   UserCircleFilled,
@@ -299,7 +300,8 @@ export default function HomeScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: wp(16),
-      paddingVertical: 0,
+      paddingTop: hp(12),
+      paddingBottom: 0,
       marginBottom: hp(32),
       gap: wp(16),
     },
@@ -676,8 +678,38 @@ export default function HomeScreen() {
     },
   });
 
+  // Header component to pass to SubscriptionOverlay
+  const headerComponent = (
+    <SafeAreaView edges={['top']} style={{ backgroundColor: '#FFFFFF' }}>
+      <View style={styles.header}>
+        {/* Logo */}
+        <View style={styles.logoContainer}>
+          <LogoIcon width={33} height={28} color="#212121" />
+        </View>
+
+        {/* Search Bar */}
+        <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/search')}>
+          <View style={styles.searchIcon}>
+            <Magnifier size={18} color="#212121" />
+          </View>
+          <Text style={styles.searchPlaceholder}>Search watches...</Text>
+        </TouchableOpacity>
+
+        {/* Profile Button */}
+        <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+          {profileImageUrl ? (
+            <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
+          ) : (
+            <User size={24} color="#212121" />
+          )}
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SubscriptionOverlay feature="home" header={headerComponent}>
+    <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -686,30 +718,6 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
         }
       >
-        {/* Header with Logo, Search Bar, and Profile */}
-        <View style={styles.header}>
-          {/* Logo */}
-          <View style={styles.logoContainer}>
-            <LogoIcon width={33} height={28} color="#212121" />
-          </View>
-
-          {/* Search Bar */}
-          <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/search')}>
-            <View style={styles.searchIcon}>
-              <Magnifier size={18} color="#212121" />
-            </View>
-            <Text style={styles.searchPlaceholder}>Search watches...</Text>
-          </TouchableOpacity>
-
-          {/* Profile Button */}
-          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-            {profileImageUrl ? (
-              <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
-            ) : (
-              <User size={24} color="#212121" />
-            )}
-          </TouchableOpacity>
-        </View>
 
         {/* Latest Activity Section */}
         <View style={styles.activitySection}>
@@ -950,6 +958,7 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
+    </SubscriptionOverlay>
   );
 }

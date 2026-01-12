@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
 
 interface ActivityItem {
   id: string;
@@ -191,6 +192,7 @@ export function HomePage() {
   };
 
   return (
+    <SubscriptionOverlay feature="home">
     <div className="max-w-[1000px] mx-auto px-4 sm:px-6 lg:px-0 py-6 sm:py-8 space-y-10 sm:space-y-16">
       {/* Top Section: Latest Activity + Quick Access */}
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
@@ -516,5 +518,6 @@ export function HomePage() {
         )}
       </div>
     </div>
+    </SubscriptionOverlay>
   );
 }

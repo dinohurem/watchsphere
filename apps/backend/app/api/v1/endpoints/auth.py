@@ -10,6 +10,7 @@ from app.core.deps import get_current_active_user, get_current_user
 from app.models.user import User, UserRole, AuthProvider
 from app.models.verification import VerificationCode
 from app.models.billing import Subscription, SubscriptionPlan, SubscriptionStatus
+from app.models.auth_handoff import AuthHandoffToken
 from app.services.email import email_service
 from app.services.watchlist import assign_default_watchlist_to_user
 from pydantic import BaseModel, EmailStr
@@ -767,3 +768,112 @@ async def apple_auth(request: AppleAuthRequest) -> Any:
             status_code=401,
             detail="Invalid Apple token",
         )
+
+
+# Mobile-to-Web Auth Handoff
+class MobileHandoffRequest(BaseModel):
+    redirect_to: str = "billing"  # Where to redirect after auth (e.g., "billing", "profile")
+
+
+class MobileHandoffResponse(BaseModel):
+    handoff_token: str
+    redirect_url: str
+
+
+class RedeemHandoffRequest(BaseModel):
+    token: str
+
+
+@router.post("/mobile-handoff", response_model=MobileHandoffResponse)
+async def generate_mobile_handoff_token(
+    request: MobileHandoffRequest,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Generate a one-time auth token for mobile-to-web authentication handoff.
+
+    This allows mobile users to seamlessly open the web app already logged in.
+    The token is valid for 5 minutes and can only be used once.
+    """
+    # Create handoff token valid for 5 minutes
+    handoff = await AuthHandoffToken.create_for_user(
+        user_id=str(current_user.id),
+        redirect_to=request.redirect_to,
+        expires_minutes=5
+    )
+
+    # Map redirect_to to actual web paths
+    redirect_paths = {
+        "billing": "/app/profile/billing",
+        "profile": "/app/profile",
+        "settings": "/app/profile/settings",
+    }
+    redirect_path = redirect_paths.get(request.redirect_to, "/app/profile/billing")
+
+    return {
+        "handoff_token": handoff.token,
+        "redirect_url": f"/auth/handoff?token={handoff.token}&redirect={redirect_path}",
+    }
+
+
+@router.post("/redeem-handoff", response_model=TokenData)
+async def redeem_handoff_token(request: RedeemHandoffRequest) -> Any:
+    """Redeem a mobile handoff token and get access/refresh tokens.
+
+    This endpoint is called by the web app to exchange the one-time handoff token
+    for full authentication tokens.
+    """
+    from beanie import PydanticObjectId
+
+    # Find the handoff token
+    handoff = await AuthHandoffToken.find_one(
+        AuthHandoffToken.token == request.token,
+        AuthHandoffToken.used == False,
+    )
+
+    if not handoff:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or already used handoff token",
+        )
+
+    if not handoff.is_valid():
+        raise HTTPException(
+            status_code=400,
+            detail="Handoff token has expired. Please try again from the mobile app.",
+        )
+
+    # Mark the token as used
+    await handoff.mark_used()
+
+    # Get the user
+    user = await User.get(PydanticObjectId(handoff.user_id))
+
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="User not found",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="User account is inactive",
+        )
+
+    # Create new access and refresh tokens
+    access_token, refresh_token = create_tokens(str(user.id))
+
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "verified": user.verified,
+            "approved": user.approved,
+            "auth_provider": user.auth_provider,
+        },
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
