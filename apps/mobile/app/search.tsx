@@ -235,7 +235,7 @@ export default function SearchScreen() {
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search Watch Sphere"
+            placeholder="Search WatchSphere"
             placeholderTextColor="rgba(33, 33, 33, 0.5)"
             autoFocus
             returnKeyType="search"

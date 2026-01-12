@@ -241,7 +241,7 @@ This code will expire in 15 minutes. If you didn't request a password reset, ple
             You now have full access to all features. Log in to start exploring the world of luxury watches, connect with collectors, and discover rare timepieces.
         </p>
         <div style="text-align: center; margin: 0 0 30px;">
-            <a href="https://watchsphere.com" style="display: inline-block; background-color: #1D1D1F; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
+            <a href="https://watchsphere.io" style="display: inline-block; background-color: #1D1D1F; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
                 Open WatchSphere
             </a>
         </div>
@@ -258,7 +258,7 @@ Great news! Your WatchSphere account has been reviewed and approved by our team.
 
 You now have full access to all features. Log in to start exploring the world of luxury watches, connect with collectors, and discover rare timepieces.
 
-Visit https://watchsphere.com to get started.
+Visit https://watchsphere.io to get started.
 
 © 2024 WatchSphere. All rights reserved.
         """
@@ -302,7 +302,7 @@ Visit https://watchsphere.com to get started.
             For security, please change your password after logging in for the first time.
         </p>
         <div style="text-align: center; margin: 0 0 30px;">
-            <a href="https://admin.watchsphere.com" style="display: inline-block; background-color: #1D1D1F; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
+            <a href="https://watchsphere.io" style="display: inline-block; background-color: #1D1D1F; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
                 Access Admin Panel
             </a>
         </div>
@@ -324,7 +324,7 @@ Temporary Password: {temp_password}
 
 For security, please change your password after logging in for the first time.
 
-Visit https://admin.watchsphere.com to access the admin panel.
+Visit https://watchsphere.io to access the admin panel.
 
 © 2024 WatchSphere. All rights reserved.
         """

@@ -129,7 +129,7 @@ export function PrivacyPolicyPage() {
               If you have any questions about this privacy policy or our data practices, please contact us at:
             </p>
             <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-              <p className="text-gray-700">Email: privacy@watchsphere.com</p>
+              <p className="text-gray-700">Email: info@watchsphere.io</p>
               <p className="text-gray-700">Address: WatchSphere Inc., 123 Watch Street, Zurich, Switzerland</p>
             </div>
           </section>

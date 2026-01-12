@@ -131,7 +131,7 @@ export default function PrivacyPolicyScreen() {
           <Text style={styles.sectionTitle}>10. Contact Us</Text>
           <Text style={styles.sectionText}>
             If you have any questions about this privacy policy or our data practices, please contact us at:{'\n\n'}
-            Email: privacy@watchsphere.com{'\n'}
+            Email: info@watchsphere.io{'\n'}
             Address: WatchSphere Inc., 123 Watch Street, Zurich, Switzerland
           </Text>
         </View>

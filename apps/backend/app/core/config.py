@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # Email (Postmark)
     POSTMARK_API_KEY: str = ""
-    EMAIL_FROM: str = "noreply@watchsphere.com"
+    EMAIL_FROM: str = "noreply@watchsphere.io"
     EMAIL_FROM_NAME: str = "WatchSphere"
 
     # Verification

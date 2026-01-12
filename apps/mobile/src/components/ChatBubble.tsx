@@ -23,9 +23,10 @@ interface ChatBubbleProps {
   senderId?: string;
   isGroupChat?: boolean;
   showAvatar?: boolean;
+  onAvatarPress?: (senderId: string) => void;
 }
 
-export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender, isAI = false, quotedMessage, onLongPress, messageId, senderId, isGroupChat = false, showAvatar = false }: ChatBubbleProps) {
+export function ChatBubble({ message, isUser, timestamp, status, senderName, showSender, isAI = false, quotedMessage, onLongPress, messageId, senderId, isGroupChat = false, showAvatar = false, onAvatarPress }: ChatBubbleProps) {
   const { colors, fonts } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -191,13 +192,18 @@ export function ChatBubble({ message, isUser, timestamp, status, senderName, sho
       <View style={isGroupChat && !isUser ? styles.messageRow : undefined}>
         {/* Avatar column for group chat - only show avatar on last message of a block */}
         {isGroupChat && !isUser && (
-          <View style={styles.avatarColumn}>
+          <TouchableOpacity
+            style={styles.avatarColumn}
+            onPress={() => senderId && onAvatarPress?.(senderId)}
+            disabled={!onAvatarPress || !senderId}
+            activeOpacity={0.7}
+          >
             {shouldShowAvatar && (
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{getInitials(senderName || '')}</Text>
               </View>
             )}
-          </View>
+          </TouchableOpacity>
         )}
         <Pressable
           onLongPress={onLongPress}

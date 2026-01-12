@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, Check, X, Trash2, UserPlus, Mail, Star, Eye } from 'lucide-react'
+import { Search, Check, X, Trash2, UserPlus, Mail, Star, Eye, Edit2, Plus } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 
@@ -132,6 +132,16 @@ export function AdminUsers() {
   const [showReviewsModal, setShowReviewsModal] = useState(false)
   const [selectedUserReviews, setSelectedUserReviews] = useState<UserReviewStats | null>(null)
   const [loadingReviews, setLoadingReviews] = useState(false)
+  const [editingReview, setEditingReview] = useState<Review | null>(null)
+  const [editReviewRating, setEditReviewRating] = useState(5)
+  const [editReviewComment, setEditReviewComment] = useState('')
+  const [savingReview, setSavingReview] = useState(false)
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null)
+  const [showAddReviewModal, setShowAddReviewModal] = useState(false)
+  const [addReviewReviewerId, setAddReviewReviewerId] = useState('')
+  const [addReviewRating, setAddReviewRating] = useState(5)
+  const [addReviewComment, setAddReviewComment] = useState('')
+  const [addingReview, setAddingReview] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -238,6 +248,80 @@ export function AdminUsers() {
       setSelectedUserReviews(null)
     } finally {
       setLoadingReviews(false)
+    }
+  }
+
+  const handleEditReview = (review: Review) => {
+    setEditingReview(review)
+    setEditReviewRating(review.rating)
+    setEditReviewComment(review.comment || '')
+  }
+
+  const handleSaveReview = async () => {
+    if (!editingReview) return
+
+    setSavingReview(true)
+    try {
+      await api.patch(`/reviews/admin/${editingReview.id}`, {
+        rating: editReviewRating,
+        comment: editReviewComment || null,
+      })
+      // Refresh reviews
+      if (selectedUserReviews) {
+        const response = await api.get(`/reviews/admin/user/${selectedUserReviews.user_id}`)
+        setSelectedUserReviews(response.data)
+      }
+      setEditingReview(null)
+      fetchUsers() // Refresh user list to update ratings
+    } catch (error: any) {
+      alert(error.response?.data?.detail || 'Failed to update review')
+    } finally {
+      setSavingReview(false)
+    }
+  }
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!confirm('Are you sure you want to delete this review?')) return
+
+    setDeletingReviewId(reviewId)
+    try {
+      await api.delete(`/reviews/admin/${reviewId}`)
+      // Refresh reviews
+      if (selectedUserReviews) {
+        const response = await api.get(`/reviews/admin/user/${selectedUserReviews.user_id}`)
+        setSelectedUserReviews(response.data)
+      }
+      fetchUsers() // Refresh user list to update ratings
+    } catch (error: any) {
+      alert(error.response?.data?.detail || 'Failed to delete review')
+    } finally {
+      setDeletingReviewId(null)
+    }
+  }
+
+  const handleAddReview = async () => {
+    if (!selectedUserReviews || !addReviewReviewerId) return
+
+    setAddingReview(true)
+    try {
+      await api.post('/reviews/admin', {
+        reviewer_id: addReviewReviewerId,
+        reviewed_user_id: selectedUserReviews.user_id,
+        rating: addReviewRating,
+        comment: addReviewComment || null,
+      })
+      // Refresh reviews
+      const response = await api.get(`/reviews/admin/user/${selectedUserReviews.user_id}`)
+      setSelectedUserReviews(response.data)
+      setShowAddReviewModal(false)
+      setAddReviewReviewerId('')
+      setAddReviewRating(5)
+      setAddReviewComment('')
+      fetchUsers() // Refresh user list to update ratings
+    } catch (error: any) {
+      alert(error.response?.data?.detail || 'Failed to create review')
+    } finally {
+      setAddingReview(false)
     }
   }
 
@@ -501,15 +585,25 @@ export function AdminUsers() {
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => {
-                  setShowReviewsModal(false)
-                  setSelectedUserReviews(null)
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAddReviewModal(true)}
+                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Review
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReviewsModal(false)
+                    setSelectedUserReviews(null)
+                    setEditingReview(null)
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
@@ -526,40 +620,206 @@ export function AdminUsers() {
                 <div className="space-y-4">
                   {selectedUserReviews?.reviews.map((review) => (
                     <div key={review.id} className="p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                            <span className="text-white text-sm font-medium">
-                              {review.reviewer_name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{review.reviewer_name}</p>
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <Star
-                                  key={star}
-                                  className={`w-4 h-4 ${
-                                    star <= review.rating
-                                      ? 'text-yellow-400 fill-yellow-400'
-                                      : 'text-gray-300'
-                                  }`}
-                                />
-                              ))}
+                      {editingReview?.id === review.id ? (
+                        // Edit mode
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                              <span className="text-white text-sm font-medium">
+                                {review.reviewer_name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{review.reviewer_name}</p>
+                              <div className="flex items-center gap-1 mt-1">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <button
+                                    key={star}
+                                    type="button"
+                                    onClick={() => setEditReviewRating(star)}
+                                    className="focus:outline-none"
+                                  >
+                                    <Star
+                                      className={`w-5 h-5 cursor-pointer transition-colors ${
+                                        star <= editReviewRating
+                                          ? 'text-yellow-400 fill-yellow-400'
+                                          : 'text-gray-300 hover:text-yellow-200'
+                                      }`}
+                                    />
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           </div>
+                          <textarea
+                            value={editReviewComment}
+                            onChange={(e) => setEditReviewComment(e.target.value)}
+                            placeholder="Review comment (optional)"
+                            className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
+                            rows={3}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => setEditingReview(null)}
+                              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
+                              disabled={savingReview}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleSaveReview}
+                              disabled={savingReview}
+                              className="px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                            >
+                              {savingReview ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
                         </div>
-                        <span className="text-sm text-gray-500">
-                          {new Date(review.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      {review.comment && (
-                        <p className="mt-3 text-gray-700">{review.comment}</p>
+                      ) : (
+                        // View mode
+                        <>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                                <span className="text-white text-sm font-medium">
+                                  {review.reviewer_name.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900">{review.reviewer_name}</p>
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <Star
+                                      key={star}
+                                      className={`w-4 h-4 ${
+                                        star <= review.rating
+                                          ? 'text-yellow-400 fill-yellow-400'
+                                          : 'text-gray-300'
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-500">
+                                {new Date(review.created_at).toLocaleDateString()}
+                              </span>
+                              <button
+                                onClick={() => handleEditReview(review)}
+                                className="p-1.5 text-gray-500 hover:text-primary hover:bg-gray-100 rounded"
+                                title="Edit review"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteReview(review.id)}
+                                disabled={deletingReviewId === review.id}
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                                title="Delete review"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                          {review.comment && (
+                            <p className="mt-3 text-gray-700">{review.comment}</p>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Review Modal */}
+      {showAddReviewModal && selectedUserReviews && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Add Review</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Add a review for {selectedUserReviews.user_name}
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reviewer *</label>
+                <select
+                  value={addReviewReviewerId}
+                  onChange={(e) => setAddReviewReviewerId(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                >
+                  <option value="">Select a reviewer</option>
+                  {users
+                    .filter(u => u.id !== selectedUserReviews.user_id)
+                    .map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.email})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rating *</label>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setAddReviewRating(star)}
+                      className="focus:outline-none"
+                    >
+                      <Star
+                        className={`w-8 h-8 cursor-pointer transition-colors ${
+                          star <= addReviewRating
+                            ? 'text-yellow-400 fill-yellow-400'
+                            : 'text-gray-300 hover:text-yellow-200'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Comment</label>
+                <textarea
+                  value={addReviewComment}
+                  onChange={(e) => setAddReviewComment(e.target.value)}
+                  placeholder="Optional review comment..."
+                  className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
+                  rows={4}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddReviewModal(false)
+                    setAddReviewReviewerId('')
+                    setAddReviewRating(5)
+                    setAddReviewComment('')
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddReview}
+                  disabled={addingReview || !addReviewReviewerId}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {addingReview ? 'Adding...' : 'Add Review'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

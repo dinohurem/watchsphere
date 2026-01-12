@@ -143,7 +143,7 @@ export default function TermsConditionsScreen() {
           <Text style={styles.sectionTitle}>12. Contact Information</Text>
           <Text style={styles.sectionText}>
             For questions about these Terms and Conditions, please contact us at:{'\n\n'}
-            Email: legal@watchsphere.com{'\n'}
+            Email: info@watchsphere.io{'\n'}
             Address: WatchSphere Inc., 123 Watch Street, Zurich, Switzerland
           </Text>
         </View>

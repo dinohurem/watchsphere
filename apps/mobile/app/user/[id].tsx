@@ -51,10 +51,10 @@ function BackArrowIcon({ color = '#1D1D1F' }: { color?: string }) {
 
 function StarIcon({ filled, size = 20 }: { filled: boolean; size?: number }) {
   return (
-    <Svg width={sp(size)} height={sp(size)} viewBox="0 0 24 24" fill={filled ? '#FBBF24' : 'none'}>
+    <Svg width={sp(size)} height={sp(size)} viewBox="0 0 24 24" fill={filled ? '#1D1D1F' : 'none'}>
       <Path
         d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
-        stroke="#FBBF24"
+        stroke="#1D1D1F"
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -67,7 +67,7 @@ function MessageIcon({ color = '#FFFFFF' }: { color?: string }) {
   return (
     <Svg width={sp(20)} height={sp(20)} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z"
+        d="M21 11.5C21.0034 12.8199 20.6951 14.1219 20.1 15.3C19.3944 16.7118 18.3098 17.8992 16.9674 18.7293C15.6251 19.5594 14.0782 19.9994 12.5 20C11.1801 20.0035 9.87812 19.6951 8.7 19.1L3 21L4.9 15.3C4.30493 14.1219 3.99656 12.8199 4 11.5C4.00061 9.92179 4.44061 8.37488 5.27072 7.03258C6.10083 5.69028 7.28825 4.6056 8.7 3.90003C9.87812 3.30496 11.1801 2.99659 12.5 3.00003H13C15.0843 3.11502 17.053 3.99479 18.5291 5.47089C20.0052 6.94699 20.885 8.91568 21 11V11.5Z"
         stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
@@ -188,10 +188,19 @@ export default function UserProfileScreen() {
     if (!userId) return;
 
     try {
-      const response = await api.post('/chat/direct', {
-        participant_id: userId,
+      const response = await api.post('/chat/conversations/direct', {
+        recipient_id: userId,
       });
-      router.push(`/chat/${response.data.id}` as any);
+      if (response.data?.id) {
+        router.push({
+          pathname: '/chat/[id]',
+          params: {
+            id: response.data.id,
+            name: response.data.name || profile?.name || 'Chat',
+            participantId: userId,
+          },
+        } as any);
+      }
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Failed to start conversation');
     }

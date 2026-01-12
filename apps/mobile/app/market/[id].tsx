@@ -143,24 +143,18 @@ function StarIcon({ filled = false }: { filled?: boolean }) {
   );
 }
 
-// Social Search Icon (users with search)
+// Social Search Icon - Globe with magnifier (matches home quick access)
 function SocialSearchIcon() {
   return (
-    <Svg width={22} height={22} viewBox="0 0 22 22" fill="none">
-      {/* Two people */}
-      <Circle cx={8} cy={6} r={2.5} stroke="#1D1D1F" strokeWidth={1.5} />
-      <Path
-        d="M3 17.5C3 14.7386 5.23858 12.5 8 12.5C9.0599 12.5 10.0429 12.8243 10.8571 13.3757"
-        stroke="#1D1D1F"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-      />
-      {/* Search magnifier */}
-      <Circle cx={15.5} cy={15.5} r={3.5} stroke="#1D1D1F" strokeWidth={1.5} />
-      <Path
-        d="M18.5 18.5L20.5 20.5"
-        stroke="#1D1D1F"
-        strokeWidth={1.5}
+    <Svg width={22} height={22} viewBox="0 0 16 16" fill="none">
+      {/* Globe circle */}
+      <Path d="M6.5 12C9.53757 12 12 9.53757 12 6.5C12 3.46243 9.53757 1 6.5 1C3.46243 1 1 3.46243 1 6.5C1 9.53757 3.46243 12 6.5 12Z" stroke="#1D1D1F" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      {/* Globe horizontal line */}
+      <Path d="M1 6.5H12" stroke="#1D1D1F" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      {/* Globe vertical arc */}
+      <Path d="M6.5 1C7.93261 2.55556 8.75 4.47826 8.75 6.5C8.75 8.52174 7.93261 10.4444 6.5 12C5.06739 10.4444 4.25 8.52174 4.25 6.5C4.25 4.47826 5.06739 2.55556 6.5 1Z" stroke="#1D1D1F" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      {/* Magnifier handle */}
+      <Path d="M10.5 10.5L15 15" stroke="#1D1D1F" strokeWidth={1.2}
         strokeLinecap="round"
       />
     </Svg>
@@ -362,19 +356,25 @@ const MOCK_WATCH: WatchDetails = {
 };
 
 interface OrderBookItem {
+  id: string;
   country_code: string;
+  country_name?: string;
   date: string;
   condition: 'Used' | 'Unworn';
   price: number;
+  has_box?: boolean;
+  has_papers?: boolean;
+  user_id?: string;
+  user_name?: string;
 }
 
 // Order book mock data with proper conditions
 const ORDER_BOOK_DATA: OrderBookItem[] = [
-  { country_code: 'us', date: '12.01.25', condition: 'Unworn', price: 104500 },
-  { country_code: 'it', date: '11.28.25', condition: 'Unworn', price: 103500 },
-  { country_code: 'ae', date: '11.25.25', condition: 'Used', price: 98200 },
-  { country_code: 'de', date: '11.22.25', condition: 'Unworn', price: 106000 },
-  { country_code: 'ch', date: '11.18.25', condition: 'Used', price: 99800 },
+  { id: 'mock-1', country_code: 'us', date: '12.01.25', condition: 'Unworn', price: 104500 },
+  { id: 'mock-2', country_code: 'it', date: '11.28.25', condition: 'Unworn', price: 103500 },
+  { id: 'mock-3', country_code: 'ae', date: '11.25.25', condition: 'Used', price: 98200 },
+  { id: 'mock-4', country_code: 'de', date: '11.22.25', condition: 'Unworn', price: 106000 },
+  { id: 'mock-5', country_code: 'ch', date: '11.18.25', condition: 'Used', price: 99800 },
 ];
 
 export default function WatchDetailsScreen() {
@@ -529,18 +529,30 @@ export default function WatchDetailsScreen() {
 
         // Transform buy orders
         const formattedBuyOrders: OrderBookItem[] = (buy_orders || []).map((order: any) => ({
+          id: order.id,
           country_code: order.country_code || 'us',
+          country_name: order.country_name,
           date: formatOrderDate(order.created_at),
           condition: order.condition === 'Unworn' ? 'Unworn' : 'Used',
           price: order.price,
+          has_box: order.has_box,
+          has_papers: order.has_papers,
+          user_id: order.user_id,
+          user_name: order.user_name,
         }));
 
         // Transform sell orders
         const formattedSellOrders: OrderBookItem[] = (sell_orders || []).map((order: any) => ({
+          id: order.id,
           country_code: order.country_code || 'us',
+          country_name: order.country_name,
           date: formatOrderDate(order.created_at),
           condition: order.condition === 'Unworn' ? 'Unworn' : 'Used',
           price: order.price,
+          has_box: order.has_box,
+          has_papers: order.has_papers,
+          user_id: order.user_id,
+          user_name: order.user_name,
         }));
 
         setBuyOrders(formattedBuyOrders);
@@ -782,7 +794,7 @@ export default function WatchDetailsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => router.push('/search')}
+            onPress={() => router.push('/social-search')}
           >
             <View style={styles.actionIconContainer}>
               <SocialSearchIcon />

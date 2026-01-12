@@ -138,7 +138,7 @@ function ChevronRightIcon() {
   );
 }
 
-const SUPPORT_EMAIL = 'support@watchsphere.com';
+const SUPPORT_EMAIL = 'info@watchsphere.io';
 const SUPPORT_PHONE = '+41 44 123 4567';
 
 interface ContactItemProps {
@@ -249,7 +249,8 @@ export default function ContactScreen() {
             subtitle={SUPPORT_EMAIL}
             onPress={handleEmail}
           />
-          <ContactItem
+          </View>
+          {/* <ContactItem
             icon={<PhoneIcon />}
             title="Call Us"
             subtitle={SUPPORT_PHONE}
@@ -264,7 +265,7 @@ export default function ContactScreen() {
         </View>
 
         {/* Business Hours */}
-        <View style={styles.hoursSection}>
+        {/* <View style={styles.hoursSection}>
           <Text style={styles.hoursTitle}>Business Hours</Text>
           <View style={styles.hoursRow}>
             <Text style={styles.hoursDay}>Monday - Friday</Text>
@@ -278,10 +279,10 @@ export default function ContactScreen() {
             <Text style={styles.hoursDay}>Sunday</Text>
             <Text style={styles.hoursTime}>Closed</Text>
           </View>
-        </View>
+        </View> */}
 
         {/* Social Media */}
-        <View style={styles.socialSection}>
+        {/* <View style={styles.socialSection}>
           <Text style={styles.socialTitle}>Follow Us</Text>
           <View style={styles.socialButtons}>
             <SocialButton
@@ -297,14 +298,14 @@ export default function ContactScreen() {
               onPress={() => handleSocialPress('linkedin')}
             />
           </View>
-        </View>
+        </View> */}
 
         {/* Response Time Notice */}
-        <View style={styles.noticeSection}>
+        {/* <View style={styles.noticeSection}>
           <Text style={styles.noticeText}>
             We typically respond to all inquiries within 24-48 business hours.
           </Text>
-        </View>
+        </View>  */}
       </ScrollView>
     </SafeAreaView>
   );

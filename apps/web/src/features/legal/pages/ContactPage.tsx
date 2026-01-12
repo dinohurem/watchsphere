@@ -27,14 +27,14 @@ export function ContactPage() {
         {/* Contact Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
           <a
-            href="mailto:support@watchsphere.com"
+            href="mailto:info@watchsphere.io"
             className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-shadow group"
           >
             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-gray-200 transition-colors">
               <Mail className="w-6 h-6 text-gray-700" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Email Us</h3>
-            <p className="text-gray-600">support@watchsphere.com</p>
+            <p className="text-gray-600">info@watchsphere.io</p>
           </a>
 
           <a

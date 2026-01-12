@@ -505,6 +505,11 @@ export default function GroupChatScreen() {
         onLongPress={() => handleMessageLongPress(item)}
         isGroupChat={true}
         showAvatar={item.showAvatar}
+        onAvatarPress={(senderId) => {
+          if (senderId !== currentUserId.current) {
+            loadMemberProfile(senderId);
+          }
+        }}
       />
     );
   };
