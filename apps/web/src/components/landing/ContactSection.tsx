@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const APP_EMAIL = 'support@watchsphere.com';
+const APP_EMAIL = 'info@watchsphere.io';
 const APP_PHONE = '+1 (555) 123-4567';
 
 export function ContactSection() {
