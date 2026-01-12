@@ -18,6 +18,7 @@ import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path } from 'react-native-svg';
 import { api } from '@/services/api';
 import * as ImagePicker from 'expo-image-picker';
+import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 
 // Arrow up icon for send button (matches Figma)
 function ArrowUpIcon() {
@@ -518,7 +519,7 @@ export default function NewChatScreen() {
   });
 
   return (
-    <>
+    <SubscriptionOverlay feature="ai_chat" showBackButton>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
@@ -624,7 +625,7 @@ export default function NewChatScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </>
+    </SubscriptionOverlay>
   );
 }
 

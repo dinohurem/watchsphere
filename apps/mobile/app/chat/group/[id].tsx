@@ -121,29 +121,23 @@ function ReplyIcon({ size = 24, color = "#212121" }: { size?: number; color?: st
   );
 }
 
-// Lock Icon (for Reply Privately)
-function LockIcon({ size = 24, color = "#212121" }: { size?: number; color?: string }) {
+// Private Message Icon (message bubble with lock)
+function PrivateMessageIcon({ size = 24, color = "#212121" }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Message bubble */}
       <Path
-        d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 1110 0v4"
+        d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </Svg>
-  );
-}
-
-// User Icon (for Message User)
-function UserIcon({ size = 24, color = "#212121" }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Lock inside */}
       <Path
-        d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"
+        d="M14 10H10a1 1 0 00-1 1v2a1 1 0 001 1h4a1 1 0 001-1v-2a1 1 0 00-1-1zM10 10V9a2 2 0 114 0v1"
         stroke={color}
-        strokeWidth={2}
+        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -1037,12 +1031,12 @@ export default function GroupChatScreen() {
               {selectedMessage && selectedMessage.sender_id !== currentUserId.current && (
                 <>
                   <TouchableOpacity style={styles.modalOption} onPress={handleReplyPrivately}>
-                    <LockIcon size={sp(24)} color={colors.text} />
+                    <PrivateMessageIcon size={sp(24)} color={colors.text} />
                     <Text style={styles.modalOptionText}>Reply privately</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.modalOption} onPress={handleMessageUser}>
-                    <UserIcon size={sp(24)} color={colors.text} />
+                    <ChatIcon size={sp(24)} color={colors.text} />
                     <Text style={styles.modalOptionText}>Message {selectedMessage.sender_name}</Text>
                   </TouchableOpacity>
                 </>

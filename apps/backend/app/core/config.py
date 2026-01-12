@@ -29,11 +29,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
 
     # Monri Payments
-    MONRI_MERCHANT_KEY: str = ""
-    MONRI_AUTHENTICITY_TOKEN: str = ""
-    MONRI_API_URL: str = "https://ipg.monri.com"  # Use https://ipgtest.monri.com for testing
-    MONRI_SUBSCRIPTION_PRICE: float = 100.0  # 100€/month
+    MONRI_MERCHANT_KEY: str = "key-944bc24cd123fa7403da6278825114f1"
+    MONRI_AUTHENTICITY_TOKEN: str = "d515632967fe9eb24cf3dcc04c1fe895b4ca3583"
+    MONRI_API_URL: str = "https://ipgtest.monri.com"  # Test environment
+    MONRI_FORM_ENDPOINT: str = "https://ipgtest.monri.com/v2/form"
+    MONRI_SUBSCRIPTION_PRICE: float = 150.0  # 150€/month
     MONRI_CURRENCY: str = "EUR"
+    MONRI_DEBUG: bool = True
 
     # Email (Postmark)
     POSTMARK_API_KEY: str = ""

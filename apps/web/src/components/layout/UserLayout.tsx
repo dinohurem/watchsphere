@@ -138,12 +138,12 @@ export function UserLayout() {
 
       {/* Top Navigation Bar */}
       <nav className={`bg-white border-b border-black/10 sticky ${isAdmin ? 'top-10' : 'top-0'} z-50`}>
-        <div className="flex items-center justify-between px-8 py-5">
+        <div className="flex items-center justify-between px-4 sm:px-8 py-4 sm:py-5">
           {/* Left: Logo and Navigation */}
-          <div className="flex items-center gap-7 min-w-[280px] shrink-0">
+          <div className="flex items-center gap-4 sm:gap-7 shrink-0">
             {/* Logo */}
             <NavLink to="/app" className="flex items-center shrink-0">
-              <svg width="40" height="40" viewBox="0 0 77 64" fill="none" className="w-10 h-10">
+              <svg width="40" height="40" viewBox="0 0 77 64" fill="none" className="w-8 h-8 sm:w-10 sm:h-10">
                 <path
                   fillRule="evenodd"
                   clipRule="evenodd"
@@ -193,8 +193,8 @@ export function UserLayout() {
           </form>
 
           {/* Right: Icons and Profile */}
-          <div className="flex items-center justify-end gap-4 w-[250px]">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2 sm:gap-4">
+            <div className="hidden sm:flex items-center gap-2">
               {/* Messages */}
               <button
                 onClick={() => navigate('/app/chat')}
@@ -211,10 +211,10 @@ export function UserLayout() {
             </div>
 
             {/* Profile Avatar with Dropdown */}
-            <div className="relative" ref={dropdownRef}>
+            <div className="relative shrink-0" ref={dropdownRef}>
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center"
+                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center"
               >
                 {profileImageUrl ? (
                   <img
@@ -313,7 +313,7 @@ export function UserLayout() {
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
             >
               {mobileMenuOpen ? (
                 <X className="w-6 h-6 text-gray-600" />

@@ -5,6 +5,7 @@ import { AdminLayout } from './components/layout/AdminLayout'
 import { LoginPage } from './features/auth/pages/LoginPage'
 import { RegisterPage } from './features/auth/pages/RegisterPage'
 import { OnboardingPage } from './features/auth/pages/OnboardingPage'
+import { AuthHandoffPage } from './features/auth/pages/AuthHandoffPage'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 import { AdminRoute } from './features/auth/components/AdminRoute'
 import { HomePage } from './features/home/pages/HomePage'
@@ -15,8 +16,9 @@ import { OrderDetailPage } from './features/market/pages/OrderDetailPage'
 import { WatchlistPage } from './features/watchlist/pages/WatchlistPage'
 import { ChatPage } from './features/chat/pages/ChatPage'
 import { AIChatPage } from './features/chat/pages/AIChatPage'
-import { ProfilePage } from './features/profile/pages/ProfilePage'
 import { UserProfilePage } from './features/profile/pages/UserProfilePage'
+import { ProfileSettingsPage } from './features/profile/pages/ProfileSettingsPage'
+import { PaymentCallbackPage } from './features/payment/pages/PaymentCallbackPage'
 import { SocialSearchPage } from './features/social/pages/SocialSearchPage'
 import { SocialFiltersPage } from './features/social/pages/SocialFiltersPage'
 import { NewsDetailsPage } from './features/news/pages/NewsDetailsPage'
@@ -127,6 +129,8 @@ function App() {
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
       <Route path="/terms-conditions" element={<TermsConditionsPage />} />
       <Route path="/contact" element={<ContactPage />} />
+      <Route path="/payment-callback" element={<PaymentCallbackPage />} />
+      <Route path="/auth/handoff" element={<AuthHandoffPage />} />
 
       {/* Admin routes */}
       <Route
@@ -175,7 +179,9 @@ function App() {
         <Route path="social-search/filters" element={<SocialFiltersPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="search" element={<SearchPage />} />
-        <Route path="profile" element={<ProfilePage />} />
+        <Route path="profile" element={<ProfileSettingsPage />} />
+        <Route path="profile/settings" element={<ProfileSettingsPage />} />
+        <Route path="profile/billing" element={<ProfileSettingsPage />} />
         <Route path="user/:userId" element={<UserProfilePage />} />
         <Route path="news/:newsId" element={<NewsDetailsPage />} />
       </Route>

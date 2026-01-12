@@ -757,3 +757,25 @@ export function ArrowUp({ size = 20, color = '#FFFFFF' }: IconProps) {
     </Svg>
   );
 }
+
+// Crown icon for premium/subscription
+export function Crown({ size = 24, color = '#F59E0B' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M2 17L4 7L8 11L12 4L16 11L20 7L22 17H2Z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 21H20"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

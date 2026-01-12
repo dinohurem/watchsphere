@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { AISparkle, Plus, ChevronLeft } from '@/components/icons';
+import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
 import Svg, { Path } from 'react-native-svg';
@@ -190,7 +191,7 @@ export default function AskAIScreen() {
   });
 
   return (
-    <>
+    <SubscriptionOverlay feature="ai_chat" showBackButton>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
@@ -248,6 +249,6 @@ export default function AskAIScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
-    </>
+    </SubscriptionOverlay>
   );
 }

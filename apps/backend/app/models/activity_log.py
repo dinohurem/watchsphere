@@ -49,6 +49,18 @@ class ActivityType(str, Enum):
     # Admin events
     ADMIN_ACTION = "admin_action"
 
+    # Payment/Subscription events
+    SUBSCRIPTION_CREATED = "subscription_created"
+    SUBSCRIPTION_ACTIVATED = "subscription_activated"
+    SUBSCRIPTION_RENEWED = "subscription_renewed"
+    SUBSCRIPTION_CANCELLED = "subscription_cancelled"
+    SUBSCRIPTION_EXPIRED = "subscription_expired"
+    PAYMENT_INITIATED = "payment_initiated"
+    PAYMENT_COMPLETED = "payment_completed"
+    PAYMENT_FAILED = "payment_failed"
+    TRIAL_STARTED = "trial_started"
+    TRIAL_EXPIRED = "trial_expired"
+
 
 class EntityType(str, Enum):
     USER = "user"
@@ -59,6 +71,8 @@ class EntityType(str, Enum):
     CONVERSATION = "conversation"
     NEWS = "news"
     BILLING = "billing"
+    SUBSCRIPTION = "subscription"
+    PAYMENT = "payment"
     REVIEW = "review"
     DISPUTE = "dispute"
     ISSUE = "issue"

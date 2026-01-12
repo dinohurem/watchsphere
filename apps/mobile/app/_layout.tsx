@@ -13,6 +13,7 @@ import { AIButtonProvider } from '@/contexts/AIButtonContext';
 import { FilterProvider } from '@/contexts/FilterContext';
 import { ConfigProvider } from '@/contexts/ConfigContext';
 import { GuideProvider, useGuide } from '@/contexts/GuideContext';
+import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { AnimatedSplashScreen } from '@/components/AnimatedSplashScreen';
 import { useFonts } from 'expo-font';
 import {
@@ -214,13 +215,15 @@ export default function RootLayout() {
       <ThemeProvider>
         <ConfigProvider>
           <FilterProvider>
-            <AIButtonProvider>
-              <ChatProvider>
-                <GuideProvider>
-                  <RootLayoutNav />
-                </GuideProvider>
-              </ChatProvider>
-            </AIButtonProvider>
+            <SubscriptionProvider>
+              <AIButtonProvider>
+                <ChatProvider>
+                  <GuideProvider>
+                    <RootLayoutNav />
+                  </GuideProvider>
+                </ChatProvider>
+              </AIButtonProvider>
+            </SubscriptionProvider>
           </FilterProvider>
         </ConfigProvider>
       </ThemeProvider>

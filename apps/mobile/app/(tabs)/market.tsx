@@ -9,6 +9,7 @@ import { api } from '@/services/api';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
 import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, Filter, User } from '@/components/icons';
+import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import Svg, { Path } from 'react-native-svg';
 
 // Category tabs
@@ -332,26 +333,27 @@ export default function MarketScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: wp(16),
-      paddingVertical: hp(10),
+      paddingTop: hp(12),
+      paddingBottom: 0,
       gap: wp(16),
     },
     logoContainer: {
-      width: sp(44),
-      height: sp(27.25),
+      width: sp(33),
+      height: sp(28),
       justifyContent: 'center',
       alignItems: 'center',
     },
     searchBar: {
       flex: 1,
       height: sp(44),
-      backgroundColor: '#FAFAFA',
+      backgroundColor: '#F6F7F9',
       borderRadius: sp(99),
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: wp(16),
     },
     searchIcon: {
-      marginRight: wp(10),
+      marginRight: wp(8),
       opacity: 0.4,
     },
     searchPlaceholder: {
@@ -369,7 +371,7 @@ export default function MarketScreen() {
     profileButton: {
       width: sp(44),
       height: sp(44),
-      backgroundColor: '#FAFAFA',
+      backgroundColor: '#F6F7F9',
       borderRadius: sp(22),
       justifyContent: 'center',
       alignItems: 'center',
@@ -630,12 +632,12 @@ export default function MarketScreen() {
     },
   });
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+  // Header component to pass to SubscriptionOverlay
+  const headerComponent = (
+    <SafeAreaView edges={['top']} style={{ backgroundColor: '#FFFFFF' }}>
       <View style={styles.header}>
         <View style={styles.logoContainer}>
-          <LogoIcon width={44} height={27.25} color="#212121" />
+          <LogoIcon width={33} height={28} color="#212121" />
         </View>
         <TouchableOpacity style={styles.searchBar} activeOpacity={0.7} onPress={() => router.push('/search')}>
           <View style={styles.searchIcon}>
@@ -653,7 +655,12 @@ export default function MarketScreen() {
           )}
         </TouchableOpacity>
       </View>
+    </SafeAreaView>
+  );
 
+  return (
+    <SubscriptionOverlay feature="market" header={headerComponent}>
+    <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -859,6 +866,7 @@ export default function MarketScreen() {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
+    </SubscriptionOverlay>
   );
 }
