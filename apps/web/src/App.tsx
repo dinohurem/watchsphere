@@ -23,6 +23,7 @@ import { SocialSearchPage } from './features/social/pages/SocialSearchPage'
 import { SocialFiltersPage } from './features/social/pages/SocialFiltersPage'
 import { NewsDetailsPage } from './features/news/pages/NewsDetailsPage'
 import { InventoryPage } from './features/inventory/pages/InventoryPage'
+import { CreateListingPage } from './features/inventory/pages/CreateListingPage'
 import { SearchPage } from './features/search/pages/SearchPage'
 import { LandingPage } from './features/landing/pages/LandingPage'
 import { useAuthStore } from '@watchsphere/shared/stores'
@@ -178,6 +179,7 @@ function App() {
         <Route path="social-search" element={<SocialSearchPage />} />
         <Route path="social-search/filters" element={<SocialFiltersPage />} />
         <Route path="inventory" element={<InventoryPage />} />
+        <Route path="inventory/create" element={<CreateListingPage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="profile" element={<ProfileSettingsPage />} />
         <Route path="profile/settings" element={<ProfileSettingsPage />} />

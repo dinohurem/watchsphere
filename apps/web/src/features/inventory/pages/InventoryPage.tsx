@@ -46,7 +46,7 @@ export function InventoryPage() {
   // Empty state
   if (!loading && inventory.length === 0) {
     return (
-      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen flex flex-col items-center justify-center">
+      <div className="p-4 lg:p-6 bg-white min-h-screen flex flex-col items-center justify-center">
         {/* Watch icon */}
         <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-6">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
@@ -73,7 +73,7 @@ export function InventoryPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+    <div className="p-4 lg:p-6 bg-white min-h-screen">
       <div className="max-w-7xl mx-auto">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
