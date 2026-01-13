@@ -274,7 +274,7 @@ const MOCK_SPECS = {
 };
 
 export default function WatchDetailsScreen() {
-  const params = useLocalSearchParams<WatchDetailsParams>();
+  const params = useLocalSearchParams() as WatchDetailsParams;
   const { user, isAuthenticated } = useAuthStore();
   const [isFavorite, setIsFavorite] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
@@ -546,7 +546,7 @@ export default function WatchDetailsScreen() {
                     )}
                   </View>
                 )}
-                <Text style={[styles.sellerName, orderUserId && styles.sellerNameClickable]}>{effectiveUserName}</Text>
+                <Text style={[styles.sellerName, orderUserId ? styles.sellerNameClickable : undefined]}>{effectiveUserName}</Text>
                 {effectiveUserName !== 'N/A' && (
                   <>
                     <RatingStarIcon />
@@ -603,7 +603,7 @@ export default function WatchDetailsScreen() {
               onPress={() => {
                 setShowMenu(false);
                 router.push({
-                  pathname: '/listing/edit',
+                  pathname: '/listing/edit' as const,
                   params: {
                     orderId: params.orderId || '',
                     brand,
@@ -611,7 +611,8 @@ export default function WatchDetailsScreen() {
                     reference,
                     price: price.toString(),
                   },
-                });
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                } as any);
               }}
             >
               <Text style={styles.menuItemText}>Edit</Text>

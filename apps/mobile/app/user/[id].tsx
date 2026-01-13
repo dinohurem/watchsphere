@@ -258,7 +258,7 @@ export default function UserProfileScreen() {
       width: sp(80),
       height: sp(80),
       borderRadius: sp(40),
-      backgroundColor: colors.inputBackground,
+      backgroundColor: colors.backgroundSecondary,
       justifyContent: 'center',
       alignItems: 'center',
       overflow: 'hidden',
@@ -348,7 +348,7 @@ export default function UserProfileScreen() {
       marginBottom: hp(16),
     },
     reviewCard: {
-      backgroundColor: colors.inputBackground,
+      backgroundColor: colors.backgroundSecondary,
       borderRadius: sp(12),
       padding: wp(16),
       marginBottom: hp(12),
@@ -472,7 +472,7 @@ export default function UserProfileScreen() {
       padding: wp(4),
     },
     commentInput: {
-      backgroundColor: colors.inputBackground,
+      backgroundColor: colors.backgroundSecondary,
       borderRadius: sp(12),
       padding: wp(12),
       fontFamily: fonts.regular,

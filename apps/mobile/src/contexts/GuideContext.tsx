@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, 
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import Svg, { Defs, Rect, Mask, Circle, Path, G, ClipPath, RoundedRect } from 'react-native-svg';
+import Svg, { Defs, Rect, Mask, Circle, Path, G, ClipPath } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 

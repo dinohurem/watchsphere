@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useConfig } from '@/contexts/ConfigContext';
+import { api } from '@/services/api';
 import { BackArrow, ChevronDown, ChevronRight, Plus, X, Trash2, Check } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path, Rect } from 'react-native-svg';

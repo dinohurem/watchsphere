@@ -3,6 +3,11 @@
  * Central export for all theme tokens
  */
 
+import { colors } from './colors';
+import { typography, fontFamilies, fontWeights } from './typography';
+import { spacing, radius, sizes, elevation, divider } from './spacing';
+import { shadows } from './shadows';
+
 export { colors } from './colors';
 export type { Colors } from './colors';
 
