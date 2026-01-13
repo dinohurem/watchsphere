@@ -255,7 +255,7 @@ export function WatchDetailsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-[1000px] mx-auto py-8 flex items-center justify-center min-h-[400px]">
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
       </div>
     );
@@ -263,18 +263,20 @@ export function WatchDetailsPage() {
 
   if (!watchDetails) {
     return (
-      <div className="max-w-[1000px] mx-auto py-8 text-center">
-        <p className="text-gray-500">Watch not found</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-primary hover:underline">
-          Go back
-        </button>
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto py-8 text-center">
+          <p className="text-gray-500">Watch not found</p>
+          <button onClick={() => navigate(-1)} className="mt-4 text-primary hover:underline">
+            Go back
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="max-w-[1000px] mx-auto">
+    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3 sm:gap-4">

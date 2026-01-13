@@ -322,7 +322,8 @@ export default function ProfileScreen() {
         pathname: '/market/[id]',
         params: {
           // Use reference as id for market lookup (aggregated endpoint uses reference)
-          id: watch.reference || watch.id,
+          // Encode to handle references with special characters (e.g., 5711/1A-010)
+          id: encodeURIComponent(watch.reference || watch.id),
           reference: watch.reference,
           brand: watch.brand,
         },
@@ -380,7 +381,8 @@ export default function ProfileScreen() {
         onPress={() => router.push({
           pathname: '/market/[id]',
           params: {
-            id: order.reference || order.id,
+            // Encode to handle references with special characters (e.g., 5711/1A-010)
+            id: encodeURIComponent(order.reference || order.id),
             reference: order.reference,
             brand: order.brand,
           },

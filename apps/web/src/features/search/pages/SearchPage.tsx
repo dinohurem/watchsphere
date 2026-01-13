@@ -203,7 +203,7 @@ export function SearchPage() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-83px)] bg-white">
+    <div className="flex h-[calc(100vh-83px)] bg-gray-50">
       {/* Left Sidebar - Filters */}
       <div className="w-[280px] border-r border-gray-200 flex flex-col overflow-hidden">
         {/* Header */}
