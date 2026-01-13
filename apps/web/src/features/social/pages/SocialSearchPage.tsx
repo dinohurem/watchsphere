@@ -238,7 +238,7 @@ export function SocialSearchPage() {
 
   return (
     <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Social Search</h1>

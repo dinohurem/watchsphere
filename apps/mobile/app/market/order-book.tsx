@@ -103,7 +103,9 @@ export default function OrderBookScreen() {
 
   const loadOrderBook = async () => {
     try {
-      const response = await api.get(`/orders/book/${params.reference}`);
+      // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
+      const encodedReference = encodeURIComponent(params.reference || '');
+      const response = await api.get(`/orders/book/${encodedReference}`);
       if (response.data) {
         setOrderBook(response.data);
       } else {
@@ -130,6 +132,26 @@ export default function OrderBookScreen() {
 
   const formatPrice = (price: number, currency: string = 'EUR') => {
     return `€${price.toLocaleString('de-DE')}`;
+  };
+
+  // Format date to show MM/DD format (e.g., "12/27")
+  const formatOrderDate = (dateStr: string | undefined) => {
+    if (!dateStr) return '-';
+    // Try parsing as ISO date first
+    let date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      // Try parsing DD.MM.YY format from mock data
+      const parts = dateStr.split('.');
+      if (parts.length === 3) {
+        const [day, month, year] = parts;
+        const fullYear = parseInt(year) > 50 ? `19${year}` : `20${year}`;
+        date = new Date(`${fullYear}-${month}-${day}`);
+      }
+    }
+    if (isNaN(date.getTime())) return dateStr;
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${month}/${day}`;
   };
 
   const handleOrderPress = (order: OrderBookEntry, orderType: 'buy' | 'sell') => {
@@ -170,7 +192,7 @@ export default function OrderBookScreen() {
         <View style={[styles.tableCell, styles.marketCellContainer]}>
           <CountryFlag countryCode={item.country_code} size={16} />
         </View>
-        <Text style={[styles.tableCell, styles.tableCellText, styles.dateCellData]}>{item.date}</Text>
+        <Text style={[styles.tableCell, styles.tableCellText, styles.dateCellData]}>{formatOrderDate(item.date)}</Text>
         <Text style={[styles.tableCell, styles.tableCellText, styles.conditionCell]}>{item.condition}</Text>
         <Text style={[styles.tableCell, styles.tableCellTextBold, styles.priceCell]}>{formatPrice(item.price)}</Text>
       </TouchableOpacity>

@@ -410,7 +410,7 @@ async def get_aggregated_market_data(
         return []
 
 
-@router.get("/aggregated/{reference}")
+@router.get("/aggregated/{reference:path}")
 async def get_aggregated_watch_by_reference(reference: str) -> Any:
     """
     Get aggregated market data for a specific watch reference.

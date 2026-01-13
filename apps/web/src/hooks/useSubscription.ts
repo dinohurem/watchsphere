@@ -17,6 +17,7 @@ export interface SubscriptionStatus {
 
 export function useSubscription() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAdmin = useAuthStore((state) => state.isAdmin);
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,16 +59,20 @@ export function useSubscription() {
     loadSubscription();
   }, [loadSubscription]);
 
-  // Computed properties
-  const hasActiveSubscription = subscription?.has_subscription ?? false;
-  const isExpired = !hasActiveSubscription && subscription !== null;
-  const isTrial = subscription?.is_trial ?? false;
+  // Computed properties - admin users always have full access
+  const hasActiveSubscription = isAdmin || (subscription?.has_subscription ?? false);
+  const isExpired = !isAdmin && !hasActiveSubscription && subscription !== null;
+  const isTrial = !isAdmin && (subscription?.is_trial ?? false);
   const daysRemaining = isTrial
     ? subscription?.trial_days_remaining ?? 0
     : subscription?.subscription_days_remaining ?? 0;
 
-  // Check if feature access is allowed (has active subscription)
+  // Check if feature access is allowed (admin or has active subscription)
   const canAccessFeature = useCallback((feature: 'market' | 'orders' | 'home' | 'ai_chat' | 'chat' | 'conversations') => {
+    // Admin users always have full access
+    if (isAdmin) {
+      return true;
+    }
     // Chat/conversations are always allowed
     if (feature === 'chat' || feature === 'conversations') {
       return true;
@@ -78,7 +83,7 @@ export function useSubscription() {
     }
     // Market, orders, home require subscription
     return hasActiveSubscription;
-  }, [hasActiveSubscription]);
+  }, [isAdmin, hasActiveSubscription]);
 
   return {
     subscription,

@@ -286,11 +286,13 @@ export function AIChatPage() {
 
   return (
     <SubscriptionOverlay feature="ai_chat">
-    <div className="flex h-full bg-white">
-      {/* Left Sidebar - Conversation History */}
-      <div className="w-[335px] border-r border-gray-200 flex flex-col">
-        {/* Sidebar Header */}
-        <div className="px-4 py-6">
+    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto h-[calc(100vh-120px)]">
+        <div className="flex h-full bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          {/* Left Sidebar - Conversation History */}
+          <div className="w-[335px] border-r border-gray-200 flex flex-col">
+            {/* Sidebar Header */}
+            <div className="px-4 py-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold text-[#1d1d1f] opacity-80">AI Assistant</h2>
             <button
@@ -409,6 +411,7 @@ export function AIChatPage() {
               <ArrowUp className="w-5 h-5 text-white" />
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>

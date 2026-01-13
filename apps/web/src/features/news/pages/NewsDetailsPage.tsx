@@ -63,7 +63,7 @@ export function NewsDetailsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
       </div>
     )
@@ -71,8 +71,8 @@ export function NewsDetailsPage() {
 
   if (error || !article) {
     return (
-      <div className="p-6 lg:p-8">
-        <div className="max-w-3xl mx-auto">
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto">
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
@@ -96,8 +96,8 @@ export function NewsDetailsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 pt-10 lg:pt-12">
-      <div className="max-w-3xl mx-auto">
+    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <button
           onClick={() => navigate(-1)}

@@ -71,10 +71,10 @@ const FIELD_TYPES = [
 ]
 
 const CATEGORIES = [
-  { value: 'basic', label: 'Basic' },
-  { value: 'caliber', label: 'Caliber' },
-  { value: 'case', label: 'Case' },
-  { value: 'bracelet', label: 'Bracelet' },
+  { value: 'basic', label: 'Basic', step: 1, stepTitle: 'Basic Information' },
+  { value: 'caliber', label: 'Caliber', step: 2, stepTitle: 'Caliber Information' },
+  { value: 'case', label: 'Case', step: 3, stepTitle: 'Case Information' },
+  { value: 'bracelet', label: 'Bracelet', step: 4, stepTitle: 'Bracelet/Strap Information' },
 ]
 
 function CategoryBadge({ category }: { category: string }) {
@@ -84,10 +84,16 @@ function CategoryBadge({ category }: { category: string }) {
     case: 'bg-green-100 text-green-800',
     bracelet: 'bg-amber-100 text-amber-800',
   }
+  const categoryInfo = CATEGORIES.find(c => c.value === category)
   return (
-    <span className={`px-2 py-1 text-xs font-medium rounded-full ${colors[category] || 'bg-gray-100 text-gray-800'}`}>
-      {category}
-    </span>
+    <div className="flex flex-col gap-0.5">
+      <span className={`px-2 py-1 text-xs font-medium rounded-full ${colors[category] || 'bg-gray-100 text-gray-800'}`}>
+        {category}
+      </span>
+      {categoryInfo && (
+        <span className="text-xs text-gray-400 px-2">Step {categoryInfo.step}</span>
+      )}
+    </div>
   )
 }
 
@@ -535,9 +541,17 @@ export function AdminListingFields() {
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                   >
                     {CATEGORIES.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                      <option key={cat.value} value={cat.value}>{cat.label} (Step {cat.step})</option>
                     ))}
                   </select>
+                  {(() => {
+                    const selectedCat = CATEGORIES.find(c => c.value === formData.category)
+                    return selectedCat ? (
+                      <p className="mt-1 text-xs text-gray-500">
+                        This field will appear in <span className="font-medium">Step {selectedCat.step}: {selectedCat.stepTitle}</span>
+                      </p>
+                    ) : null
+                  })()}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>

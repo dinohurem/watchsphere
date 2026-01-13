@@ -116,13 +116,6 @@ export default function HomeScreen() {
       icon: 'social',
       color: '#7C73FF',
     },
-    {
-      id: '6',
-      title: 'All Tools',
-      subtitle: 'Everything else you need, in one place.',
-      icon: 'grid',
-      color: '#73BEFF',
-    },
   ];
 
   // Load data on initial mount
@@ -803,7 +796,8 @@ export default function HomeScreen() {
                     onPress={() => router.push({
                       pathname: '/market/[id]',
                       params: {
-                        id: watch.id,
+                        // Encode to handle references with special characters (e.g., 5711/1A-010)
+                        id: encodeURIComponent(watch.id),
                         reference: watch.reference,
                         brand: watch.brand,
                         model: watch.model,

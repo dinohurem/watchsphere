@@ -92,11 +92,12 @@ export default function OrdersScreen() {
   };
 
   const handleOrderPress = (order: Order) => {
+    // Encode IDs to handle references with special characters (e.g., 5711/1A-010)
     if (order.watch_id) {
-      router.push(`/market/${order.watch_id}` as any);
+      router.push(`/market/${encodeURIComponent(order.watch_id)}` as any);
     } else if (order.reference) {
       router.push({
-        pathname: `/market/${order.reference}`,
+        pathname: `/market/${encodeURIComponent(order.reference)}`,
         params: {
           reference: order.reference,
           brand: order.brand,

@@ -1,12 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Svg, { Path, Circle, Line, Rect, G, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
-import { useFilters } from '@/contexts/FilterContext';
+import { useFilters, OrderBookFilterState } from '@/contexts/FilterContext';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
 
@@ -378,12 +378,14 @@ const ORDER_BOOK_DATA: OrderBookItem[] = [
 ];
 
 export default function WatchDetailsScreen() {
-  const { id, reference, brand, model } = useLocalSearchParams<{
+  const { id: rawId, reference, brand, model } = useLocalSearchParams<{
     id: string;
     reference?: string;
     brand?: string;
     model?: string;
   }>();
+  // Decode the ID to handle references with special characters (e.g., 5711/1A-010)
+  const id = rawId ? decodeURIComponent(rawId) : rawId;
   const { isAuthenticated, user } = useAuthStore();
   const { getOrderBookFilterCount, hasActiveOrderBookFilters } = useFilters();
   const [watch, setWatch] = useState<WatchDetails>(MOCK_WATCH);
@@ -403,6 +405,72 @@ export default function WatchDetailsScreen() {
   // Watchlist state
   const [isInWatchlist, setIsInWatchlist] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
+
+  // Get order book filters from context
+  const { orderBookFilters } = useFilters();
+
+  // Filter orders based on applied filters
+  const filterOrders = useCallback((orders: OrderBookItem[], filters: OrderBookFilterState): OrderBookItem[] => {
+    return orders.filter(order => {
+      // Price filter
+      if (filters.priceMin !== null && order.price < filters.priceMin) return false;
+      if (filters.priceMax !== null && order.price > filters.priceMax) return false;
+
+      // Location filter
+      if (filters.locations.length > 0 && !filters.locations.includes(order.country_code?.toUpperCase())) {
+        return false;
+      }
+
+      // Condition filter
+      if (filters.condition.length > 0 && !filters.condition.includes(order.condition)) {
+        return false;
+      }
+
+      // Has box filter
+      if (filters.hasBox !== null && order.has_box !== filters.hasBox) {
+        return false;
+      }
+
+      // Has papers filter
+      if (filters.hasPapers !== null && order.has_papers !== filters.hasPapers) {
+        return false;
+      }
+
+      return true;
+    });
+  }, []);
+
+  // Filter orders based on active filters
+  const filteredBuyOrders = useMemo(() => {
+    return filterOrders(buyOrders, orderBookFilters);
+  }, [buyOrders, orderBookFilters, filterOrders]);
+
+  const filteredSellOrders = useMemo(() => {
+    return filterOrders(sellOrders, orderBookFilters);
+  }, [sellOrders, orderBookFilters, filterOrders]);
+
+  // Slice price history based on selected time period
+  const getDataPointsForPeriod = useCallback((period: string): number => {
+    // Assuming price history has data points representing daily values
+    switch (period) {
+      case '1d': return 1;
+      case '7d': return 7;
+      case '1m': return 30;
+      case '3m': return 90;
+      case '1y': return 365;
+      default: return 30;
+    }
+  }, []);
+
+  const filteredPriceHistory = useMemo(() => {
+    if (!watch.priceHistory || watch.priceHistory.length === 0) {
+      return [];
+    }
+    const dataPoints = getDataPointsForPeriod(selectedPeriod);
+    // Take the last N data points based on period, or all if fewer
+    const sliceCount = Math.min(dataPoints, watch.priceHistory.length);
+    return watch.priceHistory.slice(-sliceCount);
+  }, [watch.priceHistory, selectedPeriod, getDataPointsForPeriod]);
 
   useEffect(() => {
     loadWatchDetails();
@@ -435,8 +503,9 @@ export default function WatchDetailsScreen() {
     setWatchlistLoading(true);
     try {
       if (isInWatchlist) {
-        // Remove from watchlist
-        await api.delete(`/profile/watchlist/${watch.reference || id}`);
+        // Remove from watchlist - encode to handle special characters
+        const encodedRef = encodeURIComponent(watch.reference || id || '');
+        await api.delete(`/profile/watchlist/${encodedRef}`);
         setIsInWatchlist(false);
       } else {
         // Add to watchlist
@@ -459,9 +528,11 @@ export default function WatchDetailsScreen() {
     try {
       // If we have a reference (from aggregated data), use the aggregated endpoint
       const watchReference = reference || id;
+      // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
+      const encodedReference = encodeURIComponent(watchReference || '');
 
       // Try aggregated endpoint first (works with reference)
-      const response = await api.get(`/market/aggregated/${watchReference}`);
+      const response = await api.get(`/market/aggregated/${encodedReference}`);
       if (response.data) {
         const data = response.data;
         setWatch({
@@ -482,7 +553,8 @@ export default function WatchDetailsScreen() {
     } catch (error) {
       // If aggregated fails, try the regular watch endpoint (for MongoDB IDs)
       try {
-        const response = await api.get(`/market/watches/${id}`);
+        const encodedId = encodeURIComponent(id || '');
+        const response = await api.get(`/market/watches/${encodedId}`);
         if (response.data) {
           setWatch({
             id: response.data.id,
@@ -511,20 +583,20 @@ export default function WatchDetailsScreen() {
   const loadOrderBook = async () => {
     try {
       const watchReference = reference || id;
-      const response = await api.get(`/orders/book/${watchReference}`);
+      // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
+      const encodedReference = encodeURIComponent(watchReference || '');
+      const response = await api.get(`/orders/book/${encodedReference}`);
       if (response.data) {
         const { buy_orders, sell_orders } = response.data;
 
-        // Helper to format date safely
+        // Helper to format date safely - show MM/DD format (e.g., "12/27")
         const formatOrderDate = (dateStr: string | undefined) => {
           if (!dateStr) return '-';
           const date = new Date(dateStr);
           if (isNaN(date.getTime())) return '-';
-          return date.toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: '2-digit',
-            year: '2-digit',
-          }).replace(/\//g, '.');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const day = date.getDate().toString().padStart(2, '0');
+          return `${month}/${day}`;
         };
 
         // Transform buy orders
@@ -823,16 +895,47 @@ export default function WatchDetailsScreen() {
             </View>
           </View>
 
-          {/* Price tooltip */}
-          <View style={styles.priceTooltip}>
-            <Text style={styles.tooltipPrice}>€139.000</Text>
-            <Text style={styles.tooltipDate}>NOV 12. 2025</Text>
-          </View>
+          {/* Price tooltip - shows latest order book data if available */}
+          {(sellOrders.length > 0 || buyOrders.length > 0) && (
+            <View style={styles.priceTooltip}>
+              <Text style={styles.tooltipPrice}>
+                {formatPriceEurBefore(
+                  sellOrders.length > 0
+                    ? sellOrders[0].price
+                    : buyOrders.length > 0
+                      ? buyOrders[0].price
+                      : 0
+                )}
+              </Text>
+              <Text style={styles.tooltipDate}>
+                {(() => {
+                  const dateStr = sellOrders.length > 0
+                    ? sellOrders[0].date
+                    : buyOrders.length > 0
+                      ? buyOrders[0].date
+                      : '';
+                  if (!dateStr || dateStr === '-') return '';
+                  // Parse date from DD.MM.YY format and format as "MMM DD. YYYY"
+                  const parts = dateStr.split('.');
+                  if (parts.length !== 3) return dateStr;
+                  const [day, month, year] = parts;
+                  const fullYear = parseInt(year) > 50 ? `19${year}` : `20${year}`;
+                  const date = new Date(`${fullYear}-${month}-${day}`);
+                  if (isNaN(date.getTime())) return dateStr;
+                  return date.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  }).toUpperCase().replace(',', '.');
+                })()}
+              </Text>
+            </View>
+          )}
 
           {/* Chart */}
           <View style={styles.chartContainer}>
             <PriceChart
-              data={watch.priceHistory}
+              data={filteredPriceHistory}
               width={SCREEN_WIDTH - wp(32)}
               height={hp(200)}
             />
@@ -884,15 +987,15 @@ export default function WatchDetailsScreen() {
               <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'right' }]}>Price</Text>
             </View>
 
-            {/* Rows - use dynamic data from API */}
-            {(selectedTab === 'Buy' ? buyOrders : sellOrders).length === 0 ? (
+            {/* Rows - use dynamic data from API with filters applied */}
+            {(selectedTab === 'Buy' ? filteredBuyOrders : filteredSellOrders).length === 0 ? (
               <View style={styles.orderBookEmptyState}>
                 <Text style={styles.orderBookEmptyText}>
                   No {selectedTab.toLowerCase()} orders available for this watch
                 </Text>
               </View>
             ) : (
-              (selectedTab === 'Buy' ? buyOrders : sellOrders).slice(0, 5).map((order, index) => (
+              (selectedTab === 'Buy' ? filteredBuyOrders : filteredSellOrders).slice(0, 5).map((order, index) => (
                 <TouchableOpacity
                   key={index}
                   style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}

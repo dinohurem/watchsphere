@@ -52,6 +52,17 @@ export interface Option {
   label: string;
 }
 
+// Category type for listing fields (maps to steps in create listing)
+export type FieldCategory = 'basic' | 'caliber' | 'case' | 'bracelet';
+
+// Step mapping for categories
+export const CATEGORY_STEPS: Record<FieldCategory, { step: number; title: string }> = {
+  basic: { step: 1, title: 'Basic information' },
+  caliber: { step: 2, title: 'Caliber information' },
+  case: { step: 3, title: 'Case information' },
+  bracelet: { step: 4, title: 'Bracelet/Strap information' },
+};
+
 interface ConfigContextType {
   // Data
   listingFields: ListingField[];
@@ -79,6 +90,7 @@ interface ConfigContextType {
   getFieldByKey: (key: string) => ListingField | undefined;
   getFieldOptions: (key: string, parentValue?: string) => Option[];
   isFieldEnabled: (key: string) => boolean;
+  getFieldsByCategory: (category: FieldCategory) => ListingField[];
   getFilterByKey: (category: 'market' | 'social' | 'order_book', key: string) => Filter | undefined;
   getFilterOptions: (category: 'market' | 'social' | 'order_book', key: string) => Option[];
   getFilterConfig: (category: 'market' | 'social' | 'order_book') => Filter[];
@@ -204,6 +216,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     return field !== undefined;
   }, [listingFields]);
 
+  // Helper function to get fields by category (for dynamic step rendering)
+  const getFieldsByCategory = useCallback((category: FieldCategory): ListingField[] => {
+    return listingFields
+      .filter(f => f.category === category)
+      .sort((a, b) => a.display_order - b.display_order);
+  }, [listingFields]);
+
   // Helper function to get filter by key
   const getFilterByKey = useCallback((
     category: 'market' | 'social' | 'order_book',
@@ -276,6 +295,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         getFieldByKey,
         getFieldOptions,
         isFieldEnabled,
+        getFieldsByCategory,
         getFilterByKey,
         getFilterOptions,
         getFilterConfig,

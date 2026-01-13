@@ -106,7 +106,7 @@ class OrderUpdate(BaseModel):
 
 # ============== PUBLIC ENDPOINTS ==============
 
-@router.get("/book/{reference}", response_model=OrderBookResponse)
+@router.get("/book/{reference:path}", response_model=OrderBookResponse)
 async def get_order_book(
     reference: str,
     limit: int = Query(default=50, le=100),
@@ -185,7 +185,7 @@ async def get_order_book(
     )
 
 
-@router.get("/market-price/{reference}", response_model=MarketPriceInfo)
+@router.get("/market-price/{reference:path}", response_model=MarketPriceInfo)
 async def get_market_price(reference: str) -> Any:
     """
     Get market price for a specific watch reference.
@@ -668,7 +668,7 @@ async def admin_order_stats(
     return stats
 
 
-@router.get("/admin/by-reference/{reference}", response_model=List[OrderResponse])
+@router.get("/admin/by-reference/{reference:path}", response_model=List[OrderResponse])
 async def admin_get_orders_by_reference(
     reference: str,
     current_admin: User = Depends(get_current_admin_user),
