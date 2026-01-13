@@ -204,13 +204,13 @@ export function ChatPage() {
   ];
 
   return (
-    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto h-[calc(100vh-120px)]">
-        <div className="flex h-full bg-white rounded-2xl border border-gray-200 overflow-hidden">
+    <div className="p-4 lg:p-6 bg-white min-h-screen">
+      <div className="max-w-7xl mx-auto h-[calc(100vh-96px)]">
+        <div className="flex h-full rounded-2xl border border-black/5 overflow-hidden">
           {/* Left Sidebar - Chat List */}
           <div className="w-[335px] flex-shrink-0 flex flex-col">
             {/* Header */}
-            <div className="px-4 pt-6 pb-4">
+            <div className="px-4 py-4">
           <h1 className="text-2xl font-semibold text-[#1d1d1f]">Chat</h1>
         </div>
 

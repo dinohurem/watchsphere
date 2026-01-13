@@ -4,9 +4,7 @@ import {
   Home,
   Store,
   Heart,
-  MessageSquare,
   User,
-  Bell,
   LogOut,
   Menu,
   X,
@@ -60,7 +58,7 @@ export function UserLayout() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const token = localStorage.getItem('token')
+        const token = localStorage.getItem('auth_token')
         if (!token) return
 
         const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/profile/me`, {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/services/api';
-import { SlidersHorizontal, Heart, ChevronDown } from 'lucide-react';
+import { SlidersHorizontal, Star, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
 
@@ -71,88 +71,54 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
 
   return (
     <div
-      className="bg-white rounded-2xl p-4 border border-gray-200 min-w-[220px] cursor-pointer hover:shadow-md transition-shadow"
+      className="relative border border-black/5 rounded-2xl overflow-hidden cursor-pointer hover:bg-[rgba(29,29,31,0.02)] transition-colors bg-white shrink-0 w-[226px]"
       onClick={onClick}
     >
-      <div className="flex justify-between items-start mb-3">
-        <div className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden">
-          {watch.image_url ? (
-            <img src={watch.image_url} alt={watch.model} className="w-full h-full object-cover" />
-          ) : (
-            <ImagePlaceholder size={48} />
-          )}
+      {/* Favorite Button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onAddToWatchlist(watch.id);
+        }}
+        className="absolute top-2 right-2 w-10 h-10 rounded-full bg-[#f4f4f4] flex items-center justify-center z-10"
+      >
+        <Star className="w-[17px] h-[17px] text-[#1d1d1f]" fill="currentColor" />
+      </button>
+      {/* Watch Image */}
+      <div className="h-[150px] bg-gradient-to-b from-white to-[#f4f4f4] flex items-center justify-center rounded-t-xl">
+        {watch.image_url ? (
+          <img src={watch.image_url} alt={watch.model} className="max-h-full max-w-full object-contain" />
+        ) : (
+          <ImagePlaceholder width={120} height={120} borderRadius={0} />
+        )}
+      </div>
+      {/* Watch Info */}
+      <div className="px-4 pb-4 pt-3 flex flex-col gap-3">
+        <div>
+          <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">{watch.brand}</p>
+          <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">{watch.reference}</p>
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddToWatchlist(watch.id);
-          }}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-        >
-          <Heart className="w-5 h-5 text-gray-400" />
-        </button>
-      </div>
-
-      <div className="mb-2">
-        <p className="text-sm text-gray-500">{watch.brand}</p>
-        <p className="font-semibold text-gray-900 truncate">{watch.model}</p>
-        <p className="text-xs text-gray-400">{watch.reference}</p>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <p className="font-bold text-lg text-gray-900">€{watch.price?.toLocaleString() || '0'}</p>
-        <span className={`text-sm font-medium ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-          {isPositive ? '+' : ''}{watch.priceChange?.toFixed(1) || '0.0'}%
-        </span>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[15px] font-semibold text-[#212121] leading-[1.3]">
+            {watch.price?.toLocaleString() || '0'}€
+          </p>
+          <div className={`flex items-center gap-1 px-[7px] py-[3px] rounded-full ${
+            isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
+          }`}>
+            {isPositive ? (
+              <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
+            ) : (
+              <ArrowDownRight className="w-3 h-3 text-[#c93927]" />
+            )}
+            <span className={`text-[11px] font-semibold leading-[1.3] ${
+              isPositive ? 'text-[#4aa078]' : 'text-[#c93927]'
+            }`}>
+              {Math.abs(watch.priceChange || 0).toFixed(1)}%
+            </span>
+          </div>
+        </div>
       </div>
     </div>
-  );
-}
-
-// Market activity row component
-function MarketActivityRow({ watch, onClick }: { watch: WatchData; onClick: () => void }) {
-  const isPositive = (watch.priceChange || 0) >= 0;
-
-  return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={onClick}>
-      <td className="py-4 px-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-            {watch.image_url ? (
-              <img src={watch.image_url} alt={watch.model} className="w-full h-full object-cover" />
-            ) : (
-              <ImagePlaceholder size={32} />
-            )}
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">{watch.brand} {watch.model}</p>
-            <p className="text-sm text-gray-500">{watch.reference}</p>
-          </div>
-        </div>
-      </td>
-      <td className="py-4 px-4">
-        <MiniChart data={watch.priceHistory || []} positive={isPositive} />
-      </td>
-      <td className="py-4 px-4">
-        <span className={`font-medium ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-          {isPositive ? '+' : ''}{watch.priceChange?.toFixed(2) || '0.00'}%
-        </span>
-      </td>
-      <td className="py-4 px-4">
-        <span className="font-semibold text-gray-900">€{watch.price?.toLocaleString() || '0'}</span>
-      </td>
-      <td className="py-4 px-4">
-        <button
-          className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick();
-          }}
-        >
-          View details
-        </button>
-      </td>
-    </tr>
   );
 }
 
@@ -289,28 +255,26 @@ export function MarketPage() {
 
   return (
     <SubscriptionOverlay feature="market">
-    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
+    <div className="p-4 lg:p-6 bg-white min-h-screen">
+      <div className="max-w-[1000px] mx-auto flex flex-col gap-16">
         {/* Trending Watches Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Trending Watches</h2>
-            <button className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
-              View all
-              <ChevronDown className="w-4 h-4 rotate-[-90deg]" />
-            </button>
-          </div>
+        <div className="flex flex-col gap-8">
+          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Trending Watches</h2>
 
-          <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2">
+          <div className="flex gap-8 overflow-x-auto pb-2">
             {loading ? (
               // Loading skeleton
               [...Array(4)].map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl p-4 border border-gray-200 min-w-[220px] animate-pulse">
-                  <div className="w-20 h-20 bg-gray-200 rounded-xl mb-3" />
-                  <div className="h-4 bg-gray-200 rounded w-16 mb-2" />
-                  <div className="h-5 bg-gray-200 rounded w-32 mb-1" />
-                  <div className="h-3 bg-gray-200 rounded w-24 mb-3" />
-                  <div className="h-6 bg-gray-200 rounded w-20" />
+                <div key={i} className="bg-white rounded-2xl border border-black/5 overflow-hidden animate-pulse shrink-0 w-[226px]">
+                  <div className="h-[150px] bg-gray-200" />
+                  <div className="p-4">
+                    <div className="h-4 bg-gray-200 rounded w-20 mb-2" />
+                    <div className="h-3 bg-gray-200 rounded w-24 mb-3" />
+                    <div className="flex items-center justify-between">
+                      <div className="h-5 bg-gray-200 rounded w-16" />
+                      <div className="h-5 bg-gray-200 rounded w-12" />
+                    </div>
+                  </div>
                 </div>
               ))
             ) : (
@@ -327,104 +291,212 @@ export function MarketPage() {
         </div>
 
         {/* Market Activity Section */}
-        <div className="bg-white rounded-2xl border border-gray-200">
-          <div className="p-6 border-b border-gray-100">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <h2 className="text-xl font-bold text-gray-900">Market Activity</h2>
+        <div className="flex flex-col gap-8">
+          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Market activity</h2>
 
-              <div className="flex items-center gap-3">
-                {/* Category Tabs */}
-                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-                  {categories.map((category) => (
-                    <button
-                      key={category.key}
-                      onClick={() => setSelectedCategory(category.key)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        selectedCategory === category.key
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      {category.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Filter Button */}
+          {/* Filters Row */}
+          <div className="flex items-center justify-between">
+            {/* Category Tabs */}
+            <div className="flex gap-2">
+              {categories.map((category) => (
                 <button
-                  onClick={handleOpenFilters}
-                  className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-                    activeFilterCount > 0
-                      ? 'border-gray-900 bg-gray-900 text-white'
-                      : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                  key={category.key}
+                  onClick={() => setSelectedCategory(category.key)}
+                  className={`px-5 py-[11px] rounded-full text-[15px] leading-[20px] tracking-[0.075px] transition-colors ${
+                    selectedCategory === category.key
+                      ? 'bg-[#212121] text-white font-medium'
+                      : 'text-[#212121] font-normal hover:bg-[rgba(29,29,31,0.02)]'
                   }`}
                 >
-                  <SlidersHorizontal className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    Filter {activeFilterCount > 0 && `(${activeFilterCount})`}
-                  </span>
+                  {category.label}
                 </button>
-              </div>
+              ))}
             </div>
+
+            {/* Filter Button */}
+            <button
+              onClick={handleOpenFilters}
+              className="flex items-center gap-1 px-3 py-2 border border-black rounded-full transition-colors hover:bg-[rgba(29,29,31,0.02)]"
+            >
+              <SlidersHorizontal className="w-[26px] h-[26px]" />
+              <span className="text-[15px] font-medium leading-[20px] tracking-[0.075px] text-black">
+                Filters
+              </span>
+            </button>
           </div>
 
           {/* Market Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">Watch</th>
-                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">Chart</th>
-                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">% Change</th>
-                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">Price</th>
-                  <th className="text-left py-4 px-4 text-sm font-medium text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="border border-black/5 rounded-2xl overflow-hidden">
+            {/* Desktop Table */}
+            <div className="hidden lg:block pt-8 px-8 pb-4">
+              {/* Header */}
+              <div className="flex items-center justify-between gap-3 pr-6 mb-4">
+                <div className="w-[200px]">
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Watch</p>
+                </div>
+                <div className="w-[168px]">
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Chart</p>
+                </div>
+                <div className="w-[168px]">
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">% Change</p>
+                </div>
+                <div className="w-[168px]">
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Price</p>
+                </div>
+                <div className="w-[129px]">
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Actions</p>
+                </div>
+              </div>
+              {/* Rows */}
+              <div className="flex flex-col">
                 {loading ? (
                   // Loading skeleton rows
                   [...Array(5)].map((_, i) => (
-                    <tr key={i} className="border-b border-gray-100">
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-gray-200 rounded-lg animate-pulse" />
-                          <div>
-                            <div className="h-5 bg-gray-200 rounded w-32 mb-2 animate-pulse" />
-                            <div className="h-4 bg-gray-200 rounded w-24 animate-pulse" />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="w-20 h-8 bg-gray-200 rounded animate-pulse" />
-                      </td>
-                      <td className="py-4 px-4">
+                    <div key={i} className="flex items-center justify-between gap-3 py-6 border-b border-[rgba(33,33,33,0.05)]">
+                      <div className="w-[200px]">
+                        <div className="h-5 bg-gray-200 rounded w-24 mb-2 animate-pulse" />
+                        <div className="h-4 bg-gray-200 rounded w-20 animate-pulse" />
+                      </div>
+                      <div className="w-[168px]">
+                        <div className="w-[100px] h-[40px] bg-gray-200 rounded animate-pulse" />
+                      </div>
+                      <div className="w-[168px]">
                         <div className="h-5 bg-gray-200 rounded w-16 animate-pulse" />
-                      </td>
-                      <td className="py-4 px-4">
+                      </div>
+                      <div className="w-[168px]">
                         <div className="h-5 bg-gray-200 rounded w-20 animate-pulse" />
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="h-10 bg-gray-200 rounded w-24 animate-pulse" />
-                      </td>
-                    </tr>
+                      </div>
+                      <div className="w-[129px]">
+                        <div className="h-[44px] bg-gray-200 rounded-full w-[110px] animate-pulse" />
+                      </div>
+                    </div>
                   ))
                 ) : filteredWatches.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-12 text-center text-gray-500">
-                      {activeFilterCount > 0 ? 'No watches match your filters' : 'No watches found'}
-                    </td>
-                  </tr>
+                  <div className="py-12 text-center text-[#212121]/50">
+                    {activeFilterCount > 0 ? 'No watches match your filters' : 'No watches found'}
+                  </div>
                 ) : (
-                  filteredWatches.map((watch) => (
-                    <MarketActivityRow
-                      key={watch.id}
-                      watch={watch}
-                      onClick={() => handleWatchClick(watch)}
-                    />
-                  ))
+                  filteredWatches.map((watch, index) => {
+                    const isPositive = (watch.priceChange || 0) >= 0;
+                    return (
+                      <div
+                        key={watch.id}
+                        className={`flex items-center justify-between gap-3 py-6 cursor-pointer hover:bg-[rgba(29,29,31,0.02)] transition-colors ${
+                          index < filteredWatches.length - 1 ? 'border-b border-[rgba(33,33,33,0.05)]' : ''
+                        }`}
+                        onClick={() => handleWatchClick(watch)}
+                      >
+                        <div className="w-[200px]">
+                          <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{watch.brand}</p>
+                          <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{watch.reference}</p>
+                        </div>
+                        <div className="w-[168px]">
+                          <MiniChart data={watch.priceHistory || []} positive={isPositive} />
+                        </div>
+                        <div className="w-[168px] flex items-center gap-1">
+                          {isPositive ? (
+                            <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
+                          ) : (
+                            <ArrowDownRight className="w-3 h-3 text-[#cc6045]" />
+                          )}
+                          <span className={`text-sm font-normal leading-[16px] ${
+                            isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
+                          }`}>
+                            {Math.abs(watch.priceChange || 0).toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="w-[168px]">
+                          <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">
+                            €{watch.price?.toLocaleString() || '0'}
+                          </p>
+                        </div>
+                        <div className="w-[129px]">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleWatchClick(watch);
+                            }}
+                            className="px-5 py-3 bg-[#212121] text-white text-base font-semibold leading-[20px] tracking-[0.08px] rounded-full hover:bg-black transition-colors"
+                          >
+                            View details
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="lg:hidden divide-y divide-black/5">
+              {loading ? (
+                [...Array(5)].map((_, i) => (
+                  <div key={i} className="p-4 animate-pulse">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-gray-200 rounded-lg" />
+                      <div>
+                        <div className="h-4 bg-gray-200 rounded w-24 mb-1" />
+                        <div className="h-3 bg-gray-200 rounded w-20" />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="h-5 bg-gray-200 rounded w-20" />
+                      <div className="h-5 bg-gray-200 rounded w-16" />
+                    </div>
+                  </div>
+                ))
+              ) : filteredWatches.length === 0 ? (
+                <div className="py-12 text-center text-[#212121]/50">
+                  {activeFilterCount > 0 ? 'No watches match your filters' : 'No watches found'}
+                </div>
+              ) : (
+                filteredWatches.map((watch) => {
+                  const isPositive = (watch.priceChange || 0) >= 0;
+                  return (
+                    <div
+                      key={watch.id}
+                      onClick={() => handleWatchClick(watch)}
+                      className="p-4 cursor-pointer hover:bg-[rgba(29,29,31,0.02)] transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-[#f5f5f7] flex items-center justify-center overflow-hidden shrink-0">
+                            {watch.image_url ? (
+                              <img src={watch.image_url} alt={watch.brand} className="w-full h-full object-contain" />
+                            ) : (
+                              <ImagePlaceholder size={24} />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-base font-semibold text-[#212121]">{watch.brand}</p>
+                            <p className="text-sm font-medium text-[#212121]/50">{watch.reference}</p>
+                          </div>
+                        </div>
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${
+                          isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
+                        }`}>
+                          {isPositive ? (
+                            <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
+                          ) : (
+                            <ArrowDownRight className="w-3 h-3 text-[#cc6045]" />
+                          )}
+                          <span className={`text-sm font-medium ${
+                            isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
+                          }`}>
+                            {Math.abs(watch.priceChange || 0).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-lg font-semibold text-[#212121]">€{watch.price?.toLocaleString() || '0'}</p>
+                        <span className="text-sm font-medium text-[#212121]/50">View details →</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>
