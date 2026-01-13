@@ -165,9 +165,9 @@ export function AdminFilters() {
       is_searchable: filter.is_searchable,
       display_order: filter.display_order,
       ui_section: filter.ui_section || '',
-      range_min: filter.range_min,
-      range_max: filter.range_max,
-      range_step: filter.range_step,
+      range_min: filter.range_min ?? null,
+      range_max: filter.range_max ?? null,
+      range_step: filter.range_step ?? null,
       placeholder: filter.placeholder || '',
       values: filter.values,
     })

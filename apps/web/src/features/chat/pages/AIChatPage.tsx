@@ -115,7 +115,7 @@ export function AIChatPage() {
 
         // Add to conversations list
         const newConv: Conversation = {
-          id: chatId,
+          id: chatId!,
           title: userMessageContent.slice(0, 40) + '...',
           preview: userMessageContent,
           timestamp: new Date(),

@@ -120,7 +120,7 @@ export function AdminListingFields() {
 
   // Value form state
   const [newValueForm, setNewValueForm] = useState({ value: '', label: '', parent_value: '' })
-  const [editingValueIndex, setEditingValueIndex] = useState<number | null>(null)
+  const [_editingValueIndex, _setEditingValueIndex] = useState<number | null>(null)
 
   useEffect(() => {
     fetchFields()
@@ -156,8 +156,8 @@ export function AdminListingFields() {
       category: field.category,
       parent_field_key: field.parent_field_key || '',
       placeholder: field.placeholder || '',
-      min_value: field.min_value,
-      max_value: field.max_value,
+      min_value: field.min_value ?? null,
+      max_value: field.max_value ?? null,
       values: field.values,
     })
     setShowModal(true)

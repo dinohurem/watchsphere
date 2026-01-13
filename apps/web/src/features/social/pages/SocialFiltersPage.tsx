@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Check } from 'lucide-react';
-import { useSocialFilters, Filter } from '@/hooks/useConfig';
+import { useSocialFilters } from '@/hooks/useConfig';
 
 interface DynamicFilterState {
   [key: string]: string[];
