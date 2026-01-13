@@ -55,7 +55,7 @@ interface MarkSoldParams {
 }
 
 export default function MarkSoldScreen() {
-  const params = useLocalSearchParams<MarkSoldParams>();
+  const params = useLocalSearchParams() as unknown as MarkSoldParams;
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 

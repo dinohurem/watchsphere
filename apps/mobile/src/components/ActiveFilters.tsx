@@ -112,7 +112,7 @@ export function ActiveFilters({ filters, onRemoveFilter, onClearAll }: ActiveFil
             onPress={() => onRemoveFilter('year', year)}
           >
             <Text style={styles.filterText}>
-              {year.month ? monthNames[parseInt(year.month) - 1] : year.year}
+              {year.month ? monthNames[parseInt(String(year.month)) - 1] : year.year}
             </Text>
             <X size={14} color={colors.primary} />
           </TouchableOpacity>
