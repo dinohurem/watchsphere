@@ -309,8 +309,10 @@ export default function MarketScreen() {
 
   const handleWatchPress = (watch: WatchMarketData) => {
     // Navigate with both ID and reference for flexibility
+    // Encode the ID to handle references with special characters (e.g., 5711/1A-010)
+    const encodedId = encodeURIComponent(watch.id);
     router.push({
-      pathname: `/market/${watch.id}`,
+      pathname: `/market/${encodedId}`,
       params: {
         reference: watch.reference,
         brand: watch.brand,

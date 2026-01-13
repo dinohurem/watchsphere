@@ -453,8 +453,8 @@ export function ProfileSettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto p-6 lg:p-8">
+    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto">
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Left Sidebar */}
           <div className="lg:w-72 flex-shrink-0">

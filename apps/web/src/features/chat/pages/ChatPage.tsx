@@ -204,11 +204,13 @@ export function ChatPage() {
   ];
 
   return (
-    <div className="flex h-full bg-white">
-      {/* Left Sidebar - Chat List */}
-      <div className="w-[399px] flex-shrink-0 flex flex-col pl-[96px]">
-        {/* Header */}
-        <div className="pl-4 pt-8 pb-6">
+    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto h-[calc(100vh-120px)]">
+        <div className="flex h-full bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          {/* Left Sidebar - Chat List */}
+          <div className="w-[335px] flex-shrink-0 flex flex-col">
+            {/* Header */}
+            <div className="px-4 pt-6 pb-4">
           <h1 className="text-2xl font-semibold text-[#1d1d1f]">Chat</h1>
         </div>
 
@@ -255,11 +257,11 @@ export function ChatPage() {
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="w-px bg-[rgba(0,0,0,0.1)]" />
+          {/* Divider */}
+          <div className="w-px bg-[rgba(0,0,0,0.1)]" />
 
-      {/* Right Side - Chat Area */}
-      <div className="flex-1 flex flex-col">
+          {/* Right Side - Chat Area */}
+          <div className="flex-1 flex flex-col">
         {selectedChat ? (
           <>
             {/* Chat Header */}
@@ -367,6 +369,8 @@ export function ChatPage() {
             </div>
           </div>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );

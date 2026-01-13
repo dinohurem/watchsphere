@@ -175,7 +175,7 @@ export function OrderDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto py-8 flex items-center justify-center min-h-[400px]">
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
       </div>
     );
@@ -183,11 +183,13 @@ export function OrderDetailPage() {
 
   if (!order) {
     return (
-      <div className="max-w-6xl mx-auto py-8 text-center">
-        <p className="text-gray-500">Order not found</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-primary hover:underline">
-          Go back
-        </button>
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto py-8 text-center">
+          <p className="text-gray-500">Order not found</p>
+          <button onClick={() => navigate(-1)} className="mt-4 text-primary hover:underline">
+            Go back
+          </button>
+        </div>
       </div>
     );
   }
@@ -195,7 +197,7 @@ export function OrderDetailPage() {
   // Sale completed screen
   if (showSaleComplete) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <Check className="w-8 h-8 text-blue-500" />
@@ -227,7 +229,8 @@ export function OrderDetailPage() {
   const mainImage = order.watch_details?.image_url || images[selectedImage];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between mb-6 sm:mb-8">
         <div className="flex items-center gap-3 sm:gap-4">
@@ -617,6 +620,7 @@ export function OrderDetailPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

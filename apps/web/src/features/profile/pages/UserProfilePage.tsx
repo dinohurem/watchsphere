@@ -138,7 +138,7 @@ export function UserProfilePage() {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
       </div>
     )
@@ -146,16 +146,18 @@ export function UserProfilePage() {
 
   if (error || !profile) {
     return (
-      <div className="p-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Back
-        </button>
-        <div className="text-center py-12 text-gray-500">
-          {error || 'User not found'}
+      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
+          >
+            <ChevronLeft className="w-5 h-5" />
+            Back
+          </button>
+          <div className="text-center py-12 text-gray-500">
+            {error || 'User not found'}
+          </div>
         </div>
       </div>
     )
@@ -164,8 +166,8 @@ export function UserProfilePage() {
   const isOwnProfile = currentUser?.id === userId
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="max-w-3xl mx-auto">
+    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <button
           onClick={() => navigate(-1)}
