@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, AlertTriangle, Bug, RefreshCw, ChevronDown } from 'lucide-react'
+import { Search, AlertTriangle, Bug, RefreshCw } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface Dispute {

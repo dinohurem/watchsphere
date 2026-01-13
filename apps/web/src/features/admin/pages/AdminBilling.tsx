@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, DollarSign, CreditCard, TrendingUp, Users, Edit2, Crown, Calendar } from 'lucide-react'
+import { Plus, Search, DollarSign, TrendingUp, Users, Edit2, Crown, Calendar } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface BillingRecord {

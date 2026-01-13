@@ -30,13 +30,13 @@ export const getStorage = (): StateStorage => {
       if (!storage) {
         return;
       }
-      return storage.setItem(name, value);
+      await storage.setItem(name, value);
     },
     removeItem: async (name: string): Promise<void> => {
       if (!storage) {
         return;
       }
-      return storage.removeItem(name);
+      await storage.removeItem(name);
     },
   };
 };
