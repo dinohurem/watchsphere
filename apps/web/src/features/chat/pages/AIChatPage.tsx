@@ -286,132 +286,133 @@ export function AIChatPage() {
 
   return (
     <SubscriptionOverlay feature="ai_chat">
-    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto h-[calc(100vh-120px)]">
-        <div className="flex h-full bg-white rounded-2xl border border-gray-200 overflow-hidden">
+    <div className="p-4 lg:p-6 bg-white min-h-screen">
+      <div className="max-w-7xl mx-auto h-[calc(100vh-96px)]">
+        <div className="flex h-full rounded-2xl border border-black/5 overflow-hidden">
           {/* Left Sidebar - Conversation History */}
-          <div className="w-[335px] border-r border-gray-200 flex flex-col">
+          <div className="w-[335px] border-r border-black/5 flex flex-col">
             {/* Sidebar Header */}
-            <div className="px-4 py-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-[#1d1d1f] opacity-80">AI Assistant</h2>
-            <button
-              onClick={handleNewChat}
-              className="w-10 h-10 rounded-full bg-[#f4f4f4] flex items-center justify-center hover:bg-gray-200 transition-colors"
-            >
-              <Plus className="w-[18px] h-[18px] text-[#212121]" />
-            </button>
-          </div>
-        </div>
-
-        {/* Conversation List */}
-        <div className="flex-1 overflow-y-auto px-4">
-          {isLoadingConversations ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
+            <div className="px-4 py-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-semibold text-[#1d1d1f] opacity-80">AI Assistant</h2>
+                <button
+                  onClick={handleNewChat}
+                  className="w-10 h-10 rounded-full bg-[#f4f4f4] flex items-center justify-center hover:bg-gray-200 transition-colors"
+                >
+                  <Plus className="w-[18px] h-[18px] text-[#212121]" />
+                </button>
+              </div>
             </div>
-          ) : conversations.length === 0 ? (
-            <p className="text-center text-gray-500 py-8 text-sm">No conversations yet</p>
-          ) : (
-            conversations.map((conv) => (
-              <button
-                key={conv.id}
-                onClick={() => handleSelectConversation(conv.id)}
-                className={`w-full text-left px-4 py-3 rounded-2xl mb-1 transition-colors ${
-                  activeConversation === conv.id ? 'bg-gray-100' : 'hover:bg-gray-50'
-                }`}
-              >
-                <p className="text-[15px] text-[#212121] truncate tracking-[0.075px]">{conv.preview}</p>
-              </button>
-            ))
-          )}
-        </div>
-      </div>
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Date Header */}
-        <div className="py-8">
-          <p className="text-[13px] text-[#1d1d1f] opacity-50 text-center font-medium">Today</p>
-        </div>
-
-        {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto px-16">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`mb-8 ${message.isUser ? 'flex justify-end' : 'flex justify-start'}`}
-            >
-              {message.isUser ? (
-                <div className="bg-[#f6f6f6] px-4 py-2 rounded-xl max-w-[60%]">
-                  <p className="text-[15px] text-[#212121] leading-5 tracking-[0.075px]">
-                    {message.content}
-                  </p>
+            {/* Conversation List */}
+            <div className="flex-1 overflow-y-auto px-4">
+              {isLoadingConversations ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
                 </div>
+              ) : conversations.length === 0 ? (
+                <p className="text-center text-gray-500 py-8 text-sm">No conversations yet</p>
               ) : (
-                <div className="max-w-[80%]">{renderFormattedText(message.content)}</div>
+                conversations.map((conv) => (
+                  <button
+                    key={conv.id}
+                    onClick={() => handleSelectConversation(conv.id)}
+                    className={`w-full text-left px-4 py-3 rounded-2xl mb-1 transition-colors ${
+                      activeConversation === conv.id ? 'bg-gray-100' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <p className="text-[15px] text-[#212121] truncate tracking-[0.075px]">{conv.preview}</p>
+                  </button>
+                ))
               )}
             </div>
-          ))}
-
-          {/* Loading State */}
-          {isLoading && (
-            <div className="mb-8 flex justify-start">
-              <p className="text-[15px] text-[#212121] opacity-60 leading-5">One sec please...</p>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Bottom Section - Suggestions & Input */}
-        <div className="px-16 pb-16">
-          {/* Suggestions - Only show when no messages */}
-          {messages.length === 0 && !isLoading && (
-            <div className="flex flex-wrap gap-4 mb-6">
-              {SUGGESTIONS.map((suggestion, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleSuggestionClick(suggestion)}
-                  className="px-5 py-3 rounded-full border border-[#c1c1c1] bg-gradient-to-b from-transparent to-black/[0.02] hover:border-gray-400 transition-colors"
-                >
-                  <span className="text-[15px] text-[#212121] opacity-60 tracking-[0.075px]">
-                    {suggestion}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Input Area */}
-          <div className="flex items-center gap-4">
-            <div className="flex-1 bg-[rgba(33,33,33,0.04)] rounded-full px-4 py-3">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything"
-                className="w-full bg-transparent text-[15px] text-[#212121] placeholder:text-[#212121] placeholder:opacity-50 outline-none tracking-[0.075px]"
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Image Upload Button */}
-            <button className="w-11 h-11 rounded-full bg-[#f1f1f1] flex items-center justify-center hover:bg-gray-200 transition-colors">
-              <Image className="w-[18px] h-[18px] text-[#212121]" />
-            </button>
-
-            {/* Send Button */}
-            <button
-              onClick={handleSend}
-              disabled={!inputText.trim() || isLoading}
-              className="w-11 h-11 rounded-full bg-[#9747ff] flex items-center justify-center hover:bg-[#8033e6] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ArrowUp className="w-5 h-5 text-white" />
-            </button>
           </div>
-        </div>
+
+          {/* Main Chat Area */}
+          <div className="flex-1 flex flex-col">
+            {/* Date Header */}
+            <div className="py-8">
+              <p className="text-[13px] text-[#1d1d1f] opacity-50 text-center font-medium">Today</p>
+            </div>
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto px-16">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`mb-8 ${message.isUser ? 'flex justify-end' : 'flex justify-start'}`}
+                >
+                  {message.isUser ? (
+                    <div className="bg-[#f6f6f6] px-4 py-2 rounded-xl max-w-[60%]">
+                      <p className="text-[15px] text-[#212121] leading-5 tracking-[0.075px]">
+                        {message.content}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="max-w-[80%]">{renderFormattedText(message.content)}</div>
+                  )}
+                </div>
+              ))}
+
+              {/* Loading State */}
+              {isLoading && (
+                <div className="mb-8 flex justify-start">
+                  <p className="text-[15px] text-[#212121] opacity-60 leading-5">One sec please...</p>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Bottom Section - Suggestions & Input */}
+            <div className="px-16 pb-16">
+              {/* Suggestions - Only show when no messages */}
+              {messages.length === 0 && !isLoading && (
+                <div className="flex flex-wrap gap-4 mb-6">
+                  {SUGGESTIONS.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      className="px-5 py-3 rounded-full border border-[#c1c1c1] bg-gradient-to-b from-transparent to-black/[0.02] hover:border-gray-400 transition-colors"
+                    >
+                      <span className="text-[15px] text-[#212121] opacity-60 tracking-[0.075px]">
+                        {suggestion}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Input Area */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1 bg-[rgba(33,33,33,0.04)] rounded-full px-4 py-3">
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask anything"
+                    className="w-full bg-transparent text-[15px] text-[#212121] placeholder:text-[#212121] placeholder:opacity-50 outline-none tracking-[0.075px]"
+                    disabled={isLoading}
+                  />
+                </div>
+
+                {/* Image Upload Button */}
+                <button className="w-11 h-11 rounded-full bg-[#f1f1f1] flex items-center justify-center hover:bg-gray-200 transition-colors">
+                  <Image className="w-[18px] h-[18px] text-[#212121]" />
+                </button>
+
+                {/* Send Button */}
+                <button
+                  onClick={handleSend}
+                  disabled={!inputText.trim() || isLoading}
+                  className="w-11 h-11 rounded-full bg-[#9747ff] flex items-center justify-center hover:bg-[#8033e6] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowUp className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
