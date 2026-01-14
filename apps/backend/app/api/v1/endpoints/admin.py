@@ -181,6 +181,7 @@ async def delete_user(
 ) -> Any:
     """Delete user (Admin only)"""
     from beanie import PydanticObjectId
+    from app.models.billing import Subscription, SubscriptionHistory
 
     user = await User.get(PydanticObjectId(user_id))
 
@@ -196,6 +197,16 @@ async def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own account"
         )
+
+    # Cancel and delete user's subscription if exists
+    subscription = await Subscription.find_one(Subscription.user_id == user_id)
+    if subscription:
+        # Delete subscription history records
+        await SubscriptionHistory.find(
+            SubscriptionHistory.subscription_id == str(subscription.id)
+        ).delete()
+        # Delete the subscription
+        await subscription.delete()
 
     await user.delete()
 

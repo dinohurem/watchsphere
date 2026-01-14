@@ -27,76 +27,99 @@ interface GuideStep {
   getHighlightArea: () => HighlightArea;
 }
 
-// Step 1: Profile icon (top left on home)
+// Step 1: Profile icon (top right on home)
+// Header has SafeAreaView edges=['top'], then paddingTop: hp(12)
 const profileHighlight = (): HighlightArea => ({
-  x: wp(16),
-  y: STATUS_BAR_HEIGHT + hp(10),
-  width: wp(44),
-  height: wp(44),
-  borderRadius: wp(22),
+  x: SCREEN_WIDTH - wp(16) - sp(44),
+  y: STATUS_BAR_HEIGHT + hp(24),
+  width: sp(44),
+  height: sp(44),
+  borderRadius: sp(22),
 });
 
 // Step 2: Search input (on home page)
+// Header layout: logo (33px) + gap (16px) + search (flex) + gap (16px) + profile (44px)
+// Search starts after: padding (16) + logo (33) + gap (16) = 65
 const searchHighlight = (): HighlightArea => ({
-  x: wp(16),
-  y: STATUS_BAR_HEIGHT + hp(70),
-  width: SCREEN_WIDTH - wp(32),
-  height: hp(48),
-  borderRadius: wp(24),
+  x: wp(16) + sp(33) + wp(16),
+  y: STATUS_BAR_HEIGHT + hp(24),
+  width: SCREEN_WIDTH - wp(16) - sp(33) - wp(16) - wp(16) - sp(44) - wp(16),
+  height: sp(44),
+  borderRadius: sp(22),
 });
 
-// Step 3: Market tab in bottom navigation
-const marketTabHighlight = (): HighlightArea => ({
-  x: SCREEN_WIDTH / 2 - wp(40),
-  y: SCREEN_HEIGHT - hp(85),
-  width: wp(80),
-  height: hp(60),
-  borderRadius: wp(12),
-});
+// Step 3: Market tab in bottom navigation (second tab of 4 in the pill)
+// Tab bar: paddingHorizontal 25px, pill container flex: 1, 4 equal tabs
+// Market is the second tab (index 1)
+const marketTabHighlight = (): HighlightArea => {
+  const tabBarPadding = wp(25);
+  const aiButtonWidth = sp(54) + wp(16); // AI button + gap
+  const pillWidth = SCREEN_WIDTH - tabBarPadding * 2 - aiButtonWidth;
+  const tabWidth = pillWidth / 4;
+  const marketTabX = tabBarPadding + tabWidth; // Start of second tab
+  return {
+    x: marketTabX,
+    y: SCREEN_HEIGHT - hp(85),
+    width: tabWidth,
+    height: hp(55),
+    borderRadius: sp(12),
+  };
+};
 
-// Step 4: Filter icon on market page (top right)
+// Step 4: Filters button on market page (in the "Watches" section header, right side)
+// Position: after trendingSection (paddingTop: 16 + content + paddingBottom: 32) + watchesHeader
+// watchesHeader is at paddingHorizontal: 16, filtersButton has paddingHorizontal: 12, paddingVertical: 8
 const filtersHighlight = (): HighlightArea => ({
-  x: SCREEN_WIDTH - wp(60),
-  y: STATUS_BAR_HEIGHT + hp(10),
-  width: wp(44),
-  height: wp(44),
-  borderRadius: wp(22),
+  x: SCREEN_WIDTH - wp(16) - wp(120), // Approximate width of filters button
+  y: STATUS_BAR_HEIGHT + hp(260), // After header + trending section
+  width: wp(120),
+  height: hp(40),
+  borderRadius: sp(20),
 });
 
-// Step 5: First watch row on market page
+// Step 5: First watch row on market page (in the watch list after categories)
+// Position: after header + trending + watchesHeader + categoryTabs
 const watchRowHighlight = (): HighlightArea => ({
   x: wp(16),
-  y: STATUS_BAR_HEIGHT + hp(180),
+  y: STATUS_BAR_HEIGHT + hp(400), // After all the sections above the watch list
   width: SCREEN_WIDTH - wp(32),
-  height: hp(80),
-  borderRadius: wp(16),
+  height: hp(50),
+  borderRadius: wp(8),
 });
 
-// Step 6: Order book icon on watch details (should be visible in header)
-const orderBookHighlight = (): HighlightArea => ({
-  x: SCREEN_WIDTH - wp(60),
-  y: STATUS_BAR_HEIGHT + hp(10),
-  width: wp(44),
-  height: wp(44),
-  borderRadius: wp(22),
-});
+// Step 6: Order book icon on watch details (first action button)
+// actionButtons: paddingHorizontal: 8, space-around with 4 buttons, each actionButton width: 96
+// Order Book is the first button
+const orderBookHighlight = (): HighlightArea => {
+  const buttonWidth = wp(70);
+  const spacing = (SCREEN_WIDTH - wp(16) - buttonWidth * 4) / 5; // space-around
+  return {
+    x: spacing,
+    y: STATUS_BAR_HEIGHT + hp(490), // Below hero image (~525px) and price section
+    width: buttonWidth,
+    height: hp(60),
+    borderRadius: sp(12),
+  };
+};
 
-// Step 7: AI chat icon in tab bar (or floating button)
+// Step 7: AI chat button on watch details (bottom right, next to order buttons)
+// aiButtonOuter: width: 42, positioned at right side of bottomBar
 const aiChatHighlight = (): HighlightArea => ({
-  x: SCREEN_WIDTH - wp(70),
-  y: SCREEN_HEIGHT - hp(160),
-  width: wp(56),
-  height: wp(56),
-  borderRadius: wp(28),
+  x: SCREEN_WIDTH - wp(16) - sp(42),
+  y: SCREEN_HEIGHT - hp(70),
+  width: sp(42),
+  height: sp(42),
+  borderRadius: sp(21),
 });
 
-// Step 8: Buy/Sell buttons on watch details
+// Step 8: Buy/Sell buttons on watch details (bottom bar, left side)
+// orderButtons container: flex: 1, marginRight: 12, contains buy and sell buttons
 const orderButtonsHighlight = (): HighlightArea => ({
   x: wp(16),
-  y: SCREEN_HEIGHT - hp(130),
-  width: SCREEN_WIDTH - wp(32),
-  height: hp(56),
-  borderRadius: wp(28),
+  y: SCREEN_HEIGHT - hp(78),
+  width: SCREEN_WIDTH - wp(16) - wp(12) - sp(42) - wp(16),
+  height: sp(48),
+  borderRadius: sp(24),
 });
 
 const guideSteps: GuideStep[] = [
@@ -139,7 +162,7 @@ const guideSteps: GuideStep[] = [
     id: 'order-book',
     title: 'Order Book',
     description: 'View buy and sell orders for this watch. See current market prices, best bids, and asks from traders worldwide.',
-    route: '/market/126610LN',
+    route: '/market/[id]',
     routeParams: { id: '126610LN', reference: '126610LN' },
     getHighlightArea: orderBookHighlight,
   },
@@ -147,7 +170,7 @@ const guideSteps: GuideStep[] = [
     id: 'ai-assistant',
     title: 'AI Watch Expert',
     description: 'Chat with our AI assistant to get expert advice on watches, pricing, and market trends.',
-    route: '/market/126610LN',
+    route: '/market/[id]',
     routeParams: { id: '126610LN', reference: '126610LN' },
     getHighlightArea: aiChatHighlight,
   },
@@ -155,7 +178,7 @@ const guideSteps: GuideStep[] = [
     id: 'place-orders',
     title: 'Place Orders',
     description: 'Ready to buy or sell? Use these buttons to place buy or sell orders for this watch.',
-    route: '/market/126610LN',
+    route: '/market/[id]',
     routeParams: { id: '126610LN', reference: '126610LN' },
     getHighlightArea: orderButtonsHighlight,
   },
@@ -170,6 +193,7 @@ interface GuideContextType {
   endGuide: () => void;
   nextStep: () => void;
   previousStep: () => void;
+  goToStep: (stepIndex: number) => void;
   hasSeenGuide: boolean;
   setHasSeenGuide: (seen: boolean) => void;
   checkFirstLogin: () => Promise<boolean>;
@@ -238,6 +262,14 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     }
   }, [currentStep, navigateToStep]);
 
+  const goToStep = useCallback((stepIndex: number) => {
+    if (stepIndex >= 0 && stepIndex < guideSteps.length && stepIndex !== currentStep) {
+      const targetStep = guideSteps[stepIndex];
+      setCurrentStep(stepIndex);
+      navigateToStep(targetStep);
+    }
+  }, [currentStep, navigateToStep]);
+
   const setHasSeenGuide = useCallback((seen: boolean) => {
     setHasSeenGuideState(seen);
   }, []);
@@ -262,6 +294,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
         endGuide,
         nextStep,
         previousStep,
+        goToStep,
         hasSeenGuide,
         setHasSeenGuide,
         checkFirstLogin,
@@ -280,7 +313,7 @@ function GuideOverlay() {
     return null;
   }
 
-  const { currentGuideStep, currentStep, totalSteps, nextStep, previousStep, endGuide } = context;
+  const { currentGuideStep, currentStep, totalSteps, nextStep, previousStep, goToStep, endGuide } = context;
   const isLastStep = currentStep === totalSteps - 1;
   const isFirstStep = currentStep === 0;
 
@@ -361,16 +394,22 @@ function GuideOverlay() {
           <Text style={styles.description}>{currentGuideStep.description}</Text>
 
           <View style={styles.footer}>
-            {/* Step indicators */}
+            {/* Step indicators - tappable */}
             <View style={styles.dotsContainer}>
               {Array.from({ length: totalSteps }).map((_, index) => (
-                <View
+                <TouchableOpacity
                   key={index}
-                  style={[
-                    styles.dot,
-                    index === currentStep && styles.dotActive,
-                  ]}
-                />
+                  onPress={() => goToStep(index)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <View
+                    style={[
+                      styles.dot,
+                      index === currentStep && styles.dotActive,
+                    ]}
+                  />
+                </TouchableOpacity>
               ))}
             </View>
 

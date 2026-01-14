@@ -84,7 +84,7 @@ export default function HomeScreen() {
     {
       id: '1',
       title: 'Activity Center',
-      subtitle: 'Track your matches, payments, shipping',
+      subtitle: 'Track your watchlist, orders, and price alerts',
       icon: 'activity',
       color: '#FF7373',
     },

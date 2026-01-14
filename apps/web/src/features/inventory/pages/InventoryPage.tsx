@@ -108,7 +108,7 @@ export function InventoryPage() {
               className="bg-white rounded-xl border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
             >
               {/* Watch Image */}
-              <div className="aspect-square bg-gray-50 flex items-center justify-center p-4">
+              <div className="aspect-square bg-gray-50 flex items-center justify-center p-4 relative">
                 {item.cover_image ? (
                   <img
                     src={item.cover_image}
@@ -117,6 +117,12 @@ export function InventoryPage() {
                   />
                 ) : (
                   <ImagePlaceholder width={180} height={180} borderRadius={0} />
+                )}
+                {/* Sold Badge */}
+                {item.status === 'sold' && (
+                  <div className="absolute top-3 left-3 bg-[#4AA078] text-white text-xs font-semibold px-3 py-1 rounded-full">
+                    Sold
+                  </div>
                 )}
               </div>
 

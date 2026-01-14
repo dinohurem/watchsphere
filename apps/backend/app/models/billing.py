@@ -115,6 +115,39 @@ class Subscription(Document):
         ]
 
 
+class SubscriptionHistory(Document):
+    """Historical records of subscription changes"""
+    subscription_id: str = Field(..., index=True)
+    user_id: str = Field(..., index=True)
+    user_name: str
+    user_email: str
+
+    # Subscription details at this point in time
+    plan: SubscriptionPlan
+    status: SubscriptionStatus
+    price_monthly: float
+    currency: str = "EUR"
+
+    # Action that caused this history record
+    action: str  # "created", "renewed", "upgraded", "downgraded", "cancelled", "expired"
+    action_by: Optional[str] = None  # Admin who made the change (if any)
+
+    # Period info
+    period_start: datetime
+    period_end: Optional[datetime] = None
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "subscription_history"
+        indexes = [
+            "subscription_id",
+            "user_id",
+            "action",
+            "created_at",
+        ]
+
+
 class Transaction(Document):
     """Marketplace transaction records (buy/sell orders)"""
     # Order info

@@ -175,6 +175,7 @@ function App() {
         <Route path="order/:orderId" element={<OrderDetailPage />} />
         <Route path="watchlist" element={<WatchlistPage />} />
         <Route path="chat" element={<ChatPage />} />
+        <Route path="chat/:recipientId" element={<ChatPage />} />
         <Route path="ai-assistant" element={<AIChatPage />} />
         <Route path="social-search" element={<SocialSearchPage />} />
         <Route path="social-search/filters" element={<SocialFiltersPage />} />

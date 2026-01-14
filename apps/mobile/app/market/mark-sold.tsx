@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
@@ -21,21 +21,33 @@ function CloseIcon() {
   );
 }
 
-// Checkmark Circle Icon
+// Checkmark Circle Icon (blue, matching Figma design)
 function CheckCircleIcon() {
   return (
-    <Svg width={80} height={80} viewBox="0 0 80 80" fill="none">
-      <Circle cx="40" cy="40" r="38" stroke="#4AA078" strokeWidth="4" />
-      <Path
-        d="M25 40L35 50L55 30"
-        stroke="#4AA078"
-        strokeWidth="4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <View style={checkIconStyles.container}>
+      <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
+        <Path
+          d="M26.6668 8L12.0002 22.6667L5.3335 16"
+          stroke="#0088FF"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </View>
   );
 }
+
+const checkIconStyles = StyleSheet.create({
+  container: {
+    width: sp(64),
+    height: sp(64),
+    borderRadius: sp(80),
+    backgroundColor: 'rgba(0, 136, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
 
 // Grabber bar for sheet appearance
 function GrabberBar() {
@@ -76,10 +88,12 @@ export default function MarkSoldScreen() {
 
     setLoading(true);
     try {
-      await api.post(`/orders/${params.orderId}/mark-sold`);
+      console.log('Marking order as sold:', params.orderId);
+      const response = await api.post(`/orders/${params.orderId}/mark-sold`);
+      console.log('Mark as sold response:', response.data);
       setSuccess(true);
     } catch (error: any) {
-      console.error('Error marking as sold:', error);
+      console.error('Error marking as sold:', error?.response?.data || error);
       Alert.alert(
         'Error',
         error.response?.data?.detail || 'Failed to mark order as sold. Please try again.'
@@ -97,30 +111,18 @@ export default function MarkSoldScreen() {
 
   if (success) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <GrabberBar />
-
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Mark as Sold</Text>
-          <TouchableOpacity style={styles.closeButton} onPress={handleDone}>
-            <CloseIcon />
-          </TouchableOpacity>
-        </View>
-
-        {/* Success Content */}
+      <SafeAreaView style={styles.successContainer} edges={['top', 'bottom']}>
+        {/* Success Content - centered */}
         <View style={styles.successContent}>
           <CheckCircleIcon />
-          <Text style={styles.successTitle}>Congratulations!</Text>
+          <Text style={styles.successTitle}>Sale completed</Text>
           <Text style={styles.successMessage}>
-            Your {brand} {model} has been marked as sold and removed from your inventory.
+            Your watch has been marked as sold.{'\n'}Thank you for keeping your inventory up to date.
           </Text>
-        </View>
 
-        {/* Done Button */}
-        <View style={styles.bottomSection}>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleDone}>
-            <Text style={styles.primaryButtonText}>Done</Text>
+          {/* Go to Inventory Button */}
+          <TouchableOpacity style={styles.successButton} onPress={handleDone}>
+            <Text style={styles.primaryButtonText}>Go to Inventory</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -185,6 +187,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  successContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: sp(32),
   },
   grabberContainer: {
     alignItems: 'center',
@@ -270,15 +277,20 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: '#212121',
-    borderRadius: sp(12),
-    paddingVertical: hp(16),
+    borderRadius: sp(99),
+    paddingVertical: hp(12),
+    paddingHorizontal: wp(33),
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
+    minWidth: wp(147),
   },
   primaryButtonText: {
     fontFamily: 'HankenGrotesk_600SemiBold',
-    fontSize: fp(16),
+    fontSize: fp(15),
     color: '#FFFFFF',
+    letterSpacing: 0.075,
+    lineHeight: fp(20),
   },
   secondaryButton: {
     backgroundColor: 'transparent',
@@ -301,20 +313,32 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: wp(24),
+    paddingHorizontal: wp(16),
   },
   successTitle: {
-    fontFamily: 'HankenGrotesk_700Bold',
-    fontSize: fp(24),
-    color: '#212121',
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(20),
+    color: '#1D1D1F',
     marginTop: hp(24),
     marginBottom: hp(12),
+    lineHeight: fp(26),
   },
   successMessage: {
     fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(15),
-    color: '#666666',
+    color: 'rgba(29, 29, 31, 0.6)',
     textAlign: 'center',
-    lineHeight: fp(22),
+    lineHeight: fp(20),
+    width: wp(250),
+  },
+  successButton: {
+    backgroundColor: '#212121',
+    borderRadius: sp(99),
+    paddingVertical: hp(12),
+    paddingHorizontal: wp(33),
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: wp(147),
+    marginTop: hp(24),
   },
 });

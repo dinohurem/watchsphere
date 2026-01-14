@@ -25,12 +25,10 @@ interface DynamicFilterState {
 }
 
 // Mini chart component for price trend visualization
-function MiniChart({ data, positive }: { data: number[]; positive: boolean }) {
+function MiniChart({ data }: { data: number[] }) {
+  // Only render if we have actual price history data
   if (!data || data.length < 2) {
-    // Generate placeholder data
-    data = positive
-      ? [40, 45, 42, 50, 48, 55, 52, 60]
-      : [60, 55, 58, 50, 52, 45, 48, 40];
+    return null;
   }
 
   const height = 32;
@@ -45,7 +43,8 @@ function MiniChart({ data, positive }: { data: number[]; positive: boolean }) {
     return `${x},${y}`;
   }).join(' ');
 
-  const color = positive ? '#22C55E' : '#EF4444';
+  // Use black color as per Figma design
+  const color = '#1D1D1F';
 
   return (
     <svg width={width} height={height} className="overflow-visible">
@@ -95,7 +94,7 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
       {/* Watch Info */}
       <div className="px-4 pb-4 pt-3 flex flex-col gap-3">
         <div>
-          <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">{watch.brand}</p>
+          <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">{watch.brand} {watch.model}</p>
           <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">{watch.reference}</p>
         </div>
         <div className="flex items-center justify-between gap-2">
@@ -233,7 +232,8 @@ export function MarketPage() {
   };
 
   const handleWatchClick = (watch: WatchData) => {
-    navigate(`/app/watch/${watch.reference}`);
+    const watchIdentifier = watch.reference || watch.id;
+    navigate(`/app/watch/${encodeURIComponent(watchIdentifier)}`);
   };
 
   const handleOpenFilters = () => {
@@ -387,11 +387,11 @@ export function MarketPage() {
                         onClick={() => handleWatchClick(watch)}
                       >
                         <div className="w-[200px]">
-                          <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{watch.brand}</p>
+                          <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{watch.brand} {watch.model}</p>
                           <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{watch.reference}</p>
                         </div>
                         <div className="w-[168px]">
-                          <MiniChart data={watch.priceHistory || []} positive={isPositive} />
+                          <MiniChart data={watch.priceHistory || []} />
                         </div>
                         <div className="w-[168px] flex items-center gap-1">
                           {isPositive ? (
@@ -469,7 +469,7 @@ export function MarketPage() {
                             )}
                           </div>
                           <div>
-                            <p className="text-base font-semibold text-[#212121]">{watch.brand}</p>
+                            <p className="text-base font-semibold text-[#212121]">{watch.brand} {watch.model}</p>
                             <p className="text-sm font-medium text-[#212121]/50">{watch.reference}</p>
                           </div>
                         </div>
