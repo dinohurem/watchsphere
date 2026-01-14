@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Svg, { Path, Circle, Line, Rect, G, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
@@ -250,8 +250,16 @@ function ChartEmptyState({ width, height }: { width: number; height: number }) {
   );
 }
 
-// Price Chart Component
-function PriceChart({ data, width, height }: { data: number[], width: number, height: number }) {
+// Price Chart Component with interactive touch
+interface PriceChartProps {
+  data: number[];
+  width: number;
+  height: number;
+  selectedIndex: number | null;
+  onSelectIndex: (index: number | null) => void;
+}
+
+function PriceChart({ data, width, height, selectedIndex, onSelectIndex }: PriceChartProps) {
   // Show empty state if no data or insufficient data points
   if (!data || data.length < 2) {
     return <ChartEmptyState width={width} height={height} />;
@@ -263,6 +271,25 @@ function PriceChart({ data, width, height }: { data: number[], width: number, he
   const padding = sp(20);
   const chartWidth = width - padding * 2;
   const chartHeight = height - padding * 2;
+
+  // Calculate point coordinates for interaction
+  const getPointAtIndex = (index: number) => {
+    const x = padding + (index / (data.length - 1)) * chartWidth;
+    const y = padding + chartHeight - ((data[index] - min) / range) * chartHeight;
+    return { x, y };
+  };
+
+  // Handle touch to find closest point
+  const handleTouch = (event: GestureResponderEvent) => {
+    const { locationX } = event.nativeEvent;
+
+    // Find the closest data point based on X coordinate
+    const relativeX = locationX - padding;
+    const indexFloat = (relativeX / chartWidth) * (data.length - 1);
+    const closestIndex = Math.max(0, Math.min(data.length - 1, Math.round(indexFloat)));
+
+    onSelectIndex(closestIndex);
+  };
 
   // Create path for the line
   const pathData = data.map((value, index) => {
@@ -277,43 +304,80 @@ function PriceChart({ data, width, height }: { data: number[], width: number, he
   // Grid lines
   const gridLines = [0.25, 0.5, 0.75].map((pct) => padding + chartHeight * (1 - pct));
 
+  // Get selected point position
+  const selectedPoint = selectedIndex !== null ? getPointAtIndex(selectedIndex) : null;
+
   return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Defs>
-        <SvgLinearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0%" stopColor="#4AA078" stopOpacity={0.2} />
-          <Stop offset="100%" stopColor="#4AA078" stopOpacity={0} />
-        </SvgLinearGradient>
-      </Defs>
+    <View
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => true}
+      onResponderGrant={handleTouch}
+      onResponderMove={handleTouch}
+    >
+      <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <Defs>
+          <SvgLinearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor="#4AA078" stopOpacity={0.2} />
+            <Stop offset="100%" stopColor="#4AA078" stopOpacity={0} />
+          </SvgLinearGradient>
+        </Defs>
 
-      {/* Grid lines */}
-      {gridLines.map((y, i) => (
-        <Line
-          key={i}
-          x1={padding}
-          y1={y}
-          x2={width - padding}
-          y2={y}
-          stroke="rgba(0,0,0,0.05)"
-          strokeWidth={1}
-          strokeDasharray="4,4"
-        />
-      ))}
+        {/* Grid lines */}
+        {gridLines.map((y, i) => (
+          <Line
+            key={i}
+            x1={padding}
+            y1={y}
+            x2={width - padding}
+            y2={y}
+            stroke="rgba(0,0,0,0.05)"
+            strokeWidth={1}
+            strokeDasharray="4,4"
+          />
+        ))}
 
-      {/* Area fill */}
-      <Path d={areaPath} fill="url(#areaGradient)" />
+        {/* Area fill */}
+        <Path d={areaPath} fill="url(#areaGradient)" />
 
-      {/* Line */}
-      <Path d={pathData} stroke="#212121" strokeWidth={2} fill="none" />
+        {/* Line */}
+        <Path d={pathData} stroke="#212121" strokeWidth={2} fill="none" />
 
-      {/* Current price dot */}
-      <Circle
-        cx={padding + chartWidth}
-        cy={padding + chartHeight - ((data[data.length - 1] - min) / range) * chartHeight}
-        r={4}
-        fill="#212121"
-      />
-    </Svg>
+        {/* Selected point indicator */}
+        {selectedPoint && (
+          <>
+            {/* Vertical dashed line */}
+            <Line
+              x1={selectedPoint.x}
+              y1={padding}
+              x2={selectedPoint.x}
+              y2={padding + chartHeight}
+              stroke="rgba(33, 33, 33, 0.3)"
+              strokeWidth={1}
+              strokeDasharray="4,4"
+            />
+            {/* Selected point dot */}
+            <Circle
+              cx={selectedPoint.x}
+              cy={selectedPoint.y}
+              r={6}
+              fill="#FFFFFF"
+              stroke="#212121"
+              strokeWidth={2}
+            />
+          </>
+        )}
+
+        {/* Current price dot (only show if no selection or selection is the last point) */}
+        {(selectedIndex === null || selectedIndex === data.length - 1) && (
+          <Circle
+            cx={padding + chartWidth}
+            cy={padding + chartHeight - ((data[data.length - 1] - min) / range) * chartHeight}
+            r={4}
+            fill="#212121"
+          />
+        )}
+      </Svg>
+    </View>
   );
 }
 
@@ -405,6 +469,9 @@ export default function WatchDetailsScreen() {
   // Watchlist state
   const [isInWatchlist, setIsInWatchlist] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
+
+  // Chart interaction state
+  const [selectedChartIndex, setSelectedChartIndex] = useState<number | null>(null);
 
   // Get order book filters from context
   const { orderBookFilters } = useFilters();
@@ -895,20 +962,54 @@ export default function WatchDetailsScreen() {
             </View>
           </View>
 
-          {/* Price tooltip - shows latest order book data if available */}
-          {(sellOrders.length > 0 || buyOrders.length > 0) && (
+          {/* Price tooltip - shows selected chart point or latest order book data */}
+          {(filteredPriceHistory.length > 0 || sellOrders.length > 0 || buyOrders.length > 0) && (
             <View style={styles.priceTooltip}>
               <Text style={styles.tooltipPrice}>
-                {formatPriceEurBefore(
-                  sellOrders.length > 0
-                    ? sellOrders[0].price
-                    : buyOrders.length > 0
-                      ? buyOrders[0].price
-                      : 0
-                )}
+                {(() => {
+                  // If a chart point is selected, show that price
+                  if (selectedChartIndex !== null && filteredPriceHistory[selectedChartIndex] !== undefined) {
+                    return formatPriceEurBefore(filteredPriceHistory[selectedChartIndex]);
+                  }
+                  // Otherwise show latest order book price
+                  return formatPriceEurBefore(
+                    sellOrders.length > 0
+                      ? sellOrders[0].price
+                      : buyOrders.length > 0
+                        ? buyOrders[0].price
+                        : filteredPriceHistory.length > 0
+                          ? filteredPriceHistory[filteredPriceHistory.length - 1]
+                          : 0
+                  );
+                })()}
               </Text>
               <Text style={styles.tooltipDate}>
                 {(() => {
+                  // If a chart point is selected, calculate and show that date
+                  if (selectedChartIndex !== null && filteredPriceHistory.length > 0) {
+                    // Calculate the date based on index and selected period
+                    const today = new Date();
+                    const totalDays = (() => {
+                      switch (selectedPeriod) {
+                        case '1d': return 1;
+                        case '7d': return 7;
+                        case '1m': return 30;
+                        case '3m': return 90;
+                        case '1y': return 365;
+                        default: return 30;
+                      }
+                    })();
+                    // Calculate how many days ago this point represents
+                    const daysAgo = totalDays - Math.round((selectedChartIndex / (filteredPriceHistory.length - 1)) * totalDays);
+                    const pointDate = new Date(today);
+                    pointDate.setDate(today.getDate() - daysAgo);
+                    return pointDate.toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    }).toUpperCase().replace(',', '.');
+                  }
+                  // Otherwise show latest order book date
                   const dateStr = sellOrders.length > 0
                     ? sellOrders[0].date
                     : buyOrders.length > 0
@@ -938,6 +1039,8 @@ export default function WatchDetailsScreen() {
               data={filteredPriceHistory}
               width={SCREEN_WIDTH - wp(32)}
               height={hp(200)}
+              selectedIndex={selectedChartIndex}
+              onSelectIndex={setSelectedChartIndex}
             />
           </View>
 
@@ -947,7 +1050,10 @@ export default function WatchDetailsScreen() {
               <TouchableOpacity
                 key={period}
                 style={[styles.periodButton, selectedPeriod === period && styles.periodButtonActive]}
-                onPress={() => setSelectedPeriod(period)}
+                onPress={() => {
+                  setSelectedPeriod(period);
+                  setSelectedChartIndex(null); // Reset selection when period changes
+                }}
               >
                 <Text style={[styles.periodText, selectedPeriod === period && styles.periodTextActive]}>
                   {period}

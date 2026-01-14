@@ -140,6 +140,7 @@ interface InventoryWatch {
   isPositive: boolean;
   sellNowPrice: string | null;
   image: string;
+  status?: string;
 }
 
 export default function DashboardScreen() {
@@ -175,6 +176,7 @@ export default function DashboardScreen() {
           isPositive: (order.price_change || 0) >= 0,
           sellNowPrice: order.best_bid ? `€${order.best_bid.toLocaleString('de-DE')}` : null,
           image: order.cover_image || '',
+          status: order.status || 'active',
         }));
         setInventory(formattedInventory);
       }
@@ -213,6 +215,8 @@ export default function DashboardScreen() {
     router.push('/listing/create');
   }, []);
 
+  const isSold = (status?: string) => status === 'sold';
+
   const renderWatchCard = (watch: InventoryWatch) => (
     <View key={watch.id} style={styles.watchCard}>
       {/* Watch Image */}
@@ -231,6 +235,12 @@ export default function DashboardScreen() {
             <LogoIcon size={sp(40)} color="rgba(33, 33, 33, 0.15)" />
           )}
         </LinearGradient>
+        {/* Sold Badge */}
+        {isSold(watch.status) && (
+          <View style={styles.soldBadge}>
+            <Text style={styles.soldBadgeText}>Sold</Text>
+          </View>
+        )}
       </View>
 
       {/* Watch Info */}
@@ -590,11 +600,28 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: sp(12),
     borderTopRightRadius: sp(12),
     overflow: 'hidden',
+    position: 'relative',
   },
   watchImageGradient: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  soldBadge: {
+    position: 'absolute',
+    top: hp(8),
+    left: wp(8),
+    backgroundColor: '#4AA078',
+    paddingHorizontal: wp(10),
+    paddingVertical: hp(4),
+    borderRadius: sp(99),
+  },
+  soldBadgeText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(11),
+    fontWeight: '600',
+    color: '#FFFFFF',
+    lineHeight: fp(14),
   },
   watchImage: {
     width: '66%',

@@ -71,7 +71,7 @@ class EmailService:
                         {content}
                         <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 30px 0;">
                         <p style="color: #999999; font-size: 12px; line-height: 18px; margin: 0; text-align: center;">
-                            &copy; 2024 WatchSphere. All rights reserved.
+                            &copy; 2026 WatchSphere. All rights reserved.
                         </p>
                     </td>
                 </tr>
@@ -126,7 +126,7 @@ Thank you for signing up! Please use the verification code below to complete you
 
 This code will expire in 15 minutes. If you didn't request this code, please ignore this email.
 
-© 2024 WatchSphere. All rights reserved.
+© 2026 WatchSphere. All rights reserved.
         """
 
         return await self._send_email(to_email, subject, html_content, text_content)
@@ -161,7 +161,7 @@ Your account has been successfully set up. You're now part of an exclusive commu
 
 Start exploring watches, track your favorites, and connect with fellow collectors.
 
-© 2024 WatchSphere. All rights reserved.
+© 2026 WatchSphere. All rights reserved.
         """
 
         return await self._send_email(to_email, subject, html_content, text_content)
@@ -211,7 +211,7 @@ We received a request to reset your password. Use the code below to proceed:
 
 This code will expire in 15 minutes. If you didn't request a password reset, please ignore this email or contact support if you have concerns.
 
-© 2024 WatchSphere. All rights reserved.
+© 2026 WatchSphere. All rights reserved.
         """
 
         return await self._send_email(to_email, subject, html_content, text_content)
@@ -260,7 +260,7 @@ You now have full access to all features. Log in to start exploring the world of
 
 Visit https://watchsphere.io to get started.
 
-© 2024 WatchSphere. All rights reserved.
+© 2026 WatchSphere. All rights reserved.
         """
 
         return await self._send_email(to_email, subject, html_content, text_content)
@@ -326,7 +326,7 @@ For security, please change your password after logging in for the first time.
 
 Visit https://watchsphere.io to access the admin panel.
 
-© 2024 WatchSphere. All rights reserved.
+© 2026 WatchSphere. All rights reserved.
         """
 
         return await self._send_email(to_email, subject, html_content, text_content)
