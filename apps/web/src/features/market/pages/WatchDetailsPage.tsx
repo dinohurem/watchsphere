@@ -1,10 +1,8 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ArrowLeft,
-  GitCompare,
-  SlidersHorizontal,
-  Share2,
+  ChevronLeft,
+  ListFilter,
   Star,
   TrendingUp,
   TrendingDown,
@@ -13,6 +11,36 @@ import {
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+
+// Custom Order Book Icon matching mobile design
+function OrderBookIcon({ size = 20, color = '#1D1D1F' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <g clipPath="url(#clip0_orderbook)">
+        <path d="M7.47168 7.47165V3.32071C7.47168 1.94521 8.58671 0.830139 9.96225 0.830139C11.3378 0.830139 12.4528 1.94521 12.4528 3.32071V7.47165" stroke={color} strokeWidth="1.66038" strokeLinecap="square"/>
+        <path d="M15.7741 7.4711V4.98053H9.96279H4.15148V9.96166L2.88828 16.2776C2.68278 17.3049 3.46863 18.2635 4.51641 18.2635H8.30241" stroke={color} strokeWidth="1.66038" strokeMiterlimit="10" strokeLinecap="square"/>
+        <path d="M17.4353 10.7921H12.4542C11.9957 10.7921 11.624 11.1637 11.624 11.6222V18.2638L14.9448 15.7732L18.2655 18.2638V11.6222C18.2655 11.1637 17.8939 10.7921 17.4353 10.7921Z" stroke={color} strokeWidth="1.66038" strokeMiterlimit="10" strokeLinecap="square"/>
+      </g>
+      <defs>
+        <clipPath id="clip0_orderbook">
+          <rect width="19.9245" height="19.9245" fill="white"/>
+        </clipPath>
+      </defs>
+    </svg>
+  );
+}
+
+// Custom Social Search Icon matching mobile design
+function SocialSearchIcon({ size = 20, color = '#1D1D1F' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6.5 12C9.53757 12 12 9.53757 12 6.5C12 3.46243 9.53757 1 6.5 1C3.46243 1 1 3.46243 1 6.5C1 9.53757 3.46243 12 6.5 12Z" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M1 6.5H12" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.5 1C7.93261 2.55556 8.75 4.47826 8.75 6.5C8.75 8.52174 7.93261 10.4444 6.5 12C5.06739 10.4444 4.25 8.52174 4.25 6.5C4.25 4.47826 5.06739 2.55556 6.5 1Z" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10.5 10.5L15 15" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 interface PriceData {
   bestBid: number;
@@ -79,10 +107,19 @@ const emptyOrderForm: OrderFormData = {
   notes: '',
 };
 
+interface FilterState {
+  [key: string]: string[];
+}
+
 export function WatchDetailsPage() {
   const { watchId } = useParams<{ watchId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  // Get filters from navigation state (when returning from filters page)
+  const appliedFilters: FilterState = location.state?.filters || {};
+  const hasActiveFilters = Object.values(appliedFilters).some(arr => arr?.length > 0);
 
   const [selectedPeriod, setSelectedPeriod] = useState<'1d' | '7d' | '1m' | '3m' | '1y'>('1m');
   const [orderBookTab, setOrderBookTab] = useState<'buy' | 'sell'>('buy');
@@ -90,9 +127,12 @@ export function WatchDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [watchDetails, setWatchDetails] = useState<WatchDetails | null>(null);
   const [orderBook, setOrderBook] = useState<OrderBookEntry[]>([]);
+  const [priceHistory, setPriceHistory] = useState<number[]>([]);
 
   // Order Modal state
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [confirmedPrice, setConfirmedPrice] = useState(0);
   const [orderFormData, setOrderFormData] = useState<OrderFormData>(emptyOrderForm);
   const [savingOrder, setSavingOrder] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -100,11 +140,92 @@ export function WatchDetailsPage() {
   // Full Order Book Modal state
   const [showFullOrderBook, setShowFullOrderBook] = useState(false);
 
+  // Interactive chart state
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
+  const chartRef = useRef<SVGSVGElement>(null);
+
   const periods = ['1d', '7d', '1m', '3m', '1y'] as const;
 
   useEffect(() => {
     fetchWatchDetails();
   }, [watchId]);
+
+  // Check watchlist status when authenticated
+  useEffect(() => {
+    const checkWatchlistStatus = async () => {
+      if (!isAuthenticated || !watchDetails?.id) return;
+      try {
+        const response = await api.get('/watchlist');
+        const watchlist = response.data || [];
+        const isWatchlisted = watchlist.some((item: any) =>
+          item.watch_id === watchDetails.id ||
+          item.reference === watchDetails.reference
+        );
+        setIsInWatchlist(isWatchlisted);
+      } catch (error) {
+        console.error('Failed to check watchlist status:', error);
+      }
+    };
+    checkWatchlistStatus();
+  }, [isAuthenticated, watchDetails?.id, watchDetails?.reference]);
+
+  // Full price history for the entire year (generated once, seeded by watch ID)
+  const [fullPriceHistory, setFullPriceHistory] = useState<number[]>([]);
+
+  // Generate full year of price history once when watch details load
+  useEffect(() => {
+    if (!watchDetails) return;
+
+    const basePrice = watchDetails.priceData.currentPrice;
+    const volatility = 0.03; // 3% daily volatility
+    const totalDays = 365;
+
+    // Use watch ID as seed for consistent random generation
+    const seed = watchDetails.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const seededRandom = (i: number) => {
+      const x = Math.sin(seed + i) * 10000;
+      return x - Math.floor(x);
+    };
+
+    // Generate 365 days of price history working backwards from current price
+    const history: number[] = [];
+    let price = basePrice;
+
+    // Generate prices going backward in time
+    for (let i = totalDays - 1; i >= 0; i--) {
+      history.unshift(Math.round(price));
+      // Random walk with mean reversion towards base price
+      const randomFactor = (seededRandom(i) - 0.5) * 2;
+      const meanReversion = (basePrice - price) * 0.02;
+      const change = randomFactor * volatility * basePrice + meanReversion;
+      price = price - change; // Going backwards
+      price = Math.max(basePrice * 0.6, Math.min(basePrice * 1.4, price));
+    }
+
+    setFullPriceHistory(history);
+  }, [watchDetails?.id, watchDetails?.priceData.currentPrice]);
+
+  // Slice the appropriate portion based on selected period (like zooming in/out)
+  useEffect(() => {
+    if (fullPriceHistory.length === 0) return;
+
+    // Days to show for each period
+    const daysMap = { '1d': 1, '7d': 7, '1m': 30, '3m': 90, '1y': 365 };
+    const days = daysMap[selectedPeriod];
+
+    // Get the last N days of data
+    const slicedData = fullPriceHistory.slice(-days);
+
+    // For shorter periods, sample to get reasonable number of points
+    const maxPoints = 50;
+    if (slicedData.length > maxPoints) {
+      const step = Math.ceil(slicedData.length / maxPoints);
+      const sampled = slicedData.filter((_, i) => i % step === 0 || i === slicedData.length - 1);
+      setPriceHistory(sampled);
+    } else {
+      setPriceHistory(slicedData);
+    }
+  }, [selectedPeriod, fullPriceHistory]);
 
   const fetchWatchDetails = async () => {
     if (!watchId) return;
@@ -127,25 +248,31 @@ export function WatchDetailsPage() {
           const orderBookResponse = await api.get(`/orders/book/${encodeURIComponent(watch.reference)}`);
           const orderBookData = orderBookResponse.data;
 
-          buyOrders = (orderBookData.buy_orders || []).map((o: any) => ({
-            id: o.id,
-            market: o.country_code,
-            flag: getFlagEmoji(o.country_code),
-            date: new Date(o.created_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }),
-            condition: o.condition,
-            price: o.price,
-            order_type: 'buy',
-          }));
+          buyOrders = (orderBookData.buy_orders || []).map((o: any) => {
+            const d = new Date(o.created_at);
+            return {
+              id: o.id,
+              market: o.country_code,
+              flag: getFlagEmoji(o.country_code),
+              date: `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`,
+              condition: o.condition,
+              price: o.price,
+              order_type: 'buy' as const,
+            };
+          });
 
-          sellOrders = (orderBookData.sell_orders || []).map((o: any) => ({
-            id: o.id,
-            market: o.country_code,
-            flag: getFlagEmoji(o.country_code),
-            date: new Date(o.created_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }),
-            condition: o.condition,
-            price: o.price,
-            order_type: 'sell',
-          }));
+          sellOrders = (orderBookData.sell_orders || []).map((o: any) => {
+            const d = new Date(o.created_at);
+            return {
+              id: o.id,
+              market: o.country_code,
+              flag: getFlagEmoji(o.country_code),
+              date: `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`,
+              condition: o.condition,
+              price: o.price,
+              order_type: 'sell' as const,
+            };
+          });
 
           bestBid = orderBookData.highest_bid || 0;
           bestAsk = orderBookData.lowest_ask || 0;
@@ -236,7 +363,10 @@ export function WatchDetailsPage() {
         notes: orderFormData.notes || undefined,
       });
 
+      // Store the confirmed price and show confirmation modal
+      setConfirmedPrice(orderFormData.price);
       setShowOrderModal(false);
+      setShowConfirmationModal(true);
       // Refresh order book
       fetchWatchDetails();
     } catch (error: any) {
@@ -247,26 +377,65 @@ export function WatchDetailsPage() {
     }
   };
 
-  const toggleWatchlist = () => {
-    setIsInWatchlist(!isInWatchlist);
+  const toggleWatchlist = async () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      if (isInWatchlist) {
+        // Remove from watchlist
+        await api.delete(`/watchlist/${watchDetails?.reference}`);
+        setIsInWatchlist(false);
+      } else {
+        // Add to watchlist
+        await api.post('/watchlist', {
+          watch_id: watchDetails?.id,
+          reference: watchDetails?.reference,
+          brand: watchDetails?.brand,
+          model: watchDetails?.model,
+        });
+        setIsInWatchlist(true);
+      }
+    } catch (error) {
+      console.error('Failed to toggle watchlist:', error);
+    }
   };
 
-  const filteredOrderBook = orderBook.filter(entry => entry.order_type === orderBookTab);
+  // Apply filters to order book
+  const filteredOrderBook = useMemo(() => {
+    let filtered = orderBook.filter(entry => entry.order_type === orderBookTab);
+
+    // Apply condition filter if present
+    const conditionFilter = appliedFilters['condition'] || [];
+    if (conditionFilter.length > 0) {
+      filtered = filtered.filter(entry => conditionFilter.includes(entry.condition));
+    }
+
+    // Apply market/country filter if present
+    const marketFilter = appliedFilters['market'] || appliedFilters['country'] || [];
+    if (marketFilter.length > 0) {
+      filtered = filtered.filter(entry => marketFilter.includes(entry.market));
+    }
+
+    return filtered;
+  }, [orderBook, orderBookTab, appliedFilters]);
 
   if (loading) {
     return (
-      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      <div className="p-4 lg:p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1d1d1f]"></div>
       </div>
     );
   }
 
   if (!watchDetails) {
     return (
-      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
-        <div className="max-w-7xl mx-auto py-8 text-center">
-          <p className="text-gray-500">Watch not found</p>
-          <button onClick={() => navigate(-1)} className="mt-4 text-primary hover:underline">
+      <div className="p-4 lg:p-6 bg-white min-h-screen">
+        <div className="max-w-[1000px] mx-auto py-8 text-center">
+          <p className="text-[#1d1d1f]/50">Watch not found</p>
+          <button onClick={() => navigate(-1)} className="mt-4 text-[#1d1d1f] hover:underline">
             Go back
           </button>
         </div>
@@ -275,111 +444,130 @@ export function WatchDetailsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
+    <div className="p-4 lg:p-6 bg-white min-h-screen">
+      <div className="max-w-[1000px] mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6 sm:mb-8">
-        <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-start justify-between gap-4 mb-8">
+        <div className="flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="w-9 sm:w-10 h-9 sm:h-10 rounded-full border border-black/10 flex items-center justify-center hover:bg-gray-50 transition-colors shrink-0"
+            className="w-10 h-10 rounded-full border border-black/10 flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors shrink-0"
           >
-            <ArrowLeft className="w-4 sm:w-5 h-4 sm:h-5 text-gray-900" />
+            <ChevronLeft className="w-6 h-6 text-[#1d1d1f]" />
           </button>
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
+            <h1 className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
               {watchDetails.brand} {watchDetails.model}
             </h1>
-            <p className="text-sm sm:text-base text-gray-500">{watchDetails.reference}</p>
+            <p className="text-[15px] text-[#1d1d1f]/50 leading-[1.3]">{watchDetails.reference}</p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 ml-12 sm:ml-0">
-          <button className="hidden sm:flex w-10 h-10 rounded-full border border-black/10 items-center justify-center hover:bg-gray-50 transition-colors">
-            <GitCompare className="w-5 h-5 text-gray-600" />
+        <div className="flex items-center gap-2">
+          {/* Order Book - opens the full order book modal */}
+          <button
+            onClick={() => setShowFullOrderBook(true)}
+            className="w-10 h-10 rounded-full border border-black/10 flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors"
+          >
+            <OrderBookIcon size={20} color="rgba(29,29,31,0.6)" />
           </button>
-          <button className="hidden sm:flex w-10 h-10 rounded-full border border-black/10 items-center justify-center hover:bg-gray-50 transition-colors">
-            <SlidersHorizontal className="w-5 h-5 text-gray-600" />
+          {/* Filters */}
+          <button
+            onClick={() => navigate('/app/market/filters', { state: { fromWatchDetails: true, watchId } })}
+            className={`w-10 h-10 rounded-full border flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors relative ${
+              hasActiveFilters ? 'border-[#1d1d1f] bg-[rgba(29,29,31,0.05)]' : 'border-black/10'
+            }`}
+          >
+            <ListFilter className={`w-5 h-5 ${hasActiveFilters ? 'text-[#1d1d1f]' : 'text-[#1d1d1f]/60'}`} />
+            {hasActiveFilters && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#1d1d1f] text-white text-[10px] font-semibold rounded-full flex items-center justify-center">
+                {Object.values(appliedFilters).reduce((sum, arr) => sum + (arr?.length || 0), 0)}
+              </span>
+            )}
           </button>
-          <button className="w-9 sm:w-10 h-9 sm:h-10 rounded-full border border-black/10 flex items-center justify-center hover:bg-gray-50 transition-colors">
-            <Share2 className="w-4 sm:w-5 h-4 sm:h-5 text-gray-600" />
-          </button>
+          {/* Watchlist - toggles watchlist status */}
           <button
             onClick={toggleWatchlist}
-            className={`relative w-9 sm:w-10 h-9 sm:h-10 rounded-full border flex items-center justify-center transition-colors ${
-              isInWatchlist
-                ? 'border-yellow-400 bg-yellow-50'
-                : 'border-black/10 hover:bg-gray-50'
+            className={`w-10 h-10 rounded-full border flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors ${
+              isInWatchlist ? 'border-[#1d1d1f] bg-[rgba(29,29,31,0.05)]' : 'border-black/10'
             }`}
           >
             <Star
-              className={`w-4 sm:w-5 h-4 sm:h-5 ${isInWatchlist ? 'text-yellow-500 fill-yellow-500' : 'text-gray-600'}`}
+              className={`w-5 h-5 ${isInWatchlist ? 'text-[#1d1d1f] fill-[#1d1d1f]' : 'text-[#1d1d1f]/60'}`}
             />
-            {/* Watchlist tooltip */}
-            <span className="absolute -top-8 right-0 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 hover:opacity-100 pointer-events-none whitespace-nowrap">
-              Watchlist
-            </span>
+          </button>
+          {/* Social Search - navigates to social search */}
+          <button
+            onClick={() => navigate('/app/social-search')}
+            className="w-10 h-10 rounded-full border border-black/10 flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors"
+          >
+            <SocialSearchIcon size={20} color="rgba(29,29,31,0.6)" />
           </button>
         </div>
       </div>
 
       {/* Main Content Grid */}
-      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+      <div className="flex flex-col lg:flex-row gap-8">
         {/* Left Column - Watch Image */}
-        <div className="w-full lg:w-[320px] flex flex-col gap-4 sm:gap-6">
+        <div className="w-full lg:w-[340px] flex flex-col gap-4">
           {/* Watch Image Card */}
-          <div className="bg-gradient-to-b from-white to-gray-100 rounded-2xl border border-black/5 p-6 sm:p-8 flex items-center justify-center aspect-square max-w-[320px] mx-auto lg:mx-0 w-full">
-            {watchDetails.image ? (
-              <img
-                src={watchDetails.image}
-                alt={`${watchDetails.brand} ${watchDetails.reference}`}
-                className="max-w-full max-h-full object-contain"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                }}
-              />
-            ) : (
-              <ImagePlaceholder width={200} height={200} borderRadius={0} />
-            )}
-          </div>
-
-          {/* Price Range */}
-          <div className="flex items-center justify-between max-w-[320px] mx-auto lg:mx-0 w-full">
-            <div>
-              <p className="text-xs sm:text-sm text-gray-500">Market Price</p>
-              <p className="text-base sm:text-lg font-semibold text-gray-900">
-                €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
-              </p>
-            </div>
-            <div className={`flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full ${
-              watchDetails.priceData.priceChange >= 0 ? 'bg-green-600/5' : 'bg-red-600/5'
-            }`}>
-              {watchDetails.priceData.priceChange >= 0 ? (
-                <TrendingUp className="w-3 sm:w-4 h-3 sm:h-4 text-green-600" />
+          <div className="bg-gradient-to-b from-white to-[#f4f4f4] rounded-2xl border border-black/5 overflow-hidden">
+            {/* Watch Image Area */}
+            <div className="h-[300px] flex items-center justify-center p-6">
+              {watchDetails.image ? (
+                <img
+                  src={watchDetails.image}
+                  alt={`${watchDetails.brand} ${watchDetails.reference}`}
+                  className="max-w-full max-h-full object-contain"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
+                />
               ) : (
-                <TrendingDown className="w-3 sm:w-4 h-3 sm:h-4 text-red-600" />
+                <ImagePlaceholder width={200} height={200} borderRadius={0} />
               )}
-              <span className={`text-xs sm:text-sm font-semibold ${
-                watchDetails.priceData.priceChange >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {(watchDetails.priceData.priceChange * 100).toFixed(2)}%
-              </span>
+            </div>
+
+            {/* Price Range - at bottom of card */}
+            <div className="px-4 pb-4 pt-2">
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-[12px] text-[#1d1d1f]/50 leading-[1.3]">Market Price</p>
+                  <p className="text-[15px] font-semibold text-[#1d1d1f] leading-[1.3]">
+                    €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
+                  </p>
+                </div>
+                <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full ${
+                  watchDetails.priceData.priceChange >= 0 ? 'bg-[rgba(74,160,120,0.1)]' : 'bg-[rgba(201,57,39,0.1)]'
+                }`}>
+                  {watchDetails.priceData.priceChange >= 0 ? (
+                    <TrendingUp className="w-3.5 h-3.5 text-[#4aa078]" />
+                  ) : (
+                    <TrendingDown className="w-3.5 h-3.5 text-[#c93927]" />
+                  )}
+                  <span className={`text-[12px] font-semibold ${
+                    watchDetails.priceData.priceChange >= 0 ? 'text-[#4aa078]' : 'text-[#c93927]'
+                  }`}>
+                    {Math.abs(watchDetails.priceData.priceChange * 100).toFixed(2)}%
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 sm:gap-4 max-w-[320px] mx-auto lg:mx-0 w-full">
+          {/* Action Buttons - half-pill style matching Figma exactly */}
+          <div className="flex gap-[12px] w-full">
             <button
               onClick={() => handlePlaceOrder('buy')}
-              className="flex-1 h-10 sm:h-12 bg-green-600 text-white text-sm sm:text-base font-semibold rounded-full hover:bg-green-700 transition-colors"
+              className="flex-1 h-[48px] bg-[#54b368] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-bl-[64px] rounded-tl-[64px] rounded-br-[3px] rounded-tr-[3px] hover:bg-[#4aa35d] transition-colors"
             >
               Place Buy Order
             </button>
             <button
               onClick={() => handlePlaceOrder('sell')}
-              className="flex-1 h-10 sm:h-12 bg-red-500 text-white text-sm sm:text-base font-semibold rounded-full hover:bg-red-600 transition-colors"
+              className="flex-1 h-[48px] bg-[#d35741] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-bl-[3px] rounded-tl-[3px] rounded-br-[64px] rounded-tr-[64px] hover:bg-[#c04a36] transition-colors"
             >
               Place Sell Order
             </button>
@@ -387,67 +575,196 @@ export function WatchDetailsPage() {
         </div>
 
         {/* Right Column - Charts and Order Book */}
-        <div className="flex-1 flex flex-col gap-6 sm:gap-8">
+        <div className="flex-1 flex flex-col gap-8">
           {/* Price Stats */}
-          <div className="flex flex-col sm:flex-row border border-black/5 rounded-2xl overflow-hidden">
-            <div className="flex-1 p-4 sm:p-6 text-center border-b sm:border-b-0 sm:border-r border-black/5">
-              <p className="text-xl sm:text-2xl font-semibold text-gray-900">
+          <div className="flex border border-black/5 rounded-2xl overflow-hidden">
+            <div className="flex-1 p-5 text-center border-r border-black/5">
+              <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
                 {watchDetails.priceData.bestBid.toLocaleString()}€
               </p>
-              <p className="text-xs sm:text-sm text-gray-500">Best Bid</p>
+              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">Best Bid</p>
             </div>
-            <div className="flex-1 p-4 sm:p-6 text-center border-b sm:border-b-0 sm:border-r border-black/5">
-              <p className="text-xl sm:text-2xl font-semibold text-gray-900">
+            <div className="flex-1 p-5 text-center border-r border-black/5">
+              <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
                 {watchDetails.priceData.bestAsk.toLocaleString()}€
               </p>
-              <p className="text-xs sm:text-sm text-gray-500">Best Ask</p>
+              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">Best Ask</p>
             </div>
-            <div className="flex-1 p-4 sm:p-6 text-center">
-              <p className="text-xl sm:text-2xl font-semibold text-gray-900">
+            <div className="flex-1 p-5 text-center">
+              <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
                 {watchDetails.priceData.spread.toLocaleString()}€
               </p>
-              <p className="text-xs sm:text-sm text-gray-500">Spread</p>
+              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">Spread</p>
             </div>
           </div>
 
           {/* Price Chart */}
           <div className="flex-1">
-            {/* Chart Placeholder */}
-            <div className="h-[150px] sm:h-[200px] mb-4 relative">
-              {/* Price tooltip */}
-              <div className="absolute top-2 sm:top-4 right-1/4 bg-gray-900 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded flex items-center gap-1 sm:gap-2">
-                <span className="font-semibold">€{watchDetails.priceData.currentPrice.toLocaleString()}</span>
-                <span className="text-gray-400 hidden sm:inline">{new Date().toLocaleDateString()}</span>
-              </div>
-              {/* Simple chart visualization */}
-              <svg viewBox="0 0 400 150" className="w-full h-full">
-                <path
-                  d="M0,120 Q30,115 60,110 T120,100 T180,80 T240,90 T300,60 T360,50 T400,40"
-                  fill="none"
-                  stroke="#1D1D1F"
-                  strokeWidth="2"
-                />
-                {/* Current price dot */}
-                <circle cx="340" cy="45" r="6" fill="#1D1D1F" />
-              </svg>
-              {/* Y-axis labels */}
-              <div className="absolute right-0 top-0 h-full flex flex-col justify-between text-[10px] sm:text-xs text-gray-500">
-                <span>€{(watchDetails.priceData.maxPrice / 1000).toFixed(1)}K</span>
-                <span>€{(watchDetails.priceData.currentPrice / 1000).toFixed(1)}K</span>
-                <span>€{(watchDetails.priceData.minPrice / 1000).toFixed(1)}K</span>
+            {/* Chart Area */}
+            <div className="h-[200px] mb-4 relative">
+              {/* Price tooltip - shows selected point or current price */}
+              {priceHistory.length > 0 && (() => {
+                const displayIndex = selectedPointIndex !== null ? selectedPointIndex : priceHistory.length - 1;
+                const displayPrice = priceHistory[displayIndex];
+
+                // Calculate date for the selected point
+                const daysMap = { '1d': 1, '7d': 7, '1m': 30, '3m': 90, '1y': 365 };
+                const totalDays = daysMap[selectedPeriod];
+                const daysAgo = Math.round((priceHistory.length - 1 - displayIndex) / (priceHistory.length - 1) * totalDays);
+                const displayDate = new Date();
+                displayDate.setDate(displayDate.getDate() - daysAgo);
+
+                const isPositive = displayPrice >= (priceHistory[0] || displayPrice);
+
+                return (
+                  <div
+                    className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#1d1d1f] text-white text-[12px] px-3 py-1.5 rounded-lg flex items-center gap-2 z-10 pointer-events-none"
+                  >
+                    <span className={`font-semibold ${isPositive ? 'text-[#4aa078]' : 'text-[#c93927]'}`}>
+                      €{displayPrice?.toLocaleString() || watchDetails.priceData.currentPrice.toLocaleString()}
+                    </span>
+                    <span className="text-white/60">
+                      {displayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                );
+              })()}
+              {/* Chart visualization with area fill */}
+              <div className="flex h-full">
+                <div className="flex-1 relative">
+                  {priceHistory.length > 0 && (() => {
+                    const minPrice = Math.min(...priceHistory);
+                    const maxPrice = Math.max(...priceHistory);
+                    const range = maxPrice - minPrice || 1;
+                    const height = 160;
+                    const width = 500;
+                    const padding = 10;
+
+                    // Generate path points with coordinates stored for interaction
+                    const pointCoordinates = priceHistory.map((price, index) => {
+                      const x = (index / (priceHistory.length - 1)) * width;
+                      const y = padding + ((maxPrice - price) / range) * (height - padding * 2);
+                      return { x, y, price, index };
+                    });
+
+                    const points = pointCoordinates.map(p => `${p.x},${p.y}`);
+                    const linePath = `M${points.join(' L')}`;
+                    const areaPath = `${linePath} L${width},${height} L0,${height} Z`;
+
+                    // Get the selected point or last point
+                    const activePointData = selectedPointIndex !== null
+                      ? pointCoordinates[selectedPointIndex]
+                      : pointCoordinates[pointCoordinates.length - 1];
+
+                    const handleChartClick = (e: React.MouseEvent<SVGSVGElement>) => {
+                      if (!chartRef.current) return;
+
+                      const rect = chartRef.current.getBoundingClientRect();
+                      const clickX = ((e.clientX - rect.left) / rect.width) * width;
+
+                      // Find the closest point to the click
+                      let closestIndex = 0;
+                      let closestDistance = Infinity;
+
+                      pointCoordinates.forEach((point, index) => {
+                        const distance = Math.abs(point.x - clickX);
+                        if (distance < closestDistance) {
+                          closestDistance = distance;
+                          closestIndex = index;
+                        }
+                      });
+
+                      setSelectedPointIndex(closestIndex);
+                    };
+
+                    const handleChartMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+                      if (!chartRef.current) return;
+
+                      const rect = chartRef.current.getBoundingClientRect();
+                      const clickX = ((e.clientX - rect.left) / rect.width) * width;
+
+                      // Find the closest point to the mouse position
+                      let closestIndex = 0;
+                      let closestDistance = Infinity;
+
+                      pointCoordinates.forEach((point, index) => {
+                        const distance = Math.abs(point.x - clickX);
+                        if (distance < closestDistance) {
+                          closestDistance = distance;
+                          closestIndex = index;
+                        }
+                      });
+
+                      setSelectedPointIndex(closestIndex);
+                    };
+
+                    const handleChartMouseLeave = () => {
+                      setSelectedPointIndex(null);
+                    };
+
+                    return (
+                      <svg
+                        ref={chartRef}
+                        viewBox={`0 0 ${width} ${height}`}
+                        className="w-full h-full cursor-crosshair"
+                        preserveAspectRatio="none"
+                        onClick={handleChartClick}
+                        onMouseMove={handleChartMouseMove}
+                        onMouseLeave={handleChartMouseLeave}
+                      >
+                        {/* Area fill */}
+                        <path d={areaPath} fill="rgba(29,29,31,0.03)" />
+                        {/* Line */}
+                        <path d={linePath} fill="none" stroke="#1D1D1F" strokeWidth="1.5" />
+                        {/* Vertical line at selected point */}
+                        {activePointData && (
+                          <line
+                            x1={activePointData.x}
+                            y1={0}
+                            x2={activePointData.x}
+                            y2={height}
+                            stroke="rgba(29,29,31,0.2)"
+                            strokeWidth="1"
+                            strokeDasharray="4,4"
+                          />
+                        )}
+                        {/* Selected/Current price dot */}
+                        {activePointData && (
+                          <circle
+                            cx={activePointData.x}
+                            cy={activePointData.y}
+                            r="6"
+                            fill="#1D1D1F"
+                            stroke="white"
+                            strokeWidth="2"
+                          />
+                        )}
+                      </svg>
+                    );
+                  })()}
+                </div>
+                {/* Y-axis labels */}
+                <div className="w-16 flex flex-col justify-between text-[12px] text-[#1d1d1f]/50 text-right pl-3">
+                  <span>€{(Math.max(...(priceHistory.length ? priceHistory : [watchDetails.priceData.maxPrice])) / 1000).toFixed(1)}K</span>
+                  <span>€{(watchDetails.priceData.currentPrice / 1000).toFixed(1)}K</span>
+                  <span>€{(Math.min(...(priceHistory.length ? priceHistory : [watchDetails.priceData.minPrice])) / 1000).toFixed(1)}K</span>
+                </div>
               </div>
             </div>
 
-            {/* Period Tabs */}
-            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto">
+            {/* Period Tabs - matching Figma exactly */}
+            <div className="flex items-center justify-center gap-[12px] px-[2px] rounded-[112px]">
               {periods.map((period) => (
                 <button
                   key={period}
-                  onClick={() => setSelectedPeriod(period)}
-                  className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-colors shrink-0 ${
+                  onClick={() => {
+                    setSelectedPeriod(period);
+                    setSelectedPointIndex(null); // Reset selection when period changes
+                  }}
+                  className={`flex-1 h-[40px] px-[12px] py-[6px] text-[15px] tracking-[0.075px] leading-[20px] transition-colors rounded-[112px] ${
                     selectedPeriod === period
-                      ? 'bg-gray-100 text-gray-900'
-                      : 'text-gray-500 hover:text-gray-900'
+                      ? 'bg-[rgba(33,33,33,0.05)] text-[#212121] font-semibold'
+                      : 'text-[#212121]/60 font-medium hover:text-[#212121]'
                   }`}
                 >
                   {period}
@@ -458,55 +775,55 @@ export function WatchDetailsPage() {
 
           {/* Order Book */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Order Book</h2>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-[24px] font-semibold text-[#1d1d1f] leading-[1.1] tracking-[-0.24px]">Order Book</h2>
               <button
                 onClick={() => setShowFullOrderBook(true)}
-                className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1 transition-colors"
+                className="text-[16px] font-semibold text-[#212121] tracking-[0.08px] leading-[20px] hover:opacity-70 flex items-center gap-[12px] transition-colors"
               >
                 See Order Book
-                <span className="text-lg">→</span>
+                <span className="text-[18px]">→</span>
               </button>
             </div>
 
-            {/* Order Book Tabs */}
-            <div className="flex bg-gray-100 rounded-full p-1 mb-4">
+            {/* Order Book Tabs - iOS segmented control style */}
+            <div className="flex bg-[rgba(118,118,128,0.12)] rounded-[100px] h-[36px] px-[8px] py-[4px] mb-6">
               <button
                 onClick={() => setOrderBookTab('buy')}
-                className={`flex-1 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-full transition-colors ${
+                className={`relative flex-1 flex items-center justify-center px-[10px] py-[2px] rounded-[20px] text-[14px] tracking-[-0.08px] leading-[18px] transition-all ${
                   orderBookTab === 'buy'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500'
+                    ? 'bg-white text-black font-semibold shadow-[0px_2px_20px_0px_rgba(0,0,0,0.06)]'
+                    : 'text-black font-medium'
                 }`}
               >
-                Buy ({orderBook.filter(o => o.order_type === 'buy').length})
+                Buy
               </button>
               <button
                 onClick={() => setOrderBookTab('sell')}
-                className={`flex-1 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-full transition-colors ${
+                className={`relative flex-1 flex items-center justify-center px-[10px] py-[2px] rounded-[20px] text-[14px] tracking-[-0.08px] leading-[18px] transition-all ${
                   orderBookTab === 'sell'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500'
+                    ? 'bg-white text-black font-semibold shadow-[0px_2px_20px_0px_rgba(0,0,0,0.06)]'
+                    : 'text-black font-medium'
                 }`}
               >
-                Sell ({orderBook.filter(o => o.order_type === 'sell').length})
+                Sell
               </button>
             </div>
 
             {/* Order Book Table */}
-            <div className="border border-black/5 rounded-2xl overflow-hidden">
+            <div className="overflow-hidden">
               {/* Table Header */}
-              <div className="flex items-center px-3 sm:px-6 py-2 sm:py-3 bg-gray-50/50 text-xs sm:text-sm font-medium text-gray-500">
-                <span className="w-[70px] sm:w-[100px]">Market</span>
-                <span className="w-[60px] sm:w-[100px]">Date</span>
-                <span className="flex-1">Condition</span>
-                <span className="w-[80px] sm:w-[100px] text-right">Price</span>
+              <div className="flex items-center h-[44px] border-b border-[rgba(0,0,0,0.05)]">
+                <span className="flex-1 pl-[12px] pr-[8px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Market</span>
+                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Date</span>
+                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Condition</span>
+                <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">Price</span>
               </div>
 
               {/* Table Rows */}
-              <div className="max-h-[250px] sm:max-h-[300px] overflow-y-auto">
+              <div className="max-h-[400px] overflow-y-auto">
                 {filteredOrderBook.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 text-sm">
+                  <div className="text-center py-8 text-[#212121]/50 text-[15px]">
                     No {orderBookTab} orders available
                   </div>
                 ) : (
@@ -514,19 +831,17 @@ export function WatchDetailsPage() {
                     <div
                       key={entry.id}
                       onClick={() => navigate(`/app/order/${entry.id}`)}
-                      className={`flex items-center px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm cursor-pointer hover:bg-gray-50 transition-colors ${
-                        index < filteredOrderBook.length - 1 ? 'border-b border-black/5' : ''
-                      }`}
+                      className={`flex items-center h-[44px] cursor-pointer transition-colors ${
+                        index % 2 === 0 ? 'bg-[#fbfbfb]' : 'bg-white'
+                      } hover:bg-[#e8f4fd]`}
                     >
-                      <span className="w-[70px] sm:w-[100px] flex items-center gap-1 sm:gap-2">
-                        <span>{entry.flag}</span>
-                        <span className="text-gray-900">{entry.market}</span>
+                      <span className="flex-1 pl-[12px] pr-0 py-[8px] flex items-center gap-[8px]">
+                        <span className="text-[14px]">{entry.flag}</span>
+                        <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.market.toUpperCase()}</span>
                       </span>
-                      <span className="w-[60px] sm:w-[100px] text-gray-600">{entry.date}</span>
-                      <span className="flex-1 text-gray-600">{entry.condition}</span>
-                      <span className={`w-[80px] sm:w-[100px] text-right font-semibold ${
-                        orderBookTab === 'buy' ? 'text-green-600' : 'text-red-500'
-                      }`}>
+                      <span className="flex-1 p-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.date}</span>
+                      <span className="flex-1 p-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
+                      <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
                         €{entry.price.toLocaleString()}
                       </span>
                     </div>
@@ -538,127 +853,88 @@ export function WatchDetailsPage() {
         </div>
       </div>
 
-      {/* Order Creation Modal */}
+      {/* Order Creation Modal - Matching Figma design */}
       {showOrderModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="p-6 border-b flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Place {orderFormData.order_type === 'buy' ? 'Buy' : 'Sell'} Order
-                </h2>
-                <p className="text-sm text-gray-500">
-                  {watchDetails.brand} {watchDetails.model}
-                </p>
-              </div>
+          <div className="bg-white rounded-[32px] shadow-[0px_15px_75px_0px_rgba(0,0,0,0.18)] w-full max-w-[420px] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 h-[60px] border-b border-[rgba(33,33,33,0.05)]">
+              <p className="text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">
+                Make an offer
+              </p>
               <button
                 onClick={() => setShowOrderModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="w-8 h-8 rounded-full bg-[rgba(120,120,128,0.12)] flex items-center justify-center hover:bg-[rgba(120,120,128,0.2)] transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 text-[#999]" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitOrder} className="p-6 space-y-4">
+            {/* Watch Info */}
+            <div className="flex items-center gap-3 px-6 py-[13px] border-b border-[rgba(33,33,33,0.05)]">
+              <div className="w-[79px] h-[78px] rounded-2xl border border-[rgba(0,0,0,0.05)] overflow-hidden bg-gradient-to-b from-white to-[#f4f4f4] flex items-center justify-center shrink-0">
+                {watchDetails.image ? (
+                  <img
+                    src={watchDetails.image}
+                    alt={watchDetails.model}
+                    className="w-[60px] h-[60px] object-contain"
+                  />
+                ) : (
+                  <ImagePlaceholder width={60} height={60} borderRadius={0} />
+                )}
+              </div>
+              <div className="flex flex-col gap-2 min-w-0">
+                <p className="text-[18px] font-semibold text-[#212121] tracking-[0.09px] leading-[20px] truncate">
+                  {watchDetails.brand} {watchDetails.model}
+                </p>
+                <p className="text-[16px] font-medium text-[#1d1d1f]/50 leading-[1.3]">
+                  €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmitOrder} className="p-6 flex flex-col gap-6">
               {orderError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">
                   {orderError}
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Price ({watchDetails.currency}) *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  value={orderFormData.price}
-                  onChange={(e) => setOrderFormData({ ...orderFormData, price: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
-                  <select
-                    value={orderFormData.condition}
-                    onChange={(e) => setOrderFormData({ ...orderFormData, condition: e.target.value as 'Unworn' | 'Used' })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="Unworn">Unworn</option>
-                    <option value="Used">Used</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                  <select
-                    value={orderFormData.country_code}
-                    onChange={(e) => setOrderFormData({ ...orderFormData, country_code: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    {COUNTRIES.map(country => (
-                      <option key={country.code} value={country.code}>{country.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="flex items-center">
+              {/* Your Offer Input */}
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[15px] font-semibold text-[#1d1d1f] tracking-[0.075px] leading-[20px]">
+                  Your offer
+                </label>
+                <div className="flex items-center gap-2 px-4 py-[14px] border border-[rgba(29,29,31,0.1)] rounded-2xl bg-white">
+                  <span className="text-[15px] font-medium text-[#1d1d1f]/50 tracking-[0.075px] leading-[20px]">€</span>
                   <input
-                    type="checkbox"
-                    id="has_box"
-                    checked={orderFormData.has_box}
-                    onChange={(e) => setOrderFormData({ ...orderFormData, has_box: e.target.checked })}
-                    className="h-4 w-4 text-primary border-gray-300 rounded"
+                    type="text"
+                    required
+                    value={orderFormData.price.toLocaleString()}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/,/g, '');
+                      const num = parseFloat(value);
+                      if (!isNaN(num)) {
+                        setOrderFormData({ ...orderFormData, price: num });
+                      } else if (value === '') {
+                        setOrderFormData({ ...orderFormData, price: 0 });
+                      }
+                    }}
+                    className="flex-1 text-[15px] font-medium text-[#1d1d1f] tracking-[0.075px] leading-[20px] outline-none bg-transparent"
+                    placeholder="0"
                   />
-                  <label htmlFor="has_box" className="ml-2 text-sm text-gray-700">Has Box</label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="has_papers"
-                    checked={orderFormData.has_papers}
-                    onChange={(e) => setOrderFormData({ ...orderFormData, has_papers: e.target.checked })}
-                    className="h-4 w-4 text-primary border-gray-300 rounded"
-                  />
-                  <label htmlFor="has_papers" className="ml-2 text-sm text-gray-700">Has Papers</label>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-                <textarea
-                  rows={2}
-                  value={orderFormData.notes}
-                  onChange={(e) => setOrderFormData({ ...orderFormData, notes: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="Any additional details..."
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowOrderModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingOrder}
-                  className={`px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 ${
-                    orderFormData.order_type === 'buy'
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-red-500 hover:bg-red-600'
-                  }`}
-                >
-                  {savingOrder ? 'Placing Order...' : `Place ${orderFormData.order_type === 'buy' ? 'Buy' : 'Sell'} Order`}
-                </button>
-              </div>
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={savingOrder || orderFormData.price <= 0}
+                className="w-full h-[44px] bg-[#212121] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-full hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingOrder ? 'Submitting...' : 'Make an offer'}
+              </button>
             </form>
           </div>
         </div>
@@ -670,55 +946,55 @@ export function WatchDetailsPage() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             {/* Modal Header */}
             <div className="p-6 border-b flex items-center justify-between shrink-0">
-              <h2 className="text-xl font-semibold text-gray-900">Order Book</h2>
+              <h2 className="text-[20px] font-semibold text-[#1d1d1f]">Order Book</h2>
               <button
                 onClick={() => setShowFullOrderBook(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 hover:bg-[rgba(29,29,31,0.02)] rounded-full transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-[#1d1d1f]" />
               </button>
             </div>
 
             {/* Watch Info */}
             <div className="px-6 py-4 border-b flex items-center gap-4 shrink-0">
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+              <div className="w-12 h-12 bg-gradient-to-b from-white to-[#f4f4f4] rounded-lg flex items-center justify-center overflow-hidden">
                 {watchDetails.image ? (
                   <img
                     src={watchDetails.image}
                     alt={watchDetails.model}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                 ) : (
                   <ImagePlaceholder width={48} height={48} borderRadius={8} />
                 )}
               </div>
               <div>
-                <p className="font-semibold text-gray-900">{watchDetails.brand} {watchDetails.model}</p>
-                <p className="text-sm text-gray-500">
+                <p className="font-semibold text-[#1d1d1f] text-[15px]">{watchDetails.brand} {watchDetails.model}</p>
+                <p className="text-[13px] text-[#1d1d1f]/50">
                   €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
                 </p>
               </div>
             </div>
 
-            {/* Order Book Tabs */}
-            <div className="px-6 pt-4 shrink-0">
-              <div className="flex bg-gray-100 rounded-full p-1">
+            {/* Order Book Tabs - iOS segmented control style */}
+            <div className="px-6 pt-4 shrink-0 flex justify-center">
+              <div className="flex bg-[rgba(118,118,128,0.12)] rounded-[100px] h-[36px] px-[8px] py-[4px] w-[280px]">
                 <button
                   onClick={() => setOrderBookTab('buy')}
-                  className={`flex-1 py-2 text-sm font-medium rounded-full transition-colors ${
+                  className={`relative flex-1 flex items-center justify-center px-[10px] py-[2px] rounded-[20px] text-[14px] tracking-[-0.08px] leading-[18px] transition-all ${
                     orderBookTab === 'buy'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500'
+                      ? 'bg-white text-black font-semibold shadow-[0px_2px_20px_0px_rgba(0,0,0,0.06)]'
+                      : 'text-black font-medium'
                   }`}
                 >
                   Buy
                 </button>
                 <button
                   onClick={() => setOrderBookTab('sell')}
-                  className={`flex-1 py-2 text-sm font-medium rounded-full transition-colors ${
+                  className={`relative flex-1 flex items-center justify-center px-[10px] py-[2px] rounded-[20px] text-[14px] tracking-[-0.08px] leading-[18px] transition-all ${
                     orderBookTab === 'sell'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500'
+                      ? 'bg-white text-black font-semibold shadow-[0px_2px_20px_0px_rgba(0,0,0,0.06)]'
+                      : 'text-black font-medium'
                   }`}
                 >
                   Sell
@@ -729,17 +1005,17 @@ export function WatchDetailsPage() {
             {/* Order Book Table */}
             <div className="flex-1 overflow-hidden px-6 py-4">
               {/* Table Header */}
-              <div className="flex items-center py-3 text-sm font-medium text-gray-500 border-b">
-                <span className="w-[100px]">Market</span>
-                <span className="w-[100px]">Date</span>
-                <span className="flex-1">Condition</span>
-                <span className="w-[100px] text-right">Price</span>
+              <div className="flex items-center h-[44px] border-b border-[rgba(0,0,0,0.05)]">
+                <span className="flex-1 pl-[12px] pr-[8px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Market</span>
+                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Date</span>
+                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Condition</span>
+                <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">Price</span>
               </div>
 
               {/* Table Rows */}
               <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 280px)' }}>
                 {filteredOrderBook.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500 text-sm">
+                  <div className="text-center py-12 text-[#212121]/50 text-[15px]">
                     No {orderBookTab} orders available
                   </div>
                 ) : (
@@ -750,25 +1026,86 @@ export function WatchDetailsPage() {
                         setShowFullOrderBook(false);
                         navigate(`/app/order/${entry.id}`);
                       }}
-                      className={`flex items-center py-3 text-sm ${
-                        index < filteredOrderBook.length - 1 ? 'border-b border-gray-100' : ''
-                      } hover:bg-gray-50 cursor-pointer`}
+                      className={`flex items-center h-[44px] cursor-pointer transition-colors ${
+                        index % 2 === 0 ? 'bg-[#fbfbfb]' : 'bg-white'
+                      } hover:bg-[#e8f4fd]`}
                     >
-                      <span className="w-[100px] flex items-center gap-2">
-                        <span>{entry.flag}</span>
-                        <span className="text-gray-900">{entry.market}</span>
+                      <span className="flex-1 pl-[12px] pr-0 py-[8px] flex items-center gap-[8px]">
+                        <span className="text-[14px]">{entry.flag}</span>
+                        <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.market.toUpperCase()}</span>
                       </span>
-                      <span className="w-[100px] text-gray-600">{entry.date}</span>
-                      <span className="flex-1 text-gray-900">{entry.condition}</span>
-                      <span className={`w-[100px] text-right font-semibold ${
-                        orderBookTab === 'buy' ? 'text-green-600' : 'text-red-500'
-                      }`}>
+                      <span className="flex-1 p-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.date}</span>
+                      <span className="flex-1 p-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
+                      <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
                         €{entry.price.toLocaleString()}
                       </span>
                     </div>
                   ))
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Confirmation Modal - Matching Figma design */}
+      {showConfirmationModal && watchDetails && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[32px] shadow-[0px_15px_75px_0px_rgba(0,0,0,0.18)] w-full max-w-[420px] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 h-[60px] border-b border-[rgba(33,33,33,0.05)]">
+              <p className="text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">
+                Make an offer
+              </p>
+              <button
+                onClick={() => setShowConfirmationModal(false)}
+                className="w-8 h-8 rounded-full bg-[rgba(120,120,128,0.12)] flex items-center justify-center hover:bg-[rgba(120,120,128,0.2)] transition-colors"
+              >
+                <X className="w-4 h-4 text-[#999]" />
+              </button>
+            </div>
+
+            {/* Watch Info */}
+            <div className="flex items-center gap-3 px-6 py-[13px] border-b border-[rgba(33,33,33,0.05)]">
+              <div className="w-[79px] h-[78px] rounded-2xl border border-[rgba(0,0,0,0.05)] overflow-hidden bg-gradient-to-b from-white to-[#f4f4f4] flex items-center justify-center shrink-0">
+                {watchDetails.image ? (
+                  <img
+                    src={watchDetails.image}
+                    alt={watchDetails.model}
+                    className="w-[60px] h-[60px] object-contain"
+                  />
+                ) : (
+                  <ImagePlaceholder width={60} height={60} borderRadius={0} />
+                )}
+              </div>
+              <div className="flex flex-col gap-2 min-w-0">
+                <p className="text-[18px] font-semibold text-[#212121] tracking-[0.09px] leading-[20px] truncate">
+                  {watchDetails.brand} {watchDetails.model}
+                </p>
+                <p className="text-[16px] font-medium text-[#1d1d1f]/50 leading-[1.3]">
+                  €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            {/* Confirmation Content */}
+            <div className="p-6 flex flex-col items-center gap-4">
+              {/* Success Icon */}
+              <div className="w-[72px] h-[72px] rounded-full bg-[#007AFF]/10 flex items-center justify-center">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 6L9 17L4 12" stroke="#007AFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+
+              {/* Offer Sent Text */}
+              <p className="text-[15px] font-medium text-[#212121]/60 tracking-[0.075px] leading-[20px]">
+                Offer sent
+              </p>
+
+              {/* Price */}
+              <p className="text-[34px] font-bold text-[#212121] tracking-[-0.68px] leading-[1.1]">
+                €{confirmedPrice.toLocaleString()}
+              </p>
             </div>
           </div>
         </div>

@@ -9,7 +9,7 @@ from app.models.user import User
 from app.models.billing import (
     Billing, BillingType, BillingStatus,
     Subscription, SubscriptionPlan, SubscriptionStatus,
-    Transaction, TransactionStatus
+    Transaction, TransactionStatus, SubscriptionHistory
 )
 from app.services.payment import monri_service, check_subscription_status, log_payment_activity
 from app.models.activity_log import ActivityType, EntityType
@@ -64,6 +64,23 @@ class TransactionResponse(BaseModel):
     fee_amount: float
     status: TransactionStatus
     completed_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class SubscriptionHistoryResponse(BaseModel):
+    id: str
+    subscription_id: str
+    user_id: str
+    user_name: str
+    user_email: str
+    plan: SubscriptionPlan
+    status: SubscriptionStatus
+    price_monthly: float
+    currency: str
+    action: str
+    action_by: Optional[str] = None
+    period_start: datetime
+    period_end: Optional[datetime] = None
     created_at: datetime
 
 
@@ -400,6 +417,64 @@ async def admin_update_subscription(
         "auto_renew": subscription.auto_renew,
         "created_at": subscription.created_at,
     }
+
+
+@router.get("/admin/subscriptions/{sub_id}/history", response_model=List[SubscriptionHistoryResponse])
+async def admin_get_subscription_history(
+    sub_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Get subscription history records (Admin only)"""
+
+    history = await SubscriptionHistory.find(
+        SubscriptionHistory.subscription_id == sub_id
+    ).sort([("created_at", -1)]).to_list()
+
+    return [
+        {
+            "id": str(h.id),
+            "subscription_id": h.subscription_id,
+            "user_id": h.user_id,
+            "user_name": h.user_name,
+            "user_email": h.user_email,
+            "plan": h.plan,
+            "status": h.status,
+            "price_monthly": h.price_monthly,
+            "currency": h.currency,
+            "action": h.action,
+            "action_by": h.action_by,
+            "period_start": h.period_start,
+            "period_end": h.period_end,
+            "created_at": h.created_at,
+        }
+        for h in history
+    ]
+
+
+@router.delete("/admin/subscriptions/{sub_id}")
+async def admin_delete_subscription(
+    sub_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Delete a subscription and all its history records (Admin only)"""
+
+    subscription = await Subscription.get(PydanticObjectId(sub_id))
+
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subscription not found"
+        )
+
+    # Delete all history records for this subscription
+    await SubscriptionHistory.find(
+        SubscriptionHistory.subscription_id == sub_id
+    ).delete()
+
+    # Delete the subscription
+    await subscription.delete()
+
+    return {"message": "Subscription and history deleted successfully"}
 
 
 # ============== TRANSACTION ADMIN ENDPOINTS ==============

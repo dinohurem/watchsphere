@@ -86,10 +86,6 @@ export default function TermsPrivacyScreen() {
             title="Terms and Conditions"
             onPress={() => router.push('/terms-conditions' as any)}
           />
-          <LegalItem
-            title="Contact Us"
-            onPress={() => router.push('/contact' as any)}
-          />
         </View>
 
         {/* Info Text */}

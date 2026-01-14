@@ -2,19 +2,44 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
-  Share2,
   Star,
   MoreVertical,
-  Edit,
-  CheckCircle,
-  Trash2,
   X,
-  Check,
-  User
+  User,
+  MessageCircle
 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+
+// Edit icon matching Figma design
+function EditIcon({ className }: { className?: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <path d="M14.1665 2.5C14.3854 2.28113 14.6452 2.10752 14.9312 1.98906C15.2171 1.87061 15.5236 1.80957 15.8332 1.80957C16.1427 1.80957 16.4492 1.87061 16.7352 1.98906C17.0211 2.10752 17.281 2.28113 17.4998 2.5C17.7187 2.71887 17.8923 2.97871 18.0108 3.26468C18.1292 3.55064 18.1903 3.85714 18.1903 4.16667C18.1903 4.47619 18.1292 4.78269 18.0108 5.06866C17.8923 5.35462 17.7187 5.61446 17.4998 5.83333L6.24984 17.0833L1.6665 18.3333L2.9165 13.75L14.1665 2.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+// Checkbox icon for Mark as sold
+function CheckboxIcon({ className }: { className?: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <rect x="2.5" y="2.5" width="15" height="15" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M6 10L9 13L14 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+// Trash icon for Delete
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <path d="M2.5 5H17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M6.66667 5V3.33333C6.66667 2.89131 6.84226 2.46738 7.15482 2.15482C7.46738 1.84226 7.89131 1.66667 8.33333 1.66667H11.6667C12.1087 1.66667 12.5326 1.84226 12.8452 2.15482C13.1577 2.46738 13.3333 2.89131 13.3333 3.33333V5M15.8333 5V16.6667C15.8333 17.1087 15.6577 17.5326 15.3452 17.8452C15.0326 18.1577 14.6087 18.3333 14.1667 18.3333H5.83333C5.39131 18.3333 4.96738 18.1577 4.65482 17.8452C4.34226 17.5326 4.16667 17.1087 4.16667 16.6667V5H15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
 
 interface OrderDetail {
   id: string;
@@ -58,16 +83,6 @@ interface OrderDetail {
   };
 }
 
-interface SimilarListing {
-  id: string;
-  brand: string;
-  model: string;
-  reference: string;
-  price: number;
-  price_change?: number;
-  image_url?: string;
-}
-
 export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
@@ -79,7 +94,6 @@ export function OrderDetailPage() {
   const [isInWatchlist, setIsInWatchlist] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [selectedImage, setSelectedImage] = useState(0);
-  const [similarListings, setSimilarListings] = useState<SimilarListing[]>([]);
 
   // Mark as sold state
   const [showMarkSoldModal, setShowMarkSoldModal] = useState(false);
@@ -113,18 +127,6 @@ export function OrderDetailPage() {
       setLoading(true);
       const response = await api.get(`/orders/${orderId}`);
       setOrder(response.data);
-
-      // Fetch similar listings
-      if (response.data.reference) {
-        try {
-          const similarResponse = await api.get('/market/aggregated', {
-            params: { limit: 4 }
-          });
-          setSimilarListings(similarResponse.data || []);
-        } catch (error) {
-          console.error('Failed to fetch similar listings:', error);
-        }
-      }
     } catch (error) {
       console.error('Failed to fetch order details:', error);
     } finally {
@@ -194,28 +196,43 @@ export function OrderDetailPage() {
     );
   }
 
-  // Sale completed screen
+  // Sale completed screen - matching Figma design
   if (showSaleComplete) {
     return (
-      <div className="p-6 lg:p-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-4">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Check className="w-8 h-8 text-blue-500" />
+      <div className="bg-[#fafafa] min-h-screen relative">
+        {/* Top border line */}
+        <div className="absolute top-[136px] left-1/2 -translate-x-1/2 w-full max-w-[1400px] h-[1px] bg-[rgba(0,0,0,0.1)]" />
+
+        {/* Content */}
+        <div className="flex flex-col items-center justify-center min-h-screen px-[68px] py-0">
+          {/* Blue check icon */}
+          <div className="w-16 h-16 bg-[rgba(0,136,255,0.1)] rounded-full flex items-center justify-center mb-10">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M26.6667 8L12 22.6667L5.33333 16" stroke="#0088FF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-3">Sale completed</h1>
-          <p className="text-gray-500 mb-8">
-            Your watch has been marked as sold. Thank you for keeping your inventory up to date.
-          </p>
-          <div className="flex items-center justify-center gap-4">
+
+          {/* Text content */}
+          <div className="flex flex-col gap-4 items-center text-center max-w-[514px] mb-10">
+            <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
+              Sale completed
+            </h1>
+            <p className="text-[18px] font-normal text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-[22px]">
+              Your watch has been marked as sold. Thank you for keeping your inventory up to date.
+            </p>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-6 items-start w-[404px]">
             <button
-              onClick={() => navigate('/app')}
-              className="px-6 py-3 bg-gray-900 text-white font-medium rounded-full hover:bg-gray-800 transition-colors"
+              onClick={() => navigate('/app/inventory')}
+              className="flex-1 h-[48px] bg-[#212121] text-white text-[15px] font-semibold tracking-[0.075px] leading-[20px] rounded-full hover:bg-black transition-colors"
             >
               Go to Inventory
             </button>
             <button
-              onClick={() => navigate('/app/market')}
-              className="text-gray-700 font-medium hover:text-gray-900 transition-colors"
+              onClick={() => navigate('/app')}
+              className="flex-1 h-[44px] text-[#1d1d1f] text-[15px] font-semibold tracking-[0.075px] leading-[20px] hover:opacity-70 transition-opacity flex items-center justify-center"
             >
               Back to homepage
             </button>
@@ -250,30 +267,27 @@ export function OrderDetailPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
-          <button className="w-9 sm:w-10 h-9 sm:h-10 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors">
-            <Share2 className="w-4 sm:w-5 h-4 sm:h-5 text-gray-600" />
-          </button>
-
           {isOwnOrder ? (
+            /* Owner sees three-dot menu */
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="w-9 sm:w-10 h-9 sm:h-10 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                className="w-11 h-11 rounded-full bg-[rgba(33,33,33,0.1)] flex items-center justify-center hover:bg-[rgba(33,33,33,0.15)] transition-colors"
               >
-                <MoreVertical className="w-4 sm:w-5 h-4 sm:h-5 text-gray-600" />
+                <MoreVertical className="w-5 h-5 text-[#1d1d1f]" />
               </button>
 
-              {/* Dropdown Menu */}
+              {/* Dropdown Menu - matching Figma design */}
               {showMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                <div className="absolute right-0 top-full mt-2 w-[200px] bg-white rounded-2xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] py-2 z-50">
                   <button
                     onClick={() => {
                       setShowMenu(false);
                       // Navigate to edit (can be implemented later)
                     }}
-                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                    className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
                   >
-                    <Edit className="w-4 h-4" />
+                    <EditIcon className="w-5 h-5 text-[#1d1d1f]" />
                     Edit
                   </button>
                   <button
@@ -281,9 +295,9 @@ export function OrderDetailPage() {
                       setShowMenu(false);
                       setShowMarkSoldModal(true);
                     }}
-                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                    className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
                   >
-                    <CheckCircle className="w-4 h-4" />
+                    <CheckboxIcon className="w-5 h-5 text-[#1d1d1f]" />
                     Mark as sold
                   </button>
                   <button
@@ -291,25 +305,22 @@ export function OrderDetailPage() {
                       setShowMenu(false);
                       setShowDeleteModal(true);
                     }}
-                    className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-gray-50 flex items-center gap-3"
+                    className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#c93927] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <TrashIcon className="w-5 h-5 text-[#c93927]" />
                     Delete
                   </button>
                 </div>
               )}
             </div>
           ) : (
+            /* Non-owner sees watchlist icon */
             <button
               onClick={toggleWatchlist}
-              className={`w-9 sm:w-10 h-9 sm:h-10 rounded-full border flex items-center justify-center transition-colors ${
-                isInWatchlist
-                  ? 'border-yellow-400 bg-yellow-50'
-                  : 'border-gray-200 hover:bg-gray-50'
-              }`}
+              className="w-11 h-11 rounded-full bg-[rgba(33,33,33,0.1)] flex items-center justify-center hover:bg-[rgba(33,33,33,0.15)] transition-colors"
             >
               <Star
-                className={`w-4 sm:w-5 h-4 sm:h-5 ${isInWatchlist ? 'text-yellow-500 fill-yellow-500' : 'text-gray-600'}`}
+                className={`w-5 h-5 ${isInWatchlist ? 'text-[#1d1d1f] fill-[#1d1d1f]' : 'text-[#1d1d1f]'}`}
               />
             </button>
           )}
@@ -390,16 +401,15 @@ export function OrderDetailPage() {
               </div>
             </div>
 
-            {/* Action Buttons */}
-            {!isOwnOrder && order.order_type === 'sell' && (
-              <div className="flex gap-3">
-                <button className="flex-1 py-3 bg-gray-900 text-white font-semibold rounded-full hover:bg-gray-800 transition-colors">
-                  Buy Now
-                </button>
-                <button className="flex-1 py-3 border border-gray-200 text-gray-900 font-semibold rounded-full hover:bg-gray-50 transition-colors">
-                  Make offer
-                </button>
-              </div>
+            {/* Contact Button - only for non-owners */}
+            {!isOwnOrder && (
+              <button
+                onClick={() => navigate(`/app/chat/${order.user_id}`)}
+                className="w-full h-[48px] bg-[#212121] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-full hover:bg-black transition-colors flex items-center justify-center gap-2"
+              >
+                <MessageCircle className="w-5 h-5" />
+                Contact
+              </button>
             )}
           </div>
         </div>
@@ -510,46 +520,6 @@ export function OrderDetailPage() {
           )}
         </div>
       </div>
-
-      {/* Similar Listings */}
-      {similarListings.length > 0 && (
-        <div className="mt-12">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Similar Listings</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {similarListings.map((listing) => (
-              <div
-                key={listing.id}
-                onClick={() => navigate(`/app/watch/${listing.reference}`)}
-                className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-              >
-                <div className="relative mb-3">
-                  <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                    {listing.image_url ? (
-                      <img src={listing.image_url} alt={listing.model} className="w-full h-full object-cover" />
-                    ) : (
-                      <ImagePlaceholder size={100} borderRadius={8} />
-                    )}
-                  </div>
-                  <button className="absolute top-2 right-2 w-8 h-8 bg-white/80 rounded-full flex items-center justify-center">
-                    <Star className="w-4 h-4 text-gray-400" />
-                  </button>
-                </div>
-                <p className="text-sm text-gray-500">{listing.brand}</p>
-                <p className="font-medium text-gray-900 truncate">{listing.model}</p>
-                <p className="text-xs text-gray-400 mb-2">{listing.reference}</p>
-                <div className="flex items-center justify-between">
-                  <p className="font-bold text-gray-900">€{listing.price.toLocaleString()}</p>
-                  {listing.price_change !== undefined && (
-                    <span className={`text-xs font-medium ${listing.price_change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                      {listing.price_change >= 0 ? '+' : ''}{listing.price_change.toFixed(1)}%
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Mark as Sold Modal */}
       {showMarkSoldModal && (

@@ -444,6 +444,7 @@ async def update_order(
     order_id: str,
     order_update: OrderUpdate,
     current_user: User = Depends(get_current_active_user),
+    x_platform: Optional[str] = Header(None),
 ) -> Any:
     """Update own order"""
 
@@ -468,6 +469,25 @@ async def update_order(
 
     order.updated_at = datetime.utcnow()
     await order.save()
+
+    # Log activity
+    platform = x_platform or "web"
+    await log_activity(
+        activity_type=ActivityType.WATCH_UPDATED,
+        description=f"{current_user.name} updated their {order.order_type.value} order for {order.brand} {order.model}",
+        user=current_user,
+        entity_type=EntityType.ORDER,
+        entity_id=str(order.id),
+        platform=platform,
+        metadata={
+            "order_type": order.order_type.value,
+            "brand": order.brand,
+            "model": order.model,
+            "reference": order.reference,
+            "price": order.price,
+            "updated_fields": list(update_data.keys()),
+        }
+    )
 
     return OrderResponse(
         id=str(order.id),
@@ -496,6 +516,7 @@ async def update_order(
 async def cancel_order(
     order_id: str,
     current_user: User = Depends(get_current_active_user),
+    x_platform: Optional[str] = Header(None),
 ) -> Any:
     """Cancel own order"""
 
@@ -513,9 +534,34 @@ async def cancel_order(
             detail="Not authorized to cancel this order"
         )
 
+    # Store order details for logging before changing status
+    order_type = order.order_type.value
+    brand = order.brand
+    model = order.model
+    reference = order.reference
+    price = order.price
+
     order.status = OrderStatus.CANCELLED
     order.updated_at = datetime.utcnow()
     await order.save()
+
+    # Log activity
+    platform = x_platform or "web"
+    await log_activity(
+        activity_type=ActivityType.ORDER_CANCELLED,
+        description=f"{current_user.name} cancelled their {order_type} order for {brand} {model}",
+        user=current_user,
+        entity_type=EntityType.ORDER,
+        entity_id=str(order.id),
+        platform=platform,
+        metadata={
+            "order_type": order_type,
+            "brand": brand,
+            "model": model,
+            "reference": reference,
+            "price": price,
+        }
+    )
 
     return {"message": "Order cancelled successfully"}
 
@@ -524,6 +570,7 @@ async def cancel_order(
 async def mark_order_as_sold(
     order_id: str,
     current_user: User = Depends(get_current_active_user),
+    x_platform: Optional[str] = Header(None),
 ) -> Any:
     """Mark own sell order as sold (removes from inventory)"""
 
@@ -550,6 +597,25 @@ async def mark_order_as_sold(
     order.status = OrderStatus.SOLD
     order.updated_at = datetime.utcnow()
     await order.save()
+
+    # Log activity
+    platform = x_platform or "web"
+    await log_activity(
+        activity_type=ActivityType.WATCH_SOLD,
+        description=f"{current_user.name} marked {order.brand} {order.model} as sold for {order.price} {order.currency}",
+        user=current_user,
+        entity_type=EntityType.ORDER,
+        entity_id=str(order.id),
+        platform=platform,
+        metadata={
+            "order_type": order.order_type.value,
+            "brand": order.brand,
+            "model": order.model,
+            "reference": order.reference,
+            "price": order.price,
+            "currency": order.currency,
+        }
+    )
 
     return OrderResponse(
         id=str(order.id),

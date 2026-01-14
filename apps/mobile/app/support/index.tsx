@@ -171,6 +171,10 @@ export default function SupportScreen() {
             title="Report an Issue"
             onPress={() => router.push('/support/report-issue' as any)}
           />
+          <SupportItem
+            title="Contact Us"
+            onPress={() => router.push('/contact' as any)}
+          />
         </View>
       </View>
     </SafeAreaView>

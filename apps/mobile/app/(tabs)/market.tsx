@@ -30,7 +30,8 @@ interface WatchMarketData {
 }
 
 // Mini sparkline component for price chart
-function MiniSparkline({ data, isPositive, width = 40, height = 16 }: { data: number[], isPositive: boolean, width?: number, height?: number }) {
+function MiniSparkline({ data, width = 40, height = 16 }: { data: number[], width?: number, height?: number }) {
+  // Only render if we have actual price history data (at least 2 points)
   if (!data || data.length < 2) return null;
 
   const min = Math.min(...data);
@@ -43,7 +44,8 @@ function MiniSparkline({ data, isPositive, width = 40, height = 16 }: { data: nu
     return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
   }).join(' ');
 
-  const color = isPositive ? '#4AA078' : '#D90429';
+  // Use black color to match web design - the price change badge already shows direction
+  const color = '#1D1D1F';
 
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -191,7 +193,7 @@ export default function MarketScreen() {
           // Use display_price which is lowest order price OR admin price
           price: item.display_price || 0,
           priceChange: item.price_change || 0,
-          priceHistory: item.price_history || generatePriceHistory(item.display_price || 0, item.price_change || 0),
+          priceHistory: item.price_history || [],
           trending: item.trending || false,
           orderCount: item.total_orders || 0,
           lowestOrderPrice: item.lowest_order_price,
@@ -228,7 +230,7 @@ export default function MarketScreen() {
             reference: item.reference || '',
             price: item.price || 0,
             priceChange: item.price_change || 0,
-            priceHistory: item.price_history || generatePriceHistory(item.price || 0, item.price_change || 0),
+            priceHistory: item.price_history || [],
             trending: item.trending || false,
             orderCount: item.order_count || 0,
           }));
@@ -283,7 +285,7 @@ export default function MarketScreen() {
             reference: item.reference || '',
             price: item.price || 0,
             priceChange: item.price_change || 0,
-            priceHistory: generatePriceHistory(item.price || 0, item.price_change || 0),
+            priceHistory: item.price_history || [],
             trending: false,
             orderCount: 0,
           }));
@@ -295,17 +297,6 @@ export default function MarketScreen() {
     }
   };
 
-  // Generate price history for sparkline chart based on current price and change
-  const generatePriceHistory = (price: number, change: number) => {
-    if (!price) return [];
-    const history = [];
-    let currentPrice = price / (1 + change / 100);
-    for (let i = 0; i < 6; i++) {
-      history.push(Math.round(currentPrice));
-      currentPrice = currentPrice * (1 + (change / 100) / 5);
-    }
-    return history;
-  };
 
   const handleWatchPress = (watch: WatchMarketData) => {
     // Navigate with both ID and reference for flexibility
@@ -836,7 +827,6 @@ export default function MarketScreen() {
                     <View style={styles.chartContainer}>
                       <MiniSparkline
                         data={watch.priceHistory}
-                        isPositive={isPositive}
                         width={40}
                         height={16}
                       />

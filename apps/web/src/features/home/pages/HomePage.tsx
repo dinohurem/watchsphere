@@ -21,26 +21,26 @@ import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
 
 // Mini chart component for price trend visualization
-function MiniChart({ data, positive }: { data?: number[]; positive: boolean }) {
-  const chartData = data && data.length >= 2
-    ? data
-    : positive
-      ? [40, 45, 42, 50, 48, 55, 52, 60]
-      : [60, 55, 58, 50, 52, 45, 48, 40];
+function MiniChart({ data }: { data?: number[] }) {
+  // Only render if we have actual price history data
+  if (!data || data.length < 2) {
+    return null;
+  }
 
   const height = 40;
   const width = 100;
-  const min = Math.min(...chartData);
-  const max = Math.max(...chartData);
+  const min = Math.min(...data);
+  const max = Math.max(...data);
   const range = max - min || 1;
 
-  const points = chartData.map((value, index) => {
-    const x = (index / (chartData.length - 1)) * width;
+  const points = data.map((value, index) => {
+    const x = (index / (data.length - 1)) * width;
     const y = height - ((value - min) / range) * height;
     return `${x},${y}`;
   }).join(' ');
 
-  const color = positive ? '#4aa078' : '#cc6045';
+  // Use black color as per Figma design
+  const color = '#1D1D1F';
 
   return (
     <svg width={width} height={height} className="overflow-visible">
@@ -124,6 +124,7 @@ export function HomePage() {
 
   const loadWatchlist = async () => {
     try {
+      // First try to load user's personal watchlist
       const response = await api.get('/profile/watchlist');
       if (response.data && response.data.length > 0) {
         setWatchlist(response.data.slice(0, 4).map((item: any) => ({
@@ -132,15 +133,52 @@ export function HomePage() {
           model: item.model,
           reference: item.reference || '',
           price: item.price || item.target_price || 0,
-          priceChange: item.priceChange || 0,
-          image: item.image,
+          priceChange: item.priceChange || item.price_change || 0,
+          image: item.image || item.cover_image,
         })));
       } else {
-        setWatchlist([]);
+        // If user has no watchlist, try to load default watchlist
+        try {
+          const defaultResponse = await api.get('/default-watchlist/public');
+          if (defaultResponse.data && defaultResponse.data.length > 0) {
+            setWatchlist(defaultResponse.data.slice(0, 4).map((item: any) => ({
+              id: item.id || item.watch_id,
+              brand: item.brand,
+              model: item.model,
+              reference: item.reference || '',
+              price: item.price || item.target_price || 0,
+              priceChange: item.priceChange || item.price_change || 0,
+              image: item.image || item.cover_image,
+            })));
+          } else {
+            setWatchlist([]);
+          }
+        } catch (defaultError) {
+          // If default endpoint fails, show empty watchlist
+          setWatchlist([]);
+        }
       }
     } catch (error) {
       console.error('Failed to load watchlist:', error);
-      setWatchlist([]);
+      // Try default watchlist as fallback
+      try {
+        const defaultResponse = await api.get('/default-watchlist/public');
+        if (defaultResponse.data && defaultResponse.data.length > 0) {
+          setWatchlist(defaultResponse.data.slice(0, 4).map((item: any) => ({
+            id: item.id || item.watch_id,
+            brand: item.brand,
+            model: item.model,
+            reference: item.reference || '',
+            price: item.price || item.target_price || 0,
+            priceChange: item.priceChange || item.price_change || 0,
+            image: item.image || item.cover_image,
+          })));
+        } else {
+          setWatchlist([]);
+        }
+      } catch (defaultError) {
+        setWatchlist([]);
+      }
     } finally {
       setLoadingWatchlist(false);
     }
@@ -246,8 +284,10 @@ export function HomePage() {
     return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   };
 
-  const handleWatchClick = (watchId: string) => {
-    navigate(`/app/watch/${watchId}`);
+  const handleWatchClick = (watch: WatchlistItem | MarketItem) => {
+    // Use reference for routing as the watch details page expects reference
+    const watchIdentifier = 'reference' in watch && watch.reference ? watch.reference : watch.id;
+    navigate(`/app/watch/${encodeURIComponent(watchIdentifier)}`);
   };
 
   return (
@@ -372,7 +412,7 @@ export function HomePage() {
             {watchlist.map((watch) => (
               <div
                 key={watch.id}
-                onClick={() => handleWatchClick(watch.id)}
+                onClick={() => handleWatchClick(watch)}
                 className="relative border border-black/5 rounded-2xl overflow-hidden cursor-pointer hover:bg-[rgba(29,29,31,0.02)] transition-colors bg-white shrink-0 w-[226px]"
               >
                 {/* Favorite Button */}
@@ -405,7 +445,7 @@ export function HomePage() {
                 <div className="px-4 pb-4 pt-3 flex flex-col gap-3">
                   <div>
                     <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">
-                      {watch.brand}
+                      {watch.brand} {watch.model}
                     </p>
                     <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">
                       {watch.reference}
@@ -481,14 +521,14 @@ export function HomePage() {
                     className={`flex items-center justify-between gap-3 py-6 cursor-pointer hover:bg-[rgba(29,29,31,0.02)] transition-colors ${
                       index < marketItems.length - 1 ? 'border-b border-[rgba(33,33,33,0.05)]' : ''
                     }`}
-                    onClick={() => handleWatchClick(item.id)}
+                    onClick={() => handleWatchClick(item)}
                   >
                     <div className="w-[200px]">
-                      <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{item.brand}</p>
+                      <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{item.brand} {item.model}</p>
                       <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{item.reference}</p>
                     </div>
                     <div className="w-[168px]">
-                      <MiniChart data={item.priceHistory} positive={item.isPositive} />
+                      <MiniChart data={item.priceHistory} />
                     </div>
                     <div className="w-[168px] flex items-center gap-1">
                       {item.isPositive ? (
@@ -511,7 +551,7 @@ export function HomePage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleWatchClick(item.id);
+                          handleWatchClick(item);
                         }}
                         className="px-5 py-3 bg-[#212121] text-white text-base font-semibold leading-[20px] tracking-[0.08px] rounded-full hover:bg-black transition-colors"
                       >
@@ -528,7 +568,7 @@ export function HomePage() {
               {marketItems.map((item, index) => (
                 <div
                   key={item.id + '-mobile-' + index}
-                  onClick={() => handleWatchClick(item.id)}
+                  onClick={() => handleWatchClick(item)}
                   className="p-4 cursor-pointer hover:bg-[rgba(29,29,31,0.02)] transition-colors"
                 >
                   <div className="flex items-center justify-between mb-3">
@@ -541,7 +581,7 @@ export function HomePage() {
                         )}
                       </div>
                       <div>
-                        <p className="text-base font-semibold text-[#212121]">{item.brand}</p>
+                        <p className="text-base font-semibold text-[#212121]">{item.brand} {item.model}</p>
                         <p className="text-sm font-medium text-[#212121]/50">{item.reference}</p>
                       </div>
                     </div>

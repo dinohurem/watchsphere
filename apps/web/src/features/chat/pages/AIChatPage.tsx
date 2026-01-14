@@ -286,11 +286,11 @@ export function AIChatPage() {
 
   return (
     <SubscriptionOverlay feature="ai_chat">
-    <div className="p-4 lg:p-6 bg-white min-h-screen">
-      <div className="max-w-7xl mx-auto h-[calc(100vh-96px)]">
-        <div className="flex h-full rounded-2xl border border-black/5 overflow-hidden">
+    <div className="mx-24 py-6 bg-white h-[calc(100vh-64px)]">
+      <div className="h-full overflow-hidden">
+        <div className="flex h-full">
           {/* Left Sidebar - Conversation History */}
-          <div className="w-[335px] border-r border-black/5 flex flex-col">
+          <div className="w-[280px] flex flex-col">
             {/* Sidebar Header */}
             <div className="px-4 py-4">
               <div className="flex items-center justify-between">
@@ -328,15 +328,18 @@ export function AIChatPage() {
             </div>
           </div>
 
+          {/* Divider */}
+          <div className="w-px bg-[rgba(0,0,0,0.1)]" />
+
           {/* Main Chat Area */}
           <div className="flex-1 flex flex-col">
             {/* Date Header */}
-            <div className="py-8">
+            <div className="py-4">
               <p className="text-[13px] text-[#1d1d1f] opacity-50 text-center font-medium">Today</p>
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto px-16">
+            <div className="flex-1 overflow-y-auto px-8">
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -365,7 +368,7 @@ export function AIChatPage() {
             </div>
 
             {/* Bottom Section - Suggestions & Input */}
-            <div className="px-16 pb-16">
+            <div className="px-8 pb-6">
               {/* Suggestions - Only show when no messages */}
               {messages.length === 0 && !isLoading && (
                 <div className="flex flex-wrap gap-4 mb-6">

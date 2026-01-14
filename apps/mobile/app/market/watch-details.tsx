@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
@@ -126,28 +127,31 @@ function XIcon() {
   );
 }
 
-// 3 Dots Menu Icon
+// 3 Dots Menu Icon (vertical)
 function MoreIcon() {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
       <Path
+        d="M12 6C12.5523 6 13 5.55228 13 5C13 4.44772 12.5523 4 12 4C11.4477 4 11 4.44772 11 5C11 5.55228 11.4477 6 12 6Z"
+        fill="#1D1D1F"
+        stroke="#1D1D1F"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
         d="M12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13Z"
+        fill="#1D1D1F"
         stroke="#1D1D1F"
-        strokeWidth={2}
+        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
-        d="M19 13C19.5523 13 20 12.5523 20 12C20 11.4477 19.5523 11 19 11C18.4477 11 18 11.4477 18 12C18 12.5523 18.4477 13 19 13Z"
+        d="M12 20C12.5523 20 13 19.5523 13 19C13 18.4477 12.5523 18 12 18C11.4477 18 11 18.4477 11 19C11 19.5523 11.4477 20 12 20Z"
+        fill="#1D1D1F"
         stroke="#1D1D1F"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M5 13C5.55228 13 6 12.5523 6 12C6 11.4477 5.55228 11 5 11C4.44772 11 4 11.4477 4 12C4 12.5523 4.44772 13 5 13Z"
-        stroke="#1D1D1F"
-        strokeWidth={2}
+        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -584,7 +588,7 @@ export default function WatchDetailsScreen() {
         </View>
       </LinearGradient>
 
-      {/* Action Menu Modal */}
+      {/* Dropdown Menu Modal - positioned below 3-dot icon */}
       <Modal
         visible={showMenu}
         transparent
@@ -596,83 +600,110 @@ export default function WatchDetailsScreen() {
           activeOpacity={1}
           onPress={() => setShowMenu(false)}
         >
-          <View style={styles.menuContainer}>
-            {/* Edit */}
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                router.push({
-                  pathname: '/listing/edit' as const,
-                  params: {
-                    orderId: params.orderId || '',
-                    brand,
-                    model,
-                    reference,
-                    price: price.toString(),
-                  },
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                } as any);
-              }}
-            >
-              <Text style={styles.menuItemText}>Edit</Text>
-            </TouchableOpacity>
-
-            {/* Mark as Sold */}
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                router.push({
-                  pathname: '/market/mark-sold',
-                  params: {
-                    orderId: params.orderId || '',
-                    brand,
-                    model,
-                    reference,
-                    price: price.toString(),
-                  },
-                });
-              }}
-            >
-              <Text style={styles.menuItemText}>Mark as Sold</Text>
-            </TouchableOpacity>
-
-            {/* Delete */}
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                Alert.alert(
-                  'Delete Listing',
-                  'Are you sure you want to delete this listing?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Delete',
-                      style: 'destructive',
-                      onPress: async () => {
-                        try {
-                          await api.delete(`/orders/${params.orderId}`);
-                          Alert.alert('Success', 'Listing deleted successfully');
-                          router.back();
-                        } catch (error) {
-                          Alert.alert('Error', 'Failed to delete listing');
-                        }
+          <View style={styles.dropdownContainer}>
+            {/* Action buttons with glass effect */}
+            <BlurView intensity={80} tint="light" style={styles.dropdownBlur}>
+              <View style={styles.dropdownContent}>
+                {/* Edit */}
+                <TouchableOpacity
+                  style={styles.actionSheetItem}
+                  onPress={() => {
+                    setShowMenu(false);
+                    router.push({
+                      pathname: '/listing/create' as const,
+                      params: {
+                        editMode: 'true',
+                        orderId: params.orderId || '',
+                        orderType: orderType || 'sell',
+                        brand,
+                        model,
+                        reference,
+                        price: price.toString(),
+                        condition,
+                        country_code: countryCode,
+                        country_name: countryName,
+                        has_box: hasBox.toString(),
+                        has_papers: hasPapers.toString(),
                       },
-                    },
-                  ]
-                );
-              }}
-            >
-              <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>Delete</Text>
-            </TouchableOpacity>
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    } as any);
+                  }}
+                >
+                  <Text style={styles.actionSheetItemText}>Edit</Text>
+                </TouchableOpacity>
+
+                {/* Mark as Sold - only show for sell orders */}
+                {orderType === 'sell' && (
+                  <>
+                    <View style={styles.actionSheetDivider} />
+                    <TouchableOpacity
+                      style={styles.actionSheetItem}
+                      onPress={() => {
+                        setShowMenu(false);
+                        router.push({
+                          pathname: '/market/mark-sold',
+                          params: {
+                            orderId: params.orderId || '',
+                            brand,
+                            model,
+                            reference,
+                            price: price.toString(),
+                          },
+                        });
+                      }}
+                    >
+                      <Text style={styles.actionSheetItemText}>Mark as Sold</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                <View style={styles.actionSheetDivider} />
+
+                {/* Delete */}
+                <TouchableOpacity
+                  style={styles.actionSheetItem}
+                  onPress={() => {
+                    setShowMenu(false);
+                    Alert.alert(
+                      'Delete Listing',
+                      'Are you sure you want to delete this listing?',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Delete',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              console.log('Deleting order:', params.orderId);
+                              await api.delete(`/orders/${params.orderId}`);
+                              Alert.alert('Success', 'Listing deleted successfully', [
+                                {
+                                  text: 'OK',
+                                  onPress: () => router.back(),
+                                },
+                              ]);
+                            } catch (error: any) {
+                              console.error('Delete error:', error?.response?.data || error);
+                              Alert.alert('Error', error?.response?.data?.detail || 'Failed to delete listing');
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={[styles.actionSheetItemText, styles.actionSheetItemTextDanger]}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </BlurView>
           </View>
         </TouchableOpacity>
       </Modal>
     </View>
   );
 }
+
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 47 : 24;
 
 const styles = StyleSheet.create({
   container: {
@@ -938,31 +969,44 @@ const styles = StyleSheet.create({
   },
   menuOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
-  menuContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: sp(24),
-    borderTopRightRadius: sp(24),
-    paddingTop: hp(24),
-    paddingBottom: hp(40),
-    paddingHorizontal: wp(16),
+  // Dropdown positioned below 3-dot icon
+  dropdownContainer: {
+    position: 'absolute',
+    top: STATUS_BAR_HEIGHT + hp(12) + sp(44) + hp(8), // status bar + header padding + button height + gap
+    right: wp(16),
+    minWidth: wp(160),
   },
-  menuItem: {
-    backgroundColor: 'rgba(33, 33, 33, 0.05)',
-    borderRadius: sp(16),
+  dropdownBlur: {
+    borderRadius: sp(12),
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dropdownContent: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+  },
+  actionSheetItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: hp(18),
-    marginBottom: hp(8),
+    paddingVertical: hp(14),
+    paddingHorizontal: wp(16),
   },
-  menuItemText: {
+  actionSheetItemText: {
     fontFamily: 'HankenGrotesk_500Medium',
     fontSize: fp(17),
     color: '#212121',
   },
-  menuItemTextDanger: {
+  actionSheetItemTextDanger: {
     color: '#D35741',
+  },
+  actionSheetDivider: {
+    height: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    marginHorizontal: wp(16),
   },
 });

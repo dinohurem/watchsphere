@@ -85,7 +85,23 @@ export default function CreateListingScreen() {
     reference?: string;
     priceMin?: string;
     priceMax?: string;
+    // Edit mode params
+    editMode?: string;
+    orderId?: string;
+    orderType?: string;
+    price?: string;
+    condition?: string;
+    country_code?: string;
+    country_name?: string;
+    has_box?: string;
+    has_papers?: string;
   }>();
+
+  // Check if we're in edit mode
+  const isEditMode = params.editMode === 'true';
+  const orderId = params.orderId;
+  const isBuyOrder = params.orderType === 'buy';
+  const [isSaving, setIsSaving] = useState(false);
 
   // Current step (1-6)
   const [currentStep, setCurrentStep] = useState(1);
@@ -102,7 +118,24 @@ export default function CreateListingScreen() {
   const [dropdownOptions, setDropdownOptions] = useState<string[]>([]);
   const [dropdownTitle, setDropdownTitle] = useState('');
 
-  // Form data - pre-populated if coming from sell order
+  // Derive box and papers value for edit mode
+  const getBoxAndPapersValue = () => {
+    const hasBox = params.has_box === 'true';
+    const hasPapers = params.has_papers === 'true';
+    if (hasBox && hasPapers) return 'Box and Papers';
+    if (hasBox) return 'Box Only';
+    if (hasPapers) return 'Papers Only';
+    return '';
+  };
+
+  // Derive condition value for edit mode
+  const getConditionValue = () => {
+    if (params.condition === 'unworn' || params.condition === 'Unworn') return 'Unworn';
+    if (params.condition) return 'Used';
+    return '';
+  };
+
+  // Form data - pre-populated if coming from sell order or edit mode
   const [formData, setFormData] = useState<ListingFormData>({
     // Step 1: Basic Information - pre-populate from params
     brand: params.brand || '',
@@ -113,12 +146,12 @@ export default function CreateListingScreen() {
     movement: '',
     caseMaterial: '',
     braceletMaterial: '',
-    condition: '',
+    condition: isEditMode ? getConditionValue() : '',
     conditionDescription: '',
-    boxAndPapers: '',
+    boxAndPapers: isEditMode ? getBoxAndPapersValue() : '',
     gender: '',
-    location: '',
-    price: '',
+    location: isEditMode ? (params.country_name || '') : '',
+    price: isEditMode ? (params.price || '') : '',
     currency: 'EUR',
     availability: '',
 
@@ -219,61 +252,91 @@ export default function CreateListingScreen() {
     }
   }, [currentStep]);
 
-  // Handle save listing
+  // Handle save listing (create or update)
   const handleSave = useCallback(async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+
     try {
-      // Upload photos first
+      // Upload photos first (only new local photos) - skip for buy orders
       const uploadedPhotoUrls: string[] = [];
 
-      for (const photoUri of formData.photos) {
-        // Create form data for upload
-        const formDataFile = new FormData();
-        const filename = photoUri.split('/').pop() || 'photo.jpg';
-        formDataFile.append('file', {
-          uri: photoUri,
-          type: 'image/jpeg',
-          name: filename,
-        } as any);
+      if (!isBuyOrder) {
+        for (const photoUri of formData.photos) {
+          // Skip already uploaded photos (URLs starting with http)
+          if (photoUri.startsWith('http')) {
+            uploadedPhotoUrls.push(photoUri);
+            continue;
+          }
 
-        const uploadResponse = await api.post('/upload/watch', formDataFile, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
+          // Create form data for upload
+          const formDataFile = new FormData();
+          const filename = photoUri.split('/').pop() || 'photo.jpg';
+          formDataFile.append('file', {
+            uri: photoUri,
+            type: 'image/jpeg',
+            name: filename,
+          } as any);
 
-        if (uploadResponse.data?.url) {
-          uploadedPhotoUrls.push(uploadResponse.data.url);
+          const uploadResponse = await api.post('/upload/watch', formDataFile, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+
+          if (uploadResponse.data?.url) {
+            uploadedPhotoUrls.push(uploadResponse.data.url);
+          }
         }
       }
 
-      // Create the order/listing
+      // Create/Update the order/listing
       const priceValue = parseInt(formData.price.replace(/[^0-9]/g, ''), 10) || 0;
 
-      const orderData = {
-        order_type: 'sell',
-        brand: formData.brand,
-        model: formData.model,
-        reference: formData.reference,
-        price: priceValue,
-        currency: formData.currency,
-        condition: formData.condition === 'Unworn' ? 'unworn' : 'used',
-        country_code: 'US', // Default, should come from location selection
-        country_name: formData.location,
-        has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
-        has_papers: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Papers Only',
-        notes: formData.conditionDescription,
-      };
+      if (isEditMode && orderId) {
+        // Update existing order - only send fields the backend accepts
+        const updateData = {
+          price: priceValue,
+          condition: formData.condition === 'Unworn' ? 'unworn' : 'used',
+          has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
+          has_papers: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Papers Only',
+          notes: formData.conditionDescription || null,
+        };
 
-      await api.post('/orders', orderData);
+        console.log('Updating order:', orderId, updateData);
+        await api.patch(`/orders/${orderId}`, updateData);
+        Alert.alert('Success', 'Your order has been updated!', [
+          { text: 'OK', onPress: () => router.back() }
+        ]);
+      } else {
+        // Create new order - send all fields
+        const orderData = {
+          order_type: 'sell',
+          brand: formData.brand,
+          model: formData.model,
+          reference: formData.reference,
+          price: priceValue,
+          currency: formData.currency,
+          condition: formData.condition === 'Unworn' ? 'unworn' : 'used',
+          country_code: params.country_code || 'US',
+          country_name: formData.location,
+          has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
+          has_papers: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Papers Only',
+          notes: formData.conditionDescription,
+        };
 
-      Alert.alert('Success', 'Your listing has been created!', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+        await api.post('/orders', orderData);
+        Alert.alert('Success', 'Your listing has been created!', [
+          { text: 'OK', onPress: () => router.back() }
+        ]);
+      }
     } catch (error: any) {
-      console.error('Error creating listing:', error);
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to create listing. Please try again.');
+      console.error('Error saving listing:', error?.response?.data || error);
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to save listing. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-  }, [formData]);
+  }, [formData, isEditMode, orderId, params.country_code, isBuyOrder, isSaving]);
 
   // Format price input
   const formatPriceInput = (text: string) => {
@@ -1267,7 +1330,7 @@ export default function CreateListingScreen() {
   const getButtonText = () => {
     if (currentStep === 6) return 'Save';
     if (currentStep === 5 && formData.photos.length === 0) return 'Continue';
-    if (currentStep === 5) return 'Create Listing';
+    if (currentStep === 5) return isEditMode ? 'Update Listing' : 'Create Listing';
     return 'Continue';
   };
 
@@ -1289,7 +1352,7 @@ export default function CreateListingScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <BackArrow size={sp(24)} color="#212121" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create new listing</Text>
+          <Text style={styles.headerTitle}>{isEditMode ? 'Edit Listing' : 'Create new listing'}</Text>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#212121" />
@@ -1309,7 +1372,7 @@ export default function CreateListingScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <BackArrow size={sp(24)} color="#212121" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create new listing</Text>
+          <Text style={styles.headerTitle}>{isEditMode ? 'Edit Listing' : 'Create new listing'}</Text>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: wp(24) }}>
           <Text style={{ fontFamily: fonts.medium, color: '#212121', textAlign: 'center' }}>
@@ -1326,6 +1389,155 @@ export default function CreateListingScreen() {
     );
   }
 
+  // Simplified edit view for buy orders
+  if (isEditMode && isBuyOrder) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {/* Header with Update button */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <BackArrow size={sp(24)} color="#212121" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Buy Order</Text>
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={isSaving}
+            style={{ paddingHorizontal: wp(8) }}
+          >
+            <Text style={{
+              fontSize: fp(16),
+              fontFamily: fonts.semiBold,
+              color: isSaving ? 'rgba(33, 33, 33, 0.4)' : '#212121',
+            }}>
+              {isSaving ? 'Saving...' : 'Update'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Buy Order Edit Content */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.sectionTitle}>Edit your buy order</Text>
+
+          {/* Watch Info (read-only) */}
+          <View style={[styles.fieldContainer, { backgroundColor: '#F8F8F8', borderRadius: sp(12), padding: wp(16), marginBottom: hp(24) }]}>
+            <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(16), color: '#212121' }}>
+              {formData.brand} {formData.model}
+            </Text>
+            <Text style={{ fontFamily: fonts.regular, fontSize: fp(14), color: '#666666', marginTop: hp(4) }}>
+              {formData.reference}
+            </Text>
+          </View>
+
+          {/* Price */}
+          {isFieldEnabled('price') && (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Price</Text>
+              <View style={styles.fieldInputContainer}>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={formData.price}
+                  onChangeText={(text) => updateField('price', formatPriceInput(text))}
+                  placeholder="e.g., 12,450"
+                  placeholderTextColor="rgba(29, 29, 31, 0.5)"
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Condition */}
+          {isFieldEnabled('condition') && (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Condition</Text>
+              <TouchableOpacity
+                style={styles.fieldInputContainer}
+                onPress={() => openDropdown('condition', getOptionsForField('condition'), 'Select Condition')}
+              >
+                {formData.condition ? (
+                  <Text style={styles.fieldValue}>{formData.condition}</Text>
+                ) : (
+                  <Text style={styles.fieldPlaceholder}>Please select condition</Text>
+                )}
+                <ChevronDown size={sp(18)} color="#1D1D1F" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Box and Papers */}
+          {isFieldEnabled('box_papers') && (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Box and papers</Text>
+              <TouchableOpacity
+                style={styles.fieldInputContainer}
+                onPress={() => openDropdown('boxAndPapers', getOptionsForField('box_papers'), 'Select Box and Papers')}
+              >
+                {formData.boxAndPapers ? (
+                  <Text style={styles.fieldValue}>{formData.boxAndPapers}</Text>
+                ) : (
+                  <Text style={styles.fieldPlaceholder}>Please select</Text>
+                )}
+                <ChevronDown size={sp(18)} color="#1D1D1F" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Dropdown Modal */}
+        <Modal
+          visible={showDropdown}
+          animationType="none"
+          transparent={true}
+          onRequestClose={() => setShowDropdown(false)}
+        >
+          <View style={styles.dropdownOverlay}>
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              activeOpacity={1}
+              onPress={() => setShowDropdown(false)}
+            />
+            <View style={styles.dropdownContent}>
+              <View style={styles.dropdownHeader}>
+                <Text style={styles.dropdownTitle}>{dropdownTitle}</Text>
+                <TouchableOpacity
+                  style={styles.dropdownCloseButton}
+                  onPress={() => setShowDropdown(false)}
+                >
+                  <X size={sp(18)} color="#212121" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={styles.dropdownScrollContent}>
+                {dropdownOptions.map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={styles.dropdownOption}
+                    onPress={() => selectOption(option)}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownOptionText,
+                        dropdownField && formData[dropdownField] === option && styles.dropdownOptionSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                    {dropdownField && formData[dropdownField] === option && (
+                      <Check size={sp(20)} color="#212121" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -1334,22 +1546,40 @@ export default function CreateListingScreen() {
           <BackArrow size={sp(24)} color="#212121" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {currentStep === 6 ? 'Listing overview' : 'Create new listing'}
+          {currentStep === 6 ? 'Listing overview' : (isEditMode ? 'Edit Listing' : 'Create new listing')}
         </Text>
+        {/* Update button for sell order edit mode */}
+        {isEditMode && !isBuyOrder && (
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={isSaving}
+            style={{ paddingHorizontal: wp(8) }}
+          >
+            <Text style={{
+              fontSize: fp(16),
+              fontFamily: fonts.semiBold,
+              color: isSaving ? 'rgba(33, 33, 33, 0.4)' : '#212121',
+            }}>
+              {isSaving ? 'Saving...' : 'Update'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Progress Indicator */}
-      <View style={styles.progressContainer}>
-        {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.progressDot,
-              index < currentStep && styles.progressDotActive,
-            ]}
-          />
-        ))}
-      </View>
+      {/* Progress Indicator - hide for edit mode */}
+      {!isEditMode && (
+        <View style={styles.progressContainer}>
+          {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.progressDot,
+                index < currentStep && styles.progressDotActive,
+              ]}
+            />
+          ))}
+        </View>
+      )}
 
       {/* Content */}
       <ScrollView
@@ -1361,19 +1591,21 @@ export default function CreateListingScreen() {
         {renderStepContent()}
       </ScrollView>
 
-      {/* Bottom Button */}
-      <View style={styles.bottomButtonsContainer}>
-        <TouchableOpacity
-          style={[
-            styles.continueButton,
-            isButtonDisabled() && styles.continueButtonDisabled,
-          ]}
-          onPress={currentStep === 6 ? handleSave : (currentStep === 5 && formData.photos.length > 0 ? () => setCurrentStep(6) : handleNext)}
-          disabled={isButtonDisabled()}
-        >
-          <Text style={styles.continueButtonText}>{getButtonText()}</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Bottom Button - hide for edit mode (use header Update button instead) */}
+      {!isEditMode && (
+        <View style={styles.bottomButtonsContainer}>
+          <TouchableOpacity
+            style={[
+              styles.continueButton,
+              isButtonDisabled() && styles.continueButtonDisabled,
+            ]}
+            onPress={currentStep === 6 ? handleSave : (currentStep === 5 && formData.photos.length > 0 ? () => setCurrentStep(6) : handleNext)}
+            disabled={isButtonDisabled()}
+          >
+            <Text style={styles.continueButtonText}>{getButtonText()}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Dropdown Modal */}
       <Modal

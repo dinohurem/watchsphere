@@ -18,7 +18,7 @@ async def connect_to_mongo():
     from app.models.chat import Message, Conversation
     from app.models.news import News
     from app.models.chat_group import ConversationMember
-    from app.models.billing import Billing, Subscription, Transaction
+    from app.models.billing import Billing, Subscription, SubscriptionHistory, Transaction
     from app.models.watchlist import WatchlistRecord
     from app.models.default_watchlist import DefaultWatchlistItem
     from app.models.activity_log import ActivityLog
@@ -36,7 +36,7 @@ async def connect_to_mongo():
         document_models=[
             User, Watch, Message, Conversation,
             News, ConversationMember,
-            Billing, Subscription, Transaction,
+            Billing, Subscription, SubscriptionHistory, Transaction,
             WatchlistRecord, DefaultWatchlistItem, ActivityLog,
             WhatsAppImport, WhatsAppMessage, ExtractedWatchListing,
             VerificationCode, Order,

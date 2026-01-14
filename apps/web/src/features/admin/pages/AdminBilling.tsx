@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Plus, Search, DollarSign, TrendingUp, Users, Edit2, Crown, Calendar } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { Plus, Search, DollarSign, TrendingUp, Users, Edit2, Crown, Calendar, MoreVertical, History, Trash2, X } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface BillingRecord {
@@ -30,6 +30,23 @@ interface Subscription {
   started_at: string
   expires_at: string | null
   auto_renew: boolean
+  created_at: string
+}
+
+interface SubscriptionHistoryRecord {
+  id: string
+  subscription_id: string
+  user_id: string
+  user_name: string
+  user_email: string
+  plan: 'free' | 'basic' | 'premium' | 'enterprise'
+  status: 'active' | 'cancelled' | 'expired' | 'past_due'
+  price_monthly: number
+  currency: string
+  action: string
+  action_by: string | null
+  period_start: string
+  period_end: string | null
   created_at: string
 }
 
@@ -75,6 +92,15 @@ const planColors: Record<string, string> = {
   enterprise: 'bg-amber-100 text-amber-800',
 }
 
+const actionColors: Record<string, string> = {
+  created: 'bg-green-100 text-green-800',
+  renewed: 'bg-blue-100 text-blue-800',
+  upgraded: 'bg-purple-100 text-purple-800',
+  downgraded: 'bg-amber-100 text-amber-800',
+  cancelled: 'bg-red-100 text-red-800',
+  expired: 'bg-gray-100 text-gray-800',
+}
+
 type TabType = 'billing' | 'subscriptions'
 
 // Format date in EU format (DD/MM/YYYY)
@@ -108,6 +134,15 @@ export function AdminBilling() {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
   const [showCreateSubscriptionModal, setShowCreateSubscriptionModal] = useState(false)
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [historySubscription, setHistorySubscription] = useState<Subscription | null>(null)
+  const [historyRecords, setHistoryRecords] = useState<SubscriptionHistoryRecord[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletingSubscription, setDeletingSubscription] = useState<Subscription | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null)
+  const actionMenuRef = useRef<HTMLDivElement>(null)
   const [subscriptionFormData, setSubscriptionFormData] = useState({
     user_id: '',
     plan: 'basic' as 'free' | 'basic' | 'premium' | 'enterprise',
@@ -120,6 +155,17 @@ export function AdminBilling() {
 
   useEffect(() => {
     fetchData()
+  }, [])
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(event.target as Node)) {
+        setActiveActionMenu(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const fetchData = async () => {
@@ -198,6 +244,44 @@ export function AdminBilling() {
       auto_renew: true,
     })
     setShowCreateSubscriptionModal(true)
+  }
+
+  const openHistoryModal = async (sub: Subscription) => {
+    setHistorySubscription(sub)
+    setShowHistoryModal(true)
+    setLoadingHistory(true)
+    setActiveActionMenu(null)
+    try {
+      const res = await api.get(`/billing/admin/subscriptions/${sub.id}/history`)
+      setHistoryRecords(res.data)
+    } catch (error) {
+      console.error('Failed to fetch subscription history:', error)
+      setHistoryRecords([])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  const openDeleteModal = (sub: Subscription) => {
+    setDeletingSubscription(sub)
+    setShowDeleteModal(true)
+    setActiveActionMenu(null)
+  }
+
+  const handleDeleteSubscription = async () => {
+    if (!deletingSubscription) return
+    setDeleting(true)
+    try {
+      await api.delete(`/billing/admin/subscriptions/${deletingSubscription.id}`)
+      setShowDeleteModal(false)
+      setDeletingSubscription(null)
+      fetchData()
+    } catch (error: any) {
+      console.error('Failed to delete subscription:', error)
+      alert(error.response?.data?.detail || 'Failed to delete subscription')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const handleSaveSubscription = async (e: React.FormEvent) => {
@@ -472,13 +556,42 @@ export function AdminBilling() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => openEditSubscriptionModal(sub)}
-                        className="text-sm text-primary hover:text-primary/80 font-medium inline-flex items-center gap-1"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                        Edit
-                      </button>
+                      <div className="relative inline-block" ref={activeActionMenu === sub.id ? actionMenuRef : undefined}>
+                        <button
+                          onClick={() => setActiveActionMenu(activeActionMenu === sub.id ? null : sub.id)}
+                          className="p-1 rounded hover:bg-gray-100"
+                        >
+                          <MoreVertical className="w-5 h-5 text-gray-500" />
+                        </button>
+                        {activeActionMenu === sub.id && (
+                          <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border z-10">
+                            <button
+                              onClick={() => {
+                                openEditSubscriptionModal(sub)
+                                setActiveActionMenu(null)
+                              }}
+                              className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => openHistoryModal(sub)}
+                              className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <History className="w-4 h-4" />
+                              View History
+                            </button>
+                            <button
+                              onClick={() => openDeleteModal(sub)}
+                              className="w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -830,6 +943,150 @@ export function AdminBilling() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Subscription History Modal */}
+      {showHistoryModal && historySubscription && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Subscription History</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {historySubscription.user_name} ({historySubscription.user_email})
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowHistoryModal(false)
+                  setHistorySubscription(null)
+                  setHistoryRecords([])
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
+              {loadingHistory ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : historyRecords.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <History className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No history records found</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {historyRecords.map((record) => (
+                    <div key={record.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full capitalize ${actionColors[record.action] || 'bg-gray-100 text-gray-800'}`}>
+                          {record.action}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {formatDateEU(record.created_at)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-500">Plan:</span>
+                          <span className={`ml-2 px-2 py-0.5 text-xs font-medium rounded-full capitalize ${planColors[record.plan]}`}>
+                            {record.plan}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Status:</span>
+                          <span className={`ml-2 px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[record.status]}`}>
+                            {record.status}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Price:</span>
+                          <span className="ml-2 font-medium">
+                            {record.price_monthly === 0 ? 'Free' : `${record.currency} ${record.price_monthly}/mo`}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Period Start:</span>
+                          <span className="ml-2">{formatDateEU(record.period_start)}</span>
+                        </div>
+                        {record.period_end && (
+                          <div>
+                            <span className="text-gray-500">Period End:</span>
+                            <span className="ml-2">{formatDateEU(record.period_end)}</span>
+                          </div>
+                        )}
+                        {record.action_by && (
+                          <div>
+                            <span className="text-gray-500">Action By:</span>
+                            <span className="ml-2">{record.action_by}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && deletingSubscription && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Delete Subscription</h2>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 bg-red-100 rounded-full">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">
+                    {deletingSubscription.user_name}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {deletingSubscription.user_email}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to delete this subscription? This will also remove all subscription history records.
+              </p>
+
+              <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="p-6 border-t flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false)
+                  setDeletingSubscription(null)
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSubscription}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete Subscription'}
+              </button>
+            </div>
           </div>
         </div>
       )}
