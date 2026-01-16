@@ -1,12 +1,15 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
+from beanie.operators import In
 
 from app.core.deps import get_current_active_user
 from app.models.user import User
 from app.models.watchlist import WatchlistRecord, WatchlistItemType
+from app.models.watch import Watch, WatchStatus
+from app.models.order import Order, OrderType, OrderStatus
 
 router = APIRouter()
 
@@ -243,6 +246,35 @@ async def get_my_watchlist(
 
     items = await WatchlistRecord.find(*query_conditions).sort([("created_at", -1)]).to_list()
 
+    # Build lookup for market data (price_change and image) by reference
+    references = [item.reference for item in items if item.reference]
+    market_data: Dict[str, dict] = {}
+
+    if references:
+        # Get watches by reference
+        watches = await Watch.find(
+            In(Watch.reference, references),
+            Watch.status == WatchStatus.ACTIVE,
+        ).to_list()
+
+        for watch in watches:
+            if watch.reference:
+                # Get lowest active sell order price for this reference
+                sell_orders = await Order.find(
+                    Order.reference == watch.reference,
+                    Order.order_type == OrderType.SELL,
+                    Order.status == OrderStatus.ACTIVE,
+                ).sort([("price", 1)]).limit(1).to_list()
+
+                lowest_order_price = sell_orders[0].price if sell_orders else None
+                display_price = lowest_order_price if lowest_order_price else watch.price
+
+                market_data[watch.reference] = {
+                    "price_change": watch.price_change or 0.0,
+                    "image": watch.cover_image,
+                    "display_price": display_price,
+                }
+
     return [
         {
             "id": str(item.id),
@@ -256,10 +288,10 @@ async def get_my_watchlist(
             "notes": item.notes,
             "is_active": item.is_active,
             "created_at": item.created_at,
-            # Frontend display fields
-            "price": item.target_price or 0,
-            "priceChange": 0.0,  # TODO: Calculate from market data
-            "image": None,  # TODO: Get from market data
+            # Frontend display fields - get from market data if available
+            "price": market_data.get(item.reference, {}).get("display_price") or item.target_price or 0,
+            "priceChange": market_data.get(item.reference, {}).get("price_change", 0.0),
+            "image": market_data.get(item.reference, {}).get("image"),
         }
         for item in items
     ]

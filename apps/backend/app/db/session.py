@@ -27,7 +27,7 @@ async def connect_to_mongo():
     from app.models.order import Order
     from app.models.listing_field import ListingField
     from app.models.filter import Filter
-    from app.models.support import Dispute, Issue
+    from app.models.support import Dispute, Issue, Report
     from app.models.review import Review
     from app.models.auth_handoff import AuthHandoffToken
 
@@ -41,7 +41,7 @@ async def connect_to_mongo():
             WhatsAppImport, WhatsAppMessage, ExtractedWatchListing,
             VerificationCode, Order,
             ListingField, Filter,
-            Dispute, Issue, Review, AuthHandoffToken
+            Dispute, Issue, Report, Review, AuthHandoffToken
         ]
     )
 

@@ -6,7 +6,7 @@ from beanie import PydanticObjectId
 
 from app.core.deps import get_current_active_user, get_current_admin_user
 from app.models.user import User
-from app.models.support import Dispute, DisputeStatus, Issue, IssueStatus
+from app.models.support import Dispute, DisputeStatus, Issue, IssueStatus, Report, ReportStatus, ReportedType
 from app.api.v1.endpoints.activity import log_activity
 from app.models.activity_log import ActivityType, EntityType
 
@@ -60,6 +60,35 @@ class IssueResponse(BaseModel):
     title: str
     description: str
     status: IssueStatus
+    admin_notes: Optional[str]
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+
+class ReportCreateRequest(BaseModel):
+    reported_type: str  # conversation, group, user
+    reported_id: str
+    reported_name: str
+    reason: str
+    description: Optional[str] = None
+
+
+class ReportUpdateRequest(BaseModel):
+    status: Optional[ReportStatus] = None
+    admin_notes: Optional[str] = None
+
+
+class ReportResponse(BaseModel):
+    id: str
+    reporter_id: str
+    reporter_name: str
+    reporter_email: str
+    reported_type: str
+    reported_id: str
+    reported_name: str
+    reason: str
+    description: Optional[str]
+    status: ReportStatus
     admin_notes: Optional[str]
     created_at: datetime
     updated_at: Optional[datetime]
@@ -221,6 +250,70 @@ async def create_issue(
     }
 
 
+@router.post("/reports", response_model=ReportResponse)
+async def create_report(
+    data: ReportCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    x_platform: Optional[str] = Header(None, alias="X-Platform"),
+) -> Any:
+    """Create a new report for a conversation, group, or user"""
+    # Validate reported_type
+    try:
+        reported_type = ReportedType(data.reported_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid reported_type. Must be one of: {[e.value for e in ReportedType]}"
+        )
+
+    report = Report(
+        reporter_id=str(current_user.id),
+        reporter_name=current_user.name,
+        reporter_email=current_user.email,
+        reported_type=reported_type,
+        reported_id=data.reported_id,
+        reported_name=data.reported_name,
+        reason=data.reason,
+        description=data.description,
+        status=ReportStatus.OPEN,
+        created_at=datetime.utcnow(),
+    )
+    await report.insert()
+
+    # Log activity
+    platform = x_platform or "web"
+    await log_activity(
+        activity_type=ActivityType.REPORT_CREATED,
+        description=f"{current_user.name} reported a {data.reported_type}: {data.reported_name}",
+        user=current_user,
+        entity_type=EntityType.REPORT,
+        entity_id=str(report.id),
+        metadata={
+            "reported_type": data.reported_type,
+            "reported_id": data.reported_id,
+            "reason": data.reason,
+            "platform": platform,
+        },
+        platform=platform,
+    )
+
+    return {
+        "id": str(report.id),
+        "reporter_id": report.reporter_id,
+        "reporter_name": report.reporter_name,
+        "reporter_email": report.reporter_email,
+        "reported_type": report.reported_type.value,
+        "reported_id": report.reported_id,
+        "reported_name": report.reported_name,
+        "reason": report.reason,
+        "description": report.description,
+        "status": report.status,
+        "admin_notes": report.admin_notes,
+        "created_at": report.created_at,
+        "updated_at": report.updated_at,
+    }
+
+
 # ============== Admin Endpoints ==============
 
 @router.get("/admin/disputes", response_model=List[DisputeResponse])
@@ -354,4 +447,75 @@ async def update_issue(
         "admin_notes": issue.admin_notes,
         "created_at": issue.created_at,
         "updated_at": issue.updated_at,
+    }
+
+
+@router.get("/admin/reports", response_model=List[ReportResponse])
+async def get_all_reports(
+    report_status: Optional[ReportStatus] = None,
+    current_user: User = Depends(get_current_admin_user),
+) -> Any:
+    """Get all reports (admin only)"""
+    query_conditions = []
+    if report_status:
+        query_conditions.append(Report.status == report_status)
+
+    if query_conditions:
+        reports = await Report.find(*query_conditions).sort([("created_at", -1)]).to_list()
+    else:
+        reports = await Report.find().sort([("created_at", -1)]).to_list()
+
+    return [
+        {
+            "id": str(r.id),
+            "reporter_id": r.reporter_id,
+            "reporter_name": r.reporter_name,
+            "reporter_email": r.reporter_email,
+            "reported_type": r.reported_type.value,
+            "reported_id": r.reported_id,
+            "reported_name": r.reported_name,
+            "reason": r.reason,
+            "description": r.description,
+            "status": r.status,
+            "admin_notes": r.admin_notes,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+        }
+        for r in reports
+    ]
+
+
+@router.patch("/admin/reports/{report_id}", response_model=ReportResponse)
+async def update_report(
+    report_id: str,
+    data: ReportUpdateRequest,
+    current_user: User = Depends(get_current_admin_user),
+) -> Any:
+    """Update a report (admin only)"""
+    report = await Report.get(PydanticObjectId(report_id))
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Report not found"
+        )
+
+    update_data = data.model_dump(exclude_unset=True)
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        await report.set(update_data)
+
+    return {
+        "id": str(report.id),
+        "reporter_id": report.reporter_id,
+        "reporter_name": report.reporter_name,
+        "reporter_email": report.reporter_email,
+        "reported_type": report.reported_type.value,
+        "reported_id": report.reported_id,
+        "reported_name": report.reported_name,
+        "reason": report.reason,
+        "description": report.description,
+        "status": report.status,
+        "admin_notes": report.admin_notes,
+        "created_at": report.created_at,
+        "updated_at": report.updated_at,
     }

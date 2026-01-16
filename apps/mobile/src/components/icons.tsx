@@ -378,6 +378,15 @@ export function Check({ size = 24, color = '#000', fill = 'none' }: IconProps) {
   );
 }
 
+export function CheckCheck({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M18 6L7 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M22 10L12 20" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function Settings({ size = 24, color = '#000', fill = 'none' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
@@ -794,6 +803,15 @@ export function Calendar({ size = 24, color = '#000', fill = 'none' }: IconProps
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
       <Path d="M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" strokeLinecap="round" strokeLinejoin="round" />
       <Path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function Flag({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M4 22v-7" strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }

@@ -2,15 +2,18 @@ import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useChat } from '@/contexts/ChatContext';
 import { ChatBubble, QuotedMessage } from '@/components/ChatBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import { BackArrow, Users } from '@/components/icons';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { chatService, Message as ChatServiceMessage } from '@/services/chatService';
 
 interface Message {
   id: string;
@@ -148,6 +151,7 @@ function PrivateMessageIcon({ size = 24, color = "#212121" }: { size?: number; c
 export default function GroupChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors, fonts } = useTheme();
+  const { setActiveConversation, messages: chatMessages, markAsRead } = useChat();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [group, setGroup] = useState<GroupDetails | null>(null);
@@ -164,6 +168,118 @@ export default function GroupChatScreen() {
   const flashListRef = useRef<FlashList<Message & { showSender: boolean; showAvatar: boolean }>>(null);
   const currentUserId = useRef<string>('');
 
+  // Set active conversation on mount and clear on unmount
+  // This prevents notifications from showing when the group chat is open
+  // Also marks messages as read to clear unread count
+  useEffect(() => {
+    if (id) {
+      setActiveConversation(id);
+
+      // Mark all messages as read via API (this updates the database)
+      // This ensures the backend unread count is accurate
+      const markAsReadApi = async () => {
+        try {
+          await api.post(`/chat/groups/${id}/read`);
+        } catch (error) {
+          console.error('Failed to mark group as read:', error);
+        }
+      };
+      markAsReadApi();
+    }
+    return () => {
+      setActiveConversation(null);
+    };
+  }, [id, setActiveConversation]);
+
+  // Listen for real-time messages directly from chatService (more reliable than ChatContext)
+  useEffect(() => {
+    if (!id) return;
+
+    const handleNewMessage = (message: ChatServiceMessage) => {
+      console.log('Group [id].tsx: Direct message received:', message.id, 'for conv:', message.conversationId, 'current group:', id);
+
+      // Only process messages for this group
+      if (message.conversationId !== id) {
+        console.log('Group [id].tsx: Message is for different conversation, ignoring');
+        return;
+      }
+
+      setMessages(prev => {
+        // Check if message already exists by ID
+        const existsById = prev.some(m => m.id === message.id);
+        if (existsById) {
+          console.log('Group [id].tsx: Message already exists by ID, skipping');
+          return prev;
+        }
+
+        // Check if this is our own message that we sent (temp message exists)
+        // Match by content + sender to detect temp message duplicates
+        const isSentByMe = message.senderId === currentUserId.current;
+        if (isSentByMe) {
+          // Check if there's a temp message with the same content
+          const tempMessageIndex = prev.findIndex(m =>
+            m.id.startsWith('temp-') &&
+            m.content === message.content &&
+            m.sender_id === message.senderId
+          );
+
+          if (tempMessageIndex !== -1) {
+            console.log('Group [id].tsx: Replacing temp message with real message');
+            // Replace the temp message with the real one
+            const newMessages = [...prev];
+            newMessages[tempMessageIndex] = {
+              id: message.id,
+              conversation_id: message.conversationId,
+              sender_id: message.senderId,
+              sender_name: message.senderName,
+              content: message.content,
+              type: message.type || 'text',
+              is_ai: false,
+              read: message.status === 'read',
+              created_at: message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
+              reply_to_id: message.replyTo,
+              reply_to_content: message.replyToContent,
+              reply_to_sender_name: message.replyToSenderName,
+              reply_to_sender_id: message.replyToSenderId,
+            };
+            return newMessages;
+          }
+        }
+
+        console.log('Group [id].tsx: Adding new message to UI');
+        // Scroll to bottom when new messages arrive
+        setTimeout(() => {
+          flashListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+
+        return [...prev, {
+          id: message.id,
+          conversation_id: message.conversationId,
+          sender_id: message.senderId,
+          sender_name: message.senderName,
+          content: message.content,
+          type: message.type || 'text',
+          is_ai: false,
+          read: message.status === 'read',
+          created_at: message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
+          reply_to_id: message.replyTo,
+          reply_to_content: message.replyToContent,
+          reply_to_sender_name: message.replyToSenderName,
+          reply_to_sender_id: message.replyToSenderId,
+        }];
+      });
+    };
+
+    // Subscribe to new messages
+    chatService.on('message:new', handleNewMessage);
+    console.log('Group [id].tsx: Subscribed to chatService message:new for group:', id);
+
+    return () => {
+      chatService.off('message:new', handleNewMessage);
+      console.log('Group [id].tsx: Unsubscribed from chatService message:new');
+    };
+  }, [id]);
+
   useEffect(() => {
     if (id) {
       loadGroupDetails();
@@ -171,6 +287,17 @@ export default function GroupChatScreen() {
       loadCurrentUser();
     }
   }, [id]);
+
+  // Reload messages when screen comes into focus (e.g., after navigating back)
+  // This ensures messages received while away are loaded from the API
+  useFocusEffect(
+    useCallback(() => {
+      if (id) {
+        console.log('Group chat: Screen focused, reloading messages for:', id);
+        loadMessages();
+      }
+    }, [id])
+  );
 
   const loadCurrentUser = async () => {
     try {
@@ -197,9 +324,15 @@ export default function GroupChatScreen() {
   const loadMessages = async () => {
     try {
       setIsLoading(true);
+      console.log('Group chat: loadMessages called for group:', id);
       const response = await api.get(`/chat/groups/${id}/messages`);
+      console.log('Group chat: API returned', response.data?.length || 0, 'messages');
       if (response.data) {
         setMessages(response.data);
+        // Scroll to bottom after messages load
+        setTimeout(() => {
+          flashListRef.current?.scrollToEnd({ animated: false });
+        }, 100);
       }
     } catch (error) {
       console.error('Error loading messages:', error);

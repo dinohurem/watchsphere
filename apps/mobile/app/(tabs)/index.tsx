@@ -40,6 +40,7 @@ interface WatchlistItem {
   price: number;
   priceChange: number;
   image?: string;
+  isFromUserWatchlist?: boolean; // true if from user's watchlist, false if from default
 }
 
 interface ActivityItem {
@@ -118,22 +119,6 @@ export default function HomeScreen() {
     },
   ];
 
-  // Load data on initial mount
-  useEffect(() => {
-    loadAllData();
-  }, []);
-
-  // Refresh data when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      loadAllData();
-    }, [])
-  );
-
-  const loadAllData = async () => {
-    await Promise.all([loadWatchlist(), loadActivity(), loadNews(), loadProfile()]);
-  };
-
   const loadProfile = async () => {
     try {
       const response = await api.get('/profile/me');
@@ -144,12 +129,6 @@ export default function HomeScreen() {
       console.error('Failed to load profile:', error);
     }
   };
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadAllData();
-    setRefreshing(false);
-  }, []);
 
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -177,6 +156,7 @@ export default function HomeScreen() {
           price: item.price || item.target_price || 0,
           priceChange: item.priceChange || 0,
           image: item.image,
+          isFromUserWatchlist: true, // From user's personal watchlist
         })));
       } else {
         // User watchlist is empty, try to fetch default watchlist
@@ -192,6 +172,7 @@ export default function HomeScreen() {
               price: item.target_price || 0,
               priceChange: 0,
               image: item.image_url || null,
+              isFromUserWatchlist: false, // From default watchlist (not user's)
             })));
           } else {
             setWatchlistItems([]);
@@ -252,6 +233,28 @@ export default function HomeScreen() {
       setLoadingNews(false);
     }
   };
+
+  const loadAllData = useCallback(async () => {
+    await Promise.all([loadWatchlist(), loadActivity(), loadNews(), loadProfile()]);
+  }, []);
+
+  // Load data on initial mount
+  useEffect(() => {
+    loadAllData();
+  }, [loadAllData]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadAllData();
+    }, [loadAllData])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  }, [loadAllData]);
 
   const formatPrice = (price: number) => {
     return `€${price.toLocaleString()}`;
@@ -801,6 +804,8 @@ export default function HomeScreen() {
                         reference: watch.reference,
                         brand: watch.brand,
                         model: watch.model,
+                        // Pass flag to indicate if from user's watchlist (affects Saved icon display)
+                        fromUserWatchlist: watch.isFromUserWatchlist ? 'true' : 'false',
                       },
                     } as any)}
                     activeOpacity={0.7}

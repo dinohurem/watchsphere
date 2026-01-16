@@ -8,13 +8,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
-import { ChatProvider } from '@/contexts/ChatContext';
+import { ChatProvider, setNotificationCallback } from '@/contexts/ChatContext';
+import { NotificationProvider, useNotification } from '@/contexts/NotificationContext';
 import { AIButtonProvider } from '@/contexts/AIButtonContext';
 import { FilterProvider } from '@/contexts/FilterContext';
 import { ConfigProvider } from '@/contexts/ConfigContext';
 import { GuideProvider, useGuide } from '@/contexts/GuideContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { AnimatedSplashScreen } from '@/components/AnimatedSplashScreen';
+import { NotificationBanner } from '@/components/NotificationBanner';
 import { useFonts } from 'expo-font';
 import {
   HankenGrotesk_300Light,
@@ -39,6 +41,61 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Component to connect notification context with chat context and render banner
+// This MUST be rendered inside NotificationProvider
+function NotificationHandler() {
+  const notificationContext = useNotification();
+  const { currentNotification, showNotification, dismissNotification } = notificationContext;
+
+  // Connect the notification callback from ChatContext to NotificationContext
+  useEffect(() => {
+    setNotificationCallback((data) => {
+      showNotification({
+        title: data.title,
+        body: data.body,
+        avatar: data.avatar,
+        conversationId: data.conversationId,
+        isGroup: data.isGroup,
+      });
+    });
+
+    return () => {
+      setNotificationCallback(null);
+    };
+  }, [showNotification]);
+
+  const handleNotificationPress = useCallback((notification: any) => {
+    // Navigate to the conversation
+    if (notification.conversationId) {
+      if (notification.isGroup) {
+        router.push({
+          pathname: '/chat/group/[id]',
+          params: {
+            id: notification.conversationId,
+            name: notification.title,
+          },
+        });
+      } else {
+        router.push({
+          pathname: '/chat/[id]',
+          params: {
+            id: notification.conversationId,
+            name: notification.title,
+          },
+        });
+      }
+    }
+  }, []);
+
+  return (
+    <NotificationBanner
+      notification={currentNotification}
+      onPress={handleNotificationPress}
+      onDismiss={dismissNotification}
+    />
+  );
+}
 
 function RootLayoutNav() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -217,11 +274,15 @@ export default function RootLayout() {
           <FilterProvider>
             <SubscriptionProvider>
               <AIButtonProvider>
-                <ChatProvider>
-                  <GuideProvider>
-                    <RootLayoutNav />
-                  </GuideProvider>
-                </ChatProvider>
+                <NotificationProvider>
+                  <ChatProvider>
+                    <GuideProvider>
+                      <RootLayoutNav />
+                      {/* In-app notification banner - must be inside NotificationProvider */}
+                      <NotificationHandler />
+                    </GuideProvider>
+                  </ChatProvider>
+                </NotificationProvider>
               </AIButtonProvider>
             </SubscriptionProvider>
           </FilterProvider>

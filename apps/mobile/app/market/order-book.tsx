@@ -191,6 +191,7 @@ export default function OrderBookScreen() {
       >
         <View style={[styles.tableCell, styles.marketCellContainer]}>
           <CountryFlag countryCode={item.country_code} size={16} />
+          <Text style={styles.marketCodeText}>{item.country_code}</Text>
         </View>
         <Text style={[styles.tableCell, styles.tableCellText, styles.dateCellData]}>{formatOrderDate(item.date)}</Text>
         <Text style={[styles.tableCell, styles.tableCellText, styles.conditionCell]}>{item.condition}</Text>
@@ -428,13 +429,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(8),
   },
   marketCellContainer: {
-    width: wp(60),
+    width: wp(70),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: wp(4),
+  },
+  marketCodeText: {
+    fontSize: fp(13),
+    fontFamily: 'HankenGrotesk_400Regular',
+    color: '#1D1D1F',
   },
   marketCell: {
-    width: wp(60),
+    width: wp(70),
     textAlign: 'center',
   },
   dateCell: {

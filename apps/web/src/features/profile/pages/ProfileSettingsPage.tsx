@@ -1509,7 +1509,6 @@ export function ProfileSettingsPage() {
                   )}
                 </div>
                 <h2 className="text-lg font-semibold text-gray-900">{profile?.name || user?.name}</h2>
-                <p className="text-sm text-gray-500">Customer ID: {profile?.customer_id || 'N/A'}</p>
               </div>
 
               {/* Navigation */}
