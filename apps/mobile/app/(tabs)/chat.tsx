@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useChat } from '@/contexts/ChatContext';
 import { MessageSquare, Users, AISparkle, Plus } from '@/components/icons';
 import { SwipeableChatItem } from '@/components/SwipeableChatItem';
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
@@ -62,6 +63,12 @@ interface Group {
 
 export default function ChatScreen() {
   const { colors, fonts } = useTheme();
+  const {
+    updateConversationsFromApi,
+    updateGroupsFromApi,
+    conversations: contextConversations,
+    groups: contextGroups,
+  } = useChat();
   const [activeTab, setActiveTab] = useState<TabType>('conversations');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -69,15 +76,75 @@ export default function ChatScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Helper function to safely format timestamp
+  const formatTimestamp = (date: Date | string | undefined): string | undefined => {
+    if (!date) return undefined;
+    try {
+      const dateObj = date instanceof Date ? date : new Date(date);
+      if (isNaN(dateObj.getTime())) return undefined;
+      return dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return undefined;
+    }
+  };
+
+  // Sync with ChatContext for real-time updates (unread counts, last messages)
+  // This ensures the list updates in real-time when new messages arrive
+  useEffect(() => {
+    if (contextConversations.length > 0) {
+      setConversations(prev => {
+        // Merge real-time updates from context with existing data
+        return prev.map(conv => {
+          const contextConv = contextConversations.find(c => c.id === conv.id);
+          if (contextConv) {
+            const formattedTimestamp = formatTimestamp(contextConv.updatedAt);
+            return {
+              ...conv,
+              unread: contextConv.unreadCount,
+              lastMessage: contextConv.lastMessage?.content || conv.lastMessage,
+              timestamp: formattedTimestamp || conv.timestamp,
+            };
+          }
+          return conv;
+        });
+      });
+    }
+  }, [contextConversations]);
+
+  useEffect(() => {
+    if (contextGroups.length > 0) {
+      setGroups(prev => {
+        // Merge real-time updates from context with existing data
+        return prev.map(group => {
+          const contextGroup = contextGroups.find(g => g.id === group.id);
+          if (contextGroup) {
+            const formattedTimestamp = formatTimestamp(contextGroup.updatedAt);
+            return {
+              ...group,
+              unread: contextGroup.unreadCount,
+              lastMessage: contextGroup.lastMessage?.content || group.lastMessage,
+              timestamp: formattedTimestamp || group.timestamp,
+            };
+          }
+          return group;
+        });
+      });
+    }
+  }, [contextGroups]);
+
   // Load data based on active tab
   useEffect(() => {
     loadTabData();
   }, [activeTab]);
 
   // Refresh data when screen comes into focus
+  // Also load both conversations and groups to keep the badge accurate
   useFocusEffect(
     useCallback(() => {
       loadTabData();
+      // Always load both to keep the unread badge accurate
+      if (activeTab !== 'conversations') loadConversations();
+      if (activeTab !== 'groups') loadGroups();
     }, [activeTab])
   );
 
@@ -107,10 +174,14 @@ export default function ChatScreen() {
       const response = await api.get('/chat/conversations');
       if (response.data) {
         setConversations(response.data);
+        // Sync to ChatContext so tab bar badge is accurate
+        updateConversationsFromApi(response.data);
       }
     } catch (error) {
       console.log('Conversations not available yet');
       setConversations([]);
+      // Clear ChatContext conversations to reset the badge
+      updateConversationsFromApi([]);
     } finally {
       setLoading(false);
     }
@@ -122,10 +193,14 @@ export default function ChatScreen() {
       const response = await api.get('/chat/groups');
       if (response.data) {
         setGroups(response.data);
+        // Sync to ChatContext so tab bar badge includes group unreads
+        updateGroupsFromApi(response.data);
       }
     } catch (error) {
       console.log('Groups not available yet');
       setGroups([]);
+      // Clear groups in ChatContext
+      updateGroupsFromApi([]);
     } finally {
       setLoading(false);
     }
@@ -150,12 +225,55 @@ export default function ChatScreen() {
   };
 
 
+  const handleMarkAsRead = async (chatId: string, isGroup: boolean) => {
+    try {
+      const endpoint = isGroup
+        ? `/chat/groups/${chatId}/read`
+        : `/chat/conversations/${chatId}/read`;
+      await api.post(endpoint);
+      // Update local state and ChatContext
+      if (isGroup) {
+        const updatedGroups = groups.map(g => g.id === chatId ? { ...g, unread: 0 } : g);
+        setGroups(updatedGroups);
+        updateGroupsFromApi(updatedGroups);
+      } else {
+        const updatedConversations = conversations.map(c => c.id === chatId ? { ...c, unread: 0 } : c);
+        setConversations(updatedConversations);
+        updateConversationsFromApi(updatedConversations);
+      }
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
+    }
+  };
+
+  const handleDeleteChat = async (chatId: string, isGroup: boolean) => {
+    try {
+      const endpoint = isGroup
+        ? `/chat/groups/${chatId}`
+        : `/chat/conversations/${chatId}`;
+      await api.delete(endpoint);
+      // Update local state and ChatContext
+      if (isGroup) {
+        const updatedGroups = groups.filter(g => g.id !== chatId);
+        setGroups(updatedGroups);
+        updateGroupsFromApi(updatedGroups);
+      } else {
+        const updatedConversations = conversations.filter(c => c.id !== chatId);
+        setConversations(updatedConversations);
+        updateConversationsFromApi(updatedConversations);
+      }
+    } catch (error) {
+      console.error('Failed to delete chat:', error);
+    }
+  };
+
   const renderConversationItem = ({ item }: { item: Conversation }) => (
     <SwipeableChatItem
-      onMore={() => console.log('More:', item.id)}
-      onPin={() => console.log('Pin:', item.id)}
-      onDelete={() => console.log('Delete:', item.id)}
+      onMore={() => handleMarkAsRead(item.id, false)}
+      onDelete={() => handleDeleteChat(item.id, false)}
       isGroup={false}
+      chatId={item.id}
+      chatName={item.name}
     >
       <TouchableOpacity style={styles.conversationItem} onPress={() => router.push(`/chat/${item.id}` as any)}>
         {item.avatar ? (
@@ -185,10 +303,11 @@ export default function ChatScreen() {
 
   const renderGroupItem = ({ item }: { item: Group }) => (
     <SwipeableChatItem
-      onMore={() => console.log('More:', item.id)}
-      onPin={() => console.log('Pin:', item.id)}
-      onDelete={() => console.log('Delete:', item.id)}
+      onMore={() => handleMarkAsRead(item.id, true)}
+      onDelete={() => handleDeleteChat(item.id, true)}
       isGroup={true}
+      chatId={item.id}
+      chatName={item.name}
     >
       <TouchableOpacity style={styles.conversationItem} onPress={() => router.push({ pathname: '/chat/group/[id]', params: { id: item.id } } as any)}>
         {item.avatar ? (
@@ -484,7 +603,7 @@ export default function ChatScreen() {
       minWidth: sp(20),
       height: sp(20),
       borderRadius: sp(10),
-      backgroundColor: colors.primary,
+      backgroundColor: colors.error,
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: wp(6),

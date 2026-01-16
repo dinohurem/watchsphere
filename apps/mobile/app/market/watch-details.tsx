@@ -981,6 +981,8 @@ const styles = StyleSheet.create({
   dropdownBlur: {
     borderRadius: sp(12),
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -988,7 +990,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   dropdownContent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
   actionSheetItem: {
     alignItems: 'center',

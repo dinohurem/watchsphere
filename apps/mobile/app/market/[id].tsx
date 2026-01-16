@@ -399,24 +399,20 @@ interface WatchDetails {
   priceHistory: number[];
 }
 
-// Mock data
-const MOCK_WATCH: WatchDetails = {
-  id: '1',
-  brand: 'Audemars Piguet',
-  model: 'Royal Oak',
-  reference: '26240OR Blue',
-  image: 'https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=400',
-  marketPriceMin: 51000,
-  marketPriceMax: 156460,
-  priceChange: 0.05,
-  bestBid: 104500,
-  bestAsk: 107200,
-  spread: 2700,
-  priceHistory: [
-    120000, 122000, 118000, 125000, 130000, 128000, 135000, 132000,
-    138000, 140000, 137000, 142000, 139000, 145000, 143000, 148000,
-    146000, 150000, 147000, 152000, 149000, 155000, 151000, 139000,
-  ],
+// Default empty watch state
+const DEFAULT_WATCH: WatchDetails = {
+  id: '',
+  brand: '',
+  model: '',
+  reference: '',
+  image: undefined,
+  marketPriceMin: 0,
+  marketPriceMax: 0,
+  priceChange: 0,
+  bestBid: 0,
+  bestAsk: 0,
+  spread: 0,
+  priceHistory: [],
 };
 
 interface OrderBookItem {
@@ -432,27 +428,19 @@ interface OrderBookItem {
   user_name?: string;
 }
 
-// Order book mock data with proper conditions
-const ORDER_BOOK_DATA: OrderBookItem[] = [
-  { id: 'mock-1', country_code: 'us', date: '12.01.25', condition: 'Unworn', price: 104500 },
-  { id: 'mock-2', country_code: 'it', date: '11.28.25', condition: 'Unworn', price: 103500 },
-  { id: 'mock-3', country_code: 'ae', date: '11.25.25', condition: 'Used', price: 98200 },
-  { id: 'mock-4', country_code: 'de', date: '11.22.25', condition: 'Unworn', price: 106000 },
-  { id: 'mock-5', country_code: 'ch', date: '11.18.25', condition: 'Used', price: 99800 },
-];
-
 export default function WatchDetailsScreen() {
-  const { id: rawId, reference, brand, model } = useLocalSearchParams<{
+  const { id: rawId, reference, brand, model, fromUserWatchlist } = useLocalSearchParams<{
     id: string;
     reference?: string;
     brand?: string;
     model?: string;
+    fromUserWatchlist?: string;
   }>();
   // Decode the ID to handle references with special characters (e.g., 5711/1A-010)
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   const { isAuthenticated, user } = useAuthStore();
   const { getOrderBookFilterCount, hasActiveOrderBookFilters } = useFilters();
-  const [watch, setWatch] = useState<WatchDetails>(MOCK_WATCH);
+  const [watch, setWatch] = useState<WatchDetails>(DEFAULT_WATCH);
   const [loading, setLoading] = useState(true);
   const [buyOrders, setBuyOrders] = useState<OrderBookItem[]>([]);
   const [sellOrders, setSellOrders] = useState<OrderBookItem[]>([]);
@@ -542,11 +530,23 @@ export default function WatchDetailsScreen() {
   useEffect(() => {
     loadWatchDetails();
     loadOrderBook();
-    checkWatchlistStatus();
   }, [id, reference]);
+
+  // Check watchlist status when authentication changes or reference changes
+  useEffect(() => {
+    checkWatchlistStatus();
+  }, [id, reference, isAuthenticated]);
 
   const checkWatchlistStatus = async () => {
     if (!isAuthenticated) return;
+
+    // If navigated from default watchlist (not user's watchlist), don't show as saved
+    // User needs to explicitly add it to their watchlist
+    if (fromUserWatchlist === 'false') {
+      setIsInWatchlist(false);
+      return;
+    }
+
     try {
       const response = await api.get('/profile/watchlist');
       if (response.data && Array.isArray(response.data)) {
@@ -593,34 +593,40 @@ export default function WatchDetailsScreen() {
 
   const loadWatchDetails = async () => {
     try {
-      // If we have a reference (from aggregated data), use the aggregated endpoint
-      const watchReference = reference || id;
-      // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
-      const encodedReference = encodeURIComponent(watchReference || '');
+      // Use reference if available (required for aggregated endpoint)
+      // The 'id' param might be a DefaultWatchlistItem ObjectId which won't work
+      const watchReference = reference || '';
 
-      // Try aggregated endpoint first (works with reference)
-      const response = await api.get(`/market/aggregated/${encodedReference}`);
-      if (response.data) {
-        const data = response.data;
-        setWatch({
-          id: data.reference, // Use reference as ID for aggregated data
-          brand: data.brand,
-          model: data.model,
-          reference: data.reference || '',
-          image: data.cover_image,
-          marketPriceMin: data.lowest_order_price || data.admin_price || 0,
-          marketPriceMax: data.admin_price || data.display_price || 0,
-          priceChange: data.price_change || 0,
-          bestBid: 0, // Will be populated from order book
-          bestAsk: data.lowest_order_price || 0,
-          spread: 0,
-          priceHistory: data.price_history || MOCK_WATCH.priceHistory,
-        });
+      if (watchReference) {
+        // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
+        const encodedReference = encodeURIComponent(watchReference);
+
+        // Try aggregated endpoint with reference
+        const response = await api.get(`/market/aggregated/${encodedReference}`);
+        if (response.data) {
+          const data = response.data;
+          setWatch({
+            id: data.reference, // Use reference as ID for aggregated data
+            brand: data.brand,
+            model: data.model,
+            reference: data.reference || '',
+            image: data.cover_image,
+            marketPriceMin: data.lowest_order_price || data.admin_price || 0,
+            marketPriceMax: data.admin_price || data.display_price || 0,
+            priceChange: data.price_change || 0,
+            bestBid: 0, // Will be populated from order book
+            bestAsk: data.lowest_order_price || 0,
+            spread: 0,
+            priceHistory: data.price_history || [],
+          });
+          return; // Success, exit early
+        }
       }
-    } catch (error) {
-      // If aggregated fails, try the regular watch endpoint (for MongoDB IDs)
-      try {
-        const encodedId = encodeURIComponent(id || '');
+
+      // If no reference or aggregated lookup failed, try by ID
+      // Only try this if id looks like it could be a valid MongoDB ObjectId or watch reference
+      if (id) {
+        const encodedId = encodeURIComponent(id);
         const response = await api.get(`/market/watches/${encodedId}`);
         if (response.data) {
           setWatch({
@@ -635,11 +641,29 @@ export default function WatchDetailsScreen() {
             bestBid: 0,
             bestAsk: response.data.price || 0,
             spread: 0,
-            priceHistory: response.data.price_history || MOCK_WATCH.priceHistory,
+            priceHistory: response.data.price_history || [],
           });
         }
-      } catch {
-        // Use mock data on error
+      }
+    } catch (error) {
+      // If all lookups fail, use the passed brand/model params if available
+      // This handles default watchlist items that don't have a matching Watch document
+      if (brand && model) {
+        setWatch({
+          id: id || '',
+          brand: brand,
+          model: model,
+          reference: reference || '',
+          image: undefined,
+          marketPriceMin: 0,
+          marketPriceMax: 0,
+          priceChange: 0,
+          bestBid: 0,
+          bestAsk: 0,
+          spread: 0,
+          priceHistory: [],
+        });
+      } else {
         console.error('Failed to load watch details');
       }
     } finally {
@@ -1126,8 +1150,9 @@ export default function WatchDetailsScreen() {
                   })}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.tableCell, { width: wp(80), justifyContent: 'center', alignItems: 'center' }]}>
+                  <View style={[styles.tableCell, { width: wp(80), flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: wp(4) }]}>
                     <CountryFlag countryCode={order.country_code} size={14} />
+                    <Text style={[styles.tableCellText, { fontSize: fp(13) }]}>{order.country_code?.toUpperCase()}</Text>
                   </View>
                   <Text style={[styles.tableCell, styles.tableCellText, { width: wp(70), marginLeft: wp(8) }]}>{order.date}</Text>
                   <Text style={[styles.tableCell, styles.tableCellText, { flex: 1, textAlign: 'center' }]}>{order.condition}</Text>

@@ -30,7 +30,7 @@ interface WatchMarketData {
 }
 
 // Mini sparkline component for price chart
-function MiniSparkline({ data, width = 40, height = 16 }: { data: number[], width?: number, height?: number }) {
+function MiniSparkline({ data, width = 40, height = 16, isPositive = true }: { data: number[], width?: number, height?: number, isPositive?: boolean }) {
   // Only render if we have actual price history data (at least 2 points)
   if (!data || data.length < 2) return null;
 
@@ -44,8 +44,8 @@ function MiniSparkline({ data, width = 40, height = 16 }: { data: number[], widt
     return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
   }).join(' ');
 
-  // Use black color to match web design - the price change badge already shows direction
-  const color = '#1D1D1F';
+  // Use green for positive, red for negative price change
+  const color = isPositive ? '#4AA078' : '#D90429';
 
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -167,12 +167,6 @@ export default function MarketScreen() {
     }
   };
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadMarketData();
-    setRefreshing(false);
-  }, [selectedCategory]);
-
   const loadMarketData = async () => {
     setLoading(true);
     try {
@@ -269,27 +263,27 @@ export default function MarketScreen() {
 
   const loadFeaturedWatches = async () => {
     try {
-      // Fetch featured watches from the market endpoint
-      const response = await api.get('/market', {
+      // Fetch featured watches from the dedicated featured endpoint
+      // Priority: admin-assigned featured → order_count → views
+      const response = await api.get('/market/featured', {
         params: { limit: 5 }
       });
 
       if (response.data && response.data.length > 0) {
-        const featured = response.data
-          .filter((item: any) => item.featured)
-          .slice(0, 5)
-          .map((item: any) => ({
-            id: item.id,
-            brand: item.brand,
-            model: item.model,
-            reference: item.reference || '',
-            price: item.price || 0,
-            priceChange: item.price_change || 0,
-            priceHistory: item.price_history || [],
-            trending: false,
-            orderCount: 0,
-          }));
+        const featured = response.data.map((item: any) => ({
+          id: item.id,
+          brand: item.brand,
+          model: item.model,
+          reference: item.reference || '',
+          price: item.price || 0,
+          priceChange: item.price_change || 0,
+          priceHistory: item.price_history || [],
+          trending: item.trending || false,
+          orderCount: item.order_count || 0,
+        }));
         setFeaturedWatches(featured);
+      } else {
+        setFeaturedWatches([]);
       }
     } catch (error) {
       console.error('Failed to load featured watches:', error);
@@ -297,6 +291,15 @@ export default function MarketScreen() {
     }
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Load both market data and featured watches in parallel to ensure fresh data
+    await Promise.all([
+      loadMarketData(),
+      loadFeaturedWatches(),
+    ]);
+    setRefreshing(false);
+  }, [selectedCategory]);
 
   const handleWatchPress = (watch: WatchMarketData) => {
     // Navigate with both ID and reference for flexibility
@@ -541,6 +544,8 @@ export default function MarketScreen() {
     },
     watchInfo: {
       flex: 1,
+      maxWidth: '55%',
+      marginRight: wp(8),
     },
     watchName: {
       fontSize: fp(15),
@@ -820,8 +825,8 @@ export default function MarketScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.watchInfo}>
-                    <Text style={styles.watchName}>{watch.brand} {watch.model}</Text>
-                    <Text style={styles.watchReference}>{watch.reference}</Text>
+                    <Text style={styles.watchName} numberOfLines={1}>{watch.brand} {watch.model}</Text>
+                    <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
                   </View>
                   <View style={styles.watchPriceSection}>
                     <View style={styles.chartContainer}>
@@ -829,6 +834,7 @@ export default function MarketScreen() {
                         data={watch.priceHistory}
                         width={40}
                         height={16}
+                        isPositive={isPositive}
                       />
                     </View>
                     <View style={styles.watchPriceInfo}>

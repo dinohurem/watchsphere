@@ -13,7 +13,7 @@ import {
   Sparkles,
   Search
 } from 'lucide-react'
-import { useAuthStore } from '@watchsphere/shared/stores'
+import { useAuthStore, useChatStore } from '@watchsphere/shared/stores'
 
 // Custom Chat Icon matching Figma design
 function ChatIcon({ className }: { className?: string }) {
@@ -47,6 +47,7 @@ export function UserLayout() {
   const user = useAuthStore((state) => state.user)
   const isAdmin = useAuthStore((state) => state.isAdmin)
   const logout = useAuthStore((state) => state.logout)
+  const totalUnread = useChatStore((state) => state.totalUnread)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -198,7 +199,9 @@ export function UserLayout() {
                 className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors"
               >
                 <ChatIcon className="w-5 h-5 text-gray-900" />
-                <span className="absolute top-1.5 right-0.5 w-[7px] h-[7px] bg-[#C93927] rounded-full"></span>
+                {totalUnread > 0 && (
+                  <span className="absolute top-1.5 right-0.5 w-[7px] h-[7px] bg-[#C93927] rounded-full"></span>
+                )}
               </button>
               {/* Notifications */}
               <button className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors">

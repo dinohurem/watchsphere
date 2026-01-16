@@ -11,6 +11,9 @@ export interface Message {
   status: 'sending' | 'sent' | 'delivered' | 'read';
   timestamp: Date;
   replyTo?: string;
+  replyToContent?: string;
+  replyToSenderName?: string;
+  replyToSenderId?: string;
 }
 
 export interface Conversation {
@@ -50,11 +53,19 @@ class ChatService {
       return;
     }
 
-    // Use WebSocket URL from config, fallback to baseURL
-    const socketUrl = API_CONFIG.wsURL || API_CONFIG.baseURL.replace('http', 'ws');
+    // Use Socket.IO URL from config (HTTP URL - Socket.IO handles WebSocket upgrade)
+    const socketUrl = API_CONFIG.socketIOURL || API_CONFIG.baseURL.replace('/api/v1', '');
+
+    // Debug: Log connection details
+    console.log('ChatService: Connecting to Socket.IO');
+    console.log('ChatService: URL:', socketUrl);
+    console.log('ChatService: Token present:', !!token);
+    console.log('ChatService: Token length:', token?.length);
+    console.log('ChatService: Token prefix:', token?.substring(0, 20) + '...');
 
     this.socket = io(socketUrl, {
       auth: { token },
+      path: '/socket.io/',  // Socket.IO path on server
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
@@ -69,14 +80,27 @@ class ChatService {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log('Chat connected');
+      console.log('=== ChatService: SOCKET CONNECTED ===');
+      console.log('ChatService: Socket ID:', this.socket?.id);
+      console.log('ChatService: Socket connected:', this.socket?.connected);
       this.reconnectAttempts = 0;
       this.emit('connection', { status: 'connected' });
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('Chat disconnected');
+    this.socket.on('disconnect', (reason) => {
+      console.log('=== ChatService: SOCKET DISCONNECTED ===');
+      console.log('ChatService: Disconnect reason:', reason);
       this.emit('connection', { status: 'disconnected' });
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.log('=== ChatService: CONNECTION ERROR ===');
+      console.log('ChatService: Error:', error.message);
+    });
+
+    // Catch ALL events for debugging
+    this.socket.onAny((eventName, ...args) => {
+      console.log(`ChatService: Received event '${eventName}':`, JSON.stringify(args).substring(0, 200));
     });
 
     this.socket.on('reconnect_attempt', (attempt) => {
@@ -85,7 +109,23 @@ class ChatService {
     });
 
     // Message events
-    this.socket.on('message:new', (message: Message) => {
+    this.socket.on('message:new', (data: any) => {
+      console.log('ChatService: Received message:new event', JSON.stringify(data));
+      // All data comes in camelCase now
+      const message: Message = {
+        id: data.id,
+        conversationId: data.conversationId,
+        senderId: data.senderId,
+        senderName: data.senderName,
+        content: data.content,
+        type: data.type || 'text',
+        status: data.status || 'sent',
+        timestamp: new Date(data.timestamp),
+        replyTo: data.replyTo,
+        replyToContent: data.replyToContent,
+        replyToSenderName: data.replyToSenderName,
+        replyToSenderId: data.replyToSenderId,
+      };
       this.emit('message:new', message);
     });
 
@@ -118,6 +158,15 @@ class ChatService {
 
     this.socket.on('user:offline', (userId: string) => {
       this.emit('user:offline', userId);
+    });
+
+    // Unread count update event
+    this.socket.on('unread:update', (data: { conversationId: string; unreadCount: number }) => {
+      console.log('ChatService: Received unread:update event', data);
+      this.emit('unread:update', {
+        conversationId: data.conversationId,
+        unreadCount: data.unreadCount ?? 0,
+      });
     });
   }
 

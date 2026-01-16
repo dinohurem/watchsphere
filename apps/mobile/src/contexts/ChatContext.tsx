@@ -2,6 +2,21 @@ import React, { createContext, useContext, useEffect, useState, useCallback, Rea
 import { chatService, Conversation, Message, TypingIndicator } from '@/services/chatService';
 import { useAuthStore } from '@watchsphere/shared/stores';
 
+// Callback for showing in-app notifications
+type NotificationCallback = (data: {
+  title: string;
+  body: string;
+  avatar?: string;
+  conversationId: string;
+  isGroup: boolean;
+}) => void;
+
+// Global notification callback setter
+let notificationCallback: NotificationCallback | null = null;
+export const setNotificationCallback = (callback: NotificationCallback | null) => {
+  notificationCallback = callback;
+};
+
 // Import notifications dynamically to avoid crashes
 let Notifications: any = null;
 try {
@@ -23,10 +38,12 @@ try {
 
 interface ChatContextType {
   conversations: Conversation[];
+  groups: Conversation[];
   messages: Map<string, Message[]>;
   loadingConversations: boolean;
   loadingMessages: Map<string, boolean>;
   connectionStatus: 'connected' | 'disconnected' | 'reconnecting';
+  activeConversationId: string | null;
 
   // Methods
   loadConversations: () => Promise<void>;
@@ -36,6 +53,9 @@ interface ChatContextType {
   startTyping: (conversationId: string) => void;
   stopTyping: (conversationId: string) => void;
   deleteMessage: (messageId: string) => void;
+  setActiveConversation: (conversationId: string | null) => void;
+  updateConversationsFromApi: (apiConversations: any[]) => void;
+  updateGroupsFromApi: (apiGroups: any[]) => void;
 
   // Getters
   getConversation: (conversationId: string) => Conversation | undefined;
@@ -48,14 +68,36 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuthStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [groups, setGroups] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Map<string, Message[]>>(new Map());
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState<Map<string, boolean>>(new Map());
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+
+  // Ref to track active conversation in callbacks
+  const activeConversationRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    activeConversationRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  // Ref to track current user ID in callbacks (avoids stale closure issues)
+  const userIdRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    userIdRef.current = user?.id || null;
+  }, [user]);
+
+  const setActiveConversation = useCallback((conversationId: string | null) => {
+    setActiveConversationId(conversationId);
+  }, []);
 
   // Connect to chat service when user logs in
   useEffect(() => {
     if (user && token) {
+      console.log('=== ChatContext: Connecting to chat service ===');
+      console.log('ChatContext: User ID:', user.id);
+      console.log('ChatContext: Token present:', !!token);
+      console.log('ChatContext: Token length:', token?.length);
       chatService.connect(token);
       loadConversations();
 
@@ -65,9 +107,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           console.log('Failed to request notification permissions:', err);
         });
       }
+    } else {
+      console.log('ChatContext: NOT connecting - user:', !!user, 'token:', !!token);
     }
 
     return () => {
+      console.log('ChatContext: Disconnecting chat service');
       chatService.disconnect();
     };
   }, [user, token]);
@@ -81,34 +126,90 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     // New message received
     const handleNewMessage = (message: Message) => {
+      console.log('ChatContext: handleNewMessage called with:', message.id, 'for conv:', message.conversationId);
+      console.log('ChatContext: Current user ID from ref:', userIdRef.current, 'sender:', message.senderId);
+
+      // Track if this is a new message from someone else (use ref for latest user ID)
+      const isFromOtherUser = message.senderId !== userIdRef.current;
+      const isNotActive = message.conversationId !== activeConversationRef.current;
+      console.log('ChatContext: isFromOtherUser:', isFromOtherUser, 'isNotActive:', isNotActive);
+
       setMessages(prev => {
         const convMessages = prev.get(message.conversationId) || [];
+        console.log('ChatContext: existing messages for conv:', convMessages.length);
 
         // Check if message already exists
         const exists = convMessages.some(m => m.id === message.id);
-        if (exists) return prev;
+        if (exists) {
+          console.log('ChatContext: message already exists, skipping');
+          return prev;
+        }
 
         const newMap = new Map(prev);
         newMap.set(message.conversationId, [...convMessages, message]);
+        console.log('ChatContext: added message, new count:', newMap.get(message.conversationId)?.length);
         return newMap;
       });
 
-      // Update conversation's last message
-      setConversations(prev => prev.map(conv => {
-        if (conv.id === message.conversationId) {
-          return {
-            ...conv,
-            lastMessage: message,
-            unreadCount: message.senderId !== user?.id ? conv.unreadCount + 1 : conv.unreadCount,
-            updatedAt: message.timestamp,
-          };
-        }
-        return conv;
-      }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+      // Check if message belongs to a conversation or group
+      let isGroup = false;
+      let conversationName = '';
+      let conversationAvatar: string | undefined;
 
-      // Show notification if message is from someone else and app is in background
-      if (message.senderId !== user?.id) {
-        showNotification(message);
+      // Update conversation's last message (for direct messages)
+      setConversations(prev => {
+        const updated = prev.map(conv => {
+          if (conv.id === message.conversationId) {
+            conversationName = conv.name;
+            conversationAvatar = conv.avatar;
+            return {
+              ...conv,
+              lastMessage: message,
+              unreadCount: isFromOtherUser && isNotActive ? conv.unreadCount + 1 : conv.unreadCount,
+              updatedAt: message.timestamp,
+            };
+          }
+          return conv;
+        });
+        return updated.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      });
+
+      // Also update groups (for group messages)
+      setGroups(prev => {
+        const updated = prev.map(group => {
+          if (group.id === message.conversationId) {
+            isGroup = true;
+            conversationName = group.name;
+            conversationAvatar = group.avatar;
+            return {
+              ...group,
+              lastMessage: message,
+              unreadCount: isFromOtherUser && isNotActive ? group.unreadCount + 1 : group.unreadCount,
+              updatedAt: message.timestamp,
+            };
+          }
+          return group;
+        });
+        return updated.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      });
+
+      // Show notification only if:
+      // 1. Message is from someone else
+      // 2. The conversation is NOT currently active (user isn't viewing it)
+      if (isFromOtherUser && isNotActive) {
+        // Show in-app notification banner only (not system notification)
+        // System notifications are only shown when app is in background
+        if (notificationCallback) {
+          notificationCallback({
+            title: conversationName || message.senderName,
+            body: message.content,
+            avatar: conversationAvatar,
+            conversationId: message.conversationId,
+            isGroup,
+          });
+        }
+        // Note: System notification (showNotification) is NOT called here
+        // because the app is in the foreground and we're showing in-app banner instead
       }
     };
 
@@ -239,6 +340,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       })));
     };
 
+    // Unread count update
+    const handleUnreadUpdate = (data: { conversationId: string; unreadCount: number }) => {
+      // Update conversations
+      setConversations(prev => prev.map(conv =>
+        conv.id === data.conversationId
+          ? { ...conv, unreadCount: data.unreadCount }
+          : conv
+      ));
+      // Also update groups
+      setGroups(prev => prev.map(group =>
+        group.id === data.conversationId
+          ? { ...group, unreadCount: data.unreadCount }
+          : group
+      ));
+    };
+
     // Register listeners
     chatService.on('connection', handleConnection);
     chatService.on('message:new', handleNewMessage);
@@ -251,6 +368,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     chatService.on('conversation:updated', handleConversationUpdated);
     chatService.on('user:online', handleUserOnline);
     chatService.on('user:offline', handleUserOffline);
+    chatService.on('unread:update', handleUnreadUpdate);
 
     return () => {
       chatService.off('connection', handleConnection);
@@ -264,6 +382,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       chatService.off('conversation:updated', handleConversationUpdated);
       chatService.off('user:online', handleUserOnline);
       chatService.off('user:offline', handleUserOffline);
+      chatService.off('unread:update', handleUnreadUpdate);
     };
   }, [user]);
 
@@ -291,38 +410,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const loadConversations = useCallback(async () => {
     setLoadingConversations(true);
     try {
-      // API call to load conversations
-      // const response = await api.get('/conversations');
-      // setConversations(response.data);
-
-      // Mock data for now
-      const mockConversations: Conversation[] = [
-        {
-          id: '1',
-          type: 'direct',
-          name: 'John Dealer',
-          participants: [
-            { id: '1', name: 'John Dealer', online: true }
-          ],
-          unreadCount: 2,
-          typing: [],
-          updatedAt: new Date(),
-        },
-        {
-          id: '2',
-          type: 'group',
-          name: 'Rolex Enthusiasts',
-          participants: Array.from({ length: 500 }, (_, i) => ({
-            id: `user_${i}`,
-            name: `User ${i}`,
-            online: Math.random() > 0.5,
-          })),
-          unreadCount: 5,
-          typing: [],
-          updatedAt: new Date(),
-        },
-      ];
-      setConversations(mockConversations);
+      // Conversations are loaded from the API via chat.tsx's loadConversations
+      // which calls updateConversationsFromApi. This function is only for
+      // compatibility with the chat service connection flow.
+      // Don't set mock data here as it causes persistent unread badges.
     } catch (error) {
       console.error('Failed to load conversations:', error);
     } finally {
@@ -333,150 +424,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const loadMessages = useCallback(async (conversationId: string) => {
     setLoadingMessages(prev => new Map(prev).set(conversationId, true));
     try {
-      // API call to load messages
-      // const response = await api.get(`/conversations/${conversationId}/messages`);
-      // setMessages(prev => new Map(prev).set(conversationId, response.data));
-
-      // Mock data for now - different messages for different conversation types
-      let mockMessages: Message[] = [];
-
-      if (conversationId === '1') {
-        // Direct chat with user - messages with bubbles
-        mockMessages = [
-          {
-            id: 'm1',
-            conversationId: '1',
-            senderId: '1',
-            senderName: 'John Dealer',
-            content: 'Hi! I saw your Rolex Submariner listing. Is it still available?',
-            type: 'text',
-            timestamp: new Date(Date.now() - 3600000),
-            status: 'read',
-          },
-          {
-            id: 'm2',
-            conversationId: '1',
-            senderId: 'current_user',
-            senderName: 'You',
-            content: 'Yes, it is! It\'s in excellent condition with all original papers and box.',
-            type: 'text',
-            timestamp: new Date(Date.now() - 3500000),
-            status: 'read',
-          },
-          {
-            id: 'm3',
-            conversationId: '1',
-            senderId: '1',
-            senderName: 'John Dealer',
-            content: 'Great! What\'s your best price on it? I\'m a serious buyer.',
-            type: 'text',
-            timestamp: new Date(Date.now() - 3400000),
-            status: 'read',
-          },
-          {
-            id: 'm4',
-            conversationId: '1',
-            senderId: 'current_user',
-            senderName: 'You',
-            content: 'I can do €12,000. That\'s already a great deal for this condition.',
-            type: 'text',
-            timestamp: new Date(Date.now() - 3300000),
-            status: 'read',
-          },
-          {
-            id: 'm5',
-            conversationId: '1',
-            senderId: '1',
-            senderName: 'John Dealer',
-            content: 'Deal. How can I make the payment?',
-            type: 'text',
-            timestamp: new Date(Date.now() - 600000),
-            status: 'delivered',
-          },
-        ];
-      } else if (conversationId === '2' || conversationId === 'g1') {
-        // Group chat - messages with bubbles and sender names
-        mockMessages = [
-          {
-            id: 'g1',
-            conversationId: '2',
-            senderId: 'user_1',
-            senderName: 'Mike Johnson',
-            content: 'Hey everyone! Just picked up a new Submariner Date. The quality is incredible!',
-            type: 'text',
-            timestamp: new Date(Date.now() - 7200000),
-            status: 'read',
-          },
-          {
-            id: 'g2',
-            conversationId: '2',
-            senderId: 'user_2',
-            senderName: 'Sarah Chen',
-            content: 'Congrats Mike! Which reference did you get?',
-            type: 'text',
-            timestamp: new Date(Date.now() - 7100000),
-            status: 'read',
-          },
-          {
-            id: 'g3',
-            conversationId: '2',
-            senderId: 'user_1',
-            senderName: 'Mike Johnson',
-            content: 'The 126610LN. Been waiting for this for months!',
-            type: 'text',
-            timestamp: new Date(Date.now() - 7000000),
-            status: 'read',
-          },
-          {
-            id: 'g4',
-            conversationId: '2',
-            senderId: 'current_user',
-            senderName: 'You',
-            content: 'That\'s awesome! How\'s the build quality compared to previous models?',
-            type: 'text',
-            timestamp: new Date(Date.now() - 6900000),
-            status: 'read',
-          },
-          {
-            id: 'g5',
-            conversationId: '2',
-            senderId: 'user_3',
-            senderName: 'David Smith',
-            content: 'Great discussion about the new releases!',
-            type: 'text',
-            timestamp: new Date(Date.now() - 900000),
-            status: 'delivered',
-          },
-        ];
-      } else if (conversationId.startsWith('ai')) {
-        // AI chat - messages without bubbles for AI responses
-        mockMessages = [
-          {
-            id: 'ai1',
-            conversationId: conversationId,
-            senderId: 'current_user',
-            senderName: 'You',
-            content: 'What\'s the reason for the price spike of Nautilus 5711?',
-            type: 'text',
-            timestamp: new Date(Date.now() - 1800000),
-            status: 'read',
-          },
-          {
-            id: 'ai2',
-            conversationId: conversationId,
-            senderId: 'ai_assistant',
-            senderName: 'AI Assistant',
-            content: 'Here\'s the short version:\n\nWhy the Patek Philippe Nautilus 5711 spiked in price\n\n1. Discontinuation: Patek officially stopped producing the steel 5711 in 2021, making existing pieces instantly rarer.\n\n2. Extreme scarcity: Even before that, demand far exceeded supply — long waitlists and limited production.\n\n3. Hype & status: Celebrity ownership, social media buzz, and its reputation as the luxury steel sports watch fueled desire.\n\n4. Speculation: Collectors and investors treated it like an asset, driving up resale values.\n\n5. Brand strategy: Patek replaced it with the costlier gold 5811, reinforcing the 5711\'s exclusivity.\n\nIn short: limited supply + massive hype + discontinuation = price explosion.',
-            type: 'text',
-            timestamp: new Date(Date.now() - 1780000),
-            status: 'read',
-          },
-        ];
-      }
-
-      setMessages(prev => new Map(prev).set(conversationId, mockMessages));
-
-      // Join conversation room
+      // Messages are loaded directly by the chat screen components via API
+      // This function is kept for compatibility but doesn't load mock data
+      // Join conversation room for real-time updates
       chatService.joinConversation(conversationId);
     } catch (error) {
       console.error('Failed to load messages:', error);
@@ -510,6 +460,58 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     chatService.deleteMessage(messageId);
   }, []);
 
+  const updateConversationsFromApi = useCallback((apiConversations: any[]) => {
+    // Transform API conversations to the ChatContext format
+    // Note: lastMessage from API is a string (the message content), not an object
+    const transformedConversations: Conversation[] = apiConversations.map(conv => ({
+      id: conv.id,
+      type: conv.type || 'direct',
+      name: conv.name,
+      avatar: conv.avatar,
+      participants: conv.participants || [],
+      unreadCount: conv.unread || 0,
+      typing: [],
+      updatedAt: conv.timestamp ? new Date(conv.timestamp) : new Date(),
+      lastMessage: conv.lastMessage ? {
+        id: 'api-last',
+        conversationId: conv.id,
+        senderId: '',
+        senderName: '',
+        content: typeof conv.lastMessage === 'string' ? conv.lastMessage : conv.lastMessage.content || '',
+        type: 'text' as const,
+        timestamp: conv.timestamp ? new Date(conv.timestamp) : new Date(),
+        status: 'read' as const,
+      } : undefined,
+    }));
+    setConversations(transformedConversations);
+  }, []);
+
+  const updateGroupsFromApi = useCallback((apiGroups: any[]) => {
+    // Transform API groups to the ChatContext format
+    // Note: lastMessage from API is a string (the message content), not an object
+    const transformedGroups: Conversation[] = apiGroups.map(group => ({
+      id: group.id,
+      type: 'group' as const,
+      name: group.name,
+      avatar: group.avatar,
+      participants: [],
+      unreadCount: group.unread || 0,
+      typing: [],
+      updatedAt: group.timestamp ? new Date(group.timestamp) : new Date(),
+      lastMessage: group.lastMessage ? {
+        id: 'api-last',
+        conversationId: group.id,
+        senderId: '',
+        senderName: '',
+        content: typeof group.lastMessage === 'string' ? group.lastMessage : group.lastMessage.content || '',
+        type: 'text' as const,
+        timestamp: group.timestamp ? new Date(group.timestamp) : new Date(),
+        status: 'read' as const,
+      } : undefined,
+    }));
+    setGroups(transformedGroups);
+  }, []);
+
   const getConversation = useCallback((conversationId: string) => {
     return conversations.find(c => c.id === conversationId);
   }, [conversations]);
@@ -519,15 +521,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [messages]);
 
   const getTotalUnreadCount = useCallback(() => {
-    return conversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
-  }, [conversations]);
+    const conversationUnread = conversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
+    const groupUnread = groups.reduce((sum, group) => sum + group.unreadCount, 0);
+    return conversationUnread + groupUnread;
+  }, [conversations, groups]);
 
   const value: ChatContextType = {
     conversations,
+    groups,
     messages,
     loadingConversations,
     loadingMessages,
     connectionStatus,
+    activeConversationId,
     loadConversations,
     loadMessages,
     sendMessage,
@@ -535,6 +541,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     startTyping,
     stopTyping,
     deleteMessage,
+    setActiveConversation,
+    updateConversationsFromApi,
+    updateGroupsFromApi,
     getConversation,
     getMessages,
     getTotalUnreadCount,
