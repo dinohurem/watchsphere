@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Image, Send, X, Flag, Users, Reply, MessageSquare, CornerUpRight } from 'lucide-react';
+import { Image, Send, X, Flag, Users, Reply, MessageSquare, CornerUpRight, MoreVertical, CheckCheck, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { chatWebSocket, WebSocketMessage } from '@/services/chatWebSocket';
+import { useChatStore } from '@watchsphere/shared/stores';
 
 interface UserProfile {
   id: string;
@@ -97,6 +99,17 @@ interface Message {
   is_ai: boolean;
   read: boolean;
   created_at: string;
+  reply_to_id?: string;
+  reply_to_content?: string;
+  reply_to_sender_name?: string;
+  reply_to_sender_id?: string;
+}
+
+interface ReplyingTo {
+  id: string;
+  content: string;
+  senderName: string;
+  senderId: string;
 }
 
 interface ChatItem {
@@ -125,10 +138,167 @@ export function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfile | null>(null);
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [showGroupMembers, setShowGroupMembers] = useState(false);
   const [groupMembers, setGroupMembers] = useState<UserProfile[]>([]);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<{ [conversationId: string]: string[] }>({});
+  const [replyingTo, setReplyingTo] = useState<ReplyingTo | null>(null);
+  const [chatMenuOpen, setChatMenuOpen] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState<ChatItem | null>(null);
+  const [showReportModal, setShowReportModal] = useState<ChatItem | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [showReportSuccess, setShowReportSuccess] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedChatRef = useRef<ChatItem | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    selectedChatRef.current = selectedChat;
+  }, [selectedChat]);
+
+  // WebSocket connection and event handling
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    console.log('ChatPage: Attempting WebSocket connection, token exists:', !!token);
+    if (token) {
+      chatWebSocket.connect(token);
+    } else {
+      console.warn('ChatPage: No auth_token found in localStorage');
+    }
+
+    // Connection status handler
+    const unsubConnection = chatWebSocket.onConnection((status) => {
+      setWsConnected(status === 'connected');
+      console.log('WebSocket status:', status);
+    });
+
+    // New message handler - use ref to avoid stale closure
+    const unsubMessage = chatWebSocket.onMessage((wsMessage: WebSocketMessage) => {
+      console.log('Received WebSocket message:', wsMessage);
+
+      // Add message to list if it's for the current chat
+      setMessages(prev => {
+        // Check if message already exists (by id or tempId)
+        const exists = prev.some(m =>
+          m.id === wsMessage.id ||
+          (wsMessage.tempId && m.id === wsMessage.tempId)
+        );
+
+        if (exists) {
+          // Replace temp message with real one
+          return prev.map(m =>
+            (m.id === wsMessage.tempId || m.id === wsMessage.id)
+              ? { ...m, id: wsMessage.id, content: wsMessage.content }
+              : m
+          );
+        }
+
+        // Use ref to get current selectedChat value (avoids stale closure)
+        const currentChat = selectedChatRef.current;
+
+        // Only add if for current conversation (using camelCase from WebSocket)
+        if (currentChat && wsMessage.conversationId === currentChat.id) {
+          return [...prev, {
+            id: wsMessage.id,
+            conversation_id: wsMessage.conversationId,
+            sender_id: wsMessage.senderId,
+            sender_name: wsMessage.senderName,
+            content: wsMessage.content,
+            type: wsMessage.type || 'text',
+            is_ai: false,
+            read: false,
+            created_at: wsMessage.timestamp,
+            reply_to_id: wsMessage.replyTo,
+            reply_to_content: wsMessage.replyToContent,
+            reply_to_sender_name: wsMessage.replyToSenderName,
+            reply_to_sender_id: wsMessage.replyToSenderId,
+          }];
+        }
+        return prev;
+      });
+
+      // Update conversation list with last message (using camelCase from WebSocket)
+      setConversations(prev => prev.map(conv =>
+        conv.id === wsMessage.conversationId
+          ? { ...conv, lastMessage: wsMessage.content, timestamp: wsMessage.timestamp }
+          : conv
+      ));
+
+      // Also update groups list with last message (using camelCase from WebSocket)
+      setGroups(prev => prev.map(group =>
+        group.id === wsMessage.conversationId
+          ? { ...group, lastMessage: wsMessage.content, timestamp: wsMessage.timestamp }
+          : group
+      ));
+    });
+
+    // Typing indicator handler (using camelCase from WebSocket)
+    const unsubTyping = chatWebSocket.onTyping((data) => {
+      setTypingUsers(prev => {
+        const users = prev[data.conversationId] || [];
+        if (data.isTyping) {
+          if (!users.includes(data.userName)) {
+            return { ...prev, [data.conversationId]: [...users, data.userName] };
+          }
+        } else {
+          return { ...prev, [data.conversationId]: users.filter(u => u !== data.userName) };
+        }
+        return prev;
+      });
+    });
+
+    // Unread count update handler (using camelCase from WebSocket)
+    const unsubUnread = chatWebSocket.onUnreadUpdate((data) => {
+      // Use ref to get current selectedChat value (avoids stale closure)
+      const currentChat = selectedChatRef.current;
+
+      // If this conversation is currently open, don't update unread count
+      // The user is already viewing these messages
+      if (currentChat && currentChat.id === data.conversationId) {
+        return;
+      }
+
+      // Update unread count in conversations list
+      setConversations(prev => prev.map(conv =>
+        conv.id === data.conversationId
+          ? { ...conv, unread: data.unreadCount }
+          : conv
+      ));
+
+      // Also update in groups list
+      setGroups(prev => prev.map(group =>
+        group.id === data.conversationId
+          ? { ...group, unread: data.unreadCount }
+          : group
+      ));
+
+      // Update global chat store for sidebar badge
+      useChatStore.getState().setConversationUnread(data.conversationId, data.unreadCount);
+    });
+
+    return () => {
+      unsubConnection();
+      unsubMessage();
+      unsubTyping();
+      unsubUnread();
+      chatWebSocket.disconnect();
+    };
+  }, []); // Empty dependency - only run once on mount
+
+  // Join/leave conversation room when chat selection changes
+  useEffect(() => {
+    if (selectedChat && wsConnected) {
+      chatWebSocket.joinConversation(selectedChat.id);
+      return () => {
+        chatWebSocket.leaveConversation(selectedChat.id);
+      };
+    }
+  }, [selectedChat?.id, wsConnected]);
 
   // Load conversations and groups
   useEffect(() => {
@@ -178,12 +348,43 @@ export function ChatPage() {
     }
   }, [conversationParam, conversations]);
 
-  // Load messages when chat is selected
+  // Load messages when chat is selected and mark as read
   useEffect(() => {
     if (selectedChat) {
       loadMessages(selectedChat.id, selectedChat.type);
+
+      // Mark messages as read via API (this updates the database)
+      // This ensures the backend unread count is accurate
+      // Always call this when opening a chat, not just when unread > 0
+      const markAsRead = async () => {
+        try {
+          const endpoint = selectedChat.type === 'group'
+            ? `/chat/groups/${selectedChat.id}/read`
+            : `/chat/conversations/${selectedChat.id}/read`;
+          await api.post(endpoint);
+        } catch (error) {
+          console.error('Failed to mark as read:', error);
+        }
+      };
+
+      // Always mark as read when opening the chat
+      markAsRead();
+
+      // Clear unread count for this chat in local state immediately
+      if (selectedChat.unread > 0) {
+        setConversations(prev => prev.map(conv =>
+          conv.id === selectedChat.id ? { ...conv, unread: 0 } : conv
+        ));
+        setGroups(prev => prev.map(group =>
+          group.id === selectedChat.id ? { ...group, unread: 0 } : group
+        ));
+        // Update the selected chat state as well
+        setSelectedChat(prev => prev ? { ...prev, unread: 0 } : null);
+        // Clear in global store for sidebar badge
+        useChatStore.getState().setConversationUnread(selectedChat.id, 0);
+      }
     }
-  }, [selectedChat]);
+  }, [selectedChat?.id]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -206,6 +407,10 @@ export function ChatPage() {
       const response = await api.get('/chat/conversations');
       if (response.data) {
         setConversations(response.data);
+        // Sync ALL conversation unread counts to global store (including 0s to clear stale data)
+        response.data.forEach((conv: any) => {
+          useChatStore.getState().setConversationUnread(conv.id, conv.unread || 0);
+        });
       }
     } catch (error) {
       console.log('Conversations not available yet');
@@ -218,6 +423,10 @@ export function ChatPage() {
       const response = await api.get('/chat/groups');
       if (response.data) {
         setGroups(response.data);
+        // Sync ALL group unread counts to global store (including 0s to clear stale data)
+        response.data.forEach((group: any) => {
+          useChatStore.getState().setConversationUnread(group.id, group.unread || 0);
+        });
       }
     } catch (error) {
       console.log('Groups not available yet');
@@ -231,7 +440,13 @@ export function ChatPage() {
       const endpoint = chatType === 'group'
         ? `/chat/groups/${chatId}/messages`
         : `/chat/conversations/${chatId}/messages`;
+      console.log('ChatPage: loadMessages called for:', chatId, chatType);
       const response = await api.get(endpoint);
+      console.log('ChatPage: API returned', response.data?.length || 0, 'messages');
+      if (response.data && response.data.length > 0) {
+        console.log('ChatPage: First message:', response.data[0]?.id, response.data[0]?.content?.substring(0, 50));
+        console.log('ChatPage: Last message:', response.data[response.data.length - 1]?.id, response.data[response.data.length - 1]?.content?.substring(0, 50));
+      }
       if (response.data) {
         setMessages(response.data);
       }
@@ -266,7 +481,16 @@ export function ChatPage() {
   };
 
   const handleReply = (message: Message) => {
-    setInputText(`@${message.sender_name} `);
+    setReplyingTo({
+      id: message.id,
+      content: message.content,
+      senderName: message.sender_name,
+      senderId: message.sender_id,
+    });
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
   };
 
   const handleReplyPrivately = async (message: Message) => {
@@ -309,16 +533,32 @@ export function ChatPage() {
     return currentMsg.sender_id !== nextMsg.sender_id;
   };
 
+  // Check if this is the first message in a consecutive group from same sender
+  const isFirstMessageFromSender = (index: number) => {
+    if (index === 0) return true;
+    const currentMsg = messages[index];
+    const prevMsg = messages[index - 1];
+    return currentMsg.sender_id !== prevMsg.sender_id;
+  };
+
   const handleSend = async () => {
     if (!inputText.trim() || !selectedChat || isSending) return;
 
     const messageContent = inputText.trim();
+    const currentReply = replyingTo;
     setInputText('');
+    setReplyingTo(null);
     setIsSending(true);
 
+    // Stop typing indicator
+    if (wsConnected) {
+      chatWebSocket.stopTyping(selectedChat.id);
+    }
+
     // Optimistic update
+    const tempId = `temp-${Date.now()}`;
     const tempMessage: Message = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       conversation_id: selectedChat.id,
       sender_id: currentUserId,
       sender_name: 'You',
@@ -327,30 +567,66 @@ export function ChatPage() {
       is_ai: false,
       read: true,
       created_at: new Date().toISOString(),
+      reply_to_id: currentReply?.id,
+      reply_to_content: currentReply?.content,
+      reply_to_sender_name: currentReply?.senderName,
+      reply_to_sender_id: currentReply?.senderId,
     };
     setMessages(prev => [...prev, tempMessage]);
 
-    try {
-      const endpoint = selectedChat.type === 'group'
-        ? `/chat/groups/${selectedChat.id}/messages`
-        : `/chat/conversations/${selectedChat.id}/messages`;
-
-      const response = await api.post(endpoint, { content: messageContent });
-
-      if (response.data) {
-        // Replace temp message with real one
-        setMessages(prev =>
-          prev.map(msg =>
-            msg.id === tempMessage.id ? response.data : msg
-          )
-        );
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      // Remove temp message on error
-      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
-    } finally {
+    // Use WebSocket if connected, otherwise fall back to REST API
+    if (wsConnected) {
+      // Join conversation room if not already joined (for group chats)
+      chatWebSocket.joinConversation(selectedChat.id);
+      chatWebSocket.sendMessage(selectedChat.id, messageContent, tempId, currentReply?.id);
       setIsSending(false);
+    } else {
+      // Fall back to REST API when WebSocket is not connected
+      try {
+        const endpoint = selectedChat.type === 'group'
+          ? `/chat/groups/${selectedChat.id}/messages`
+          : `/chat/conversations/${selectedChat.id}/messages`;
+
+        const response = await api.post(endpoint, {
+          content: messageContent,
+          reply_to_id: currentReply?.id,
+        });
+
+        if (response.data) {
+          // Replace temp message with real one
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === tempMessage.id ? response.data : msg
+            )
+          );
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+        // Remove temp message on error
+        setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
+      } finally {
+        setIsSending(false);
+      }
+    }
+  };
+
+  // Handle input change with typing indicator
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+
+    // Send typing indicator via WebSocket
+    if (wsConnected && selectedChat) {
+      chatWebSocket.startTyping(selectedChat.id);
+
+      // Clear previous timeout and set a new one to stop typing after 2 seconds
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      typingTimeoutRef.current = setTimeout(() => {
+        if (selectedChat) {
+          chatWebSocket.stopTyping(selectedChat.id);
+        }
+      }, 2000);
     }
   };
 
@@ -358,6 +634,99 @@ export function ChatPage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setChatMenuOpen(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Handle Mark as Read
+  const handleMarkAsRead = async (chat: ChatItem) => {
+    try {
+      const endpoint = chat.type === 'group'
+        ? `/chat/groups/${chat.id}/read`
+        : `/chat/conversations/${chat.id}/read`;
+      await api.post(endpoint);
+
+      // Update local state
+      if (chat.type === 'group') {
+        setGroups(prev => prev.map(g => g.id === chat.id ? { ...g, unread: 0 } : g));
+      } else {
+        setConversations(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c));
+      }
+      // Update global store
+      useChatStore.getState().setConversationUnread(chat.id, 0);
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
+    }
+    setChatMenuOpen(null);
+  };
+
+  // Handle Delete Conversation
+  const handleDeleteConversation = async () => {
+    if (!showDeleteModal) return;
+
+    setIsDeleting(true);
+    try {
+      const endpoint = showDeleteModal.type === 'group'
+        ? `/chat/groups/${showDeleteModal.id}`
+        : `/chat/conversations/${showDeleteModal.id}`;
+      await api.delete(endpoint);
+
+      // Update local state
+      if (showDeleteModal.type === 'group') {
+        setGroups(prev => prev.filter(g => g.id !== showDeleteModal.id));
+      } else {
+        setConversations(prev => prev.filter(c => c.id !== showDeleteModal.id));
+      }
+
+      // Clear selection if this was the selected chat
+      if (selectedChat?.id === showDeleteModal.id) {
+        setSelectedChat(null);
+        setMessages([]);
+      }
+
+      // Update global store
+      useChatStore.getState().setConversationUnread(showDeleteModal.id, 0);
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(null);
+    }
+  };
+
+  // Handle Report Conversation
+  const handleReportConversation = async () => {
+    if (!showReportModal || !reportReason) return;
+
+    setIsSubmittingReport(true);
+    try {
+      await api.post('/support/reports', {
+        reported_type: showReportModal.type === 'group' ? 'group' : 'conversation',
+        reported_id: showReportModal.id,
+        reported_name: showReportModal.name,
+        reason: reportReason,
+        description: reportDescription,
+      });
+
+      // Reset form and show success modal
+      setReportReason('');
+      setReportDescription('');
+      setShowReportModal(null);
+      setShowReportSuccess(true);
+    } catch (error) {
+      console.error('Failed to submit report:', error);
+    } finally {
+      setIsSubmittingReport(false);
     }
   };
 
@@ -406,7 +775,7 @@ export function ChatPage() {
             allChats.map((chat) => (
               <div
                 key={`${chat.type}-${chat.id}`}
-                className={`w-full flex items-center gap-2 px-4 py-3 rounded-2xl transition-colors cursor-pointer ${
+                className={`group relative w-full flex items-center gap-2 px-4 py-3 rounded-2xl transition-colors cursor-pointer ${
                   selectedChat?.id === chat.id && selectedChat?.type === chat.type
                     ? 'bg-[#f4f4f4]'
                     : 'hover:bg-gray-50'
@@ -447,6 +816,68 @@ export function ChatPage() {
                     {chat.lastMessage || '—'}
                   </p>
                 </div>
+
+                {/* Unread Badge */}
+                {chat.unread > 0 && (
+                  <span className="flex-shrink-0 min-w-[20px] h-[20px] rounded-full bg-red-500 text-white text-xs font-semibold flex items-center justify-center px-1.5">
+                    {chat.unread > 99 ? '99+' : chat.unread}
+                  </span>
+                )}
+
+                {/* 3-dot Menu Button - appears on hover */}
+                <div className="relative" ref={chatMenuOpen === `${chat.type}-${chat.id}` ? menuRef : null}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setChatMenuOpen(chatMenuOpen === `${chat.type}-${chat.id}` ? null : `${chat.type}-${chat.id}`);
+                    }}
+                    className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                      chatMenuOpen === `${chat.type}-${chat.id}`
+                        ? 'bg-gray-200 opacity-100'
+                        : 'opacity-0 group-hover:opacity-100 hover:bg-gray-200'
+                    }`}
+                  >
+                    <MoreVertical className="w-4 h-4 text-[#1d1d1f]" />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {chatMenuOpen === `${chat.type}-${chat.id}` && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMarkAsRead(chat);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#1d1d1f] hover:bg-gray-50 transition-colors"
+                      >
+                        <CheckCheck className="w-4 h-4" />
+                        Mark as Read
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setChatMenuOpen(null);
+                          setShowReportModal(chat);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#1d1d1f] hover:bg-gray-50 transition-colors"
+                      >
+                        <Flag className="w-4 h-4" />
+                        Report
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setChatMenuOpen(null);
+                          setShowDeleteModal(chat);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           )}
@@ -467,10 +898,16 @@ export function ChatPage() {
                   <h2 className="text-lg font-semibold text-[#1d1d1f]">
                     {selectedChat.name}
                   </h2>
-                  <p className="text-base text-[#1d1d1f] opacity-50">
+                  <p className="text-base text-[#1d1d1f] opacity-50 flex items-center gap-2">
                     {selectedChat.type === 'group'
                       ? `${groupMembers.length > 0 ? groupMembers.length : (selectedChat.memberCount || 0)} members`
-                      : 'Online'}
+                      : 'Direct message'}
+                    {wsConnected && (
+                      <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        Live
+                      </span>
+                    )}
                   </p>
                 </div>
                 {/* Group Members Icon - only for group chats */}
@@ -513,14 +950,13 @@ export function ChatPage() {
                   {messages.map((message, index) => {
                     const isOwnMessage = message.sender_id === currentUserId;
                     const showAvatar = isLastMessageFromSender(index);
+                    const showSenderName = isFirstMessageFromSender(index);
                     const senderMember = groupMembers.find(m => m.id === message.sender_id);
 
                     return (
                       <div
                         key={message.id}
                         className={`flex items-end gap-2 group ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-                        onMouseEnter={() => setHoveredMessageId(message.id)}
-                        onMouseLeave={() => setHoveredMessageId(null)}
                       >
                         {/* Avatar for other users' messages (only show on last message in group) */}
                         {!isOwnMessage && selectedChat.type === 'group' && (
@@ -543,7 +979,7 @@ export function ChatPage() {
                         )}
 
                         {/* Hover actions - left side for own messages */}
-                        {isOwnMessage && hoveredMessageId === message.id && (
+                        {isOwnMessage && (
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => handleReply(message)}
@@ -562,10 +998,31 @@ export function ChatPage() {
                               : 'bg-[rgba(33,33,33,0.04)] text-[#212121]'
                           }`}
                         >
-                          {!isOwnMessage && selectedChat.type === 'group' && (
+                          {!isOwnMessage && selectedChat.type === 'group' && showSenderName && (
                             <p className="text-xs font-medium opacity-70 mb-1">
                               {message.sender_name}
                             </p>
+                          )}
+                          {/* Quoted message for replies */}
+                          {message.reply_to_id && message.reply_to_content && (
+                            <div
+                              className={`mb-2 p-2 rounded-lg border-l-2 ${
+                                isOwnMessage
+                                  ? 'bg-white/10 border-white/40'
+                                  : 'bg-[#212121]/5 border-[#212121]/30'
+                              }`}
+                            >
+                              <p className={`text-[11px] font-medium mb-0.5 ${
+                                isOwnMessage ? 'text-white/70' : 'text-[#212121]/70'
+                              }`}>
+                                {message.reply_to_sender_name}
+                              </p>
+                              <p className={`text-[12px] line-clamp-2 ${
+                                isOwnMessage ? 'text-white/60' : 'text-[#212121]/60'
+                              }`}>
+                                {message.reply_to_content}
+                              </p>
+                            </div>
                           )}
                           <p className="text-[15px] leading-5">{message.content}</p>
                           <p className={`text-[11px] mt-1 ${isOwnMessage ? 'text-white/60' : 'text-[#212121]/50'}`}>
@@ -574,7 +1031,7 @@ export function ChatPage() {
                         </div>
 
                         {/* Hover actions - right side for others' messages */}
-                        {!isOwnMessage && hoveredMessageId === message.id && (
+                        {!isOwnMessage && (
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => handleReply(message)}
@@ -610,13 +1067,40 @@ export function ChatPage() {
                 </div>
               )}
 
+              {/* Typing Indicator */}
+              {selectedChat && typingUsers[selectedChat.id]?.length > 0 && (
+                <div className="px-4 py-2 text-[13px] text-[#212121]/60 italic">
+                  {typingUsers[selectedChat.id].join(', ')} {typingUsers[selectedChat.id].length === 1 ? 'is' : 'are'} typing...
+                </div>
+              )}
+
+              {/* Reply Preview */}
+              {replyingTo && (
+                <div className="mx-4 mb-2 p-3 bg-[#f5f5f5] rounded-lg border-l-4 border-[#212121] flex justify-between items-start">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-[#212121] mb-1">
+                      Replying to {replyingTo.senderName}
+                    </p>
+                    <p className="text-[13px] text-[#212121]/70 truncate">
+                      {replyingTo.content}
+                    </p>
+                  </div>
+                  <button
+                    onClick={cancelReply}
+                    className="ml-2 p-1 hover:bg-gray-200 rounded-full transition-colors"
+                  >
+                    <X className="w-4 h-4 text-[#212121]/50" />
+                  </button>
+                </div>
+              )}
+
               {/* Input Area */}
               <div className="flex items-center gap-4 py-4">
                 <div className="flex-1 flex items-center bg-[rgba(33,33,33,0.04)] rounded-full px-4 py-3">
                   <input
                     type="text"
                     value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
+                    onChange={handleInputChange}
                     onKeyPress={handleKeyPress}
                     placeholder="Send message..."
                     className="flex-1 bg-transparent text-[15px] text-[#212121] placeholder:text-[#212121]/50 outline-none"
@@ -703,6 +1187,154 @@ export function ChatPage() {
                     </div>
                   </button>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-[24px] shadow-[0px_15px_75px_0px_rgba(0,0,0,0.18)] w-full max-w-[400px] overflow-hidden">
+              <div className="p-6">
+                {/* Icon */}
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+
+                {/* Title */}
+                <h2 className="text-[18px] font-semibold text-[#212121] text-center mb-2">
+                  Delete Conversation
+                </h2>
+
+                {/* Description */}
+                <p className="text-[15px] text-[#212121]/60 text-center mb-6">
+                  Are you sure you want to delete this conversation with <strong>{showDeleteModal.name}</strong>? This action cannot be undone.
+                </p>
+
+                {/* Buttons */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowDeleteModal(null)}
+                    className="flex-1 px-4 py-3 text-[15px] font-semibold text-[#212121] bg-[rgba(33,33,33,0.05)] rounded-full hover:bg-[rgba(33,33,33,0.1)] transition-colors"
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteConversation}
+                    className="flex-1 px-4 py-3 text-[15px] font-semibold text-white bg-red-600 rounded-full hover:bg-red-700 transition-colors disabled:opacity-50"
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Report Modal */}
+        {showReportModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-[24px] shadow-[0px_15px_75px_0px_rgba(0,0,0,0.18)] w-full max-w-[480px] overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 h-[60px] border-b border-[rgba(33,33,33,0.05)]">
+                <h2 className="text-[18px] font-semibold text-[#212121]">
+                  Report Conversation
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowReportModal(null);
+                    setReportReason('');
+                    setReportDescription('');
+                  }}
+                  className="w-8 h-8 rounded-full bg-[rgba(120,120,128,0.12)] flex items-center justify-center hover:bg-[rgba(120,120,128,0.2)] transition-colors"
+                >
+                  <X className="w-4 h-4 text-[#999]" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6">
+                <p className="text-[15px] text-[#212121]/60 mb-4">
+                  Report <strong>{showReportModal.name}</strong> for inappropriate behavior
+                </p>
+
+                {/* Reason Selection */}
+                <div className="mb-4">
+                  <label className="block text-[14px] font-medium text-[#212121] mb-2">
+                    Reason for report *
+                  </label>
+                  <select
+                    value={reportReason}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    className="w-full px-4 py-3 text-[15px] border border-[rgba(33,33,33,0.1)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#212121]/20"
+                  >
+                    <option value="">Select a reason</option>
+                    <option value="spam">Spam or scam</option>
+                    <option value="harassment">Harassment or bullying</option>
+                    <option value="inappropriate">Inappropriate content</option>
+                    <option value="fraud">Fraud or fake listings</option>
+                    <option value="impersonation">Impersonation</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                {/* Description */}
+                <div className="mb-6">
+                  <label className="block text-[14px] font-medium text-[#212121] mb-2">
+                    Additional details (optional)
+                  </label>
+                  <textarea
+                    value={reportDescription}
+                    onChange={(e) => setReportDescription(e.target.value)}
+                    placeholder="Provide more context about your report..."
+                    rows={4}
+                    className="w-full px-4 py-3 text-[15px] border border-[rgba(33,33,33,0.1)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#212121]/20 resize-none"
+                  />
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  onClick={handleReportConversation}
+                  disabled={!reportReason || isSubmittingReport}
+                  className="w-full px-4 py-3 text-[15px] font-semibold text-white bg-[#212121] rounded-full hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Report Success Modal */}
+        {showReportSuccess && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-[24px] shadow-[0px_15px_75px_0px_rgba(0,0,0,0.18)] w-full max-w-[400px] overflow-hidden">
+              <div className="p-6">
+                {/* Icon */}
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+
+                {/* Title */}
+                <h2 className="text-[18px] font-semibold text-[#212121] text-center mb-2">
+                  Report Submitted
+                </h2>
+
+                {/* Description */}
+                <p className="text-[15px] text-[#212121]/60 text-center mb-6">
+                  Thank you for your report. We will review it shortly and take appropriate action if needed.
+                </p>
+
+                {/* Button */}
+                <button
+                  onClick={() => setShowReportSuccess(false)}
+                  className="w-full px-4 py-3 text-[15px] font-semibold text-white bg-[#212121] rounded-full hover:bg-black transition-colors"
+                >
+                  Done
+                </button>
               </div>
             </div>
           </div>

@@ -34,6 +34,8 @@ interface ChatState {
   markAsRead: (conversationId: string) => void;
   setActiveConversation: (conversationId: string | null) => void;
   updateUnreadCount: () => void;
+  setConversationUnread: (conversationId: string, unreadCount: number) => void;
+  incrementTotalUnread: () => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -77,5 +79,19 @@ export const useChatStore = create<ChatState>((set) => ({
       (acc, conv) => acc + conv.unreadCount,
       0
     ),
+  })),
+
+  setConversationUnread: (conversationId, unreadCount) => set((state) => {
+    const conversations = state.conversations.map((c) =>
+      c.id === conversationId ? { ...c, unreadCount } : c
+    );
+    return {
+      conversations,
+      totalUnread: conversations.reduce((acc, conv) => acc + conv.unreadCount, 0),
+    };
+  }),
+
+  incrementTotalUnread: () => set((state) => ({
+    totalUnread: state.totalUnread + 1,
   })),
 }));

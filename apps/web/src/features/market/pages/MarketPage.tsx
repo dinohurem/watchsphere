@@ -153,6 +153,38 @@ export function MarketPage() {
     loadWatches();
   }, [selectedCategory]);
 
+  // Load featured/trending watches separately on mount
+  useEffect(() => {
+    loadFeaturedWatches();
+  }, []);
+
+  const loadFeaturedWatches = async () => {
+    try {
+      // Fetch from dedicated featured endpoint
+      // Priority: admin-assigned featured → order_count → views
+      const response = await api.get('/market/featured', {
+        params: { limit: 4 }
+      });
+
+      if (response.data && response.data.length > 0) {
+        const featured = response.data.map((item: any) => ({
+          id: item.id,
+          reference: item.reference,
+          brand: item.brand,
+          model: item.model,
+          price: item.price || 0,
+          priceChange: item.price_change || 0,
+          priceHistory: item.price_history || [],
+          image_url: item.cover_image,
+          condition: item.condition,
+        }));
+        setTrendingWatches(featured);
+      }
+    } catch (error) {
+      console.error('Failed to load featured watches:', error);
+    }
+  };
+
   const loadWatches = async () => {
     setLoading(true);
     try {
@@ -176,8 +208,6 @@ export function MarketPage() {
           condition: item.condition,
         }));
         setWatches(watchData);
-        // Use first 4 watches for trending section
-        setTrendingWatches(watchData.slice(0, 4));
       } else {
         const fallbackResponse = await api.get('/market');
         const fallbackData = (fallbackResponse.data || []).map((item: any) => ({
@@ -192,12 +222,10 @@ export function MarketPage() {
           condition: item.condition,
         }));
         setWatches(fallbackData);
-        setTrendingWatches(fallbackData.slice(0, 4));
       }
     } catch (error) {
       console.error('Failed to load watches:', error);
       setWatches([]);
-      setTrendingWatches([]);
     } finally {
       setLoading(false);
     }

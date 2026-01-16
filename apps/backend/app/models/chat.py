@@ -30,6 +30,10 @@ class Conversation(Document):
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
+    # Soft delete support - track which users have deleted the conversation
+    deleted_for: List[str] = Field(default_factory=list)  # User IDs who deleted this chat
+    # Track when messages should be visible from (for users who re-open after delete)
+    visible_after: dict = Field(default_factory=dict)  # {user_id: datetime} - messages after this time are visible
 
     class Settings:
         name = "conversations"

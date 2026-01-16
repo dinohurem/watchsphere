@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { Home, BarChart, WristWatch, MessageCircle, AISparkle } from '@/components/icons';
 import { AIChatModal } from '@/components/AIChatModal';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useChat } from '@/contexts/ChatContext';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
 function CustomTabBar() {
@@ -13,10 +14,14 @@ function CustomTabBar() {
   const pathname = usePathname();
   const [showAIChat, setShowAIChat] = useState(false);
 
+  // Get unread count from chat context
+  const { getTotalUnreadCount } = useChat();
+  const totalUnreadCount = getTotalUnreadCount();
+
   const tabs = [
     { name: 'index', title: 'Home', icon: Home, route: '/(tabs)/' },
     { name: 'market', title: 'Market', icon: BarChart, route: '/(tabs)/market' },
-    { name: 'chat', title: 'Chat', icon: MessageCircle, route: '/(tabs)/chat', hasNotification: true },
+    { name: 'chat', title: 'Chat', icon: MessageCircle, route: '/(tabs)/chat', hasNotification: totalUnreadCount > 0 },
     { name: 'dashboard', title: 'Inventory', icon: WristWatch, route: '/(tabs)/dashboard' },
   ];
 

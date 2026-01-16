@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, AlertTriangle, Bug, RefreshCw } from 'lucide-react'
+import { Search, AlertTriangle, Bug, RefreshCw, Flag } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface Dispute {
@@ -30,26 +30,58 @@ interface Issue {
   updated_at?: string
 }
 
-type Tab = 'disputes' | 'issues'
+interface Report {
+  id: string
+  reporter_id: string
+  reporter_name: string
+  reporter_email: string
+  reported_type: 'conversation' | 'group' | 'user'
+  reported_id: string
+  reported_name: string
+  reason: string
+  description?: string
+  status: 'open' | 'reviewed' | 'resolved' | 'dismissed'
+  admin_notes?: string
+  created_at: string
+  updated_at?: string
+}
 
-const STATUS_COLORS = {
+type Tab = 'disputes' | 'issues' | 'reports'
+
+const STATUS_COLORS: Record<string, string> = {
   open: 'bg-amber-100 text-amber-800',
   in_progress: 'bg-blue-100 text-blue-800',
   closed: 'bg-green-100 text-green-800',
   completed: 'bg-green-100 text-green-800',
+  reviewed: 'bg-blue-100 text-blue-800',
+  resolved: 'bg-green-100 text-green-800',
+  dismissed: 'bg-gray-100 text-gray-800',
 }
 
-const STATUS_LABELS = {
+const STATUS_LABELS: Record<string, string> = {
   open: 'Open',
   in_progress: 'In Progress',
   closed: 'Closed',
   completed: 'Completed',
+  reviewed: 'Reviewed',
+  resolved: 'Resolved',
+  dismissed: 'Dismissed',
+}
+
+const REASON_LABELS: Record<string, string> = {
+  spam: 'Spam or scam',
+  harassment: 'Harassment or bullying',
+  inappropriate: 'Inappropriate content',
+  fraud: 'Fraud or fake listings',
+  impersonation: 'Impersonation',
+  other: 'Other',
 }
 
 export function AdminSupport() {
   const [activeTab, setActiveTab] = useState<Tab>('disputes')
   const [disputes, setDisputes] = useState<Dispute[]>([])
   const [issues, setIssues] = useState<Issue[]>([])
+  const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
@@ -69,10 +101,14 @@ export function AdminSupport() {
         const params = statusFilter ? `?status=${statusFilter}` : ''
         const response = await api.get(`/support/admin/disputes${params}`)
         setDisputes(response.data)
-      } else {
+      } else if (activeTab === 'issues') {
         const params = statusFilter ? `?status=${statusFilter}` : ''
         const response = await api.get(`/support/admin/issues${params}`)
         setIssues(response.data)
+      } else if (activeTab === 'reports') {
+        const params = statusFilter ? `?status=${statusFilter}` : ''
+        const response = await api.get(`/support/admin/reports${params}`)
+        setReports(response.data)
       }
     } catch (error) {
       console.error('Failed to fetch data:', error)
@@ -102,9 +138,14 @@ export function AdminSupport() {
 
     setSaving(true)
     try {
-      const endpoint = activeTab === 'disputes'
-        ? `/support/admin/disputes/${editingId}`
-        : `/support/admin/issues/${editingId}`
+      let endpoint: string
+      if (activeTab === 'disputes') {
+        endpoint = `/support/admin/disputes/${editingId}`
+      } else if (activeTab === 'issues') {
+        endpoint = `/support/admin/issues/${editingId}`
+      } else {
+        endpoint = `/support/admin/reports/${editingId}`
+      }
 
       await api.patch(endpoint, {
         status: editStatus,
@@ -150,6 +191,17 @@ export function AdminSupport() {
       i.user_email.toLowerCase().includes(searchLower) ||
       i.title.toLowerCase().includes(searchLower) ||
       i.description.toLowerCase().includes(searchLower)
+    )
+  })
+
+  const filteredReports = reports.filter((r) => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      r.reporter_name.toLowerCase().includes(searchLower) ||
+      r.reporter_email.toLowerCase().includes(searchLower) ||
+      r.reported_name.toLowerCase().includes(searchLower) ||
+      (r.description && r.description.toLowerCase().includes(searchLower)) ||
+      r.reason.toLowerCase().includes(searchLower)
     )
   })
 
@@ -207,6 +259,20 @@ export function AdminSupport() {
             {issues.length}
           </span>
         </button>
+        <button
+          onClick={() => { setActiveTab('reports'); setStatusFilter(''); }}
+          className={`flex items-center gap-2 px-6 py-3 font-medium border-b-2 transition-colors ${
+            activeTab === 'reports'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Flag className="w-4 h-4" />
+          Reports
+          <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-gray-100">
+            {reports.length}
+          </span>
+        </button>
       </div>
 
       {/* Filters */}
@@ -217,7 +283,7 @@ export function AdminSupport() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder={activeTab === 'disputes' ? 'Search disputes...' : 'Search issues...'}
+                placeholder={activeTab === 'disputes' ? 'Search disputes...' : activeTab === 'issues' ? 'Search issues...' : 'Search reports...'}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -235,10 +301,17 @@ export function AdminSupport() {
                   <option value="in_progress">In Progress</option>
                   <option value="closed">Closed</option>
                 </>
-              ) : (
+              ) : activeTab === 'issues' ? (
                 <>
                   <option value="open">Open</option>
                   <option value="completed">Completed</option>
+                </>
+              ) : (
+                <>
+                  <option value="open">Open</option>
+                  <option value="reviewed">Reviewed</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="dismissed">Dismissed</option>
                 </>
               )}
             </select>
@@ -418,6 +491,107 @@ export function AdminSupport() {
             </div>
           ))}
 
+          {activeTab === 'reports' && filteredReports.map((report) => (
+            <div key={report.id} className="p-4">
+              {editingId === report.id ? (
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        Report: {report.reported_name}
+                      </h3>
+                      <p className="text-sm text-gray-500">Type: {report.reported_type}</p>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-sm font-medium text-gray-700 mb-1">Reason: {REASON_LABELS[report.reason] || report.reason}</p>
+                    {report.description && (
+                      <p className="text-sm text-gray-600">{report.description}</p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="open">Open</option>
+                        <option value="reviewed">Reviewed</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="dismissed">Dismissed</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Admin Notes</label>
+                      <textarea
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        placeholder="Add notes..."
+                        rows={2}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={handleCancelEdit}
+                      className="px-4 py-2 text-gray-700 border rounded-lg hover:bg-gray-50"
+                      disabled={saving}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                      disabled={saving}
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-semibold text-gray-900">
+                        {report.reported_name}
+                      </h3>
+                      <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                        {report.reported_type}
+                      </span>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${STATUS_COLORS[report.status]}`}>
+                        {STATUS_LABELS[report.status]}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-800 mb-1">
+                      Reason: {REASON_LABELS[report.reason] || report.reason}
+                    </p>
+                    {report.description && (
+                      <p className="text-sm text-gray-700 mb-2">{report.description}</p>
+                    )}
+                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                      <span>Reported by: {report.reporter_name} ({report.reporter_email})</span>
+                      <span>{formatDate(report.created_at)}</span>
+                    </div>
+                    {report.admin_notes && (
+                      <div className="mt-2 p-2 bg-gray-50 rounded text-sm text-gray-600">
+                        <strong>Notes:</strong> {report.admin_notes}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleEdit(report)}
+                    className="px-3 py-1.5 text-sm text-primary border border-primary rounded-lg hover:bg-primary/5"
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
           {activeTab === 'disputes' && filteredDisputes.length === 0 && (
             <div className="text-center py-12 text-gray-500">
               <AlertTriangle className="w-12 h-12 mx-auto mb-4 opacity-30" />
@@ -429,6 +603,13 @@ export function AdminSupport() {
             <div className="text-center py-12 text-gray-500">
               <Bug className="w-12 h-12 mx-auto mb-4 opacity-30" />
               <p>No issues found</p>
+            </div>
+          )}
+
+          {activeTab === 'reports' && filteredReports.length === 0 && (
+            <div className="text-center py-12 text-gray-500">
+              <Flag className="w-12 h-12 mx-auto mb-4 opacity-30" />
+              <p>No reports found</p>
             </div>
           )}
         </div>

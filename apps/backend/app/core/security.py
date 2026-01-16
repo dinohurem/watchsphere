@@ -50,6 +50,19 @@ def verify_refresh_token(token: str) -> Union[str, None]:
         return None
 
 
+def decode_access_token(token: str) -> Union[dict, None]:
+    """Decode and verify an access token, returning the payload if valid"""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        token_type: str = payload.get("type")
+
+        if token_type != "access":
+            return None
+        return payload
+    except JWTError:
+        return None
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
     return pwd_context.verify(plain_password, hashed_password)

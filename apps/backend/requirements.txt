@@ -28,5 +28,8 @@ aiofiles==23.2.1
 Pillow==10.2.0
 python-dateutil==2.8.2
 
+# WebSocket/Socket.IO
+python-socketio==5.10.0
+
 # Firebase
 firebase-admin==6.4.0

@@ -547,7 +547,7 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     style={styles.seeAllButton}
                     activeOpacity={0.7}
-                    onPress={() => router.push('/profile/buy-orders' as any)}
+                    onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'buy' } } as any)}
                   >
                     <Text style={styles.seeAllText}>See All</Text>
                     <ChevronRightSmall />
@@ -580,7 +580,7 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     style={styles.seeAllButton}
                     activeOpacity={0.7}
-                    onPress={() => router.push('/profile/sell-orders' as any)}
+                    onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'sell' } } as any)}
                   >
                     <Text style={styles.seeAllText}>See All</Text>
                     <ChevronRightSmall />

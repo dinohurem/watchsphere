@@ -4,9 +4,8 @@ import {
   Activity,
   Sparkles,
   FileCheck,
-  ShieldCheck,
   Watch,
-  Grid3X3,
+  Globe,
   Tag,
   TrendingUp,
   TrendingDown,
@@ -105,14 +104,13 @@ export function HomePage() {
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [loadingNews, setLoadingNews] = useState(true);
 
-  // Quick access items
+  // Quick access items - matching mobile
   const quickAccessItems = [
     { icon: Activity, title: 'Activity Center', color: 'bg-[#ff7373]', href: '/app/activity' },
     { icon: Sparkles, title: 'Ask AI Assistant', color: 'bg-[#d573ff]', href: '/app/ai-assistant' },
-    { icon: FileCheck, title: 'My Orders', color: 'bg-[#32d287]', href: '/app/orders' },
-    { icon: ShieldCheck, title: 'Checks', color: 'bg-[#7c73ff]', href: '/app/checks' },
     { icon: Watch, title: 'My Inventory', color: 'bg-[#767676]', href: '/app/inventory' },
-    { icon: Grid3X3, title: 'All Tools', color: 'bg-[#73beff]', href: '/app/tools' },
+    { icon: FileCheck, title: 'My Orders', color: 'bg-[#32d287]', href: '/app/orders' },
+    { icon: Globe, title: 'Social Search', color: 'bg-[#7c73ff]', href: '/app/social-search' },
   ];
 
   useEffect(() => {
@@ -350,7 +348,7 @@ export function HomePage() {
         <div className="flex-1 flex flex-col gap-8">
           <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Quick Access</h2>
           <div className="flex flex-col gap-4 flex-1">
-            {/* First Row */}
+            {/* First Row - 3 items */}
             <div className="flex gap-4 flex-1">
               {quickAccessItems.slice(0, 3).map((item, index) => {
                 const Icon = item.icon;
@@ -370,15 +368,15 @@ export function HomePage() {
                 );
               })}
             </div>
-            {/* Second Row */}
+            {/* Second Row - 2 items */}
             <div className="flex gap-4 flex-1">
-              {quickAccessItems.slice(3, 6).map((item, index) => {
+              {quickAccessItems.slice(3, 5).map((item, index) => {
                 const Icon = item.icon;
                 return (
                   <Link
                     key={index + 3}
                     to={item.href}
-                    className="flex-1 flex flex-col gap-3 p-4 rounded-2xl border border-black/5 bg-white hover:bg-[rgba(29,29,31,0.02)] transition-colors"
+                    className="flex-1 max-w-[calc(50%-8px)] flex flex-col gap-3 p-4 rounded-2xl border border-black/5 bg-white hover:bg-[rgba(29,29,31,0.02)] transition-colors"
                   >
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.color}`}>
                       <Icon className="w-4 h-4 text-white" />

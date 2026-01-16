@@ -7,17 +7,20 @@ import {
   User,
   Sparkles
 } from 'lucide-react'
+import { useChatStore } from '@watchsphere/shared/stores'
 
 const navigation = [
-  { name: 'Home', to: '/', icon: Home },
-  { name: 'Market', to: '/market', icon: Store },
-  { name: 'My Watchlist', to: '/watchlist', icon: Heart },
-  { name: 'Chat', to: '/chat', icon: MessageSquare },
-  { name: 'AI Assistant', to: '/ai-assistant', icon: Sparkles },
-  { name: 'Profile', to: '/profile', icon: User },
+  { name: 'Home', to: '/app', icon: Home },
+  { name: 'Market', to: '/app/market', icon: Store },
+  { name: 'My Watchlist', to: '/app/watchlist', icon: Heart },
+  { name: 'Chat', to: '/app/chat', icon: MessageSquare, showUnreadBadge: true },
+  { name: 'AI Assistant', to: '/app/ai-assistant', icon: Sparkles },
+  { name: 'Profile', to: '/app/profile', icon: User },
 ]
 
 export function Sidebar() {
+  const totalUnread = useChatStore((state) => state.totalUnread)
+
   return (
     <aside className="hidden md:flex md:flex-shrink-0">
       <div className="flex flex-col w-64 bg-white border-r">
@@ -40,8 +43,18 @@ export function Sidebar() {
                 }`
               }
             >
-              <item.icon className="w-5 h-5 mr-3" />
+              <div className="relative">
+                <item.icon className="w-5 h-5 mr-3" />
+                {item.showUnreadBadge && totalUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+                )}
+              </div>
               {item.name}
+              {item.showUnreadBadge && totalUnread > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                  {totalUnread > 99 ? '99+' : totalUnread}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

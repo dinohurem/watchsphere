@@ -1,16 +1,19 @@
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useChat } from '@/contexts/ChatContext';
 import { ChatBubble, QuotedMessage } from '@/components/ChatBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import { BackArrow, ChevronRight } from '@/components/icons';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { chatService, Message as ChatServiceMessage } from '@/services/chatService';
 
 // Chat Icon for in-app chat
 function ChatIcon({ size = 24, color = "#212121" }: { size?: number; color?: string }) {
@@ -139,6 +142,7 @@ export default function ChatDetailScreen() {
     replyToSenderId?: string;
   }>();
   const { colors, fonts } = useTheme();
+  const { setActiveConversation, getMessages: getChatMessages, messages: chatMessages, markAsRead } = useChat();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [watchInfo, setWatchInfo] = useState<WatchInfo | null>(null);
@@ -157,6 +161,118 @@ export default function ChatDetailScreen() {
 
   // Check if this is a new/demo conversation
   const isNewConversation = id === 'new';
+
+  // Set active conversation on mount and clear on unmount
+  // This prevents notifications from showing when the chat is open
+  // Also marks messages as read to clear unread count
+  useEffect(() => {
+    if (id && !isNewConversation) {
+      setActiveConversation(id);
+
+      // Mark all messages as read via API (this updates the database)
+      // This ensures the backend unread count is accurate
+      const markAsReadApi = async () => {
+        try {
+          await api.post(`/chat/conversations/${id}/read`);
+        } catch (error) {
+          console.error('Failed to mark as read:', error);
+        }
+      };
+      markAsReadApi();
+    }
+    return () => {
+      setActiveConversation(null);
+    };
+  }, [id, isNewConversation, setActiveConversation]);
+
+  // Listen for real-time messages directly from chatService (more reliable than ChatContext)
+  useEffect(() => {
+    if (!id || isNewConversation) return;
+
+    const handleNewMessage = (message: ChatServiceMessage) => {
+      console.log('Chat [id].tsx: Direct message received:', message.id, 'for conv:', message.conversationId, 'current conv:', id);
+
+      // Only process messages for this conversation
+      if (message.conversationId !== id) {
+        console.log('Chat [id].tsx: Message is for different conversation, ignoring');
+        return;
+      }
+
+      setMessages(prev => {
+        // Check if message already exists by ID
+        const existsById = prev.some(m => m.id === message.id);
+        if (existsById) {
+          console.log('Chat [id].tsx: Message already exists by ID, skipping');
+          return prev;
+        }
+
+        // Check if this is our own message that we sent (temp message exists)
+        // Match by content + sender to detect temp message duplicates
+        const isSentByMe = message.senderId === currentUserId.current;
+        if (isSentByMe) {
+          // Check if there's a temp message with the same content
+          const tempMessageIndex = prev.findIndex(m =>
+            m.id.startsWith('temp-') &&
+            m.content === message.content &&
+            m.sender_id === message.senderId
+          );
+
+          if (tempMessageIndex !== -1) {
+            console.log('Chat [id].tsx: Replacing temp message with real message');
+            // Replace the temp message with the real one
+            const newMessages = [...prev];
+            newMessages[tempMessageIndex] = {
+              id: message.id,
+              conversation_id: message.conversationId,
+              sender_id: message.senderId,
+              sender_name: message.senderName,
+              content: message.content,
+              type: message.type || 'text',
+              is_ai: false,
+              read: message.status === 'read',
+              created_at: message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
+              reply_to_id: message.replyTo,
+              reply_to_content: message.replyToContent,
+              reply_to_sender_name: message.replyToSenderName,
+              reply_to_sender_id: message.replyToSenderId,
+            };
+            return newMessages;
+          }
+        }
+
+        console.log('Chat [id].tsx: Adding new message to UI');
+        // Scroll to bottom when new messages arrive
+        setTimeout(() => {
+          flashListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+
+        return [...prev, {
+          id: message.id,
+          conversation_id: message.conversationId,
+          sender_id: message.senderId,
+          sender_name: message.senderName,
+          content: message.content,
+          type: message.type || 'text',
+          is_ai: false,
+          read: message.status === 'read',
+          created_at: message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
+          reply_to_id: message.replyTo,
+          reply_to_content: message.replyToContent,
+          reply_to_sender_name: message.replyToSenderName,
+          reply_to_sender_id: message.replyToSenderId,
+        }];
+      });
+    };
+
+    // Subscribe to new messages
+    chatService.on('message:new', handleNewMessage);
+    console.log('Chat [id].tsx: Subscribed to chatService message:new for conv:', id);
+
+    return () => {
+      chatService.off('message:new', handleNewMessage);
+      console.log('Chat [id].tsx: Unsubscribed from chatService message:new');
+    };
+  }, [id, isNewConversation]);
 
   useEffect(() => {
     if (id) {
@@ -193,6 +309,17 @@ export default function ChatDetailScreen() {
       loadCurrentUser();
     }
   }, [id]);
+
+  // Reload messages when screen comes into focus (e.g., after navigating back)
+  // This ensures messages received while away are loaded from the API
+  useFocusEffect(
+    useCallback(() => {
+      if (id && !isNewConversation) {
+        console.log('Chat [id].tsx: Screen focused, reloading messages for:', id);
+        loadMessages();
+      }
+    }, [id, isNewConversation])
+  );
 
   const loadConversationDetails = async () => {
     try {
@@ -282,7 +409,13 @@ export default function ChatDetailScreen() {
   const loadMessages = async () => {
     try {
       setIsLoading(true);
+      console.log('Chat [id].tsx: loadMessages called for conversation:', id);
       const response = await api.get(`/chat/conversations/${id}/messages`);
+      console.log('Chat [id].tsx: API returned', response.data?.length || 0, 'messages');
+      if (response.data && response.data.length > 0) {
+        console.log('Chat [id].tsx: First message:', response.data[0]?.id, response.data[0]?.content?.substring(0, 50));
+        console.log('Chat [id].tsx: Last message:', response.data[response.data.length - 1]?.id, response.data[response.data.length - 1]?.content?.substring(0, 50));
+      }
       if (response.data) {
         setMessages(response.data);
       }
@@ -791,6 +924,10 @@ export default function ChatDetailScreen() {
               contentContainerStyle={{ paddingVertical: 8 }}
               inverted={false}
               showsVerticalScrollIndicator={false}
+              onLoad={() => {
+                // Scroll to bottom smoothly after content loads
+                flashListRef.current?.scrollToEnd({ animated: true });
+              }}
             />
           )}
 

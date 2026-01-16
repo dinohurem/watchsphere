@@ -16,6 +16,19 @@ class IssueStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class ReportStatus(str, Enum):
+    OPEN = "open"
+    REVIEWED = "reviewed"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
+class ReportedType(str, Enum):
+    CONVERSATION = "conversation"
+    GROUP = "group"
+    USER = "user"
+
+
 class Dispute(Document):
     user_id: str
     user_name: str
@@ -52,5 +65,28 @@ class Issue(Document):
         name = "issues"
         indexes = [
             "user_id",
+            "status",
+        ]
+
+
+class Report(Document):
+    reporter_id: str
+    reporter_name: str
+    reporter_email: str
+    reported_type: ReportedType
+    reported_id: str
+    reported_name: str
+    reason: str
+    description: Optional[str] = None
+    status: ReportStatus = ReportStatus.OPEN
+    admin_notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
+
+    class Settings:
+        name = "reports"
+        indexes = [
+            "reporter_id",
+            "reported_id",
             "status",
         ]

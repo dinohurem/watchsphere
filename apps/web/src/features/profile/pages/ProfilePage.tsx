@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@watchsphere/shared/stores';
-import { Settings, Edit2, TrendingUp, TrendingDown, ChevronRight, Heart, ShoppingBag, Tag, User, Star } from 'lucide-react';
+import { Settings, Edit2, TrendingUp, TrendingDown, ChevronRight, ChevronDown, Heart, ShoppingBag, Tag, User, Star } from 'lucide-react';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
@@ -44,6 +44,9 @@ export function ProfilePage() {
   const [sellOrders, setSellOrders] = useState<Order[]>([]);
   const [favorites, setFavorites] = useState<FavoriteWatch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [buyOrdersExpanded, setBuyOrdersExpanded] = useState(true);
+  const [sellOrdersExpanded, setSellOrdersExpanded] = useState(true);
+  const [favoritesExpanded, setFavoritesExpanded] = useState(true);
 
   const loadData = useCallback(async () => {
     try {
@@ -264,8 +267,11 @@ export function ProfilePage() {
             {profile?.name || user?.name || 'User'}
           </h2>
 
-          {/* Rating */}
-          <div className="flex items-center gap-1.5 mt-1">
+          {/* Rating - clickable to view profile with reviews */}
+          <button
+            onClick={() => profile?.id && navigate(`/app/user/${profile.id}`)}
+            className="flex items-center gap-1.5 mt-1 hover:opacity-70 transition-opacity"
+          >
             <Star className="w-4 h-4 text-gray-900 fill-gray-900" />
             <span className="text-sm text-gray-700 font-medium">
               {profile?.average_rating?.toFixed(1) || '0.0'}
@@ -273,129 +279,169 @@ export function ProfilePage() {
             <span className="text-sm text-gray-500">
               ({profile?.review_count || 0} reviews)
             </span>
-          </div>
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          </button>
         </div>
 
-        {/* Buy Orders Section */}
+        {/* Buy Orders Section - Collapsible */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Buy Orders</h3>
-            {buyOrders.length > 0 && (
-              <button
-                onClick={() => navigate('/app/profile/buy-orders')}
-                className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <span className="text-sm font-medium">See All</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          <button
+            onClick={() => setBuyOrdersExpanded(!buyOrdersExpanded)}
+            className="flex items-center justify-between w-full mb-4"
+          >
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-gray-900">Buy Orders</h3>
+              <span className="text-sm text-gray-500">({buyOrders.length})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {buyOrders.length > 0 && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate('/app/profile/buy-orders');
+                  }}
+                  className="text-sm font-medium text-gray-500 hover:text-gray-700"
+                >
+                  See All
+                </span>
+              )}
+              <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${buyOrdersExpanded ? '' : '-rotate-90'}`} />
+            </div>
+          </button>
 
-          {buyOrders.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {buyOrders.slice(0, 4).map((order) => (
-                <WatchCard
-                  key={order.id}
-                  brand={order.brand}
-                  model={order.model}
-                  reference={order.reference}
-                  price={order.price}
-                  priceChange={order.price_change}
-                  image={order.cover_image}
-                  onClick={() => navigate(`/app/order/${order.id}`)}
+          {buyOrdersExpanded && (
+            buyOrders.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {buyOrders.slice(0, 4).map((order) => (
+                  <WatchCard
+                    key={order.id}
+                    brand={order.brand}
+                    model={order.model}
+                    reference={order.reference}
+                    price={order.price}
+                    priceChange={order.price_change}
+                    image={order.cover_image}
+                    onClick={() => navigate(`/app/order/${order.id}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100">
+                <EmptyState
+                  icon={ShoppingBag}
+                  title="No buy orders yet"
+                  subtitle="Create buy orders to see them here"
                 />
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-100">
-              <EmptyState
-                icon={ShoppingBag}
-                title="No buy orders yet"
-                subtitle="Create buy orders to see them here"
-              />
-            </div>
+              </div>
+            )
           )}
         </div>
 
-        {/* Sell Orders Section */}
+        {/* Sell Orders Section - Collapsible */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Sell Orders</h3>
-            {sellOrders.length > 0 && (
-              <button
-                onClick={() => navigate('/app/profile/sell-orders')}
-                className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <span className="text-sm font-medium">See All</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          <button
+            onClick={() => setSellOrdersExpanded(!sellOrdersExpanded)}
+            className="flex items-center justify-between w-full mb-4"
+          >
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-gray-900">Sell Orders</h3>
+              <span className="text-sm text-gray-500">({sellOrders.length})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {sellOrders.length > 0 && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate('/app/profile/sell-orders');
+                  }}
+                  className="text-sm font-medium text-gray-500 hover:text-gray-700"
+                >
+                  See All
+                </span>
+              )}
+              <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${sellOrdersExpanded ? '' : '-rotate-90'}`} />
+            </div>
+          </button>
 
-          {sellOrders.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {sellOrders.slice(0, 4).map((order) => (
-                <WatchCard
-                  key={order.id}
-                  brand={order.brand}
-                  model={order.model}
-                  reference={order.reference}
-                  price={order.price}
-                  priceChange={order.price_change}
-                  image={order.cover_image}
-                  onClick={() => navigate(`/app/order/${order.id}`)}
+          {sellOrdersExpanded && (
+            sellOrders.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {sellOrders.slice(0, 4).map((order) => (
+                  <WatchCard
+                    key={order.id}
+                    brand={order.brand}
+                    model={order.model}
+                    reference={order.reference}
+                    price={order.price}
+                    priceChange={order.price_change}
+                    image={order.cover_image}
+                    onClick={() => navigate(`/app/order/${order.id}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100">
+                <EmptyState
+                  icon={Tag}
+                  title="No sell orders yet"
+                  subtitle="Create sell orders to see them here"
                 />
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-100">
-              <EmptyState
-                icon={Tag}
-                title="No sell orders yet"
-                subtitle="Create sell orders to see them here"
-              />
-            </div>
+              </div>
+            )
           )}
         </div>
 
-        {/* Favorites Section */}
+        {/* Favorites Section - Collapsible */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Favorites</h3>
-            {favorites.length > 0 && (
-              <button
-                onClick={() => navigate('/app/watchlist')}
-                className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <span className="text-sm font-medium">See All</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          <button
+            onClick={() => setFavoritesExpanded(!favoritesExpanded)}
+            className="flex items-center justify-between w-full mb-4"
+          >
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-gray-900">Favorites</h3>
+              <span className="text-sm text-gray-500">({favorites.length})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {favorites.length > 0 && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate('/app/watchlist');
+                  }}
+                  className="text-sm font-medium text-gray-500 hover:text-gray-700"
+                >
+                  See All
+                </span>
+              )}
+              <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${favoritesExpanded ? '' : '-rotate-90'}`} />
+            </div>
+          </button>
 
-          {favorites.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {favorites.slice(0, 4).map((watch) => (
-                <WatchCard
-                  key={watch.id}
-                  brand={watch.brand}
-                  model={watch.model}
-                  reference={watch.reference}
-                  price={watch.price}
-                  priceChange={watch.price_change}
-                  image={watch.image}
-                  onClick={() => watch.reference && navigate(`/app/watch/${watch.reference}`)}
+          {favoritesExpanded && (
+            favorites.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {favorites.slice(0, 4).map((watch) => (
+                  <WatchCard
+                    key={watch.id}
+                    brand={watch.brand}
+                    model={watch.model}
+                    reference={watch.reference}
+                    price={watch.price}
+                    priceChange={watch.price_change}
+                    image={watch.image}
+                    onClick={() => watch.reference && navigate(`/app/watch/${watch.reference}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100">
+                <EmptyState
+                  icon={Heart}
+                  title="No favorites yet"
+                  subtitle="Add watches to your watchlist to see them here"
                 />
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-100">
-              <EmptyState
-                icon={Heart}
-                title="No favorites yet"
-                subtitle="Add watches to your watchlist to see them here"
-              />
-            </div>
+              </div>
+            )
           )}
         </div>
       </div>

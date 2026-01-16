@@ -3,12 +3,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
+import logging
 
 from app.core.deps import get_current_active_user, get_current_user
 from app.models.user import User
 from app.models.chat import Conversation, Message, ConversationType, MessageType
 from app.models.chat_group import ConversationMember
 from app.services.ai_chat import generate_ai_response
+from app.services.broadcast import broadcast_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -419,14 +423,22 @@ async def create_or_get_direct_conversation(
             detail="Cannot start a conversation with yourself"
         )
 
+    user_id = str(current_user.id)
+
     # Look for existing conversation between these two users
     existing_conversation = await Conversation.find_one(
         Conversation.type == ConversationType.DIRECT,
-        {"participant_ids": {"$all": [str(current_user.id), data.recipient_id]}},
+        {"participant_ids": {"$all": [user_id, data.recipient_id]}},
         Conversation.is_active == True,
     )
 
     if existing_conversation:
+        # If user had deleted this conversation, re-enable it for them
+        if user_id in existing_conversation.deleted_for:
+            existing_conversation.deleted_for.remove(user_id)
+            # Keep visible_after to hide old messages
+            await existing_conversation.save()
+
         return {
             "id": str(existing_conversation.id),
             "name": recipient.name,
@@ -437,7 +449,7 @@ async def create_or_get_direct_conversation(
     conversation = Conversation(
         type=ConversationType.DIRECT,
         name=None,  # Name is determined by the other participant
-        participant_ids=[str(current_user.id), data.recipient_id],
+        participant_ids=[user_id, data.recipient_id],
         is_active=True,
         created_at=datetime.utcnow(),
     )
@@ -458,30 +470,52 @@ async def list_conversations(
 ) -> Any:
     """List user's direct message conversations"""
 
-    # Find all DIRECT conversations where user is a participant
+    user_id = str(current_user.id)
+
+    # Find all DIRECT conversations where user is a participant AND not deleted for them
     conversations = await Conversation.find(
         Conversation.type == ConversationType.DIRECT,
-        {"participant_ids": str(current_user.id)},
+        {"participant_ids": user_id},
+        {"deleted_for": {"$ne": user_id}},  # Exclude conversations deleted by this user
         Conversation.is_active == True,
     ).sort([("updated_at", -1)]).skip(skip).limit(limit).to_list()
 
     result = []
     for conv in conversations:
-        # Get last message
-        last_msg = await Message.find(
-            Message.conversation_id == str(conv.id)
-        ).sort([("created_at", -1)]).first_or_none()
+        # Check if user has a visible_after timestamp (re-opened after delete)
+        visible_after = None
+        if conv.visible_after and user_id in conv.visible_after:
+            visible_after = datetime.fromisoformat(conv.visible_after[user_id])
 
-        # Get unread count
-        unread_count = await Message.find(
-            Message.conversation_id == str(conv.id),
-            Message.sender_id != str(current_user.id),
-            Message.read == False,
-        ).count()
+        # Get last message (considering visible_after)
+        if visible_after:
+            last_msg = await Message.find(
+                Message.conversation_id == str(conv.id),
+                Message.created_at > visible_after,
+            ).sort([("created_at", -1)]).first_or_none()
+        else:
+            last_msg = await Message.find(
+                Message.conversation_id == str(conv.id)
+            ).sort([("created_at", -1)]).first_or_none()
+
+        # Get unread count (considering visible_after)
+        if visible_after:
+            unread_count = await Message.find(
+                Message.conversation_id == str(conv.id),
+                Message.sender_id != user_id,
+                Message.read == False,
+                Message.created_at > visible_after,
+            ).count()
+        else:
+            unread_count = await Message.find(
+                Message.conversation_id == str(conv.id),
+                Message.sender_id != user_id,
+                Message.read == False,
+            ).count()
 
         # Get the other participant's name
         other_participant_id = next(
-            (pid for pid in conv.participant_ids if pid != str(current_user.id)),
+            (pid for pid in conv.participant_ids if pid != user_id),
             None
         )
         conversation_name = conv.name or "Unknown"
@@ -509,6 +543,80 @@ class ConversationDetailResponse(BaseModel):
     name: str
     avatar: Optional[str] = None
     other_user_id: Optional[str] = None
+
+
+@router.post("/conversations/{conversation_id}/read")
+async def mark_conversation_as_read(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Mark all messages in a conversation as read"""
+
+    conversation = await Conversation.get(PydanticObjectId(conversation_id))
+
+    if not conversation or conversation.type != ConversationType.DIRECT:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    if str(current_user.id) not in conversation.participant_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a participant in this conversation"
+        )
+
+    # Mark all unread messages from other users as read
+    await Message.find(
+        Message.conversation_id == conversation_id,
+        Message.sender_id != str(current_user.id),
+        Message.read == False,
+    ).update({"$set": {"read": True}})
+
+    # Broadcast unread count update (now 0)
+    await broadcast_service.broadcast_unread_update(
+        str(current_user.id), conversation_id, 0
+    )
+
+    return {"message": "Conversation marked as read"}
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Soft delete a conversation for the current user only"""
+
+    conversation = await Conversation.get(PydanticObjectId(conversation_id))
+
+    if not conversation or conversation.type != ConversationType.DIRECT:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    if str(current_user.id) not in conversation.participant_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a participant in this conversation"
+        )
+
+    user_id = str(current_user.id)
+
+    # Add user to deleted_for list if not already there
+    if user_id not in conversation.deleted_for:
+        conversation.deleted_for.append(user_id)
+
+    # Set visible_after to current time - if user re-opens chat, only show new messages
+    conversation.visible_after[user_id] = datetime.utcnow().isoformat()
+
+    await conversation.save()
+
+    # Broadcast unread count update (now 0 since conversation is deleted)
+    await broadcast_service.broadcast_unread_update(user_id, conversation_id, 0)
+
+    return {"message": "Conversation deleted successfully"}
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetailResponse)
@@ -560,10 +668,11 @@ async def get_conversation_messages(
     conversation_id: str,
     current_user: User = Depends(get_current_user),
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 500,  # Increased limit to ensure all messages are loaded
 ) -> Any:
     """Get messages from a direct conversation"""
 
+    user_id = str(current_user.id)
     conversation = await Conversation.get(PydanticObjectId(conversation_id))
 
     if not conversation or conversation.type != ConversationType.DIRECT:
@@ -572,26 +681,48 @@ async def get_conversation_messages(
             detail="Conversation not found"
         )
 
-    if str(current_user.id) not in conversation.participant_ids:
+    if user_id not in conversation.participant_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not a participant in this conversation"
         )
 
-    messages = await Message.find(
-        Message.conversation_id == conversation_id
-    ).sort([("created_at", 1)]).skip(skip).limit(limit).to_list()
+    # Check if user has a visible_after timestamp (re-opened after delete)
+    visible_after = None
+    if conversation.visible_after and user_id in conversation.visible_after:
+        visible_after = datetime.fromisoformat(conversation.visible_after[user_id])
+        logger.warning(f"get_conversation_messages: User {user_id} has visible_after={visible_after} - messages before this will be filtered!")
+
+    # Get messages (filtering by visible_after if set)
+    # First, let's count ALL messages for this conversation to debug
+    total_count = await Message.find(Message.conversation_id == conversation_id).count()
+    logger.info(f"get_conversation_messages: conversation_id={conversation_id}, user_id={user_id}, TOTAL messages in DB: {total_count}")
+    if visible_after:
+        logger.info(f"get_conversation_messages: filtering by visible_after={visible_after}")
+        messages = await Message.find(
+            Message.conversation_id == conversation_id,
+            Message.created_at > visible_after,
+        ).sort([("created_at", 1)]).skip(skip).limit(limit).to_list()
+    else:
+        messages = await Message.find(
+            Message.conversation_id == conversation_id
+        ).sort([("created_at", 1)]).skip(skip).limit(limit).to_list()
+
+    logger.info(f"get_conversation_messages: found {len(messages)} messages for conversation_id={conversation_id}")
+    if messages:
+        logger.info(f"get_conversation_messages: first msg id={messages[0].id}, content={messages[0].content[:30] if messages[0].content else 'N/A'}")
+        logger.info(f"get_conversation_messages: last msg id={messages[-1].id}, content={messages[-1].content[:30] if messages[-1].content else 'N/A'}")
 
     # Mark messages as read
     for msg in messages:
-        if msg.sender_id != str(current_user.id) and not msg.read:
+        if msg.sender_id != user_id and not msg.read:
             msg.read = True
             await msg.save()
 
     # Get participant names
     participant_names = {}
     for pid in conversation.participant_ids:
-        if pid == str(current_user.id):
+        if pid == user_id:
             participant_names[pid] = current_user.name
         else:
             other_user = await User.get(PydanticObjectId(pid))
@@ -662,6 +793,7 @@ async def send_conversation_message(
             pass  # If we can't find the original message, just skip the reply info
 
     # Save message
+    logger.info(f"send_conversation_message: Saving message to conversation_id={conversation_id}")
     message = Message(
         conversation_id=conversation_id,
         sender_id=str(current_user.id),
@@ -675,12 +807,14 @@ async def send_conversation_message(
         reply_to_sender_id=reply_to_sender_id,
     )
     await message.insert()
+    logger.info(f"send_conversation_message: Saved message id={message.id}, conversation_id={message.conversation_id}, content={data.content[:50]}")
 
-    # Update conversation
+    # Update conversation timestamp
     conversation.updated_at = datetime.utcnow()
     await conversation.save()
 
-    return {
+    # Prepare response data
+    response_data = {
         "id": str(message.id),
         "conversation_id": conversation_id,
         "sender_id": str(current_user.id),
@@ -695,6 +829,45 @@ async def send_conversation_message(
         "reply_to_sender_name": message.reply_to_sender_name,
         "reply_to_sender_id": message.reply_to_sender_id,
     }
+
+    # Broadcast to all connected clients (WebSocket + Socket.IO)
+    # Using camelCase consistently for all platforms
+    broadcast_data = {
+        "id": str(message.id),
+        "conversationId": conversation_id,
+        "senderId": str(current_user.id),
+        "senderName": current_user.name,
+        "content": data.content,
+        "type": "text",
+        "status": "sent",
+        "timestamp": message.created_at.isoformat(),
+        "replyTo": message.reply_to_id,
+        "replyToContent": message.reply_to_content,
+        "replyToSenderName": message.reply_to_sender_name,
+        "replyToSenderId": message.reply_to_sender_id,
+        "tempId": None,
+    }
+    logger.info(f"send_conversation_message: About to broadcast to participants {conversation.participant_ids}")
+    await broadcast_service.broadcast_message(
+        conversation_id, broadcast_data, str(current_user.id),
+        participant_ids=conversation.participant_ids
+    )
+    logger.info(f"send_conversation_message: Broadcast complete")
+
+    # Broadcast unread count update to other participant(s)
+    for participant_id in conversation.participant_ids:
+        if participant_id != str(current_user.id):
+            # Get updated unread count for this participant
+            unread_count = await Message.find(
+                Message.conversation_id == conversation_id,
+                Message.sender_id != participant_id,
+                Message.read == False,
+            ).count()
+            await broadcast_service.broadcast_unread_update(
+                participant_id, conversation_id, unread_count
+            )
+
+    return response_data
 
 
 # ============== GROUP CHAT ENDPOINTS ==============
@@ -777,6 +950,89 @@ class GroupDetailResponse(BaseModel):
     avatar: Optional[str] = None
     memberCount: int = 0
     members: List[dict] = []
+
+
+@router.post("/groups/{group_id}/read")
+async def mark_group_as_read(
+    group_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Mark all messages in a group as read"""
+
+    group = await Conversation.get(PydanticObjectId(group_id))
+
+    if not group or group.type != ConversationType.GROUP:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found"
+        )
+
+    # Check if user is a member
+    membership = await ConversationMember.find_one(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.user_id == str(current_user.id),
+        ConversationMember.is_active == True,
+    )
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group"
+        )
+
+    # Mark all unread messages from other users as read
+    await Message.find(
+        Message.conversation_id == group_id,
+        Message.sender_id != str(current_user.id),
+        Message.read == False,
+    ).update({"$set": {"read": True}})
+
+    # Broadcast unread count update (now 0)
+    await broadcast_service.broadcast_unread_update(
+        str(current_user.id), group_id, 0
+    )
+
+    return {"message": "Group marked as read"}
+
+
+@router.delete("/groups/{group_id}")
+async def leave_or_delete_group(
+    group_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Leave a group (soft delete for the user)"""
+
+    group = await Conversation.get(PydanticObjectId(group_id))
+
+    if not group or group.type != ConversationType.GROUP:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found"
+        )
+
+    user_id = str(current_user.id)
+
+    # Check if user is a member
+    membership = await ConversationMember.find_one(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.user_id == user_id,
+        ConversationMember.is_active == True,
+    )
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group"
+        )
+
+    # Deactivate the membership (soft delete)
+    membership.is_active = False
+    await membership.save()
+
+    # Broadcast unread count update (now 0)
+    await broadcast_service.broadcast_unread_update(user_id, group_id, 0)
+
+    return {"message": "Left group successfully"}
 
 
 @router.get("/groups/{group_id}", response_model=GroupDetailResponse)
@@ -911,7 +1167,7 @@ async def get_group_messages(
     group_id: str,
     current_user: User = Depends(get_current_user),
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 500,  # Increased limit to ensure all messages are loaded
 ) -> Any:
     """Get messages from a group conversation"""
 
@@ -1035,11 +1291,12 @@ async def send_group_message(
     )
     await message.insert()
 
-    # Update conversation
+    # Update conversation timestamp
     group.updated_at = datetime.utcnow()
     await group.save()
 
-    return {
+    # Prepare response data
+    response_data = {
         "id": str(message.id),
         "conversation_id": group_id,
         "sender_id": str(current_user.id),
@@ -1054,3 +1311,48 @@ async def send_group_message(
         "reply_to_sender_name": message.reply_to_sender_name,
         "reply_to_sender_id": message.reply_to_sender_id,
     }
+
+    # Broadcast to all connected clients (WebSocket + Socket.IO)
+    # Using camelCase consistently for all platforms
+    broadcast_data = {
+        "id": str(message.id),
+        "conversationId": group_id,
+        "senderId": str(current_user.id),
+        "senderName": current_user.name,
+        "content": data.content,
+        "type": "text",
+        "status": "sent",
+        "timestamp": message.created_at.isoformat(),
+        "replyTo": message.reply_to_id,
+        "replyToContent": message.reply_to_content,
+        "replyToSenderName": message.reply_to_sender_name,
+        "replyToSenderId": message.reply_to_sender_id,
+        "tempId": None,
+    }
+
+    # Get all group member IDs for direct delivery
+    group_members = await ConversationMember.find(
+        ConversationMember.conversation_id == group_id,
+        ConversationMember.is_active == True,
+    ).to_list()
+    member_ids = [m.user_id for m in group_members]
+
+    await broadcast_service.broadcast_message(
+        group_id, broadcast_data, str(current_user.id),
+        participant_ids=member_ids
+    )
+
+    # Broadcast unread count update to all group members except sender
+    for member_id in member_ids:
+        if member_id != str(current_user.id):
+            # Get updated unread count for this member
+            unread_count = await Message.find(
+                Message.conversation_id == group_id,
+                Message.sender_id != member_id,
+                Message.read == False,
+            ).count()
+            await broadcast_service.broadcast_unread_update(
+                member_id, group_id, unread_count
+            )
+
+    return response_data

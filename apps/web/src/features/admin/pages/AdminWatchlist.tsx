@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, Trash2, Bell, BellOff, Eye, X, Plus, Edit2 } from 'lucide-react'
+import { Search, Trash2, Bell, BellOff, Eye, X, Plus, Edit2, BookPlus } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 import { ImageUpload } from '@/components/ui/ImageUpload'
@@ -55,11 +55,20 @@ interface DefaultWatchlistFormData {
   reference: string
   image_url: string
   item_type: 'want_to_buy' | 'want_to_sell' | 'watching'
-  target_price: number | null
-  currency: string
   notes: string
   is_active: boolean
   display_order: number
+}
+
+interface OrderBookFormData {
+  order_type: 'buy' | 'sell'
+  price: number | null
+  currency: string
+  country_code: string
+  condition: 'Unworn' | 'Used'
+  has_box: boolean
+  has_papers: boolean
+  notes: string
 }
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
@@ -80,12 +89,34 @@ const emptyDefaultForm: DefaultWatchlistFormData = {
   reference: '',
   image_url: '',
   item_type: 'watching',
-  target_price: null,
-  currency: 'EUR',
   notes: '',
   is_active: true,
   display_order: 0,
 }
+
+const emptyOrderBookForm: OrderBookFormData = {
+  order_type: 'sell',
+  price: null,
+  currency: 'EUR',
+  country_code: 'US',
+  condition: 'Unworn',
+  has_box: false,
+  has_papers: false,
+  notes: '',
+}
+
+const COUNTRY_OPTIONS = [
+  { code: 'US', name: 'United States' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'FR', name: 'France' },
+  { code: 'CH', name: 'Switzerland' },
+  { code: 'AE', name: 'UAE' },
+  { code: 'JP', name: 'Japan' },
+  { code: 'HK', name: 'Hong Kong' },
+  { code: 'SG', name: 'Singapore' },
+]
 
 export function AdminWatchlist() {
   const [activeTab, setActiveTab] = useState<'user' | 'default'>('user')
@@ -109,6 +140,12 @@ export function AdminWatchlist() {
   const [defaultFormData, setDefaultFormData] = useState<DefaultWatchlistFormData>(emptyDefaultForm)
   const [savingDefault, setSavingDefault] = useState(false)
   const [defaultOpenMenuId, setDefaultOpenMenuId] = useState<string | null>(null)
+
+  // Order book modal state
+  const [showOrderBookModal, setShowOrderBookModal] = useState(false)
+  const [orderBookFormData, setOrderBookFormData] = useState<OrderBookFormData>(emptyOrderBookForm)
+  const [savingOrder, setSavingOrder] = useState(false)
+  const [orderBookWatchInfo, setOrderBookWatchInfo] = useState<{ brand: string; model: string; reference: string } | null>(null)
 
   useEffect(() => {
     if (activeTab === 'user') {
@@ -180,14 +217,54 @@ export function AdminWatchlist() {
       reference: item.reference || '',
       image_url: item.image_url || '',
       item_type: item.item_type,
-      target_price: item.target_price || null,
-      currency: item.currency,
       notes: item.notes || '',
       is_active: item.is_active,
       display_order: item.display_order,
     })
     setShowDefaultModal(true)
     setDefaultOpenMenuId(null)
+  }
+
+  const handleAddOrderBook = (item: DefaultWatchlistItem) => {
+    setOrderBookWatchInfo({
+      brand: item.brand,
+      model: item.model,
+      reference: item.reference || '',
+    })
+    setOrderBookFormData(emptyOrderBookForm)
+    setShowOrderBookModal(true)
+    setDefaultOpenMenuId(null)
+  }
+
+  const handleSubmitOrder = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!orderBookWatchInfo || !orderBookFormData.price) return
+
+    setSavingOrder(true)
+    try {
+      const country = COUNTRY_OPTIONS.find(c => c.code === orderBookFormData.country_code)
+      await api.post('/orders', {
+        order_type: orderBookFormData.order_type,
+        brand: orderBookWatchInfo.brand,
+        model: orderBookWatchInfo.model,
+        reference: orderBookWatchInfo.reference,
+        price: orderBookFormData.price,
+        currency: orderBookFormData.currency,
+        country_code: orderBookFormData.country_code,
+        country_name: country?.name,
+        condition: orderBookFormData.condition,
+        has_box: orderBookFormData.has_box,
+        has_papers: orderBookFormData.has_papers,
+        notes: orderBookFormData.notes || undefined,
+      })
+      setShowOrderBookModal(false)
+      alert('Order book record created successfully!')
+    } catch (error) {
+      console.error('Failed to create order:', error)
+      alert('Failed to create order book record')
+    } finally {
+      setSavingOrder(false)
+    }
   }
 
   const handleDeleteDefault = async (id: string) => {
@@ -223,8 +300,6 @@ export function AdminWatchlist() {
         reference: defaultFormData.reference || undefined,
         image_url: defaultFormData.image_url || undefined,
         item_type: defaultFormData.item_type,
-        target_price: defaultFormData.target_price || undefined,
-        currency: defaultFormData.currency,
         notes: defaultFormData.notes || undefined,
         is_active: defaultFormData.is_active,
         display_order: defaultFormData.display_order,
@@ -543,7 +618,6 @@ export function AdminWatchlist() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Watch</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target Price</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -579,15 +653,6 @@ export function AdminWatchlist() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {item.target_price ? (
-                          <span className="text-sm font-medium">
-                            {item.currency} {item.target_price.toLocaleString()}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           item.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                         }`}>
@@ -608,6 +673,12 @@ export function AdminWatchlist() {
                             icon={<Edit2 className="w-4 h-4" />}
                           >
                             Edit
+                          </ActionMenuItem>
+                          <ActionMenuItem
+                            onClick={() => handleAddOrderBook(item)}
+                            icon={<BookPlus className="w-4 h-4" />}
+                          >
+                            Add Order Book Record
                           </ActionMenuItem>
                           <ActionMenuItem
                             onClick={() => handleToggleDefaultActive(item)}
@@ -754,34 +825,6 @@ export function AdminWatchlist() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Price</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={defaultFormData.target_price || ''}
-                    onChange={(e) => setDefaultFormData({ ...defaultFormData, target_price: e.target.value ? parseFloat(e.target.value) : null })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="Optional"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                  <select
-                    value={defaultFormData.currency}
-                    onChange={(e) => setDefaultFormData({ ...defaultFormData, currency: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="EUR">EUR</option>
-                    <option value="USD">USD</option>
-                    <option value="GBP">GBP</option>
-                    <option value="CHF">CHF</option>
-                  </select>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                 <textarea
@@ -820,6 +863,140 @@ export function AdminWatchlist() {
                   className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
                 >
                   {savingDefault ? 'Saving...' : (editingDefault ? 'Update Item' : 'Create Item')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Order Book Modal */}
+      {showOrderBookModal && orderBookWatchInfo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Add Order Book Record</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {orderBookWatchInfo.brand} {orderBookWatchInfo.model} {orderBookWatchInfo.reference && `(${orderBookWatchInfo.reference})`}
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmitOrder} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Order Type *</label>
+                  <select
+                    value={orderBookFormData.order_type}
+                    onChange={(e) => setOrderBookFormData({ ...orderBookFormData, order_type: e.target.value as any })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    <option value="sell">Sell</option>
+                    <option value="buy">Buy</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
+                  <select
+                    value={orderBookFormData.condition}
+                    onChange={(e) => setOrderBookFormData({ ...orderBookFormData, condition: e.target.value as any })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    <option value="Unworn">Unworn</option>
+                    <option value="Used">Used</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={orderBookFormData.price || ''}
+                    onChange={(e) => setOrderBookFormData({ ...orderBookFormData, price: e.target.value ? parseFloat(e.target.value) : null })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="Enter price"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                  <select
+                    value={orderBookFormData.currency}
+                    onChange={(e) => setOrderBookFormData({ ...orderBookFormData, currency: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                    <option value="GBP">GBP</option>
+                    <option value="CHF">CHF</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Market (Country) *</label>
+                <select
+                  value={orderBookFormData.country_code}
+                  onChange={(e) => setOrderBookFormData({ ...orderBookFormData, country_code: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                >
+                  {COUNTRY_OPTIONS.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={orderBookFormData.has_box}
+                    onChange={(e) => setOrderBookFormData({ ...orderBookFormData, has_box: e.target.checked })}
+                    className="h-4 w-4 text-primary border-gray-300 rounded mr-2"
+                  />
+                  <span className="text-sm text-gray-700">Has Box</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={orderBookFormData.has_papers}
+                    onChange={(e) => setOrderBookFormData({ ...orderBookFormData, has_papers: e.target.checked })}
+                    className="h-4 w-4 text-primary border-gray-300 rounded mr-2"
+                  />
+                  <span className="text-sm text-gray-700">Has Papers</span>
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={orderBookFormData.notes}
+                  onChange={(e) => setOrderBookFormData({ ...orderBookFormData, notes: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  placeholder="Optional notes..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowOrderBookModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingOrder || !orderBookFormData.price}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {savingOrder ? 'Creating...' : 'Create Order'}
                 </button>
               </div>
             </form>

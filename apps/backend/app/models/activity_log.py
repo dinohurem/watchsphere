@@ -45,6 +45,8 @@ class ActivityType(str, Enum):
     DISPUTE_UPDATED = "dispute_updated"
     ISSUE_CREATED = "issue_created"
     ISSUE_UPDATED = "issue_updated"
+    REPORT_CREATED = "report_created"
+    REPORT_UPDATED = "report_updated"
 
     # Admin events
     ADMIN_ACTION = "admin_action"
@@ -76,6 +78,7 @@ class EntityType(str, Enum):
     REVIEW = "review"
     DISPUTE = "dispute"
     ISSUE = "issue"
+    REPORT = "report"
 
 
 class Platform(str, Enum):

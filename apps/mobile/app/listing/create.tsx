@@ -297,7 +297,7 @@ export default function CreateListingScreen() {
         // Update existing order - only send fields the backend accepts
         const updateData = {
           price: priceValue,
-          condition: formData.condition === 'Unworn' ? 'unworn' : 'used',
+          condition: formData.condition === 'Unworn' ? 'Unworn' : 'Used',
           has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
           has_papers: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Papers Only',
           notes: formData.conditionDescription || null,
@@ -317,7 +317,7 @@ export default function CreateListingScreen() {
           reference: formData.reference,
           price: priceValue,
           currency: formData.currency,
-          condition: formData.condition === 'Unworn' ? 'unworn' : 'used',
+          condition: formData.condition === 'Unworn' ? 'Unworn' : 'Used',
           country_code: params.country_code || 'US',
           country_name: formData.location,
           has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
@@ -376,12 +376,11 @@ export default function CreateListingScreen() {
       marginRight: sp(44), // Balance the back button
     },
 
-    // Progress Indicator
+    // Progress Indicator (now at bottom)
     progressContainer: {
       flexDirection: 'row',
       gap: wp(2),
-      paddingHorizontal: wp(16),
-      paddingVertical: hp(8),
+      marginBottom: hp(16),
     },
     progressDot: {
       flex: 1,
@@ -1566,21 +1565,6 @@ export default function CreateListingScreen() {
         )}
       </View>
 
-      {/* Progress Indicator - hide for edit mode */}
-      {!isEditMode && (
-        <View style={styles.progressContainer}>
-          {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.progressDot,
-                index < currentStep && styles.progressDotActive,
-              ]}
-            />
-          ))}
-        </View>
-      )}
-
       {/* Content */}
       <ScrollView
         style={styles.scrollView}
@@ -1591,9 +1575,21 @@ export default function CreateListingScreen() {
         {renderStepContent()}
       </ScrollView>
 
-      {/* Bottom Button - hide for edit mode (use header Update button instead) */}
+      {/* Bottom Section - Progress Indicator and Button (hide for edit mode) */}
       {!isEditMode && (
         <View style={styles.bottomButtonsContainer}>
+          {/* Progress Indicator */}
+          <View style={styles.progressContainer}>
+            {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.progressDot,
+                  index < currentStep && styles.progressDotActive,
+                ]}
+              />
+            ))}
+          </View>
           <TouchableOpacity
             style={[
               styles.continueButton,

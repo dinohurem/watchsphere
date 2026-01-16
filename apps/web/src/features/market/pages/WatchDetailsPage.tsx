@@ -155,7 +155,7 @@ export function WatchDetailsPage() {
     const checkWatchlistStatus = async () => {
       if (!isAuthenticated || !watchDetails?.id) return;
       try {
-        const response = await api.get('/watchlist');
+        const response = await api.get('/profile/watchlist');
         const watchlist = response.data || [];
         const isWatchlisted = watchlist.some((item: any) =>
           item.watch_id === watchDetails.id ||
@@ -249,26 +249,38 @@ export function WatchDetailsPage() {
           const orderBookData = orderBookResponse.data;
 
           buyOrders = (orderBookData.buy_orders || []).map((o: any) => {
-            const d = new Date(o.created_at);
+            let dateStr = '--';
+            if (o.created_at) {
+              const d = new Date(o.created_at);
+              if (!isNaN(d.getTime())) {
+                dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+              }
+            }
             return {
               id: o.id,
-              market: o.country_code,
-              flag: getFlagEmoji(o.country_code),
-              date: `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`,
-              condition: o.condition,
+              market: o.country_code || 'US',
+              flag: getFlagEmoji(o.country_code || 'US'),
+              date: dateStr,
+              condition: o.condition || 'Unworn',
               price: o.price,
               order_type: 'buy' as const,
             };
           });
 
           sellOrders = (orderBookData.sell_orders || []).map((o: any) => {
-            const d = new Date(o.created_at);
+            let dateStr = '--';
+            if (o.created_at) {
+              const d = new Date(o.created_at);
+              if (!isNaN(d.getTime())) {
+                dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+              }
+            }
             return {
               id: o.id,
-              market: o.country_code,
-              flag: getFlagEmoji(o.country_code),
-              date: `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`,
-              condition: o.condition,
+              market: o.country_code || 'US',
+              flag: getFlagEmoji(o.country_code || 'US'),
+              date: dateStr,
+              condition: o.condition || 'Unworn',
               price: o.price,
               order_type: 'sell' as const,
             };
@@ -386,11 +398,11 @@ export function WatchDetailsPage() {
     try {
       if (isInWatchlist) {
         // Remove from watchlist
-        await api.delete(`/watchlist/${watchDetails?.reference}`);
+        await api.delete(`/profile/watchlist/${watchDetails?.reference}`);
         setIsInWatchlist(false);
       } else {
         // Add to watchlist
-        await api.post('/watchlist', {
+        await api.post('/profile/watchlist', {
           watch_id: watchDetails?.id,
           reference: watchDetails?.reference,
           brand: watchDetails?.brand,
