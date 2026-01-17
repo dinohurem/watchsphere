@@ -274,6 +274,130 @@ async def list_brands() -> Any:
     return brands
 
 
+# ============== FEATURED/TRENDING ENDPOINTS ==============
+# NOTE: These must be defined BEFORE /{watch_id} to avoid route conflicts
+
+@router.get("/trending", response_model=List[MarketWatchResponse])
+async def get_trending_watches(
+    limit: int = Query(default=5, le=10),
+) -> Any:
+    """
+    Get trending watches for market display.
+
+    Trending logic:
+    1. Watches with trending=True (admin-flagged) are prioritized
+    2. Then sorted by order_count (total sell/buy orders)
+    3. Maximum of 5 trending watches
+    """
+
+    # First, get admin-flagged trending watches
+    trending_watches = await Watch.find(
+        Watch.status == WatchStatus.ACTIVE,
+        Watch.trending == True
+    ).sort([("order_count", -1)]).limit(limit).to_list()
+
+    # If we don't have enough trending watches, fill with most active by order count
+    if len(trending_watches) < limit:
+        remaining = limit - len(trending_watches)
+        trending_ids = [w.id for w in trending_watches]
+
+        # Get watches with highest order counts that aren't already in trending
+        additional_watches = await Watch.find(
+            Watch.status == WatchStatus.ACTIVE,
+            {"_id": {"$nin": trending_ids}}
+        ).sort([("order_count", -1)]).limit(remaining).to_list()
+
+        trending_watches.extend(additional_watches)
+
+    return [
+        {
+            "id": str(watch.id),
+            "brand": watch.brand,
+            "model": watch.model,
+            "reference": watch.reference,
+            "price": watch.price,
+            "currency": watch.currency,
+            "cover_image": watch.cover_image,
+            "trending": watch.trending,
+            "order_count": watch.order_count,
+            "price_change": watch.price_change,
+            "price_history": watch.price_history,
+        }
+        for watch in trending_watches
+    ]
+
+
+@router.get("/featured", response_model=List[MarketWatchResponse])
+async def get_featured_watches(
+    limit: int = Query(default=5, le=10),
+) -> Any:
+    """
+    Get featured watches for market display.
+
+    Priority logic:
+    1. Admin-assigned featured watches (featured=True) are prioritized
+    2. If not enough, fill with watches sorted by order_count (most orders first)
+    3. If still not enough, fill with watches sorted by views (most views first)
+    4. Maximum of 5 watches returned
+    """
+    featured_watches = []
+    seen_ids = set()
+
+    # Step 1: Get admin-assigned featured watches
+    admin_featured = await Watch.find(
+        Watch.status == WatchStatus.ACTIVE,
+        Watch.featured == True
+    ).sort([("order_count", -1)]).limit(limit).to_list()
+
+    for watch in admin_featured:
+        if watch.id not in seen_ids:
+            featured_watches.append(watch)
+            seen_ids.add(watch.id)
+
+    # Step 2: If not enough, fill with watches by order_count
+    if len(featured_watches) < limit:
+        remaining = limit - len(featured_watches)
+        by_orders = await Watch.find(
+            Watch.status == WatchStatus.ACTIVE,
+            {"_id": {"$nin": list(seen_ids)}}
+        ).sort([("order_count", -1)]).limit(remaining).to_list()
+
+        for watch in by_orders:
+            if watch.id not in seen_ids:
+                featured_watches.append(watch)
+                seen_ids.add(watch.id)
+
+    # Step 3: If still not enough, fill with watches by views
+    if len(featured_watches) < limit:
+        remaining = limit - len(featured_watches)
+        by_views = await Watch.find(
+            Watch.status == WatchStatus.ACTIVE,
+            {"_id": {"$nin": list(seen_ids)}}
+        ).sort([("views", -1)]).limit(remaining).to_list()
+
+        for watch in by_views:
+            if watch.id not in seen_ids:
+                featured_watches.append(watch)
+                seen_ids.add(watch.id)
+
+    return [
+        {
+            "id": str(watch.id),
+            "brand": watch.brand,
+            "model": watch.model,
+            "reference": watch.reference,
+            "price": watch.price,
+            "currency": watch.currency,
+            "cover_image": watch.cover_image,
+            "trending": watch.trending,
+            "order_count": watch.order_count,
+            "price_change": watch.price_change,
+            "price_history": watch.price_history,
+        }
+        for watch in featured_watches
+    ]
+
+
 # ============== AGGREGATED MARKET DATA ENDPOINTS ==============
 # NOTE: These must be defined BEFORE /{watch_id} to avoid route conflicts
 
@@ -829,129 +953,6 @@ async def admin_watch_stats(
     }
 
     return stats
-
-
-# ============== MARKET/TRENDING ENDPOINTS ==============
-
-@router.get("/trending", response_model=List[MarketWatchResponse])
-async def get_trending_watches(
-    limit: int = Query(default=5, le=10),
-) -> Any:
-    """
-    Get trending watches for market display.
-
-    Trending logic:
-    1. Watches with trending=True (admin-flagged) are prioritized
-    2. Then sorted by order_count (total sell/buy orders)
-    3. Maximum of 5 trending watches
-    """
-
-    # First, get admin-flagged trending watches
-    trending_watches = await Watch.find(
-        Watch.status == WatchStatus.ACTIVE,
-        Watch.trending == True
-    ).sort([("order_count", -1)]).limit(limit).to_list()
-
-    # If we don't have enough trending watches, fill with most active by order count
-    if len(trending_watches) < limit:
-        remaining = limit - len(trending_watches)
-        trending_ids = [w.id for w in trending_watches]
-
-        # Get watches with highest order counts that aren't already in trending
-        additional_watches = await Watch.find(
-            Watch.status == WatchStatus.ACTIVE,
-            {"_id": {"$nin": trending_ids}}
-        ).sort([("order_count", -1)]).limit(remaining).to_list()
-
-        trending_watches.extend(additional_watches)
-
-    return [
-        {
-            "id": str(watch.id),
-            "brand": watch.brand,
-            "model": watch.model,
-            "reference": watch.reference,
-            "price": watch.price,
-            "currency": watch.currency,
-            "cover_image": watch.cover_image,
-            "trending": watch.trending,
-            "order_count": watch.order_count,
-            "price_change": watch.price_change,
-            "price_history": watch.price_history,
-        }
-        for watch in trending_watches
-    ]
-
-
-@router.get("/featured", response_model=List[MarketWatchResponse])
-async def get_featured_watches(
-    limit: int = Query(default=5, le=10),
-) -> Any:
-    """
-    Get featured watches for market display.
-
-    Priority logic:
-    1. Admin-assigned featured watches (featured=True) are prioritized
-    2. If not enough, fill with watches sorted by order_count (most orders first)
-    3. If still not enough, fill with watches sorted by views (most views first)
-    4. Maximum of 5 watches returned
-    """
-    featured_watches = []
-    seen_ids = set()
-
-    # Step 1: Get admin-assigned featured watches
-    admin_featured = await Watch.find(
-        Watch.status == WatchStatus.ACTIVE,
-        Watch.featured == True
-    ).sort([("order_count", -1)]).limit(limit).to_list()
-
-    for watch in admin_featured:
-        if watch.id not in seen_ids:
-            featured_watches.append(watch)
-            seen_ids.add(watch.id)
-
-    # Step 2: If not enough, fill with watches by order_count
-    if len(featured_watches) < limit:
-        remaining = limit - len(featured_watches)
-        by_orders = await Watch.find(
-            Watch.status == WatchStatus.ACTIVE,
-            {"_id": {"$nin": list(seen_ids)}}
-        ).sort([("order_count", -1)]).limit(remaining).to_list()
-
-        for watch in by_orders:
-            if watch.id not in seen_ids:
-                featured_watches.append(watch)
-                seen_ids.add(watch.id)
-
-    # Step 3: If still not enough, fill with watches by views
-    if len(featured_watches) < limit:
-        remaining = limit - len(featured_watches)
-        by_views = await Watch.find(
-            Watch.status == WatchStatus.ACTIVE,
-            {"_id": {"$nin": list(seen_ids)}}
-        ).sort([("views", -1)]).limit(remaining).to_list()
-
-        for watch in by_views:
-            if watch.id not in seen_ids:
-                featured_watches.append(watch)
-                seen_ids.add(watch.id)
-
-    return [
-        {
-            "id": str(watch.id),
-            "brand": watch.brand,
-            "model": watch.model,
-            "reference": watch.reference,
-            "price": watch.price,
-            "currency": watch.currency,
-            "cover_image": watch.cover_image,
-            "trending": watch.trending,
-            "order_count": watch.order_count,
-            "price_change": watch.price_change,
-            "price_history": watch.price_history,
-        }
-        for watch in featured_watches
-    ]
 
 
 @router.post("/admin/{watch_id}/toggle-trending")

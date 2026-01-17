@@ -121,7 +121,7 @@ export function AdminSupport() {
     fetchData()
   }
 
-  const handleEdit = (item: Dispute | Issue) => {
+  const handleEdit = (item: Dispute | Issue | Report) => {
     setEditingId(item.id)
     setEditStatus(item.status)
     setEditNotes(item.admin_notes || '')

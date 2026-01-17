@@ -6,17 +6,17 @@ import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 interface InventoryItem {
   id: string;
   brand: string;
-  model: string;
+  model?: string;
   reference?: string;
   price: number;
   currency: string;
-  condition: string;
+  condition?: string;
   year?: number;
   description?: string;
   cover_image?: string;
   status: string;
-  views: number;
-  created_at: string;
+  views?: number;
+  created_at?: string;
   updated_at?: string;
   price_change?: number;
 }
@@ -33,8 +33,11 @@ export function InventoryPage() {
   const loadInventory = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/inventory');
-      setInventory(response.data);
+      // Use the same endpoint as mobile - get sell orders for current user
+      const response = await api.get('/orders/my-orders', {
+        params: { order_type: 'sell' }
+      });
+      setInventory(response.data || []);
     } catch (error) {
       console.error('Failed to load inventory:', error);
       setInventory([]);
@@ -104,7 +107,7 @@ export function InventoryPage() {
           {inventory.map((item) => (
             <div
               key={item.id}
-              onClick={() => navigate(`/app/watch/${item.reference || item.id}`)}
+              onClick={() => navigate(`/app/order/${item.id}`)}
               className="bg-white rounded-xl border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
             >
               {/* Watch Image */}
