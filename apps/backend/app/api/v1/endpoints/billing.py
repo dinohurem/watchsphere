@@ -12,6 +12,7 @@ from app.models.billing import (
     Transaction, TransactionStatus, SubscriptionHistory
 )
 from app.services.payment import monri_service, check_subscription_status, log_payment_activity
+from app.services.email import email_service
 from app.models.activity_log import ActivityType, EntityType
 
 router = APIRouter()
@@ -751,6 +752,22 @@ async def verify_subscription_payment(
             "verified_manually": True,
         }
     )
+
+    # Send subscription confirmation email
+    try:
+        expires_at_str = subscription.expires_at.strftime('%B %d, %Y') if subscription.expires_at else "N/A"
+        await email_service.send_subscription_confirmation_email(
+            to_email=current_user.email,
+            user_name=current_user.name,
+            plan_name="Premium",
+            amount=billing.amount,
+            currency=billing.currency,
+            expires_at=expires_at_str,
+            is_renewal=False,
+        )
+    except Exception as e:
+        # Don't fail the payment flow if email fails
+        print(f"Failed to send subscription confirmation email: {e}")
 
     # Get updated subscription status
     status_info = await check_subscription_status(str(current_user.id))

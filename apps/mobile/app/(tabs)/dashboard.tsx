@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, RefreshControl, ActivityIndicator, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useCallback, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,6 +9,12 @@ import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
 import { LogoIcon } from '@/components/LogoIcon';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const HORIZONTAL_PADDING = wp(16);
+const CARD_GAP = wp(12);
+// Calculate card width: (screen width - left padding - right padding - gap between cards) / 2
+const CARD_WIDTH = (SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - CARD_GAP) / 2;
 
 // Plus Icon
 function PlusIcon() {
@@ -133,14 +139,23 @@ function TrendDownIcon() {
 
 interface InventoryWatch {
   id: string;
+  watch_id?: string;
   brand: string;
+  model: string;
+  displayName: string; // Combined brand + model for display
   reference: string;
   soldOrder: string;
+  rawPrice: number;
   change: string;
   isPositive: boolean;
   sellNowPrice: string | null;
   image: string;
   status?: string;
+  condition?: string;
+  country_code?: string;
+  country_name?: string;
+  has_box?: boolean;
+  has_papers?: boolean;
 }
 
 export default function DashboardScreen() {
@@ -169,14 +184,23 @@ export default function DashboardScreen() {
 
         const formattedInventory: InventoryWatch[] = sellOrders.map((order: any) => ({
           id: order.id || order._id,
-          brand: `${order.brand} ${order.model || ''}`.trim(),
+          watch_id: order.watch_id,
+          brand: order.brand || '',
+          model: order.model || '',
+          displayName: `${order.brand} ${order.model || ''}`.trim(),
           reference: order.reference || '',
           soldOrder: order.price ? `${order.price.toLocaleString('de-DE')}€` : '0€',
+          rawPrice: order.price || 0,
           change: order.price_change ? `${Math.abs(order.price_change).toFixed(1).replace('.', ',')}%` : '0%',
           isPositive: (order.price_change || 0) >= 0,
           sellNowPrice: order.best_bid ? `€${order.best_bid.toLocaleString('de-DE')}` : null,
           image: order.cover_image || '',
           status: order.status || 'active',
+          condition: order.condition || 'Used',
+          country_code: order.country_code || 'US',
+          country_name: order.country_name || '',
+          has_box: order.has_box || false,
+          has_papers: order.has_papers || false,
         }));
         setInventory(formattedInventory);
       }
@@ -205,7 +229,7 @@ export default function DashboardScreen() {
     if (!searchQuery.trim()) return inventory;
     const query = searchQuery.toLowerCase();
     return inventory.filter(watch =>
-      watch.brand.toLowerCase().includes(query) ||
+      watch.displayName.toLowerCase().includes(query) ||
       watch.reference.toLowerCase().includes(query)
     );
   }, [inventory, searchQuery]);
@@ -217,8 +241,37 @@ export default function DashboardScreen() {
 
   const isSold = (status?: string) => status === 'sold';
 
+  const handleWatchCardPress = useCallback((watch: InventoryWatch) => {
+    // Navigate to order detail screen (watch-details) with order parameters
+    // This shows the order detail view with edit/mark-sold/delete options for the owner
+    router.push({
+      pathname: '/market/watch-details',
+      params: {
+        orderId: watch.id,
+        reference: watch.reference || '',
+        brand: watch.brand,
+        model: watch.model,
+        price: watch.rawPrice.toString(),
+        condition: watch.condition || 'Used',
+        country_code: watch.country_code || 'US',
+        country_name: watch.country_name || '',
+        has_box: (watch.has_box || false).toString(),
+        has_papers: (watch.has_papers || false).toString(),
+        user_name: '',
+        user_id: '',
+        order_type: 'sell',
+        fromOrderBook: 'false',
+      },
+    } as any);
+  }, []);
+
   const renderWatchCard = (watch: InventoryWatch) => (
-    <View key={watch.id} style={styles.watchCard}>
+    <TouchableOpacity
+      key={watch.id}
+      style={styles.watchCard}
+      onPress={() => handleWatchCardPress(watch)}
+      activeOpacity={0.7}
+    >
       {/* Watch Image */}
       <View style={styles.watchImageContainer}>
         <LinearGradient
@@ -248,7 +301,7 @@ export default function DashboardScreen() {
         <View style={styles.watchDetails}>
           {/* Brand and Reference */}
           <View style={styles.watchNameContainer}>
-            <Text style={styles.watchBrand}>{watch.brand}</Text>
+            <Text style={styles.watchBrand}>{watch.displayName}</Text>
             <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
           </View>
 
@@ -284,7 +337,7 @@ export default function DashboardScreen() {
           )}
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderEmptyState = () => (
@@ -341,21 +394,9 @@ export default function DashboardScreen() {
             <Text style={styles.noResultsText}>No watches match your search</Text>
           </View>
         ) : (
-          <>
-            <View style={styles.watchRow}>
-              {filteredInventory.slice(0, 2).map(renderWatchCard)}
-            </View>
-            {filteredInventory.length > 2 && (
-              <View style={styles.watchRow}>
-                {filteredInventory.slice(2, 4).map(renderWatchCard)}
-              </View>
-            )}
-            {filteredInventory.length > 4 && (
-              <View style={styles.watchRow}>
-                {filteredInventory.slice(4, 6).map(renderWatchCard)}
-              </View>
-            )}
-          </>
+          <View style={styles.watchGridContainer}>
+            {filteredInventory.map(renderWatchCard)}
+          </View>
         )}
       </View>
     </View>
@@ -580,20 +621,21 @@ const styles = StyleSheet.create({
     lineHeight: fp(20),
   },
   watchGrid: {
-    gap: hp(16),
     marginTop: hp(8),
   },
-  watchRow: {
+  watchGridContainer: {
     flexDirection: 'row',
-    gap: wp(12),
+    flexWrap: 'wrap',
+    gap: CARD_GAP,
   },
   watchCard: {
-    flex: 1,
+    width: CARD_WIDTH,
     backgroundColor: '#FFFFFF',
     borderRadius: sp(16),
     borderWidth: 1,
     borderColor: 'rgba(33, 33, 33, 0.05)',
     overflow: 'hidden',
+    marginBottom: hp(4),
   },
   watchImageContainer: {
     height: hp(140),
@@ -629,6 +671,7 @@ const styles = StyleSheet.create({
   },
   watchInfo: {
     paddingHorizontal: wp(16),
+    paddingTop: hp(12),
     paddingBottom: hp(16),
     gap: hp(12),
   },

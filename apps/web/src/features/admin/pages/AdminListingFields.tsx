@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Plus, Search, Edit2, Trash2, ChevronDown, ChevronUp, ToggleLeft, ToggleRight, X, Database } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
@@ -349,8 +349,8 @@ export function AdminListingFields() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredFields.map((field) => (
-                <>
-                  <tr key={field.id} className="hover:bg-gray-50">
+                <React.Fragment key={field.id}>
+                  <tr className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <button
@@ -431,7 +431,7 @@ export function AdminListingFields() {
                     </td>
                   </tr>
                   {expandedRow === field.id && field.values.length > 0 && (
-                    <tr key={`${field.id}-expanded`}>
+                    <tr>
                       <td colSpan={6} className="px-6 py-4 bg-gray-50">
                         <div className="pl-8">
                           <h4 className="text-sm font-medium text-gray-700 mb-2">Values ({field.values.length})</h4>
@@ -456,7 +456,7 @@ export function AdminListingFields() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>

@@ -197,12 +197,11 @@ export default function MarketScreen() {
         setAllWatches(watchData);
         setWatches(applyFiltersToWatches(watchData));
 
-        // Get trending watches
-        const trending = watchData.filter((w: WatchMarketData) => w.trending).slice(0, 5);
-        setTrendingWatches(trending);
+        // Fetch trending watches from dedicated endpoint (respects admin-set trending)
+        const hasTrending = await loadTrendingWatches();
 
         // If no trending watches, fetch featured watches as fallback
-        if (trending.length === 0) {
+        if (!hasTrending) {
           await loadFeaturedWatches();
         } else {
           setFeaturedWatches([]);
@@ -232,11 +231,11 @@ export default function MarketScreen() {
           setAllWatches(watchData);
           setWatches(applyFiltersToWatches(watchData));
 
-          const trending = watchData.filter((w: WatchMarketData) => w.trending).slice(0, 5);
-          setTrendingWatches(trending);
+          // Fetch trending watches from dedicated endpoint (respects admin-set trending)
+          const hasTrending = await loadTrendingWatches();
 
           // If no trending, fetch featured
-          if (trending.length === 0) {
+          if (!hasTrending) {
             await loadFeaturedWatches();
           } else {
             setFeaturedWatches([]);
@@ -245,8 +244,11 @@ export default function MarketScreen() {
           // No data available - show empty state
           setAllWatches([]);
           setWatches([]);
-          setTrendingWatches([]);
-          await loadFeaturedWatches();
+          // Still try to load trending/featured watches
+          const hasTrending = await loadTrendingWatches();
+          if (!hasTrending) {
+            await loadFeaturedWatches();
+          }
         }
       }
     } catch (error) {
@@ -254,10 +256,46 @@ export default function MarketScreen() {
       console.error('Failed to load market data:', error);
       setAllWatches([]);
       setWatches([]);
-      setTrendingWatches([]);
-      await loadFeaturedWatches();
+      // Still try to load trending/featured watches
+      const hasTrending = await loadTrendingWatches();
+      if (!hasTrending) {
+        await loadFeaturedWatches();
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTrendingWatches = async () => {
+    try {
+      // Fetch trending watches from the dedicated trending endpoint
+      // Priority: admin-assigned trending → order_count → views
+      const response = await api.get('/market/trending', {
+        params: { limit: 5 }
+      });
+
+      if (response.data && response.data.length > 0) {
+        const trending = response.data.map((item: any) => ({
+          id: item.id || item.reference,
+          brand: item.brand,
+          model: item.model,
+          reference: item.reference || '',
+          price: item.price || 0,
+          priceChange: item.price_change || 0,
+          priceHistory: item.price_history || [],
+          trending: item.trending || true,
+          orderCount: item.order_count || 0,
+        }));
+        setTrendingWatches(trending);
+        return trending.length > 0;
+      } else {
+        setTrendingWatches([]);
+        return false;
+      }
+    } catch (error) {
+      console.error('Failed to load trending watches:', error);
+      setTrendingWatches([]);
+      return false;
     }
   };
 
@@ -293,11 +331,8 @@ export default function MarketScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Load both market data and featured watches in parallel to ensure fresh data
-    await Promise.all([
-      loadMarketData(),
-      loadFeaturedWatches(),
-    ]);
+    // Load market data which will also load trending/featured watches
+    await loadMarketData();
     setRefreshing(false);
   }, [selectedCategory]);
 

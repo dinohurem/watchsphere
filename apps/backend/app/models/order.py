@@ -61,6 +61,37 @@ class Order(Document):
     has_box: bool = False
     has_papers: bool = False
 
+    # Images (for sell orders)
+    images: list[str] = Field(default_factory=list)
+
+    # Extended watch details (for sell listings)
+    year: Optional[int] = None
+    size: Optional[str] = None
+    movement: Optional[str] = None
+    case_material: Optional[str] = None
+    bracelet_material: Optional[str] = None
+    availability: Optional[str] = None
+
+    # Caliber information
+    movement_type: Optional[str] = None
+    caliber: Optional[str] = None
+    base_caliber: Optional[str] = None
+    power_reserve: Optional[str] = None
+    number_of_jewels: Optional[int] = None
+
+    # Case information
+    case_diameter: Optional[str] = None
+    water_resistance: Optional[str] = None
+    bezel_material: Optional[str] = None
+    crystal: Optional[str] = None
+    dial: Optional[str] = None
+    dial_numerals: Optional[str] = None
+
+    # Bracelet/strap information
+    bracelet_color: Optional[str] = None
+    clasp_type: Optional[str] = None
+    clasp_material: Optional[str] = None
+
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None

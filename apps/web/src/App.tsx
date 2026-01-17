@@ -181,6 +181,7 @@ function App() {
         <Route path="social-search/filters" element={<SocialFiltersPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="inventory/create" element={<CreateListingPage />} />
+        <Route path="inventory/edit/:orderId" element={<CreateListingPage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="profile" element={<ProfileSettingsPage />} />
         <Route path="profile/settings" element={<ProfileSettingsPage />} />
