@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, X, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useConfig } from '@/hooks/useConfig';
@@ -77,8 +77,8 @@ function SelectField({
   }, []);
 
   return (
-    <div className="mb-6">
-      <label className="block text-[15px] font-semibold text-[#1d1d1f] mb-1.5 tracking-[0.075px]">
+    <div>
+      <label className="block text-[15px] font-semibold text-[#1d1d1f] mb-2.5 tracking-[0.075px]">
         {label}
       </label>
       <div className="relative" ref={dropdownRef}>
@@ -135,8 +135,8 @@ function TextField({
 }) {
   if (multiline) {
     return (
-      <div className="mb-6">
-        <label className="block text-[15px] font-semibold text-[#1d1d1f] mb-1.5 tracking-[0.075px]">
+      <div>
+        <label className="block text-[15px] font-semibold text-[#1d1d1f] mb-2.5 tracking-[0.075px]">
           {label}
         </label>
         <textarea
@@ -150,8 +150,8 @@ function TextField({
   }
 
   return (
-    <div className="mb-6">
-      <label className="block text-[15px] font-semibold text-[#1d1d1f] mb-1.5 tracking-[0.075px]">
+    <div>
+      <label className="block text-[15px] font-semibold text-[#1d1d1f] mb-2.5 tracking-[0.075px]">
         {label}
       </label>
       <div className="flex h-11 bg-white border border-[rgba(29,29,31,0.1)] rounded-xl overflow-hidden">
@@ -231,11 +231,14 @@ function DiscardModal({
 
 export function CreateListingPage() {
   const navigate = useNavigate();
+  const { orderId } = useParams<{ orderId: string }>();
   const { getFieldOptions, isFieldEnabled, isLoading: isLoadingConfig } = useConfig();
 
+  const isEditMode = Boolean(orderId);
   const [currentStep, setCurrentStep] = useState(0);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingOrder, setIsLoadingOrder] = useState(isEditMode);
 
   const [formData, setFormData] = useState<ListingFormData>({
     // Step 1
@@ -268,6 +271,68 @@ export function CreateListingPage() {
     photos: [],
     photoUrls: [],
   });
+
+  // Load existing order data in edit mode
+  useEffect(() => {
+    const loadOrderData = async () => {
+      if (!orderId) return;
+
+      try {
+        setIsLoadingOrder(true);
+        const response = await api.get(`/orders/${orderId}`);
+        const order = response.data;
+
+        // Determine box and papers value
+        let boxAndPapers = 'Neither';
+        if (order.has_box && order.has_papers) {
+          boxAndPapers = 'Box and Papers';
+        } else if (order.has_box) {
+          boxAndPapers = 'Box Only';
+        } else if (order.has_papers) {
+          boxAndPapers = 'Papers Only';
+        }
+
+        // Map order data to form data
+        setFormData({
+          brand: order.brand || '',
+          model: order.model || '',
+          reference: order.reference || '',
+          year: order.watch_details?.year?.toString() || '',
+          size: order.watch_details?.case_size || '',
+          movement: order.watch_details?.movement || '',
+          caseMaterial: order.watch_details?.case_material || '',
+          braceletMaterial: order.watch_details?.bracelet_material || '',
+          condition: order.condition || '',
+          conditionDescription: order.notes || '',
+          boxAndPapers,
+          location: order.country_name || '',
+          price: order.price?.toLocaleString('de-DE') || '',
+          currency: order.currency || 'EUR',
+          availability: 'Available',
+          // Caliber
+          movementType: order.watch_details?.movement || '',
+          caliberMovement: order.watch_details?.caliber || '',
+          baseCaliber: '',
+          powerReserve: order.watch_details?.power_reserve || '',
+          numberOfJewels: order.watch_details?.number_of_jewels?.toString() || '',
+          // Bracelet
+          braceletColor: '',
+          claspType: order.watch_details?.clasp || '',
+          claspMaterial: '',
+          // Photos - use existing image URLs
+          photos: [],
+          photoUrls: order.watch_details?.images || [],
+        });
+      } catch (error) {
+        console.error('Failed to load order data:', error);
+        navigate('/app/inventory');
+      } finally {
+        setIsLoadingOrder(false);
+      }
+    };
+
+    loadOrderData();
+  }, [orderId, navigate]);
 
   const updateField = useCallback((field: keyof ListingFormData, value: any) => {
     setFormData((prev) => {
@@ -317,7 +382,7 @@ export function CreateListingPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Upload photos first
+      // Upload new photos first (only File objects, not existing URLs)
       const uploadedPhotoUrls: string[] = [];
       for (const photo of formData.photos) {
         const formDataFile = new FormData();
@@ -332,27 +397,59 @@ export function CreateListingPage() {
         }
       }
 
-      // Create listing
-      const priceValue = parseInt(formData.price.replace(/[^0-9]/g, ''), 10) || 0;
+      // Combine existing URLs (that weren't removed) with newly uploaded ones
+      // Filter out any blob URLs from photoUrls (those are for new files only)
+      const existingUrls = formData.photoUrls.filter(url => !url.startsWith('blob:'));
+      const allImageUrls = [...existingUrls, ...uploadedPhotoUrls];
 
-      await api.post('/orders', {
+      // Prepare listing data
+      const priceValue = parseInt(formData.price.replace(/[^0-9]/g, ''), 10) || 0;
+      const yearValue = formData.year ? parseInt(formData.year, 10) : undefined;
+      const jewelsValue = formData.numberOfJewels ? parseInt(formData.numberOfJewels, 10) : undefined;
+
+      const orderData = {
         order_type: 'sell',
         brand: formData.brand,
         model: formData.model,
         reference: formData.reference,
         price: priceValue,
         currency: formData.currency,
-        condition: formData.condition === 'Unworn' ? 'unworn' : 'used',
+        condition: formData.condition === 'Unworn' ? 'Unworn' : 'Used',
         country_name: formData.location,
         has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
         has_papers: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Papers Only',
         notes: formData.conditionDescription,
-        images: uploadedPhotoUrls,
-      });
+        images: allImageUrls,
+        // Extended watch details
+        year: yearValue,
+        size: formData.size || undefined,
+        movement: formData.movement || undefined,
+        case_material: formData.caseMaterial || undefined,
+        bracelet_material: formData.braceletMaterial || undefined,
+        availability: formData.availability || undefined,
+        // Caliber information
+        movement_type: formData.movementType || undefined,
+        caliber: formData.caliberMovement || undefined,
+        base_caliber: formData.baseCaliber || undefined,
+        power_reserve: formData.powerReserve || undefined,
+        number_of_jewels: jewelsValue,
+        // Bracelet/strap information
+        bracelet_color: formData.braceletColor || undefined,
+        clasp_type: formData.claspType || undefined,
+        clasp_material: formData.claspMaterial || undefined,
+      };
+
+      if (isEditMode && orderId) {
+        // Update existing order
+        await api.patch(`/orders/${orderId}`, orderData);
+      } else {
+        // Create new order
+        await api.post('/orders', orderData);
+      }
 
       navigate('/app/inventory');
     } catch (error) {
-      console.error('Error creating listing:', error);
+      console.error('Error saving listing:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -384,53 +481,53 @@ export function CreateListingPage() {
   // Calculate progress
   const progress = ((currentStep + 1) / STEPS.length) * 100;
 
-  // Show loading while config loads
-  if (isLoadingConfig) {
+  // Show loading while config or order data loads
+  if (isLoadingConfig || isLoadingOrder) {
     return (
-      <div className="p-4 lg:p-6 bg-gray-50 min-h-screen flex items-center justify-center">
+      <div className="p-4 lg:p-6 bg-white min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
       </div>
     );
   }
 
   return (
-    <div className="p-4 lg:p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-[894px] mx-auto">
-        {/* Header */}
-        <div className="pt-8 pb-8 px-4">
-          <h1 className="text-2xl font-semibold text-[#1d1d1f]/80 text-center">
-            Create new listing
-          </h1>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex gap-20">
-          {/* Left Sidebar - Steps */}
-          <div className="w-[300px] flex-shrink-0">
-            <div className="flex flex-col">
-              {STEPS.map((step, index) => (
-                <button
-                  key={step.key}
-                  onClick={() => setCurrentStep(index)}
-                  className={`h-12 px-4 rounded-2xl flex items-center text-left transition-colors ${
-                    currentStep === index
-                      ? 'bg-[#f7f7f7]'
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="text-[15px] font-semibold text-[#1d1d1f] truncate">
-                    {step.label}
-                  </span>
-                </button>
-              ))}
+    <div className="bg-white h-[calc(100vh-64px)] flex flex-col">
+      <div className="flex-1 overflow-y-auto p-4 lg:p-6 pb-0">
+        <div className="max-w-[894px] mx-auto pb-8">
+          {/* Content Area */}
+          <div className="flex gap-20">
+            {/* Left Sidebar - Steps */}
+            <div className="w-[300px] flex-shrink-0 sticky top-6 self-start">
+              {/* Header - aligned with steps */}
+              <div className="pt-8 pb-6">
+                <h1 className="text-2xl font-semibold text-[#1d1d1f]/80">
+                  {isEditMode ? 'Edit listing' : 'Create new listing'}
+                </h1>
+              </div>
+              <div className="flex flex-col">
+                {STEPS.map((step, index) => (
+                  <button
+                    key={step.key}
+                    onClick={() => setCurrentStep(index)}
+                    className={`h-12 px-4 rounded-2xl flex items-center text-left transition-colors ${
+                      currentStep === index
+                        ? 'bg-[#F7F7F7]'
+                        : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="text-[15px] font-semibold text-[#1d1d1f] truncate">
+                      {step.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Right Side - Form */}
-          <div className="flex-1 min-w-0 max-w-[514px]">
+            {/* Right Side - Form */}
+            <div className="flex-1 min-w-0 max-w-[514px] pt-[72px]">
             {/* Step 0: Basics */}
             {currentStep === 0 && (
-              <div className="space-y-0">
+              <div className="flex flex-col gap-6">
                 <SelectField
                   label="Brand"
                   value={formData.brand}
@@ -580,71 +677,87 @@ export function CreateListingPage() {
 
             {/* Step 1: Caliber Information */}
             {currentStep === 1 && (
-              <div className="space-y-0">
-                <SelectField
-                  label="Movement"
-                  value={formData.movementType}
-                  placeholder="Select type of movement"
-                  options={getFieldOptions('movement')}
-                  onChange={(v) => updateField('movementType', v)}
-                />
+              <div className="flex flex-col gap-6">
+                {isFieldEnabled('movement_type') && (
+                  <SelectField
+                    label="Movement"
+                    value={formData.movementType}
+                    placeholder="Select type of movement"
+                    options={getFieldOptions('movement_type')}
+                    onChange={(v) => updateField('movementType', v)}
+                  />
+                )}
 
-                <TextField
-                  label="Caliber/movement"
-                  value={formData.caliberMovement}
-                  placeholder="e.g. 3235"
-                  onChange={(v) => updateField('caliberMovement', v)}
-                />
+                {isFieldEnabled('caliber') && (
+                  <TextField
+                    label="Caliber/movement"
+                    value={formData.caliberMovement}
+                    placeholder="e.g. 3235"
+                    onChange={(v) => updateField('caliberMovement', v)}
+                  />
+                )}
 
-                <TextField
-                  label="Base Caliber"
-                  value={formData.baseCaliber}
-                  placeholder="e.g., 3235"
-                  onChange={(v) => updateField('baseCaliber', v)}
-                />
+                {isFieldEnabled('base_caliber') && (
+                  <TextField
+                    label="Base Caliber"
+                    value={formData.baseCaliber}
+                    placeholder="e.g., 3235"
+                    onChange={(v) => updateField('baseCaliber', v)}
+                  />
+                )}
 
-                <TextField
-                  label="Power reserve"
-                  value={formData.powerReserve}
-                  placeholder="e.g. 70h"
-                  onChange={(v) => updateField('powerReserve', v)}
-                />
+                {isFieldEnabled('power_reserve') && (
+                  <TextField
+                    label="Power reserve"
+                    value={formData.powerReserve}
+                    placeholder="e.g. 70h"
+                    onChange={(v) => updateField('powerReserve', v)}
+                  />
+                )}
 
-                <TextField
-                  label="Number of jewels"
-                  value={formData.numberOfJewels}
-                  placeholder="e.g. 20"
-                  onChange={(v) => updateField('numberOfJewels', v)}
-                />
+                {isFieldEnabled('number_of_jewels') && (
+                  <TextField
+                    label="Number of jewels"
+                    value={formData.numberOfJewels}
+                    placeholder="e.g. 20"
+                    onChange={(v) => updateField('numberOfJewels', v)}
+                  />
+                )}
               </div>
             )}
 
             {/* Step 2: Bracelet / Strap Information */}
             {currentStep === 2 && (
-              <div className="space-y-0">
-                <SelectField
-                  label="Bracelet color"
-                  value={formData.braceletColor}
-                  placeholder="Type in bracelet color"
-                  options={getFieldOptions('bracelet_color')}
-                  onChange={(v) => updateField('braceletColor', v)}
-                />
+              <div className="flex flex-col gap-6">
+                {isFieldEnabled('bracelet_color') && (
+                  <SelectField
+                    label="Bracelet color"
+                    value={formData.braceletColor}
+                    placeholder="Type in bracelet color"
+                    options={getFieldOptions('bracelet_color')}
+                    onChange={(v) => updateField('braceletColor', v)}
+                  />
+                )}
 
-                <SelectField
-                  label="Clasp"
-                  value={formData.claspType}
-                  placeholder="Select clasp type"
-                  options={getFieldOptions('clasp_type')}
-                  onChange={(v) => updateField('claspType', v)}
-                />
+                {isFieldEnabled('clasp_type') && (
+                  <SelectField
+                    label="Clasp"
+                    value={formData.claspType}
+                    placeholder="Select clasp type"
+                    options={getFieldOptions('clasp_type')}
+                    onChange={(v) => updateField('claspType', v)}
+                  />
+                )}
 
-                <SelectField
-                  label="Clasp material"
-                  value={formData.claspMaterial}
-                  placeholder="Select clasp material"
-                  options={getFieldOptions('clasp_material')}
-                  onChange={(v) => updateField('claspMaterial', v)}
-                />
+                {isFieldEnabled('clasp_material') && (
+                  <SelectField
+                    label="Clasp material"
+                    value={formData.claspMaterial}
+                    placeholder="Select clasp material"
+                    options={getFieldOptions('clasp_material')}
+                    onChange={(v) => updateField('claspMaterial', v)}
+                  />
+                )}
               </div>
             )}
 
@@ -730,11 +843,14 @@ export function CreateListingPage() {
                 )}
               </div>
             )}
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Footer */}
-        <div className="mt-8 pt-8 border-t border-gray-200">
+      {/* Footer - Sticky at bottom */}
+      <div className="sticky bottom-0 border-t border-gray-200 bg-white px-4 lg:px-6 pt-6 pb-8">
+        <div className="max-w-[894px] mx-auto">
           <div className="flex items-center justify-between">
             <button
               onClick={handleCancel}
@@ -754,13 +870,19 @@ export function CreateListingPage() {
             <button
               onClick={handleNext}
               disabled={isSubmitting}
-              className={`w-[100px] h-11 rounded-full font-semibold text-[16px] tracking-[0.08px] transition-colors ${
+              className={`min-w-[100px] px-4 h-11 rounded-full font-semibold text-[16px] tracking-[0.08px] transition-colors ${
                 currentStep === STEPS.length - 1 && formData.photoUrls.length === 0
                   ? 'bg-[#ddd] text-[#212121] cursor-not-allowed'
                   : 'bg-[#ddd] text-[#212121] hover:bg-gray-300'
               }`}
             >
-              {isSubmitting ? '...' : 'Next'}
+              {isSubmitting
+                ? '...'
+                : currentStep === STEPS.length - 1
+                  ? isEditMode
+                    ? 'Update Listing'
+                    : 'Create Listing'
+                  : 'Next'}
             </button>
           </div>
         </div>

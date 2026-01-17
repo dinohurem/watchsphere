@@ -283,7 +283,7 @@ export function OrderDetailPage() {
                   <button
                     onClick={() => {
                       setShowMenu(false);
-                      // Navigate to edit (can be implemented later)
+                      navigate(`/app/inventory/edit/${orderId}`);
                     }}
                     className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
                   >

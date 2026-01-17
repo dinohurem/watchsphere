@@ -33,6 +33,8 @@ class OrderResponse(BaseModel):
     has_box: bool
     has_papers: bool
     notes: Optional[str] = None
+    cover_image: Optional[str] = None
+    images: List[str] = []
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -78,6 +80,25 @@ class MarketPriceInfo(BaseModel):
     price_change: float
 
 
+# Watch details sub-model for order detail response
+class WatchDetailsResponse(BaseModel):
+    image_url: Optional[str] = None
+    images: list[str] = []
+    year: Optional[int] = None
+    movement: Optional[str] = None
+    case_material: Optional[str] = None
+    bracelet_material: Optional[str] = None
+    case_size: Optional[str] = None
+    water_resistance: Optional[str] = None
+    caliber: Optional[str] = None
+    power_reserve: Optional[str] = None
+    number_of_jewels: Optional[int] = None
+    crystal: Optional[str] = None
+    dial: Optional[str] = None
+    bezel_material: Optional[str] = None
+    clasp: Optional[str] = None
+
+
 # Request Models
 class OrderCreate(BaseModel):
     order_type: OrderType
@@ -88,11 +109,37 @@ class OrderCreate(BaseModel):
     price: float
     currency: str = "EUR"
     condition: OrderCondition = OrderCondition.UNWORN
-    country_code: str
+    country_code: str = "US"
     country_name: Optional[str] = None
     has_box: bool = False
     has_papers: bool = False
     notes: Optional[str] = None
+    # Images (for sell orders)
+    images: list[str] = []
+    # Extended watch details (for sell listings)
+    year: Optional[int] = None
+    size: Optional[str] = None
+    movement: Optional[str] = None
+    case_material: Optional[str] = None
+    bracelet_material: Optional[str] = None
+    availability: Optional[str] = None
+    # Caliber information
+    movement_type: Optional[str] = None
+    caliber: Optional[str] = None
+    base_caliber: Optional[str] = None
+    power_reserve: Optional[str] = None
+    number_of_jewels: Optional[int] = None
+    # Case information
+    case_diameter: Optional[str] = None
+    water_resistance: Optional[str] = None
+    bezel_material: Optional[str] = None
+    crystal: Optional[str] = None
+    dial: Optional[str] = None
+    dial_numerals: Optional[str] = None
+    # Bracelet/strap information
+    bracelet_color: Optional[str] = None
+    clasp_type: Optional[str] = None
+    clasp_material: Optional[str] = None
 
 
 class OrderUpdate(BaseModel):
@@ -102,6 +149,31 @@ class OrderUpdate(BaseModel):
     has_papers: Optional[bool] = None
     notes: Optional[str] = None
     status: Optional[OrderStatus] = None
+    # Extended watch details (for sell listings)
+    images: Optional[list[str]] = None
+    year: Optional[int] = None
+    size: Optional[str] = None
+    movement: Optional[str] = None
+    case_material: Optional[str] = None
+    bracelet_material: Optional[str] = None
+    availability: Optional[str] = None
+    # Caliber information
+    movement_type: Optional[str] = None
+    caliber: Optional[str] = None
+    base_caliber: Optional[str] = None
+    power_reserve: Optional[str] = None
+    number_of_jewels: Optional[int] = None
+    # Case information
+    case_diameter: Optional[str] = None
+    water_resistance: Optional[str] = None
+    bezel_material: Optional[str] = None
+    crystal: Optional[str] = None
+    dial: Optional[str] = None
+    dial_numerals: Optional[str] = None
+    # Bracelet/strap information
+    bracelet_color: Optional[str] = None
+    clasp_type: Optional[str] = None
+    clasp_material: Optional[str] = None
 
 
 # ============== PUBLIC ENDPOINTS ==============
@@ -259,6 +331,32 @@ async def create_order(
         has_box=order_data.has_box,
         has_papers=order_data.has_papers,
         notes=order_data.notes,
+        # Images
+        images=order_data.images,
+        # Extended watch details
+        year=order_data.year,
+        size=order_data.size,
+        movement=order_data.movement,
+        case_material=order_data.case_material,
+        bracelet_material=order_data.bracelet_material,
+        availability=order_data.availability,
+        # Caliber information
+        movement_type=order_data.movement_type,
+        caliber=order_data.caliber,
+        base_caliber=order_data.base_caliber,
+        power_reserve=order_data.power_reserve,
+        number_of_jewels=order_data.number_of_jewels,
+        # Case information
+        case_diameter=order_data.case_diameter,
+        water_resistance=order_data.water_resistance,
+        bezel_material=order_data.bezel_material,
+        crystal=order_data.crystal,
+        dial=order_data.dial,
+        dial_numerals=order_data.dial_numerals,
+        # Bracelet/strap information
+        bracelet_color=order_data.bracelet_color,
+        clasp_type=order_data.clasp_type,
+        clasp_material=order_data.clasp_material,
     )
 
     await order.insert()
@@ -308,6 +406,8 @@ async def create_order(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        cover_image=order.images[0] if order.images else None,
+        images=order.images or [],
         created_at=order.created_at,
         updated_at=order.updated_at,
     )
@@ -349,6 +449,8 @@ async def get_my_orders(
             has_box=order.has_box,
             has_papers=order.has_papers,
             notes=order.notes,
+            cover_image=order.images[0] if order.images else None,
+            images=order.images or [],
             created_at=order.created_at,
             updated_at=order.updated_at,
         )
@@ -380,6 +482,7 @@ class OrderDetailResponse(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    watch_details: Optional[WatchDetailsResponse] = None
 
 
 @router.get("/{order_id}", response_model=OrderDetailResponse)
@@ -413,6 +516,25 @@ async def get_order(
     except Exception:
         pass
 
+    # Build watch_details from order fields
+    watch_details = WatchDetailsResponse(
+        image_url=order.images[0] if order.images else None,
+        images=order.images or [],
+        year=order.year,
+        movement=order.movement or order.movement_type,
+        case_material=order.case_material,
+        bracelet_material=order.bracelet_material,
+        case_size=order.size or order.case_diameter,
+        water_resistance=order.water_resistance,
+        caliber=order.caliber,
+        power_reserve=order.power_reserve,
+        number_of_jewels=order.number_of_jewels,
+        crystal=order.crystal,
+        dial=order.dial,
+        bezel_material=order.bezel_material,
+        clasp=order.clasp_type,
+    )
+
     return OrderDetailResponse(
         id=str(order.id),
         order_type=order.order_type,
@@ -436,6 +558,7 @@ async def get_order(
         notes=order.notes,
         created_at=order.created_at,
         updated_at=order.updated_at,
+        watch_details=watch_details,
     )
 
 
@@ -507,6 +630,8 @@ async def update_order(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        cover_image=order.images[0] if order.images else None,
+        images=order.images or [],
         created_at=order.created_at,
         updated_at=order.updated_at,
     )
@@ -635,6 +760,8 @@ async def mark_order_as_sold(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        cover_image=order.images[0] if order.images else None,
+        images=order.images or [],
         created_at=order.created_at,
         updated_at=order.updated_at,
     )
@@ -686,6 +813,8 @@ async def admin_list_all_orders(
             has_box=order.has_box,
             has_papers=order.has_papers,
             notes=order.notes,
+            cover_image=order.images[0] if order.images else None,
+            images=order.images or [],
             created_at=order.created_at,
             updated_at=order.updated_at,
         )
@@ -771,6 +900,8 @@ async def admin_get_orders_by_reference(
             has_box=order.has_box,
             has_papers=order.has_papers,
             notes=order.notes,
+            cover_image=order.images[0] if order.images else None,
+            images=order.images or [],
             created_at=order.created_at,
             updated_at=order.updated_at,
         )
@@ -864,6 +995,8 @@ async def admin_create_order(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        cover_image=order.images[0] if order.images else None,
+        images=order.images or [],
         created_at=order.created_at,
         updated_at=order.updated_at,
     )
@@ -911,6 +1044,8 @@ async def admin_update_order(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        cover_image=order.images[0] if order.images else None,
+        images=order.images or [],
         created_at=order.created_at,
         updated_at=order.updated_at,
     )

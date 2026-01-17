@@ -11,6 +11,7 @@ from app.models.billing import (
     Billing, BillingType, BillingStatus
 )
 from app.models.activity_log import ActivityLog, ActivityType, EntityType
+from app.services.email import email_service
 
 
 async def log_payment_activity(
@@ -223,6 +224,22 @@ class MonriPaymentService:
                     "is_renewal": is_renewal,
                 }
             )
+
+            # Send subscription confirmation email
+            try:
+                expires_at_str = subscription.expires_at.strftime('%B %d, %Y') if subscription and subscription.expires_at else "N/A"
+                await email_service.send_subscription_confirmation_email(
+                    to_email=billing.user_email,
+                    user_name=billing.user_name,
+                    plan_name="Premium",
+                    amount=billing.amount,
+                    currency=billing.currency,
+                    expires_at=expires_at_str,
+                    is_renewal=is_renewal,
+                )
+            except Exception as e:
+                # Don't fail the payment flow if email fails
+                print(f"Failed to send subscription confirmation email: {e}")
 
             return {
                 "success": True,
