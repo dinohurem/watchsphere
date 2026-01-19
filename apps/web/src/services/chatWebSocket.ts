@@ -32,10 +32,26 @@ export interface PresenceUpdate {
   online: boolean;
 }
 
+export interface NotificationData {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  reference?: string;
+  orderId?: string;
+  price?: number;
+  currency?: string;
+  fromUserId?: string;
+  fromUserName?: string;
+  fromUserAvatar?: string;
+  createdAt: string;
+}
+
 type MessageHandler = (message: WebSocketMessage) => void;
 type TypingHandler = (data: TypingIndicator) => void;
 type PresenceHandler = (data: PresenceUpdate) => void;
 type ConnectionHandler = (status: 'connected' | 'disconnected' | 'reconnecting') => void;
+type NotificationHandler = (data: NotificationData) => void;
 
 class ChatWebSocketService {
   private socket: WebSocket | null = null;
@@ -52,6 +68,7 @@ class ChatWebSocketService {
   private onConnectionHandlers: ConnectionHandler[] = [];
   private onMessageReadHandlers: ((data: { conversationId: string; messageIds: string[]; readerId: string }) => void)[] = [];
   private onUnreadUpdateHandlers: ((data: { conversationId: string; unreadCount: number }) => void)[] = [];
+  private onNotificationHandlers: NotificationHandler[] = [];
 
   connect(token: string): void {
     if (this.socket?.readyState === WebSocket.OPEN) {
@@ -130,6 +147,10 @@ class ChatWebSocketService {
 
       case 'unread:update':
         this.onUnreadUpdateHandlers.forEach(handler => handler(data.data));
+        break;
+
+      case 'notification:new':
+        this.onNotificationHandlers.forEach(handler => handler(data.data));
         break;
 
       case 'conversation:joined':
@@ -303,6 +324,14 @@ class ChatWebSocketService {
     return () => {
       const index = this.onUnreadUpdateHandlers.indexOf(handler);
       if (index > -1) this.onUnreadUpdateHandlers.splice(index, 1);
+    };
+  }
+
+  onNotification(handler: NotificationHandler): () => void {
+    this.onNotificationHandlers.push(handler);
+    return () => {
+      const index = this.onNotificationHandlers.indexOf(handler);
+      if (index > -1) this.onNotificationHandlers.splice(index, 1);
     };
   }
 

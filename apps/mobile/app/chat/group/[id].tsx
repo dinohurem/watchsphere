@@ -12,6 +12,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import { BackArrow, Users } from '@/components/icons';
 import { api } from '@/services/api';
+import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { chatService, Message as ChatServiceMessage } from '@/services/chatService';
 
@@ -152,6 +153,7 @@ export default function GroupChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors, fonts } = useTheme();
   const { setActiveConversation, messages: chatMessages, markAsRead } = useChat();
+  const authUser = useAuthStore((state) => state.user);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [group, setGroup] = useState<GroupDetails | null>(null);
@@ -1019,34 +1021,41 @@ export default function GroupChatScreen() {
                 </TouchableOpacity>
               </View>
               <ScrollView style={styles.membersList}>
-                {group?.members.map((member) => (
-                  <TouchableOpacity
-                    key={member.id}
-                    style={styles.memberItem}
-                    onPress={() => loadMemberProfile(member.id)}
-                    disabled={loadingProfile}
-                  >
-                    {member.profile_image_url ? (
-                      <Image
-                        source={{ uri: member.profile_image_url }}
-                        style={styles.memberAvatarImage}
-                      />
-                    ) : (
-                      <View style={styles.memberAvatar}>
-                        <Text style={styles.memberAvatarText}>
-                          {member.name.charAt(0).toUpperCase()}
-                        </Text>
+                {group?.members.map((member) => {
+                  // For current user, use auth store data to show latest profile info
+                  const isCurrentUser = member.id === currentUserId.current;
+                  const displayName = isCurrentUser && authUser?.name ? authUser.name : member.name;
+                  const displayAvatar = isCurrentUser && authUser?.profile_image_url ? authUser.profile_image_url : member.profile_image_url;
+
+                  return (
+                    <TouchableOpacity
+                      key={member.id}
+                      style={styles.memberItem}
+                      onPress={() => loadMemberProfile(member.id)}
+                      disabled={loadingProfile}
+                    >
+                      {displayAvatar ? (
+                        <Image
+                          source={{ uri: displayAvatar }}
+                          style={styles.memberAvatarImage}
+                        />
+                      ) : (
+                        <View style={styles.memberAvatar}>
+                          <Text style={styles.memberAvatarText}>
+                            {displayName.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.memberInfo}>
+                        <Text style={styles.memberName}>{displayName}</Text>
+                        <Text style={styles.memberRole}>{member.role}{isCurrentUser ? ' (You)' : ''}</Text>
                       </View>
-                    )}
-                    <View style={styles.memberInfo}>
-                      <Text style={styles.memberName}>{member.name}</Text>
-                      <Text style={styles.memberRole}>{member.role}</Text>
-                    </View>
-                    {loadingProfile && (
-                      <ActivityIndicator size="small" color={colors.text} />
-                    )}
-                  </TouchableOpacity>
-                ))}
+                      {loadingProfile && (
+                        <ActivityIndicator size="small" color={colors.text} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             </Pressable>
           </Pressable>

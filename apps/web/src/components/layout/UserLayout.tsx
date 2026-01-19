@@ -14,6 +14,7 @@ import {
   Search
 } from 'lucide-react'
 import { useAuthStore, useChatStore } from '@watchsphere/shared/stores'
+import { chatWebSocket } from '@/services/chatWebSocket'
 
 // Custom Chat Icon matching Figma design
 function ChatIcon({ className }: { className?: string }) {
@@ -47,14 +48,17 @@ export function UserLayout() {
   const user = useAuthStore((state) => state.user)
   const isAdmin = useAuthStore((state) => state.isAdmin)
   const logout = useAuthStore((state) => state.logout)
+  const updateUser = useAuthStore((state) => state.updateUser)
   const totalUnread = useChatStore((state) => state.totalUnread)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null)
+  // Use profile image from auth store for reactive updates
+  const profileImageUrl = user?.profile_image_url || null
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Fetch profile image on mount
+  // Fetch profile data on mount and sync to auth store
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -68,15 +72,58 @@ export function UserLayout() {
         })
         if (response.ok) {
           const data = await response.json()
-          if (data.profile_image_url) {
-            setProfileImageUrl(data.profile_image_url)
-          }
+          // Sync profile data to auth store for global access
+          updateUser({
+            name: data.name,
+            profile_image_url: data.profile_image_url,
+            profile_image_thumbnail_url: data.profile_image_thumbnail_url,
+            phone: data.phone,
+            whatsapp_phone: data.whatsapp_phone,
+            telegram_username: data.telegram_username,
+          })
         }
       } catch (error) {
         console.error('Failed to fetch profile:', error)
       }
     }
     fetchProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Fetch unread notification count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (!token) return
+
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/notifications?limit=1`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setUnreadNotifications(data.unread_count || 0)
+        }
+      } catch (error) {
+        console.error('Failed to fetch notification count:', error)
+      }
+    }
+    fetchUnreadCount()
+  }, [])
+
+  // Connect WebSocket for real-time notifications on app load
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token')
+    if (token && !chatWebSocket.isConnected()) {
+      console.log('UserLayout: Connecting WebSocket for real-time notifications')
+      chatWebSocket.connect(token)
+    }
+
+    return () => {
+      // Don't disconnect on unmount - keep connection alive
+    }
   }, [])
 
   // Close dropdown when clicking outside
@@ -204,9 +251,14 @@ export function UserLayout() {
                 )}
               </button>
               {/* Notifications */}
-              <button className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors">
+              <button
+                onClick={() => navigate('/app/notifications')}
+                className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors"
+              >
                 <BellIcon className="w-5 h-5 text-gray-900" />
-                <span className="absolute top-1.5 right-0.5 w-[7px] h-[7px] bg-[#C93927] rounded-full"></span>
+                {unreadNotifications > 0 && (
+                  <span className="absolute top-1.5 right-0.5 w-[7px] h-[7px] bg-[#C93927] rounded-full"></span>
+                )}
               </button>
             </div>
 

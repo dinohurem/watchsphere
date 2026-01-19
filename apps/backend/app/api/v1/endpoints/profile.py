@@ -112,7 +112,13 @@ async def get_user_profile(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Get another user's public profile"""
-    user = await User.get(PydanticObjectId(user_id))
+    try:
+        user = await User.get(PydanticObjectId(user_id))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid user ID format"
+        )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

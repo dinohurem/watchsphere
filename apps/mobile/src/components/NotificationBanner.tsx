@@ -3,15 +3,20 @@ import { View, Text, StyleSheet, Animated, TouchableOpacity, Image } from 'react
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { wp, hp, sp, fp } from '@/utils/responsive';
-import { MessageCircle } from '@/components/icons';
+
+// App notification icon
+const notificationImage = require('../../assets/images/notification-image.png');
 
 export interface NotificationData {
   id: string;
+  type?: 'message' | 'buy_offer' | 'price_alert';
   title: string;
   body: string;
   avatar?: string;
   conversationId?: string;
   isGroup?: boolean;
+  orderId?: string;
+  reference?: string;
   timestamp: Date;
 }
 
@@ -98,9 +103,25 @@ export function NotificationBanner({
     }
   };
 
+  const formatTime = () => {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const formattedHours = hours % 12 || 12;
+    const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
+    return `${formattedHours}:${formattedMinutes} ${ampm}`;
+  };
+
   if (!notification) {
     return null;
   }
+
+  // For chat notifications, use avatar; for other notifications, use app icon
+  const isChat = notification.type === 'message';
+  const imageSource = isChat && notification.avatar
+    ? { uri: notification.avatar }
+    : notificationImage;
 
   return (
     <Animated.View
@@ -118,29 +139,25 @@ export function NotificationBanner({
         onPress={handlePress}
         activeOpacity={0.9}
       >
-        {/* Avatar or Icon */}
-        <View style={styles.avatarContainer}>
-          {notification.avatar ? (
-            <Image source={{ uri: notification.avatar }} style={styles.avatar} />
-          ) : (
-            <View style={styles.iconContainer}>
-              <MessageCircle size={20} color="#FFFFFF" />
-            </View>
-          )}
-        </View>
+        {/* App Icon or Avatar */}
+        <Image source={imageSource} style={styles.appIcon} />
 
         {/* Content */}
         <View style={styles.content}>
-          <Text style={[styles.title, { fontFamily: fonts.semiBold }]} numberOfLines={1}>
-            {notification.title}
-          </Text>
+          {/* Title and Time Row */}
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { fontFamily: fonts.semiBold }]} numberOfLines={1}>
+              {isChat ? notification.title : 'WatchSphere'}
+            </Text>
+            <Text style={[styles.time, { fontFamily: fonts.regular }]}>
+              {formatTime()}
+            </Text>
+          </View>
+          {/* Body */}
           <Text style={[styles.body, { fontFamily: fonts.regular }]} numberOfLines={2}>
             {notification.body}
           </Text>
         </View>
-
-        {/* Time indicator */}
-        <Text style={[styles.time, { fontFamily: fonts.regular }]}>now</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -156,51 +173,48 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#212121',
-    borderRadius: sp(16),
-    paddingVertical: hp(12),
-    paddingHorizontal: wp(14),
-    gap: wp(12),
+    backgroundColor: '#FFFFFF',
+    borderRadius: sp(21),
+    paddingVertical: hp(11),
+    paddingHorizontal: wp(12),
+    gap: wp(9),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
-    shadowRadius: 12,
+    shadowRadius: 29,
     elevation: 10,
   },
-  avatarContainer: {
-    width: sp(40),
-    height: sp(40),
-    borderRadius: sp(20),
-    overflow: 'hidden',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
-  iconContainer: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#0088FF',
-    justifyContent: 'center',
-    alignItems: 'center',
+  appIcon: {
+    width: sp(33),
+    height: sp(33),
+    borderRadius: sp(8),
   },
   content: {
     flex: 1,
-    gap: hp(2),
+    gap: hp(0),
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: wp(14),
   },
   title: {
-    fontSize: fp(14),
-    color: '#FFFFFF',
-    letterSpacing: 0.07,
+    flex: 1,
+    fontSize: fp(13),
+    color: '#212121',
+    letterSpacing: -0.2,
+    lineHeight: fp(15),
+  },
+  time: {
+    fontSize: fp(13),
+    color: '#4D4D4D',
+    lineHeight: fp(15),
   },
   body: {
     fontSize: fp(13),
-    color: 'rgba(255, 255, 255, 0.7)',
-    letterSpacing: 0.065,
-    lineHeight: fp(18),
-  },
-  time: {
-    fontSize: fp(12),
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: '#212121',
+    letterSpacing: -0.2,
+    lineHeight: fp(16),
   },
 });

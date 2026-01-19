@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { Settings, Edit2, TrendingUp, TrendingDown, ChevronRight, ChevronDown, Heart, ShoppingBag, Tag, User, Star } from 'lucide-react';
@@ -39,6 +39,7 @@ interface ProfileData {
 export function ProfilePage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const updateUser = useAuthStore((state) => state.updateUser);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [buyOrders, setBuyOrders] = useState<Order[]>([]);
   const [sellOrders, setSellOrders] = useState<Order[]>([]);
@@ -48,86 +49,100 @@ export function ProfilePage() {
   const [sellOrdersExpanded, setSellOrdersExpanded] = useState(true);
   const [favoritesExpanded, setFavoritesExpanded] = useState(true);
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-
-      // Load profile
-      try {
-        const profileResponse = await api.get('/profile/me');
-        setProfile(profileResponse.data);
-      } catch (error) {
-        if (user) {
-          setProfile({
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            profile_image_url: null,
-            average_rating: 0,
-            review_count: 0,
-          });
-        }
-      }
-
-      // Load orders
-      try {
-        const ordersResponse = await api.get('/orders/my-orders');
-        if (ordersResponse.data && Array.isArray(ordersResponse.data)) {
-          const buyOrdersData: Order[] = [];
-          const sellOrdersData: Order[] = [];
-
-          ordersResponse.data.forEach((order: any) => {
-            const formattedOrder: Order = {
-              id: order.id || order._id,
-              brand: order.brand || '',
-              model: order.model || '',
-              reference: order.reference || '',
-              price: order.price || 0,
-              price_change: order.price_change || 0,
-              cover_image: order.cover_image || '',
-              order_type: order.order_type,
-              status: order.status || 'active',
-            };
-
-            if (order.order_type === 'buy') {
-              buyOrdersData.push(formattedOrder);
-            } else if (order.order_type === 'sell') {
-              sellOrdersData.push(formattedOrder);
-            }
-          });
-
-          setBuyOrders(buyOrdersData);
-          setSellOrders(sellOrdersData);
-        }
-      } catch (error) {
-        console.error('Failed to load orders:', error);
-      }
-
-      // Load watchlist
-      try {
-        const watchlistResponse = await api.get('/profile/watchlist');
-        if (watchlistResponse.data && Array.isArray(watchlistResponse.data)) {
-          setFavorites(watchlistResponse.data.map((item: any) => ({
-            id: item.id || item._id,
-            brand: item.brand || '',
-            model: item.model || '',
-            reference: item.reference || '',
-            price: item.target_price || item.price || 0,
-            price_change: item.price_change || 0,
-            image: item.image || item.cover_image || '',
-          })));
-        }
-      } catch (error) {
-        console.error('Failed to load watchlist:', error);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+
+        // Load profile
+        try {
+          const profileResponse = await api.get('/profile/me');
+          setProfile(profileResponse.data);
+          // Sync profile data to auth store for global access
+          updateUser({
+            name: profileResponse.data.name,
+            profile_image_url: profileResponse.data.profile_image_url,
+            profile_image_thumbnail_url: profileResponse.data.profile_image_thumbnail_url,
+            phone: profileResponse.data.phone,
+            whatsapp_phone: profileResponse.data.whatsapp_phone,
+            telegram_username: profileResponse.data.telegram_username,
+            average_rating: profileResponse.data.average_rating,
+            review_count: profileResponse.data.review_count,
+          });
+        } catch (error) {
+          // Use current user from store as fallback
+          const currentUser = useAuthStore.getState().user;
+          if (currentUser) {
+            setProfile({
+              id: currentUser.id,
+              email: currentUser.email,
+              name: currentUser.name,
+              profile_image_url: null,
+              average_rating: 0,
+              review_count: 0,
+            });
+          }
+        }
+
+        // Load orders
+        try {
+          const ordersResponse = await api.get('/orders/my-orders');
+          if (ordersResponse.data && Array.isArray(ordersResponse.data)) {
+            const buyOrdersData: Order[] = [];
+            const sellOrdersData: Order[] = [];
+
+            ordersResponse.data.forEach((order: any) => {
+              const formattedOrder: Order = {
+                id: order.id || order._id,
+                brand: order.brand || '',
+                model: order.model || '',
+                reference: order.reference || '',
+                price: order.price || 0,
+                price_change: order.price_change || 0,
+                cover_image: order.cover_image || '',
+                order_type: order.order_type,
+                status: order.status || 'active',
+              };
+
+              if (order.order_type === 'buy') {
+                buyOrdersData.push(formattedOrder);
+              } else if (order.order_type === 'sell') {
+                sellOrdersData.push(formattedOrder);
+              }
+            });
+
+            setBuyOrders(buyOrdersData);
+            setSellOrders(sellOrdersData);
+          }
+        } catch (error) {
+          console.error('Failed to load orders:', error);
+        }
+
+        // Load watchlist
+        try {
+          const watchlistResponse = await api.get('/profile/watchlist');
+          if (watchlistResponse.data && Array.isArray(watchlistResponse.data)) {
+            setFavorites(watchlistResponse.data.map((item: any) => ({
+              id: item.id || item._id,
+              brand: item.brand || '',
+              model: item.model || '',
+              reference: item.reference || '',
+              price: item.target_price || item.price || 0,
+              price_change: item.price_change || 0,
+              image: item.image || item.cover_image || '',
+            })));
+          }
+        } catch (error) {
+          console.error('Failed to load watchlist:', error);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
     loadData();
-  }, [loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const WatchCard = ({
     brand,

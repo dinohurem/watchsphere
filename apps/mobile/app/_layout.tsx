@@ -66,8 +66,12 @@ function NotificationHandler() {
   }, [showNotification]);
 
   const handleNotificationPress = useCallback((notification: any) => {
-    // Navigate to the conversation
-    if (notification.conversationId) {
+    // Navigate based on notification type
+    if (notification.type === 'buy_offer' && notification.orderId) {
+      // Navigate to order details for buy offer notifications
+      router.push(`/order/${notification.orderId}` as any);
+    } else if (notification.conversationId) {
+      // Navigate to chat conversation
       if (notification.isGroup) {
         router.push({
           pathname: '/chat/group/[id]',

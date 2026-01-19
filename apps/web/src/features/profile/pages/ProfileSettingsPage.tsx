@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { User, CreditCard, Settings, ChevronRight, ChevronDown, LogOut, Crown, Check, Loader2, ShoppingBag, Sliders, FileText, HelpCircle, BookOpen, PlayCircle, AlertTriangle, Bug, Mail, Plus, ArrowLeft, Trash2, TrendingUp, TrendingDown, Tag } from 'lucide-react';
 import { api } from '@/services/api';
+import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
 // FAQ Data
 const faqData = [
@@ -101,6 +102,7 @@ export function ProfileSettingsPage() {
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const updateUser = useAuthStore((state) => state.updateUser);
 
   const [activeSection, setActiveSection] = useState<ActiveSection>('profile');
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -147,6 +149,9 @@ export function ProfileSettingsPage() {
   const [buyOrders, setBuyOrders] = useState<Order[]>([]);
   const [sellOrders, setSellOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [buyOrdersExpanded, setBuyOrdersExpanded] = useState(true);
+  const [sellOrdersExpanded, setSellOrdersExpanded] = useState(true);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
 
   // Set active section based on URL
   useEffect(() => {
@@ -160,43 +165,55 @@ export function ProfileSettingsPage() {
     }
   }, [location.pathname]);
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-
-      // Load profile
-      try {
-        const profileResponse = await api.get('/profile/me');
-        setProfile(profileResponse.data);
-      } catch (error) {
-        if (user) {
-          setProfile({
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            phone: null,
-            whatsapp_phone: null,
-            telegram_username: null,
-            profile_image_url: null,
-          });
-        }
-      }
-
-      // Load subscription status
-      try {
-        const subscriptionResponse = await api.get('/billing/subscription/status');
-        setSubscription(subscriptionResponse.data);
-      } catch (error) {
-        console.error('Failed to load subscription:', error);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+
+        // Load profile
+        try {
+          const profileResponse = await api.get('/profile/me');
+          setProfile(profileResponse.data);
+          // Sync profile data to auth store for global access
+          updateUser({
+            name: profileResponse.data.name,
+            profile_image_url: profileResponse.data.profile_image_url,
+            profile_image_thumbnail_url: profileResponse.data.profile_image_thumbnail_url,
+            phone: profileResponse.data.phone,
+            whatsapp_phone: profileResponse.data.whatsapp_phone,
+            telegram_username: profileResponse.data.telegram_username,
+          });
+        } catch (error) {
+          // Use current user from store as fallback
+          const currentUser = useAuthStore.getState().user;
+          if (currentUser) {
+            setProfile({
+              id: currentUser.id,
+              email: currentUser.email,
+              name: currentUser.name,
+              phone: null,
+              whatsapp_phone: null,
+              telegram_username: null,
+              profile_image_url: null,
+            });
+          }
+        }
+
+        // Load subscription status
+        try {
+          const subscriptionResponse = await api.get('/billing/subscription/status');
+          setSubscription(subscriptionResponse.data);
+        } catch (error) {
+          console.error('Failed to load subscription:', error);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
     loadData();
-  }, [loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubscribe = async () => {
     try {
@@ -349,6 +366,11 @@ export function ProfileSettingsPage() {
           ...prev,
           profile_image_url: response.data.url,
         } : null);
+        // Sync to auth store for global access
+        updateUser({
+          profile_image_url: response.data.url,
+          profile_image_thumbnail_url: response.data.thumbnail_url || response.data.url,
+        });
         alert('Profile photo updated successfully!');
       }
     } catch (error: any) {
@@ -363,6 +385,10 @@ export function ProfileSettingsPage() {
     try {
       await api.patch('/profile/me', { [field]: value || null });
       setProfile(prev => prev ? { ...prev, [field]: value || null } : null);
+      // Sync relevant fields to auth store for global access
+      if (['name', 'phone', 'whatsapp_phone', 'telegram_username'].includes(field)) {
+        updateUser({ [field]: value || null });
+      }
       setEditingField(null);
       setEditValue('');
     } catch (error: any) {
@@ -451,6 +477,7 @@ export function ProfileSettingsPage() {
 
         setBuyOrders(buyOrdersData);
         setSellOrders(sellOrdersData);
+        setOrdersLoaded(true);
       }
     } catch (error) {
       console.error('Failed to load orders:', error);
@@ -460,6 +487,13 @@ export function ProfileSettingsPage() {
       setLoadingOrders(false);
     }
   };
+
+  // Reload orders when navigating back to this page (location.key changes)
+  useEffect(() => {
+    if (ordersLoaded && activeSection === 'orders') {
+      loadOrders();
+    }
+  }, [location.key]);
 
   const menuItems = [
     { id: 'profile' as const, label: 'Profile Settings', icon: User },
@@ -488,19 +522,30 @@ export function ProfileSettingsPage() {
 
       const renderOrderCard = (order: Order) => {
         const isPositive = order.priceChange >= 0;
+        const isSold = order.status === 'sold';
+        const isCompleted = order.status === 'completed';
         return (
           <div
             key={order.id}
-            onClick={() => navigate(`/app/market/${encodeURIComponent(order.reference || order.id)}`)}
-            className="bg-white rounded-2xl border border-gray-100 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => navigate(`/app/order/${order.id}`)}
+            className="bg-white rounded-2xl border border-gray-100 overflow-hidden cursor-pointer hover:shadow-md transition-shadow relative"
           >
+            {/* Status Label - top right corner */}
+            {isSold && (
+              <span className="absolute top-2 right-2 z-10 px-2 py-1 rounded-lg text-[11px] font-semibold bg-[rgba(201,57,39,0.1)] text-[#c93927]">
+                Sold
+              </span>
+            )}
+            {isCompleted && (
+              <span className="absolute top-2 right-2 z-10 px-2 py-1 rounded-lg text-[11px] font-semibold bg-[rgba(128,128,128,0.1)] text-[#666666]">
+                Completed
+              </span>
+            )}
             <div className="h-36 bg-gradient-to-b from-white to-gray-50 flex items-center justify-center p-4">
               {order.image ? (
                 <img src={order.image} alt={order.brand} className="h-full object-contain" />
               ) : (
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
-                  <ShoppingBag className="w-8 h-8 text-gray-300" />
-                </div>
+                <ImagePlaceholder width={144} height={144} iconSize={48} borderRadius={0} className="bg-transparent" />
               )}
             </div>
             <div className="p-4">
@@ -530,46 +575,66 @@ export function ProfileSettingsPage() {
               <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
             </div>
           ) : (
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* Buy Orders Section */}
               <div>
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <ShoppingBag className="w-5 h-5" />
-                  Buy Orders
-                </h3>
-                {buyOrders.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {buyOrders.map(renderOrderCard)}
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-                    <div className="w-14 h-14 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                      <ShoppingBag className="w-7 h-7 text-gray-400" />
-                    </div>
-                    <h4 className="font-semibold text-gray-900 mb-1">No buy orders yet</h4>
-                    <p className="text-gray-500 text-sm">Create buy orders to see them here</p>
-                  </div>
+                <button
+                  onClick={() => setBuyOrdersExpanded(!buyOrdersExpanded)}
+                  className="w-full font-semibold text-gray-900 flex items-center justify-between py-2 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5" />
+                    Buy Orders ({buyOrders.length})
+                  </span>
+                  <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${buyOrdersExpanded ? '' : '-rotate-90'}`} />
+                </button>
+                {buyOrdersExpanded && (
+                  <>
+                    {buyOrders.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+                        {buyOrders.map(renderOrderCard)}
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center mt-4">
+                        <div className="w-14 h-14 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                          <ShoppingBag className="w-7 h-7 text-gray-400" />
+                        </div>
+                        <h4 className="font-semibold text-gray-900 mb-1">No buy orders yet</h4>
+                        <p className="text-gray-500 text-sm">Create buy orders to see them here</p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
               {/* Sell Orders Section */}
               <div>
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Tag className="w-5 h-5" />
-                  Sell Orders
-                </h3>
-                {sellOrders.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {sellOrders.map(renderOrderCard)}
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-                    <div className="w-14 h-14 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                      <Tag className="w-7 h-7 text-gray-400" />
-                    </div>
-                    <h4 className="font-semibold text-gray-900 mb-1">No sell orders yet</h4>
-                    <p className="text-gray-500 text-sm">Create sell orders to see them here</p>
-                  </div>
+                <button
+                  onClick={() => setSellOrdersExpanded(!sellOrdersExpanded)}
+                  className="w-full font-semibold text-gray-900 flex items-center justify-between py-2 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <Tag className="w-5 h-5" />
+                    Sell Orders ({sellOrders.length})
+                  </span>
+                  <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${sellOrdersExpanded ? '' : '-rotate-90'}`} />
+                </button>
+                {sellOrdersExpanded && (
+                  <>
+                    {sellOrders.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+                        {sellOrders.map(renderOrderCard)}
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center mt-4">
+                        <div className="w-14 h-14 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                          <Tag className="w-7 h-7 text-gray-400" />
+                        </div>
+                        <h4 className="font-semibold text-gray-900 mb-1">No sell orders yet</h4>
+                        <p className="text-gray-500 text-sm">Create sell orders to see them here</p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

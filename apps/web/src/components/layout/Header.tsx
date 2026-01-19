@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Bell, Search, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@watchsphere/shared/stores'
@@ -6,7 +7,30 @@ export function Header() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
-  const notificationCount = useAuthStore((state) => state.user) ? 3 : 0
+  const [notificationCount, setNotificationCount] = useState(0)
+
+  // Fetch unread notification count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (!token) return
+
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/notifications?limit=1`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setNotificationCount(data.unread_count || 0)
+        }
+      } catch (error) {
+        console.error('Failed to fetch notification count:', error)
+      }
+    }
+    fetchUnreadCount()
+  }, [])
 
   const currentHour = new Date().getHours()
   const greeting =
@@ -41,11 +65,19 @@ export function Header() {
         </button>
 
         {/* User avatar */}
-        <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-          <span className="text-white text-sm font-medium">
-            {user?.name?.charAt(0).toUpperCase() || 'U'}
-          </span>
-        </div>
+        {user?.profile_image_url ? (
+          <img
+            src={user.profile_image_url}
+            alt={user.name || 'User'}
+            className="w-8 h-8 rounded-full object-cover"
+          />
+        ) : (
+          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+            <span className="text-white text-sm font-medium">
+              {user?.name?.charAt(0).toUpperCase() || 'U'}
+            </span>
+          </div>
+        )}
 
         {/* Logout */}
         <button
