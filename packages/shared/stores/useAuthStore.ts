@@ -12,6 +12,14 @@ export interface User {
   verified: boolean;
   approved: boolean;
   auth_provider?: AuthProvider;
+  // Profile fields
+  profile_image_url?: string | null;
+  profile_image_thumbnail_url?: string | null;
+  phone?: string | null;
+  whatsapp_phone?: string | null;
+  telegram_username?: string | null;
+  average_rating?: number;
+  review_count?: number;
 }
 
 interface AuthState {
@@ -23,6 +31,7 @@ interface AuthState {
 
   // Actions
   setUser: (user: User) => void;
+  updateUser: (updates: Partial<User>) => void;
   setToken: (token: string) => void;
   login: (user: User, token: string) => void;
   logout: () => void;
@@ -43,6 +52,10 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: true,
         isAdmin: user.role === 'admin'
       }),
+
+      updateUser: (updates) => set((state) => ({
+        user: state.user ? { ...state.user, ...updates } : null
+      })),
 
       setToken: (token) => set({ token }),
 

@@ -146,9 +146,10 @@ export function WatchDetailsPage() {
 
   const periods = ['1d', '7d', '1m', '3m', '1y'] as const;
 
+  // Reload watch details when navigating back to this page (e.g., after creating an order)
   useEffect(() => {
     fetchWatchDetails();
-  }, [watchId]);
+  }, [watchId, location.key]);
 
   // Check watchlist status when authenticated
   useEffect(() => {
@@ -233,8 +234,8 @@ export function WatchDetailsPage() {
     try {
       setLoading(true);
 
-      // Fetch watch details
-      const watchResponse = await api.get(`/market/${watchId}`);
+      // Fetch watch details (encode watchId in case reference contains slashes)
+      const watchResponse = await api.get(`/market/${encodeURIComponent(watchId)}`);
       const watch = watchResponse.data;
 
       // Try to fetch order book if there's a reference
@@ -342,10 +343,25 @@ export function WatchDetailsPage() {
       return;
     }
 
+    if (type === 'sell') {
+      // For Sell Order: Skip modal and route directly to create listing page
+      navigate('/app/inventory/create', {
+        state: {
+          brand: watchDetails?.brand,
+          model: watchDetails?.model,
+          reference: watchDetails?.reference,
+          watchId: watchDetails?.id,
+          orderType: 'sell',
+        }
+      });
+      return;
+    }
+
+    // For Buy Order: Show the "Make an offer" modal first
     setOrderFormData({
       ...emptyOrderForm,
       order_type: type,
-      price: type === 'buy' ? (watchDetails?.priceData.bestBid || 0) : (watchDetails?.priceData.bestAsk || 0),
+      price: watchDetails?.priceData.bestBid || 0,
     });
     setOrderError(null);
     setShowOrderModal(true);
@@ -359,28 +375,26 @@ export function WatchDetailsPage() {
     setOrderError(null);
 
     try {
-      await api.post('/orders', {
-        order_type: orderFormData.order_type,
-        brand: watchDetails.brand,
-        model: watchDetails.model,
-        reference: watchDetails.reference,
-        watch_id: watchDetails.id,
-        price: orderFormData.price,
-        currency: watchDetails.currency,
-        condition: orderFormData.condition,
-        country_code: orderFormData.country_code,
-        country_name: COUNTRIES.find(c => c.code === orderFormData.country_code)?.name,
-        has_box: orderFormData.has_box,
-        has_papers: orderFormData.has_papers,
-        notes: orderFormData.notes || undefined,
-      });
-
       // Store the confirmed price and show confirmation modal
       setConfirmedPrice(orderFormData.price);
       setShowOrderModal(false);
       setShowConfirmationModal(true);
-      // Refresh order book
-      fetchWatchDetails();
+
+      // After showing confirmation, navigate to create listing page for buy order
+      // with the offer price prepopulated
+      setTimeout(() => {
+        setShowConfirmationModal(false);
+        navigate('/app/inventory/create', {
+          state: {
+            brand: watchDetails.brand,
+            model: watchDetails.model,
+            reference: watchDetails.reference,
+            watchId: watchDetails.id,
+            orderType: 'buy',
+            price: orderFormData.price,
+          }
+        });
+      }, 1500); // Show confirmation for 1.5 seconds before navigating
     } catch (error: any) {
       console.error('Failed to create order:', error);
       setOrderError(error.response?.data?.detail || 'Failed to create order. Please try again.');
@@ -925,8 +939,9 @@ export function WatchDetailsPage() {
                     required
                     value={orderFormData.price.toLocaleString()}
                     onChange={(e) => {
-                      const value = e.target.value.replace(/,/g, '');
-                      const num = parseFloat(value);
+                      // Remove all non-digit characters (commas, dots, spaces used as thousand separators)
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      const num = parseInt(value, 10);
                       if (!isNaN(num)) {
                         setOrderFormData({ ...orderFormData, price: num });
                       } else if (value === '') {

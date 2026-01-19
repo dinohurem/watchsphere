@@ -4,7 +4,7 @@ import { Image, Send, X, Flag, Users, Reply, MessageSquare, CornerUpRight, MoreV
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { chatWebSocket, WebSocketMessage } from '@/services/chatWebSocket';
-import { useChatStore } from '@watchsphere/shared/stores';
+import { useChatStore, useAuthStore } from '@watchsphere/shared/stores';
 
 interface UserProfile {
   id: string;
@@ -15,10 +15,14 @@ interface UserProfile {
 
 function UserProfileModal({
   user,
-  onClose
+  onClose,
+  onNavigateToProfile,
+  onReport
 }: {
   user: UserProfile;
   onClose: () => void;
+  onNavigateToProfile: (userId: string) => void;
+  onReport: (user: UserProfile) => void;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -35,8 +39,14 @@ function UserProfileModal({
 
         {/* User Info */}
         <div className="flex flex-col items-center px-6 pb-6">
-          {/* Avatar */}
-          <div className="w-[100px] h-[100px] rounded-full overflow-hidden mb-4">
+          {/* Avatar - clickable to navigate to profile */}
+          <button
+            onClick={() => {
+              onClose();
+              onNavigateToProfile(user.id);
+            }}
+            className="w-[100px] h-[100px] rounded-full overflow-hidden mb-4 hover:opacity-80 transition-opacity"
+          >
             {user.avatar ? (
               <img
                 src={user.avatar}
@@ -46,20 +56,21 @@ function UserProfileModal({
             ) : (
               <ImagePlaceholder size={100} borderRadius={50} />
             )}
-          </div>
+          </button>
 
           {/* Name */}
-          <h2 className="text-[22px] font-semibold text-[#212121] tracking-[-0.22px] leading-[1.2] mb-1">
+          <h2 className="text-[22px] font-semibold text-[#212121] tracking-[-0.22px] leading-[1.2] mb-6">
             {user.name}
           </h2>
 
-          {/* Customer ID */}
-          <p className="text-[15px] font-medium text-[#212121]/50 tracking-[0.075px] leading-[20px] mb-6">
-            Customer ID: {user.customerId || user.id.slice(0, 8).toUpperCase()}
-          </p>
-
           {/* Report Button */}
-          <button className="flex items-center gap-2 px-5 py-3 rounded-full border border-[#D35741] text-[#D35741] hover:bg-[#D35741]/5 transition-colors">
+          <button
+            onClick={() => {
+              onClose();
+              onReport(user);
+            }}
+            className="flex items-center gap-2 px-5 py-3 rounded-full border border-[#D35741] text-[#D35741] hover:bg-[#D35741]/5 transition-colors"
+          >
             <Flag className="w-4 h-4" />
             <span className="text-[15px] font-semibold tracking-[0.075px] leading-[20px]">Report</span>
           </button>
@@ -76,6 +87,7 @@ interface Conversation {
   lastMessage: string | null;
   timestamp?: string;
   unread: number;
+  participant_id?: string;  // The other participant's user ID
 }
 
 interface Group {
@@ -121,6 +133,7 @@ interface ChatItem {
   unread: number;
   type: 'direct' | 'group';
   memberCount?: number;
+  participant_id?: string;  // The other participant's user ID (for direct chats)
 }
 
 export function ChatPage() {
@@ -128,6 +141,7 @@ export function ChatPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const conversationParam = searchParams.get('conversation');
+  const authUser = useAuthStore((state) => state.user);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -290,15 +304,27 @@ export function ChatPage() {
     };
   }, []); // Empty dependency - only run once on mount
 
-  // Join/leave conversation room when chat selection changes
+  // Join/leave conversation room when chat selection changes or connection status changes
   useEffect(() => {
     if (selectedChat && wsConnected) {
+      console.log('Joining conversation:', selectedChat.id, 'wsConnected:', wsConnected);
       chatWebSocket.joinConversation(selectedChat.id);
       return () => {
+        console.log('Leaving conversation:', selectedChat.id);
         chatWebSocket.leaveConversation(selectedChat.id);
       };
+    } else {
+      console.log('Not joining - selectedChat:', selectedChat?.id, 'wsConnected:', wsConnected);
     }
   }, [selectedChat?.id, wsConnected]);
+
+  // Re-join conversation if connection is restored while chat is selected
+  useEffect(() => {
+    if (wsConnected && selectedChat) {
+      console.log('Connection restored, re-joining conversation:', selectedChat.id);
+      chatWebSocket.joinConversation(selectedChat.id);
+    }
+  }, [wsConnected]);
 
   // Load conversations and groups
   useEffect(() => {
@@ -326,6 +352,7 @@ export function ChatPage() {
               lastMessage: null,
               unread: 0,
               type: 'direct',
+              participant_id: recipientId,
             });
             // Clear the URL parameter
             navigate('/app/chat', { replace: true });
@@ -508,6 +535,7 @@ export function ChatPage() {
           lastMessage: null,
           unread: 0,
           type: 'direct',
+          participant_id: message.sender_id,
         });
       }
     } catch (error) {
@@ -786,9 +814,9 @@ export function ChatPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (chat.type === 'direct') {
+                    if (chat.type === 'direct' && chat.participant_id) {
                       setSelectedUserProfile({
-                        id: chat.id,
+                        id: chat.participant_id,
                         name: chat.name,
                         avatar: chat.avatar,
                       });
@@ -1139,6 +1167,17 @@ export function ChatPage() {
           <UserProfileModal
             user={selectedUserProfile}
             onClose={() => setSelectedUserProfile(null)}
+            onNavigateToProfile={(userId) => navigate(`/app/user/${userId}`)}
+            onReport={(user) => {
+              setShowReportModal({
+                id: user.id,
+                name: user.name,
+                avatar: user.avatar,
+                lastMessage: null,
+                unread: 0,
+                type: 'direct'
+              });
+            }}
           />
         )}
 
@@ -1161,32 +1200,39 @@ export function ChatPage() {
 
               {/* Members List */}
               <div className="max-h-[400px] overflow-y-auto">
-                {groupMembers.map((member) => (
-                  <button
-                    key={member.id}
-                    onClick={() => {
-                      setShowGroupMembers(false);
-                      navigate(`/app/user/${member.id}`);
-                    }}
-                    className="w-full flex items-center gap-3 px-6 py-4 hover:bg-[rgba(33,33,33,0.02)] transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-[#e5e5e5] flex items-center justify-center overflow-hidden">
-                      {member.avatar ? (
-                        <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-[13px] font-semibold text-[#1d1d1f]">
-                          {getInitials(member.name)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="text-[15px] font-medium text-[#212121]">{member.name}</p>
-                      {member.id === currentUserId && (
-                        <p className="text-[13px] text-[#212121]/50">You</p>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                {groupMembers.map((member) => {
+                  // For current user, use auth store data to show latest profile info
+                  const isCurrentUser = member.id === currentUserId;
+                  const displayName = isCurrentUser && authUser?.name ? authUser.name : member.name;
+                  const displayAvatar = isCurrentUser && authUser?.profile_image_url ? authUser.profile_image_url : member.avatar;
+
+                  return (
+                    <button
+                      key={member.id}
+                      onClick={() => {
+                        setShowGroupMembers(false);
+                        navigate(`/app/user/${member.id}`);
+                      }}
+                      className="w-full flex items-center gap-3 px-6 py-4 hover:bg-[rgba(33,33,33,0.02)] transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-[#e5e5e5] flex items-center justify-center overflow-hidden">
+                        {displayAvatar ? (
+                          <img src={displayAvatar} alt={displayName} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[13px] font-semibold text-[#1d1d1f]">
+                            {getInitials(displayName)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="text-[15px] font-medium text-[#212121]">{displayName}</p>
+                        {isCurrentUser && (
+                          <p className="text-[13px] text-[#212121]/50">You</p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

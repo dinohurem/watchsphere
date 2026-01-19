@@ -5,7 +5,6 @@ import {
   Sparkles,
   FileCheck,
   Watch,
-  Globe,
   Tag,
   TrendingUp,
   TrendingDown,
@@ -18,39 +17,101 @@ import {
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
+import { useAuthStore } from '@watchsphere/shared/stores';
 
-// Mini chart component for price trend visualization
-function MiniChart({ data }: { data?: number[] }) {
+// Mini chart component for price trend visualization - matching Figma design
+function MiniChart({ data, isPositive = true }: { data?: number[]; isPositive?: boolean }) {
   // Only render if we have actual price history data
   if (!data || data.length < 2) {
     return null;
   }
 
-  const height = 40;
-  const width = 100;
+  const height = 50;
+  const width = 168;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
 
+  // Add padding to prevent clipping
+  const padding = 2;
+  const chartHeight = height - padding * 2;
+
   const points = data.map((value, index) => {
     const x = (index / (data.length - 1)) * width;
-    const y = height - ((value - min) / range) * height;
+    const y = padding + chartHeight - ((value - min) / range) * chartHeight;
     return `${x},${y}`;
   }).join(' ');
 
-  // Use black color as per Figma design
-  const color = '#1D1D1F';
+  // Create path for gradient fill area
+  const areaPoints = data.map((value, index) => {
+    const x = (index / (data.length - 1)) * width;
+    const y = padding + chartHeight - ((value - min) / range) * chartHeight;
+    return { x, y };
+  });
+  const areaPath = `M${areaPoints[0].x},${areaPoints[0].y} ${areaPoints.map(p => `L${p.x},${p.y}`).join(' ')} L${width},${height} L0,${height} Z`;
+
+  // Colors based on trend direction
+  const strokeColor = isPositive ? '#4aa078' : '#cc6045';
+  const gradientId = `gradient-${isPositive ? 'green' : 'red'}-${Math.random().toString(36).substr(2, 9)}`;
+  const gradientStartColor = isPositive ? 'rgba(74, 160, 120, 0.3)' : 'rgba(204, 96, 69, 0.3)';
+  const gradientEndColor = isPositive ? 'rgba(74, 160, 120, 0)' : 'rgba(204, 96, 69, 0)';
 
   return (
     <svg width={width} height={height} className="overflow-visible">
+      <defs>
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={gradientStartColor} />
+          <stop offset="100%" stopColor={gradientEndColor} />
+        </linearGradient>
+      </defs>
+      {/* Gradient fill area */}
+      <path
+        d={areaPath}
+        fill={`url(#${gradientId})`}
+      />
+      {/* Line */}
       <polyline
         points={points}
         fill="none"
-        stroke={color}
+        stroke={strokeColor}
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+// Social Search Icon - Globe with magnifier (matching mobile)
+function SocialSearchIcon({ className }: { className?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={className}>
+      {/* Globe circle */}
+      <path d="M6.5 12C9.53757 12 12 9.53757 12 6.5C12 3.46243 9.53757 1 6.5 1C3.46243 1 1 3.46243 1 6.5C1 9.53757 3.46243 12 6.5 12Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Globe horizontal line */}
+      <path d="M1 6.5H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Globe vertical arc */}
+      <path d="M6.5 1C7.93261 2.55556 8.75 4.47826 8.75 6.5C8.75 8.52174 7.93261 10.4444 6.5 12C5.06739 10.4444 4.25 8.52174 4.25 6.5C4.25 4.47826 5.06739 2.55556 6.5 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Magnifier handle */}
+      <path d="M10.5 10.5L15 15" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Triangle Up icon for positive price change (matching Figma)
+function TriangleUp({ className }: { className?: string }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className}>
+      <path d="M6 3L9 9H3L6 3Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+// Triangle Down icon for negative price change (matching Figma)
+function TriangleDown({ className }: { className?: string }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className}>
+      <path d="M6 9L3 3H9L6 9Z" fill="currentColor" />
     </svg>
   );
 }
@@ -61,6 +122,8 @@ interface ActivityItem {
   reference: string;
   price: number;
   time: string;
+  orderId?: string;
+  currency?: string;
 }
 
 interface WatchlistItem {
@@ -106,11 +169,11 @@ export function HomePage() {
 
   // Quick access items - matching mobile
   const quickAccessItems = [
-    { icon: Activity, title: 'Activity Center', color: 'bg-[#ff7373]', href: '/app/activity' },
-    { icon: Sparkles, title: 'Ask AI Assistant', color: 'bg-[#d573ff]', href: '/app/ai-assistant' },
-    { icon: Watch, title: 'My Inventory', color: 'bg-[#767676]', href: '/app/inventory' },
-    { icon: FileCheck, title: 'My Orders', color: 'bg-[#32d287]', href: '/app/orders' },
-    { icon: Globe, title: 'Social Search', color: 'bg-[#7c73ff]', href: '/app/social-search' },
+    { icon: Activity, title: 'Activity Center', color: 'bg-[#ff7373]', href: '/app/notifications', customIcon: false },
+    { icon: Sparkles, title: 'Ask AI Assistant', color: 'bg-[#d573ff]', href: '/app/ai-assistant', customIcon: false },
+    { icon: Watch, title: 'My Inventory', color: 'bg-[#767676]', href: '/app/inventory', customIcon: false },
+    { icon: FileCheck, title: 'My Orders', color: 'bg-[#32d287]', href: '/app/orders', customIcon: false },
+    { icon: null, title: 'Social Search', color: 'bg-[#7c73ff]', href: '/app/social-search', customIcon: true },
   ];
 
   useEffect(() => {
@@ -184,18 +247,56 @@ export function HomePage() {
 
   const loadActivities = async () => {
     try {
-      const response = await api.get('/activity/admin/activity?limit=3');
-      if (response.data && response.data.length > 0) {
-        setActivities(response.data.map((item: any) => ({
-          id: item.id,
-          type: item.activity_type === 'price_alert' ? 'alert' : 'offer',
-          reference: item.metadata?.reference || item.entity_id || '',
-          price: item.metadata?.price || 0,
-          time: formatTimeAgo(item.created_at),
-        })));
-      } else {
-        setActivities([]);
+      // For regular users, use notifications endpoint directly
+      // Admin activity endpoint is only for admin users
+      let data: any[] = [];
+
+      // Check if user is admin before trying admin endpoint
+      const user = useAuthStore.getState().user;
+      const isAdmin = user?.role === 'admin';
+
+      if (isAdmin) {
+        try {
+          const adminResponse = await api.get('/activity/admin/activity?limit=10');
+          if (adminResponse.data && adminResponse.data.length > 0) {
+            // Filter to only include activities with a watch reference and take first 3
+            data = adminResponse.data
+              .filter((item: any) => item.metadata?.reference)
+              .slice(0, 3)
+              .map((item: any) => ({
+                id: item.id,
+                type: item.activity_type === 'price_alert' ? 'alert' : 'offer',
+                reference: item.metadata.reference,
+                price: item.metadata?.price || 0,
+                currency: item.metadata?.currency || 'EUR',
+                time: formatTimeAgo(item.created_at),
+                orderId: item.entity_id,
+              }));
+          }
+        } catch {
+          // Admin endpoint failed, fall through to user notifications
+        }
       }
+
+      // For non-admins or if admin endpoint returned no data, use notifications
+      if (data.length === 0) {
+        // Use notifications endpoint
+        const notifResponse = await api.get('/notifications?limit=3');
+        if (notifResponse.data?.notifications && notifResponse.data.notifications.length > 0) {
+          data = notifResponse.data.notifications.map((item: any) => ({
+            id: item.id,
+            type: item.type === 'new_offer' ? 'offer' :
+                  item.type === 'price_alert_up' || item.type === 'price_alert_down' ? 'alert' : 'offer',
+            reference: item.reference || '',
+            price: item.price || 0,
+            currency: item.currency || 'EUR',
+            time: formatTimeAgo(item.created_at),
+            orderId: item.order_id,
+          }));
+        }
+      }
+
+      setActivities(data);
     } catch (error) {
       console.error('Failed to load activities:', error);
       setActivities([]);
@@ -312,7 +413,14 @@ export function HomePage() {
                 {activities.map((activity) => (
                   <div
                     key={activity.id}
-                    className="flex items-center gap-3 p-4 rounded-2xl hover:bg-[rgba(29,29,31,0.02)] transition-colors"
+                    onClick={() => {
+                      if (activity.type === 'offer' && activity.orderId) {
+                        navigate(`/app/order/${activity.orderId}`);
+                      } else if (activity.reference) {
+                        navigate(`/app/watch/${encodeURIComponent(activity.reference)}`);
+                      }
+                    }}
+                    className="flex items-center gap-3 p-4 rounded-2xl hover:bg-[rgba(29,29,31,0.02)] transition-colors cursor-pointer"
                   >
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
                       activity.type === 'offer' ? 'bg-[rgba(0,136,255,0.05)]' : 'bg-[rgba(217,4,41,0.05)]'
@@ -332,7 +440,7 @@ export function HomePage() {
                           <span className="font-semibold text-[#212121]">{activity.reference}</span>
                         </p>
                         <p className="font-semibold text-[15px] leading-[19px] text-[#212121] shrink-0">
-                          €{activity.price.toLocaleString()}
+                          {activity.currency === 'EUR' ? '€' : activity.currency}{activity.price.toLocaleString()}
                         </p>
                       </div>
                       <p className="text-xs leading-[19px] text-[#747474] tracking-[0.06px]">{activity.time}</p>
@@ -346,7 +454,7 @@ export function HomePage() {
 
         {/* Quick Access */}
         <div className="flex-1 flex flex-col gap-8">
-          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Quick Access</h2>
+          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Quick access</h2>
           <div className="flex flex-col gap-4 flex-1">
             {/* First Row - 3 items */}
             <div className="flex gap-4 flex-1">
@@ -359,7 +467,7 @@ export function HomePage() {
                     className="flex-1 flex flex-col gap-3 p-4 rounded-2xl border border-black/5 bg-white hover:bg-[rgba(29,29,31,0.02)] transition-colors"
                   >
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.color}`}>
-                      <Icon className="w-4 h-4 text-white" />
+                      {Icon && <Icon className="w-4 h-4 text-white" />}
                     </div>
                     <p className="text-[15px] font-medium text-[#212121] leading-[19px] tracking-[0.075px]">
                       {item.title}
@@ -379,7 +487,11 @@ export function HomePage() {
                     className="flex-1 max-w-[calc(50%-8px)] flex flex-col gap-3 p-4 rounded-2xl border border-black/5 bg-white hover:bg-[rgba(29,29,31,0.02)] transition-colors"
                   >
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.color}`}>
-                      <Icon className="w-4 h-4 text-white" />
+                      {item.customIcon ? (
+                        <SocialSearchIcon className="w-4 h-4 text-white" />
+                      ) : Icon ? (
+                        <Icon className="w-4 h-4 text-white" />
+                      ) : null}
                     </div>
                     <p className="text-[15px] font-medium text-[#212121] leading-[19px] tracking-[0.075px]">
                       {item.title}
@@ -526,15 +638,15 @@ export function HomePage() {
                       <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{item.reference}</p>
                     </div>
                     <div className="w-[168px]">
-                      <MiniChart data={item.priceHistory} />
+                      <MiniChart data={item.priceHistory} isPositive={item.isPositive} />
                     </div>
                     <div className="w-[168px] flex items-center gap-1">
                       {item.isPositive ? (
-                        <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
+                        <TriangleUp className="w-3 h-3 text-[#4aa078]" />
                       ) : (
-                        <ArrowDownRight className="w-3 h-3 text-[#cc6045]" />
+                        <TriangleDown className="w-3 h-3 text-[#cc6045]" />
                       )}
-                      <span className={`text-sm font-normal leading-[16px] ${
+                      <span className={`text-sm font-mono leading-[16px] ${
                         item.isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
                       }`}>
                         {Math.abs(item.priceChange).toFixed(1)}%

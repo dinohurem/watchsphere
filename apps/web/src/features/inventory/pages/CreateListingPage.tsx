@@ -1,51 +1,48 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ChevronDown, X, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
-import { useConfig } from '@/hooks/useConfig';
+import { useConfig, type ListingField, type FieldCategory, CATEGORY_STEPS } from '@/hooks/useConfig';
 
-// Form data type
+// Navigation state type for pre-populated data
+interface NavigationState {
+  brand?: string;
+  model?: string;
+  reference?: string;
+  watchId?: string;
+  orderType?: 'buy' | 'sell';
+  price?: number;
+}
+
+// Form data type - dynamic key-value pairs plus special fields
 interface ListingFormData {
-  // Step 1: Basic Information
-  brand: string;
-  model: string;
-  reference: string;
-  year: string;
-  size: string;
-  movement: string;
-  caseMaterial: string;
-  braceletMaterial: string;
-  condition: string;
-  conditionDescription: string;
-  boxAndPapers: string;
-  location: string;
-  price: string;
-  currency: string;
-  availability: string;
-
-  // Step 2: Caliber Information
-  movementType: string;
-  caliberMovement: string;
-  baseCaliber: string;
-  powerReserve: string;
-  numberOfJewels: string;
-
-  // Step 3: Bracelet/Strap Information
-  braceletColor: string;
-  claspType: string;
-  claspMaterial: string;
-
-  // Step 4: Photos
+  // Core fields that are always present
+  order_type: 'buy' | 'sell';
+  // Dynamic field values keyed by field key
+  [key: string]: string | File[] | string[] | 'buy' | 'sell';
+  // Special fields for photos
   photos: File[];
   photoUrls: string[];
 }
 
-const STEPS = [
-  { key: 'basics', label: 'Basics' },
+// Dynamic steps based on categories with photos at the end
+const FORM_STEPS: { key: FieldCategory | 'photos'; label: string }[] = [
+  { key: 'basic', label: 'Basics' },
   { key: 'caliber', label: 'Caliber Information' },
+  { key: 'case', label: 'Case Information' },
   { key: 'bracelet', label: 'Bracelet / Strap information' },
   { key: 'photos', label: 'Photos' },
 ];
+
+// Map field keys to form data keys (camelCase conversion)
+const fieldKeyToFormKey = (key: string): string => {
+  return key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+};
+
+// Map form data keys back to API keys (snake_case conversion)
+const formKeyToApiKey = (key: string): string => {
+  return key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+};
 
 // Dropdown Select component
 function SelectField({
@@ -231,8 +228,12 @@ function DiscardModal({
 
 export function CreateListingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { orderId } = useParams<{ orderId: string }>();
-  const { getFieldOptions, isFieldEnabled, isLoading: isLoadingConfig } = useConfig();
+  const { getFieldOptions, getFieldsByCategory, listingFields, isLoading: isLoadingConfig } = useConfig();
+
+  // Get navigation state for pre-populated data
+  const navState = location.state as NavigationState | null;
 
   const isEditMode = Boolean(orderId);
   const [currentStep, setCurrentStep] = useState(0);
@@ -240,36 +241,24 @@ export function CreateListingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingOrder, setIsLoadingOrder] = useState(isEditMode);
 
-  const [formData, setFormData] = useState<ListingFormData>({
-    // Step 1
-    brand: '',
-    model: '',
-    reference: '',
-    year: '',
-    size: '',
-    movement: '',
-    caseMaterial: '',
-    braceletMaterial: '',
-    condition: '',
-    conditionDescription: '',
-    boxAndPapers: '',
-    location: '',
-    price: '',
-    currency: 'EUR',
-    availability: 'Available',
-    // Step 2
-    movementType: '',
-    caliberMovement: '',
-    baseCaliber: '',
-    powerReserve: '',
-    numberOfJewels: '',
-    // Step 3
-    braceletColor: '',
-    claspType: '',
-    claspMaterial: '',
-    // Step 4
-    photos: [],
-    photoUrls: [],
+  // Initialize form data with navigation state or empty values
+  const [formData, setFormData] = useState<ListingFormData>(() => {
+    const initialData: ListingFormData = {
+      order_type: navState?.orderType || 'sell',
+      photos: [],
+      photoUrls: [],
+    };
+
+    // Pre-populate from navigation state if available
+    if (navState) {
+      if (navState.brand) initialData.brand = navState.brand;
+      if (navState.model) initialData.model = navState.model;
+      if (navState.reference) initialData.reference = navState.reference;
+      // Store price as formatted string with thousand separators (de-DE uses . as separator)
+      if (navState.price) initialData.price = Math.round(navState.price).toLocaleString('de-DE');
+    }
+
+    return initialData;
   });
 
   // Load existing order data in edit mode
@@ -283,46 +272,54 @@ export function CreateListingPage() {
         const order = response.data;
 
         // Determine box and papers value
-        let boxAndPapers = 'Neither';
+        let boxPapers = '';
         if (order.has_box && order.has_papers) {
-          boxAndPapers = 'Box and Papers';
+          boxPapers = 'Box and Papers';
         } else if (order.has_box) {
-          boxAndPapers = 'Box Only';
+          boxPapers = 'Box Only';
         } else if (order.has_papers) {
-          boxAndPapers = 'Papers Only';
+          boxPapers = 'Papers Only';
         }
 
-        // Map order data to form data
-        setFormData({
+        // Map order data to form data dynamically
+        const loadedData: ListingFormData = {
+          order_type: order.order_type || 'sell',
+          photos: [],
+          photoUrls: order.watch_details?.images || order.images || [],
+          // Core fields
           brand: order.brand || '',
           model: order.model || '',
           reference: order.reference || '',
-          year: order.watch_details?.year?.toString() || '',
-          size: order.watch_details?.case_size || '',
-          movement: order.watch_details?.movement || '',
-          caseMaterial: order.watch_details?.case_material || '',
-          braceletMaterial: order.watch_details?.bracelet_material || '',
-          condition: order.condition || '',
-          conditionDescription: order.notes || '',
-          boxAndPapers,
-          location: order.country_name || '',
           price: order.price?.toLocaleString('de-DE') || '',
           currency: order.currency || 'EUR',
-          availability: 'Available',
-          // Caliber
-          movementType: order.watch_details?.movement || '',
-          caliberMovement: order.watch_details?.caliber || '',
-          baseCaliber: '',
-          powerReserve: order.watch_details?.power_reserve || '',
-          numberOfJewels: order.watch_details?.number_of_jewels?.toString() || '',
-          // Bracelet
-          braceletColor: '',
-          claspType: order.watch_details?.clasp || '',
-          claspMaterial: '',
-          // Photos - use existing image URLs
-          photos: [],
-          photoUrls: order.watch_details?.images || [],
+          condition: order.condition || '',
+          condition_description: order.notes || '',
+          box_papers: boxPapers,
+          location: order.country_name || '',
+        };
+
+        // Load all watch_details fields dynamically
+        if (order.watch_details) {
+          Object.entries(order.watch_details).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && key !== 'images') {
+              loadedData[key] = String(value);
+            }
+          });
+        }
+
+        // Also load direct order fields that might be extended fields
+        const extendedFields = ['year', 'size', 'movement', 'case_material', 'bracelet_material',
+          'movement_type', 'caliber', 'base_caliber', 'power_reserve', 'number_of_jewels',
+          'case_diameter', 'water_resistance', 'bezel_material', 'crystal', 'dial', 'dial_numerals',
+          'bracelet_color', 'clasp_type', 'clasp_material', 'gender', 'availability'];
+
+        extendedFields.forEach(field => {
+          if (order[field] !== null && order[field] !== undefined) {
+            loadedData[field] = String(order[field]);
+          }
         });
+
+        setFormData(loadedData);
       } catch (error) {
         console.error('Failed to load order data:', error);
         navigate('/app/inventory');
@@ -334,45 +331,56 @@ export function CreateListingPage() {
     loadOrderData();
   }, [orderId, navigate]);
 
-  const updateField = useCallback((field: keyof ListingFormData, value: any) => {
+  // Update field value - uses field key directly
+  const updateField = useCallback((fieldKey: string, value: any) => {
     setFormData((prev) => {
       // If brand changes, reset model
-      if (field === 'brand') {
-        return { ...prev, [field]: value, model: '' };
+      if (fieldKey === 'brand') {
+        return { ...prev, [fieldKey]: value, model: '' };
       }
-      return { ...prev, [field]: value };
+      return { ...prev, [fieldKey]: value };
     });
   }, []);
 
-  const getModelOptions = useCallback(() => {
-    return getFieldOptions('model', formData.brand);
-  }, [formData.brand, getFieldOptions]);
+  // Get options for a field, handling parent dependencies
+  const getOptionsForField = useCallback((field: ListingField) => {
+    // Handle parent field dependencies (e.g., model depends on brand)
+    if (field.parent_field_key) {
+      const parentValue = formData[field.parent_field_key] as string;
+      return getFieldOptions(field.key, parentValue);
+    }
+    return getFieldOptions(field.key);
+  }, [formData, getFieldOptions]);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
-    const newPhotos = Array.from(files).slice(0, 10 - formData.photos.length);
+    const currentPhotos = (formData.photos || []) as File[];
+    const currentUrls = (formData.photoUrls || []) as string[];
+    const newPhotos = Array.from(files).slice(0, 10 - currentPhotos.length);
     const newUrls = newPhotos.map((file) => URL.createObjectURL(file));
 
     setFormData((prev) => ({
       ...prev,
-      photos: [...prev.photos, ...newPhotos],
-      photoUrls: [...prev.photoUrls, ...newUrls],
+      photos: [...currentPhotos, ...newPhotos],
+      photoUrls: [...currentUrls, ...newUrls],
     }));
   };
 
   const removePhoto = (index: number) => {
-    URL.revokeObjectURL(formData.photoUrls[index]);
+    const currentUrls = (formData.photoUrls || []) as string[];
+    const currentPhotos = (formData.photos || []) as File[];
+    URL.revokeObjectURL(currentUrls[index]);
     setFormData((prev) => ({
       ...prev,
-      photos: prev.photos.filter((_, i) => i !== index),
-      photoUrls: prev.photoUrls.filter((_, i) => i !== index),
+      photos: currentPhotos.filter((_, i) => i !== index),
+      photoUrls: currentUrls.filter((_, i) => i !== index),
     }));
   };
 
   const handleNext = () => {
-    if (currentStep < STEPS.length - 1) {
+    if (currentStep < FORM_STEPS.length - 1) {
       setCurrentStep((prev) => prev + 1);
     } else {
       handleSubmit();
@@ -382,9 +390,12 @@ export function CreateListingPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
+      const currentPhotos = (formData.photos || []) as File[];
+      const currentUrls = (formData.photoUrls || []) as string[];
+
       // Upload new photos first (only File objects, not existing URLs)
       const uploadedPhotoUrls: string[] = [];
-      for (const photo of formData.photos) {
+      for (const photo of currentPhotos) {
         const formDataFile = new FormData();
         formDataFile.append('file', photo);
 
@@ -399,45 +410,63 @@ export function CreateListingPage() {
 
       // Combine existing URLs (that weren't removed) with newly uploaded ones
       // Filter out any blob URLs from photoUrls (those are for new files only)
-      const existingUrls = formData.photoUrls.filter(url => !url.startsWith('blob:'));
+      const existingUrls = currentUrls.filter(url => !url.startsWith('blob:'));
       const allImageUrls = [...existingUrls, ...uploadedPhotoUrls];
 
-      // Prepare listing data
-      const priceValue = parseInt(formData.price.replace(/[^0-9]/g, ''), 10) || 0;
-      const yearValue = formData.year ? parseInt(formData.year, 10) : undefined;
-      const jewelsValue = formData.numberOfJewels ? parseInt(formData.numberOfJewels, 10) : undefined;
+      // Parse numeric fields - ensure we handle both string and number inputs
+      const priceRaw = formData.price;
+      let priceValue = 0;
+      if (typeof priceRaw === 'number') {
+        priceValue = Math.round(priceRaw);
+      } else if (typeof priceRaw === 'string') {
+        // Remove all non-digit characters (periods, commas, spaces used as thousand separators)
+        const digitsOnly = priceRaw.replace(/[^0-9]/g, '');
+        priceValue = parseInt(digitsOnly, 10) || 0;
+      }
+      console.log('Price parsing:', { priceRaw, priceValue });
+      const yearStr = (formData.year as string) || '';
+      const yearValue = yearStr ? parseInt(yearStr, 10) : undefined;
+      const jewelsStr = (formData.number_of_jewels as string) || '';
+      const jewelsValue = jewelsStr ? parseInt(jewelsStr, 10) : undefined;
 
-      const orderData = {
-        order_type: 'sell',
-        brand: formData.brand,
-        model: formData.model,
-        reference: formData.reference,
+      // Handle box_papers field
+      const boxPapers = (formData.box_papers as string) || '';
+
+      // Build order data dynamically from all listing fields
+      const orderData: Record<string, any> = {
+        order_type: formData.order_type || 'sell',
+        brand: formData.brand || '',
+        model: formData.model || '',
+        reference: formData.reference || '',
         price: priceValue,
-        currency: formData.currency,
+        currency: formData.currency || 'EUR',
         condition: formData.condition === 'Unworn' ? 'Unworn' : 'Used',
-        country_name: formData.location,
-        has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
-        has_papers: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Papers Only',
-        notes: formData.conditionDescription,
+        country_name: formData.location || '',
+        has_box: boxPapers === 'Box and Papers' || boxPapers === 'Box Only',
+        has_papers: boxPapers === 'Box and Papers' || boxPapers === 'Papers Only',
+        notes: formData.condition_description || '',
         images: allImageUrls,
-        // Extended watch details
-        year: yearValue,
-        size: formData.size || undefined,
-        movement: formData.movement || undefined,
-        case_material: formData.caseMaterial || undefined,
-        bracelet_material: formData.braceletMaterial || undefined,
-        availability: formData.availability || undefined,
-        // Caliber information
-        movement_type: formData.movementType || undefined,
-        caliber: formData.caliberMovement || undefined,
-        base_caliber: formData.baseCaliber || undefined,
-        power_reserve: formData.powerReserve || undefined,
-        number_of_jewels: jewelsValue,
-        // Bracelet/strap information
-        bracelet_color: formData.braceletColor || undefined,
-        clasp_type: formData.claspType || undefined,
-        clasp_material: formData.claspMaterial || undefined,
       };
+
+      // Add all enabled listing fields dynamically
+      listingFields.forEach(field => {
+        const value = formData[field.key];
+        if (value !== undefined && value !== null && value !== '') {
+          // Handle numeric fields
+          if (field.field_type === 'number') {
+            const numVal = parseInt(String(value), 10);
+            if (!isNaN(numVal)) {
+              orderData[field.key] = numVal;
+            }
+          } else {
+            orderData[field.key] = value;
+          }
+        }
+      });
+
+      // Ensure specific numeric conversions
+      if (yearValue) orderData.year = yearValue;
+      if (jewelsValue) orderData.number_of_jewels = jewelsValue;
 
       if (isEditMode && orderId) {
         // Update existing order
@@ -456,12 +485,13 @@ export function CreateListingPage() {
   };
 
   const handleCancel = () => {
+    const currentPhotos = (formData.photos || []) as File[];
     // Check if there are any changes
     const hasChanges =
       formData.brand ||
       formData.model ||
       formData.reference ||
-      formData.photos.length > 0;
+      currentPhotos.length > 0;
 
     if (hasChanges) {
       setShowDiscardModal(true);
@@ -479,7 +509,72 @@ export function CreateListingPage() {
   };
 
   // Calculate progress
-  const progress = ((currentStep + 1) / STEPS.length) * 100;
+  const progress = ((currentStep + 1) / FORM_STEPS.length) * 100;
+
+  // Helper to render a dynamic field based on its type
+  const renderField = (field: ListingField) => {
+    const value = (formData[field.key] as string) || '';
+    const options = getOptionsForField(field);
+    const isDisabled = field.parent_field_key ? !formData[field.parent_field_key] : false;
+
+    // Handle special case for price formatting
+    const handleChange = (newValue: string) => {
+      if (field.key === 'price') {
+        updateField(field.key, formatPriceInput(newValue));
+      } else {
+        updateField(field.key, newValue);
+      }
+    };
+
+    switch (field.field_type) {
+      case 'dropdown':
+      case 'multi_select':
+        return (
+          <SelectField
+            key={field.key}
+            label={field.name}
+            value={value}
+            placeholder={field.placeholder || `Select ${field.name.toLowerCase()}...`}
+            options={options}
+            onChange={(v) => updateField(field.key, v)}
+            disabled={isDisabled}
+          />
+        );
+
+      case 'textarea':
+        return (
+          <TextField
+            key={field.key}
+            label={field.name}
+            value={value}
+            placeholder={field.placeholder || `Enter ${field.name.toLowerCase()}...`}
+            onChange={handleChange}
+            multiline
+          />
+        );
+
+      case 'number':
+      case 'text':
+      default:
+        return (
+          <TextField
+            key={field.key}
+            label={field.name}
+            value={value}
+            placeholder={field.placeholder || `Enter ${field.name.toLowerCase()}...`}
+            onChange={handleChange}
+            suffix={field.key === 'size' || field.key === 'case_diameter' ? 'mm' : undefined}
+          />
+        );
+    }
+  };
+
+  // Get fields for current category step
+  const getCurrentStepFields = () => {
+    const currentStepKey = FORM_STEPS[currentStep]?.key;
+    if (!currentStepKey || currentStepKey === 'photos') return [];
+    return getFieldsByCategory(currentStepKey as FieldCategory);
+  };
 
   // Show loading while config or order data loads
   if (isLoadingConfig || isLoadingOrder) {
@@ -489,6 +584,8 @@ export function CreateListingPage() {
       </div>
     );
   }
+
+  const currentUrls = (formData.photoUrls || []) as string[];
 
   return (
     <div className="bg-white h-[calc(100vh-64px)] flex flex-col">
@@ -501,11 +598,11 @@ export function CreateListingPage() {
               {/* Header - aligned with steps */}
               <div className="pt-8 pb-6">
                 <h1 className="text-2xl font-semibold text-[#1d1d1f]/80">
-                  {isEditMode ? 'Edit listing' : 'Create new listing'}
+                  {isEditMode ? 'Edit listing' : `Create new ${formData.order_type === 'buy' ? 'buy order' : 'listing'}`}
                 </h1>
               </div>
               <div className="flex flex-col">
-                {STEPS.map((step, index) => (
+                {FORM_STEPS.map((step, index) => (
                   <button
                     key={step.key}
                     onClick={() => setCurrentStep(index)}
@@ -525,310 +622,28 @@ export function CreateListingPage() {
 
             {/* Right Side - Form */}
             <div className="flex-1 min-w-0 max-w-[514px] pt-[72px]">
-            {/* Step 0: Basics */}
-            {currentStep === 0 && (
-              <div className="flex flex-col gap-6">
-                <SelectField
-                  label="Brand"
-                  value={formData.brand}
-                  placeholder="Select..."
-                  options={getFieldOptions('brand')}
-                  onChange={(v) => updateField('brand', v)}
-                />
+              {/* Dynamic Category Steps (0-3) */}
+              {currentStep < FORM_STEPS.length - 1 && (
+                <div className="flex flex-col gap-6">
+                  {getCurrentStepFields().map((field) => renderField(field))}
+                  {getCurrentStepFields().length === 0 && (
+                    <p className="text-[15px] text-[#1d1d1f]/50">
+                      No fields configured for this section.
+                    </p>
+                  )}
+                </div>
+              )}
 
-                <SelectField
-                  label="Model"
-                  value={formData.model}
-                  placeholder="Select..."
-                  options={getModelOptions()}
-                  onChange={(v) => updateField('model', v)}
-                  disabled={!formData.brand}
-                />
-
-                {isFieldEnabled('reference') && (
-                  <TextField
-                    label="Reference"
-                    value={formData.reference}
-                    placeholder="e.g., 126610LN"
-                    onChange={(v) => updateField('reference', v)}
-                  />
-                )}
-
-                {isFieldEnabled('year') && (
-                  <SelectField
-                    label="Year"
-                    value={formData.year}
-                    placeholder="Select..."
-                    options={getFieldOptions('year')}
-                    onChange={(v) => updateField('year', v)}
-                  />
-                )}
-
-                {isFieldEnabled('size') && (
-                  <TextField
-                    label="Size"
-                    value={formData.size}
-                    placeholder="e.g. 41"
-                    onChange={(v) => updateField('size', v)}
-                    suffix="mm"
-                  />
-                )}
-
-                {isFieldEnabled('movement') && (
-                  <SelectField
-                    label="Movement"
-                    value={formData.movement}
-                    placeholder="Select..."
-                    options={getFieldOptions('movement')}
-                    onChange={(v) => updateField('movement', v)}
-                  />
-                )}
-
-                {isFieldEnabled('case_material') && (
-                  <SelectField
-                    label="Case Material"
-                    value={formData.caseMaterial}
-                    placeholder="Select..."
-                    options={getFieldOptions('case_material')}
-                    onChange={(v) => updateField('caseMaterial', v)}
-                  />
-                )}
-
-                {isFieldEnabled('bracelet_material') && (
-                  <SelectField
-                    label="Bracelet material"
-                    value={formData.braceletMaterial}
-                    placeholder="Select..."
-                    options={getFieldOptions('bracelet_material')}
-                    onChange={(v) => updateField('braceletMaterial', v)}
-                  />
-                )}
-
-                {isFieldEnabled('condition') && (
-                  <SelectField
-                    label="Condition"
-                    value={formData.condition}
-                    placeholder="Select..."
-                    options={getFieldOptions('condition')}
-                    onChange={(v) => updateField('condition', v)}
-                  />
-                )}
-
-                {isFieldEnabled('condition_description') && (
-                  <TextField
-                    label="Condition description"
-                    value={formData.conditionDescription}
-                    placeholder="Write a short description..."
-                    onChange={(v) => updateField('conditionDescription', v)}
-                    multiline
-                  />
-                )}
-
-                {isFieldEnabled('box_papers') && (
-                  <SelectField
-                    label="Box and papers"
-                    value={formData.boxAndPapers}
-                    placeholder="Select..."
-                    options={getFieldOptions('box_papers')}
-                    onChange={(v) => updateField('boxAndPapers', v)}
-                  />
-                )}
-
-                {isFieldEnabled('location') && (
-                  <SelectField
-                    label="Location"
-                    value={formData.location}
-                    placeholder="Select..."
-                    options={getFieldOptions('location')}
-                    onChange={(v) => updateField('location', v)}
-                  />
-                )}
-
-                {isFieldEnabled('price') && (
-                  <TextField
-                    label="Price"
-                    value={formData.price}
-                    placeholder="e.g., 12,450"
-                    onChange={(v) => updateField('price', formatPriceInput(v))}
-                  />
-                )}
-
-                {isFieldEnabled('currency') && (
-                  <SelectField
-                    label="Currency"
-                    value={formData.currency}
-                    placeholder="Select..."
-                    options={getFieldOptions('currency')}
-                    onChange={(v) => updateField('currency', v)}
-                  />
-                )}
-
-                {isFieldEnabled('availability') && (
-                  <SelectField
-                    label="Availability"
-                    value={formData.availability}
-                    placeholder="Select..."
-                    options={getFieldOptions('availability')}
-                    onChange={(v) => updateField('availability', v)}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Step 1: Caliber Information */}
-            {currentStep === 1 && (
-              <div className="flex flex-col gap-6">
-                {isFieldEnabled('movement_type') && (
-                  <SelectField
-                    label="Movement"
-                    value={formData.movementType}
-                    placeholder="Select type of movement"
-                    options={getFieldOptions('movement_type')}
-                    onChange={(v) => updateField('movementType', v)}
-                  />
-                )}
-
-                {isFieldEnabled('caliber') && (
-                  <TextField
-                    label="Caliber/movement"
-                    value={formData.caliberMovement}
-                    placeholder="e.g. 3235"
-                    onChange={(v) => updateField('caliberMovement', v)}
-                  />
-                )}
-
-                {isFieldEnabled('base_caliber') && (
-                  <TextField
-                    label="Base Caliber"
-                    value={formData.baseCaliber}
-                    placeholder="e.g., 3235"
-                    onChange={(v) => updateField('baseCaliber', v)}
-                  />
-                )}
-
-                {isFieldEnabled('power_reserve') && (
-                  <TextField
-                    label="Power reserve"
-                    value={formData.powerReserve}
-                    placeholder="e.g. 70h"
-                    onChange={(v) => updateField('powerReserve', v)}
-                  />
-                )}
-
-                {isFieldEnabled('number_of_jewels') && (
-                  <TextField
-                    label="Number of jewels"
-                    value={formData.numberOfJewels}
-                    placeholder="e.g. 20"
-                    onChange={(v) => updateField('numberOfJewels', v)}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Step 2: Bracelet / Strap Information */}
-            {currentStep === 2 && (
-              <div className="flex flex-col gap-6">
-                {isFieldEnabled('bracelet_color') && (
-                  <SelectField
-                    label="Bracelet color"
-                    value={formData.braceletColor}
-                    placeholder="Type in bracelet color"
-                    options={getFieldOptions('bracelet_color')}
-                    onChange={(v) => updateField('braceletColor', v)}
-                  />
-                )}
-
-                {isFieldEnabled('clasp_type') && (
-                  <SelectField
-                    label="Clasp"
-                    value={formData.claspType}
-                    placeholder="Select clasp type"
-                    options={getFieldOptions('clasp_type')}
-                    onChange={(v) => updateField('claspType', v)}
-                  />
-                )}
-
-                {isFieldEnabled('clasp_material') && (
-                  <SelectField
-                    label="Clasp material"
-                    value={formData.claspMaterial}
-                    placeholder="Select clasp material"
-                    options={getFieldOptions('clasp_material')}
-                    onChange={(v) => updateField('claspMaterial', v)}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Step 3: Photos */}
-            {currentStep === 3 && (
-              <div>
-                {formData.photoUrls.length === 0 ? (
-                  <>
-                    {/* Upload Area */}
-                    <label className="flex flex-col items-center justify-center border border-dashed border-[rgba(29,29,31,0.1)] rounded-2xl py-16 cursor-pointer hover:bg-gray-50 transition-colors">
-                      <ImageIcon className="w-12 h-12 text-[#1d1d1f] mb-4" />
-                      <p className="text-[15px] text-[#1d1d1f]">
-                        Drag & drop or click to <span className="underline">upload photos</span>
-                      </p>
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={handlePhotoUpload}
-                        className="hidden"
-                      />
-                    </label>
-
-                    {/* Requirements */}
-                    <div className="mt-6">
-                      <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-3">
-                        Your photos must have
-                      </h3>
-                      <ul className="space-y-2 text-[15px] text-[#1d1d1f]">
-                        <li className="flex items-start gap-2">
-                          <span>•</span>
-                          <span>A clear, well-lit view of the watch</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span>•</span>
-                          <span>Close-up of the dial, case, and bracelet</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span>•</span>
-                          <span>Real condition, filters and editing should be avoided</span>
-                        </li>
-                      </ul>
-                    </div>
-                  </>
-                ) : (
-                  /* Photo Grid */
-                  <div className="grid grid-cols-2 gap-3">
-                    {formData.photoUrls.map((url, index) => (
-                      <div
-                        key={index}
-                        className="relative aspect-square rounded-xl overflow-hidden"
-                      >
-                        <img
-                          src={url}
-                          alt={`Photo ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          onClick={() => removePhoto(index)}
-                          className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center hover:bg-white transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-[#1d1d1f]" />
-                        </button>
-                      </div>
-                    ))}
-
-                    {formData.photoUrls.length < 10 && (
-                      <label className="aspect-square rounded-xl border border-dashed border-[rgba(29,29,31,0.1)] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
-                        <ImageIcon className="w-8 h-8 text-[#1d1d1f]/50 mb-2" />
-                        <p className="text-[13px] text-[#1d1d1f]/50 text-center px-4">
-                          Drag & drop or click to <span className="underline">upload photos</span> additional photos
+              {/* Photos Step (last step) */}
+              {currentStep === FORM_STEPS.length - 1 && (
+                <div>
+                  {currentUrls.length === 0 ? (
+                    <>
+                      {/* Upload Area */}
+                      <label className="flex flex-col items-center justify-center border border-dashed border-[rgba(29,29,31,0.1)] rounded-2xl py-16 cursor-pointer hover:bg-gray-50 transition-colors">
+                        <ImageIcon className="w-12 h-12 text-[#1d1d1f] mb-4" />
+                        <p className="text-[15px] text-[#1d1d1f]">
+                          Drag & drop or click to <span className="underline">upload photos</span>
                         </p>
                         <input
                           type="file"
@@ -838,11 +653,69 @@ export function CreateListingPage() {
                           className="hidden"
                         />
                       </label>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+
+                      {/* Requirements */}
+                      <div className="mt-6">
+                        <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-3">
+                          Your photos must have
+                        </h3>
+                        <ul className="space-y-2 text-[15px] text-[#1d1d1f]">
+                          <li className="flex items-start gap-2">
+                            <span>•</span>
+                            <span>A clear, well-lit view of the watch</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span>•</span>
+                            <span>Close-up of the dial, case, and bracelet</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span>•</span>
+                            <span>Real condition, filters and editing should be avoided</span>
+                          </li>
+                        </ul>
+                      </div>
+                    </>
+                  ) : (
+                    /* Photo Grid */
+                    <div className="grid grid-cols-2 gap-3">
+                      {currentUrls.map((url, index) => (
+                        <div
+                          key={index}
+                          className="relative aspect-square rounded-xl overflow-hidden"
+                        >
+                          <img
+                            src={url}
+                            alt={`Photo ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            onClick={() => removePhoto(index)}
+                            className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center hover:bg-white transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4 text-[#1d1d1f]" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {currentUrls.length < 10 && (
+                        <label className="aspect-square rounded-xl border border-dashed border-[rgba(29,29,31,0.1)] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
+                          <ImageIcon className="w-8 h-8 text-[#1d1d1f]/50 mb-2" />
+                          <p className="text-[13px] text-[#1d1d1f]/50 text-center px-4">
+                            Drag & drop or click to <span className="underline">upload photos</span> additional photos
+                          </p>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            onChange={handlePhotoUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -869,19 +742,21 @@ export function CreateListingPage() {
 
             <button
               onClick={handleNext}
-              disabled={isSubmitting}
+              disabled={isSubmitting || (currentStep === FORM_STEPS.length - 1 && currentUrls.length === 0 && formData.order_type !== 'buy')}
               className={`min-w-[100px] px-4 h-11 rounded-full font-semibold text-[16px] tracking-[0.08px] transition-colors ${
-                currentStep === STEPS.length - 1 && formData.photoUrls.length === 0
+                currentStep === FORM_STEPS.length - 1 && currentUrls.length === 0 && formData.order_type !== 'buy'
                   ? 'bg-[#ddd] text-[#212121] cursor-not-allowed'
                   : 'bg-[#ddd] text-[#212121] hover:bg-gray-300'
               }`}
             >
               {isSubmitting
                 ? '...'
-                : currentStep === STEPS.length - 1
+                : currentStep === FORM_STEPS.length - 1
                   ? isEditMode
                     ? 'Update Listing'
-                    : 'Create Listing'
+                    : formData.order_type === 'buy'
+                      ? 'Create Buy Order'
+                      : 'Create Listing'
                   : 'Next'}
             </button>
           </div>

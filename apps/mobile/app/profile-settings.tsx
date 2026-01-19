@@ -23,7 +23,7 @@ interface ProfileData {
 
 export default function ProfileSettingsScreen() {
   const { colors, fonts } = useTheme();
-  const { user } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -35,6 +35,15 @@ export default function ProfileSettingsScreen() {
       console.log('Profile Settings - API response:', JSON.stringify(response.data, null, 2));
       console.log('Profile Settings - profile_image_url:', response.data?.profile_image_url);
       setProfile(response.data);
+      // Sync profile data to auth store for global access
+      updateUser({
+        name: response.data.name,
+        profile_image_url: response.data.profile_image_url,
+        profile_image_thumbnail_url: response.data.profile_image_thumbnail_url,
+        phone: response.data.phone,
+        whatsapp_phone: response.data.whatsapp_phone,
+        telegram_username: response.data.telegram_username,
+      });
     } catch (error) {
       console.error('Error loading profile:', error);
       // Use auth store data as fallback
@@ -117,6 +126,11 @@ export default function ProfileSettingsScreen() {
           profile_image_url: response.data.url,
           profile_image_thumbnail_url: response.data.thumbnail_url,
         } : null);
+        // Sync to auth store for global access
+        updateUser({
+          profile_image_url: response.data.url,
+          profile_image_thumbnail_url: response.data.thumbnail_url || response.data.url,
+        });
 
         Alert.alert('Success', 'Profile photo updated successfully!');
       }

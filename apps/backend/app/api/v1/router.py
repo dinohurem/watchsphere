@@ -3,7 +3,7 @@ from app.api.v1.endpoints import (
     auth, market, inventory, chat, profile, admin, news,
     chat_groups, billing, watchlist_admin, default_watchlist_admin,
     activity, whatsapp, ai_insights, upload, orders, assistant, ai_chat,
-    listing_fields, filters, support, reviews
+    listing_fields, filters, support, reviews, notifications
 )
 
 api_router = APIRouter()
@@ -31,6 +31,7 @@ api_router.include_router(listing_fields.router, prefix="/listing-fields", tags=
 api_router.include_router(filters.router, prefix="/filters", tags=["filters"])
 api_router.include_router(support.router, prefix="/support", tags=["support"])
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 
 
 @api_router.get("/status")

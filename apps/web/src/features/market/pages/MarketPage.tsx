@@ -1,9 +1,27 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/services/api';
-import { SlidersHorizontal, Star, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { SlidersHorizontal, Star } from 'lucide-react';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
+
+// Triangle Up icon for positive price change (matching Figma)
+function TriangleUp({ className }: { className?: string }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className}>
+      <path d="M6 3L9 9H3L6 3Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+// Triangle Down icon for negative price change (matching Figma)
+function TriangleDown({ className }: { className?: string }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className}>
+      <path d="M6 9L3 3H9L6 9Z" fill="currentColor" />
+    </svg>
+  );
+}
 
 interface WatchData {
   id: string;
@@ -24,34 +42,51 @@ interface DynamicFilterState {
   [key: string]: string[];
 }
 
-// Mini chart component for price trend visualization
-function MiniChart({ data }: { data: number[] }) {
-  // Only render if we have actual price history data
-  if (!data || data.length < 2) {
-    return null;
-  }
+// Mini chart component for price trend visualization - matching Figma design
+function MiniChart({ data, isPositive = true }: { data?: number[]; isPositive?: boolean }) {
+  if (!data || data.length < 2) return null;
 
-  const height = 32;
-  const width = 80;
+  const height = 50;
+  const width = 168;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
+  const padding = 2;
+  const chartHeight = height - padding * 2;
 
   const points = data.map((value, index) => {
     const x = (index / (data.length - 1)) * width;
-    const y = height - ((value - min) / range) * height;
+    const y = padding + chartHeight - ((value - min) / range) * chartHeight;
     return `${x},${y}`;
   }).join(' ');
 
-  // Use black color as per Figma design
-  const color = '#1D1D1F';
+  // Create area path for gradient fill
+  const areaPoints = data.map((value, index) => {
+    const x = (index / (data.length - 1)) * width;
+    const y = padding + chartHeight - ((value - min) / range) * chartHeight;
+    return { x, y };
+  });
+  const areaPath = `M${areaPoints[0].x},${areaPoints[0].y} ${areaPoints.map(p => `L${p.x},${p.y}`).join(' ')} L${width},${height} L0,${height} Z`;
+
+  // Colors based on positive/negative trend
+  const strokeColor = isPositive ? '#4aa078' : '#cc6045';
+  const gradientId = `market-gradient-${isPositive ? 'green' : 'red'}-${Math.random().toString(36).substr(2, 9)}`;
+  const gradientStartColor = isPositive ? 'rgba(74, 160, 120, 0.3)' : 'rgba(204, 96, 69, 0.3)';
+  const gradientEndColor = isPositive ? 'rgba(74, 160, 120, 0)' : 'rgba(204, 96, 69, 0)';
 
   return (
     <svg width={width} height={height} className="overflow-visible">
+      <defs>
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={gradientStartColor} />
+          <stop offset="100%" stopColor={gradientEndColor} />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradientId})`} />
       <polyline
         points={points}
         fill="none"
-        stroke={color}
+        stroke={strokeColor}
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -105,11 +140,11 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
             isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
           }`}>
             {isPositive ? (
-              <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
+              <TriangleUp className="text-[#4aa078]" />
             ) : (
-              <ArrowDownRight className="w-3 h-3 text-[#c93927]" />
+              <TriangleDown className="text-[#c93927]" />
             )}
-            <span className={`text-[11px] font-semibold leading-[1.3] ${
+            <span className={`text-[11px] font-semibold leading-[1.3] font-mono ${
               isPositive ? 'text-[#4aa078]' : 'text-[#c93927]'
             }`}>
               {Math.abs(watch.priceChange || 0).toFixed(1)}%
@@ -287,7 +322,7 @@ export function MarketPage() {
       <div className="max-w-[1000px] mx-auto flex flex-col gap-16">
         {/* Trending Watches Section */}
         <div className="flex flex-col gap-8">
-          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Trending Watches</h2>
+          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Trending watches</h2>
 
           <div className="flex gap-8 overflow-x-auto pb-2">
             {loading ? (
@@ -419,15 +454,15 @@ export function MarketPage() {
                           <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{watch.reference}</p>
                         </div>
                         <div className="w-[168px]">
-                          <MiniChart data={watch.priceHistory || []} />
+                          <MiniChart data={watch.priceHistory || []} isPositive={isPositive} />
                         </div>
                         <div className="w-[168px] flex items-center gap-1">
                           {isPositive ? (
-                            <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
+                            <TriangleUp className="text-[#4aa078]" />
                           ) : (
-                            <ArrowDownRight className="w-3 h-3 text-[#cc6045]" />
+                            <TriangleDown className="text-[#cc6045]" />
                           )}
-                          <span className={`text-sm font-normal leading-[16px] ${
+                          <span className={`text-sm font-normal leading-[16px] font-mono ${
                             isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
                           }`}>
                             {Math.abs(watch.priceChange || 0).toFixed(1)}%
@@ -505,11 +540,11 @@ export function MarketPage() {
                           isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
                         }`}>
                           {isPositive ? (
-                            <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
+                            <TriangleUp className="text-[#4aa078]" />
                           ) : (
-                            <ArrowDownRight className="w-3 h-3 text-[#cc6045]" />
+                            <TriangleDown className="text-[#cc6045]" />
                           )}
-                          <span className={`text-sm font-medium ${
+                          <span className={`text-sm font-medium font-mono ${
                             isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
                           }`}>
                             {Math.abs(watch.priceChange || 0).toFixed(1)}%

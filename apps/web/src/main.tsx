@@ -6,6 +6,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google'
 import App from './App'
 import './index.css'
 import { initializeStorage } from './lib/storage'
+import { NotificationProvider, NotificationToast } from './contexts/NotificationContext'
 
 // Initialize storage for Zustand persist before any stores are used
 initializeStorage()
@@ -27,7 +28,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <GoogleOAuthProvider clientId={googleClientId}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <App />
+          <NotificationProvider>
+            <App />
+            <NotificationToast />
+          </NotificationProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </GoogleOAuthProvider>

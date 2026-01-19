@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
@@ -19,16 +19,57 @@ interface InventoryItem {
   created_at?: string;
   updated_at?: string;
   price_change?: number;
+  best_bid?: number;
+}
+
+// Small Watch Icon for "No buy orders" button
+function SmallWatchIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 32 32" fill="none">
+      <path
+        d="M10 8L11.33 2.67H20.67L22 8"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 24L11.33 29.33H20.67L22 24"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle
+        cx="16"
+        cy="16"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16 10V16L19.5 19.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export function InventoryPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Load inventory on mount and when navigating back to this page
   useEffect(() => {
     loadInventory();
-  }, []);
+  }, [location.key]);
 
   const loadInventory = async () => {
     setLoading(true);
@@ -136,7 +177,7 @@ export function InventoryPage() {
                 </h3>
                 <p className="text-sm text-gray-500 mb-3">{item.reference}</p>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-3">
                   <span className="font-semibold text-gray-900">
                     {item.price.toLocaleString()}
                     {item.currency === 'EUR' ? '€' : item.currency === 'USD' ? '$' : item.currency}
@@ -147,6 +188,30 @@ export function InventoryPage() {
                     </span>
                   )}
                 </div>
+
+                {/* Sell Now / No Buy Orders Button */}
+                {item.best_bid ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/app/watch/${encodeURIComponent(item.reference || '')}`);
+                    }}
+                    className="w-full py-2 px-3 bg-gray-900 text-white text-xs font-semibold rounded-full hover:bg-gray-800 transition-colors"
+                  >
+                    Sell now {item.best_bid.toLocaleString()}€
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/app/watch/${encodeURIComponent(item.reference || '')}`);
+                    }}
+                    className="w-full py-2 px-3 bg-gray-100 text-gray-500 text-xs font-semibold rounded-full hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <SmallWatchIcon />
+                    No buy orders
+                  </button>
+                )}
               </div>
             </div>
           ))}

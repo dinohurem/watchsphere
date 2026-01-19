@@ -71,6 +71,7 @@ class Order(Document):
     case_material: Optional[str] = None
     bracelet_material: Optional[str] = None
     availability: Optional[str] = None
+    gender: Optional[str] = None
 
     # Caliber information
     movement_type: Optional[str] = None
