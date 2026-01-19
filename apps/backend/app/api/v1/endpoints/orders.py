@@ -47,6 +47,8 @@ class OrderResponse(BaseModel):
     updated_at: Optional[datetime] = None
     # For sell orders: highest buy order price for same reference
     best_bid: Optional[float] = None
+    # Price change percentage from watch model
+    price_change: Optional[float] = None
 
 
 class OrderBookEntry(BaseModel):
@@ -368,6 +370,11 @@ async def notify_sellers_of_buy_order(
         ).to_list()
 
         for seller in sellers:
+            # Check if user has notifications enabled for buy offers
+            if not seller.notifications_enabled or not seller.notify_buy_offers:
+                logger.info(f"Skipping notification for seller {seller.id} - notifications disabled")
+                continue
+
             # Create notification in database
             notification = Notification(
                 user_id=str(seller.id),
@@ -406,8 +413,8 @@ async def notify_sellers_of_buy_order(
             except Exception as e:
                 logger.error(f"Failed to broadcast notification to {seller.id}: {e}")
 
-            # Send push notification if user has FCM tokens and notifications enabled
-            if seller.fcm_tokens and seller.notifications_enabled and seller.notify_buy_offers:
+            # Send push notification if user has FCM tokens
+            if seller.fcm_tokens:
                 for token in seller.fcm_tokens:
                     try:
                         await notify_buy_offer(
@@ -422,21 +429,22 @@ async def notify_sellers_of_buy_order(
                     except Exception as e:
                         logger.error(f"Failed to send push notification to {seller.id}: {e}")
 
-            # Send email notification
-            try:
-                await email_service.send_buy_order_received_email(
-                    to_email=seller.email,
-                    seller_name=seller.name,
-                    buyer_name=buyer.name,
-                    watch_brand=order.brand,
-                    watch_model=order.model,
-                    watch_reference=order.reference,
-                    offer_price=order.price,
-                    currency=order.currency,
-                    order_id=str(order.id),
-                )
-            except Exception as e:
-                logger.error(f"Failed to send email notification to {seller.email}: {e}")
+            # Send email notification if email notifications enabled
+            if seller.email_notifications_enabled:
+                try:
+                    await email_service.send_buy_order_received_email(
+                        to_email=seller.email,
+                        seller_name=seller.name,
+                        buyer_name=buyer.name,
+                        watch_brand=order.brand,
+                        watch_model=order.model,
+                        watch_reference=order.reference,
+                        offer_price=order.price,
+                        currency=order.currency,
+                        order_id=str(order.id),
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send email notification to {seller.email}: {e}")
 
         logger.info(f"Successfully notified {len(sellers)} sellers about buy order {order.id}")
 
@@ -481,6 +489,11 @@ async def notify_buyers_of_sell_order(
             if not buyer_order:
                 continue
 
+            # Check if user has notifications enabled for price changes (new listings affect their bids)
+            if not buyer.notifications_enabled or not buyer.notify_price_changes:
+                logger.info(f"Skipping notification for buyer {buyer.id} - notifications disabled")
+                continue
+
             # Create in-app notification
             notification = Notification(
                 user_id=str(buyer.id),
@@ -517,23 +530,24 @@ async def notify_buyers_of_sell_order(
                 }
             )
 
-            # Send email notification
-            try:
-                await email_service.send_new_listing_notification(
-                    to_email=buyer.email,
-                    buyer_name=buyer.name,
-                    seller_name=seller.name,
-                    watch_brand=order.brand,
-                    watch_model=order.model,
-                    watch_reference=order.reference,
-                    listing_price=order.price,
-                    buyer_bid_price=buyer_order.price,
-                    currency=order.currency,
-                    order_id=str(order.id),
-                )
-                logger.info(f"Sent email notification to buyer {buyer.email}")
-            except Exception as e:
-                logger.error(f"Failed to send email notification to {buyer.email}: {e}")
+            # Send email notification if email notifications enabled
+            if buyer.email_notifications_enabled:
+                try:
+                    await email_service.send_new_listing_notification(
+                        to_email=buyer.email,
+                        buyer_name=buyer.name,
+                        seller_name=seller.name,
+                        watch_brand=order.brand,
+                        watch_model=order.model,
+                        watch_reference=order.reference,
+                        listing_price=order.price,
+                        buyer_bid_price=buyer_order.price,
+                        currency=order.currency,
+                        order_id=str(order.id),
+                    )
+                    logger.info(f"Sent email notification to buyer {buyer.email}")
+                except Exception as e:
+                    logger.error(f"Failed to send email notification to {buyer.email}: {e}")
 
         logger.info(f"Successfully notified {len(buyers)} buyers about sell order {order.id}")
 
@@ -575,6 +589,11 @@ async def notify_sellers_of_lower_price(
             # Get this seller's order to know their price
             seller_order = next((o for o in higher_priced_orders if o.user_id == str(other_seller.id)), None)
             if not seller_order:
+                continue
+
+            # Check if user has notifications enabled for price changes
+            if not other_seller.notifications_enabled or not other_seller.notify_price_changes:
+                logger.info(f"Skipping notification for seller {other_seller.id} - notifications disabled")
                 continue
 
             price_diff = seller_order.price - order.price
@@ -762,6 +781,21 @@ async def get_my_orders(
 
     orders = await Order.find(*query_conditions).sort([("created_at", -1)]).to_list()
 
+    # Get unique references to fetch best bids and price changes
+    all_references = set(
+        order.reference for order in orders
+        if order.reference
+    )
+
+    # Fetch price changes from Watch models
+    price_changes: dict[str, float] = {}
+    if all_references:
+        watches = await Watch.find(
+            {"reference": {"$in": list(all_references)}}
+        ).to_list()
+        for watch in watches:
+            price_changes[watch.reference] = watch.price_change or 0.0
+
     # Get unique references for sell orders to fetch best bids
     sell_order_references = set(
         order.reference for order in orders
@@ -781,7 +815,7 @@ async def get_my_orders(
         if highest_buy:
             best_bids[reference] = highest_buy[0].price
 
-    # Build response with best_bid for sell orders
+    # Build response with best_bid and price_change
     result = []
     for order in orders:
         best_bid = None
@@ -811,6 +845,7 @@ async def get_my_orders(
             created_at=order.created_at,
             updated_at=order.updated_at,
             best_bid=best_bid,
+            price_change=price_changes.get(order.reference, 0.0),
         ))
 
     return result
@@ -841,6 +876,7 @@ class OrderDetailResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     watch_details: Optional[WatchDetailsResponse] = None
+    price_change: Optional[float] = None
 
 
 @router.get("/{order_id}", response_model=OrderDetailResponse)
@@ -873,6 +909,13 @@ async def get_order(
                 user_name = user.name
     except Exception:
         pass
+
+    # Fetch price_change from Watch model
+    price_change = 0.0
+    if order.reference:
+        watch = await Watch.find_one(Watch.reference == order.reference)
+        if watch:
+            price_change = watch.price_change or 0.0
 
     # Build watch_details from order fields - include ALL extended fields
     watch_details = WatchDetailsResponse(
@@ -931,6 +974,7 @@ async def get_order(
         created_at=order.created_at,
         updated_at=order.updated_at,
         watch_details=watch_details,
+        price_change=price_change,
     )
 
 

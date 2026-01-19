@@ -1,9 +1,11 @@
-import { View, Text, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { api } from '@/services/api';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -73,10 +75,82 @@ function GlobeIcon() {
 }
 
 export default function GeneralSettingsScreen() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState('English');
+
+  // Load notification settings from API
+  const loadSettings = async () => {
+    try {
+      const response = await api.get('/profile/me');
+      if (response.data) {
+        setPushNotifications(response.data.notifications_enabled ?? true);
+        setEmailNotifications(response.data.email_notifications_enabled ?? true);
+        setPriceAlerts(response.data.notify_price_changes ?? true);
+      }
+    } catch (error) {
+      console.error('Failed to load notification settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSettings();
+    }, [])
+  );
+
+  // Save notification setting to API
+  const updateSetting = async (key: string, value: boolean) => {
+    setSaving(true);
+    try {
+      await api.patch('/profile/notifications', { [key]: value });
+    } catch (error) {
+      console.error('Failed to update notification setting:', error);
+      // Revert the toggle on error
+      loadSettings();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePushNotificationsChange = (value: boolean) => {
+    setPushNotifications(value);
+    updateSetting('notifications_enabled', value);
+  };
+
+  const handleEmailNotificationsChange = (value: boolean) => {
+    setEmailNotifications(value);
+    updateSetting('email_notifications_enabled', value);
+  };
+
+  const handlePriceAlertsChange = (value: boolean) => {
+    setPriceAlerts(value);
+    updateSetting('notify_price_changes', value);
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <ChevronLeftIcon />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#212121" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -113,9 +187,10 @@ export default function GeneralSettingsScreen() {
               </View>
               <Switch
                 value={pushNotifications}
-                onValueChange={setPushNotifications}
+                onValueChange={handlePushNotificationsChange}
                 trackColor={{ false: '#E5E5E5', true: '#212121' }}
                 thumbColor="#FFFFFF"
+                disabled={saving}
               />
             </View>
 
@@ -128,9 +203,10 @@ export default function GeneralSettingsScreen() {
               </View>
               <Switch
                 value={emailNotifications}
-                onValueChange={setEmailNotifications}
+                onValueChange={handleEmailNotificationsChange}
                 trackColor={{ false: '#E5E5E5', true: '#212121' }}
                 thumbColor="#FFFFFF"
+                disabled={saving}
               />
             </View>
 
@@ -143,9 +219,10 @@ export default function GeneralSettingsScreen() {
               </View>
               <Switch
                 value={priceAlerts}
-                onValueChange={setPriceAlerts}
+                onValueChange={handlePriceAlertsChange}
                 trackColor={{ false: '#E5E5E5', true: '#212121' }}
                 thumbColor="#FFFFFF"
+                disabled={saving}
               />
             </View>
           </View>
@@ -195,6 +272,11 @@ const styles = StyleSheet.create({
   headerButton: {
     width: sp(44),
     height: sp(44),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },

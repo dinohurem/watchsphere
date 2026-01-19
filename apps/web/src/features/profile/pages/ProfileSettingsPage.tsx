@@ -97,6 +97,127 @@ interface ProfileData {
 
 type ActiveSection = 'profile' | 'account' | 'billing' | 'orders' | 'general' | 'terms' | 'support';
 
+// General Settings Component
+function GeneralSettings() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [pushNotifications, setPushNotifications] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [priceAlerts, setPriceAlerts] = useState(true);
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const response = await api.get('/profile/me');
+      if (response.data) {
+        setPushNotifications(response.data.notifications_enabled ?? true);
+        setEmailNotifications(response.data.email_notifications_enabled ?? true);
+        setPriceAlerts(response.data.notify_price_changes ?? true);
+      }
+    } catch (error) {
+      console.error('Failed to load notification settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateSetting = async (key: string, value: boolean) => {
+    setSaving(true);
+    try {
+      await api.patch('/profile/notifications', { [key]: value });
+    } catch (error) {
+      console.error('Failed to update notification setting:', error);
+      loadSettings();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePushChange = (checked: boolean) => {
+    setPushNotifications(checked);
+    updateSetting('notifications_enabled', checked);
+  };
+
+  const handleEmailChange = (checked: boolean) => {
+    setEmailNotifications(checked);
+    updateSetting('email_notifications_enabled', checked);
+  };
+
+  const handlePriceAlertsChange = (checked: boolean) => {
+    setPriceAlerts(checked);
+    updateSetting('notify_price_changes', checked);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">General Settings</h2>
+      <p className="text-gray-500 mb-6">Manage your app preferences</p>
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-gray-900">Push Notifications</h3>
+            <p className="text-sm text-gray-500">Receive push notifications on your device</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={pushNotifications}
+              onChange={(e) => handlePushChange(e.target.checked)}
+              disabled={saving}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></div>
+          </label>
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-gray-900">Email Notifications</h3>
+            <p className="text-sm text-gray-500">Receive updates via email</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={emailNotifications}
+              onChange={(e) => handleEmailChange(e.target.checked)}
+              disabled={saving}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></div>
+          </label>
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-gray-900">Price Alerts</h3>
+            <p className="text-sm text-gray-500">Get notified when watch prices change</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={priceAlerts}
+              onChange={(e) => handlePriceAlertsChange(e.target.checked)}
+              disabled={saving}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></div>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ProfileSettingsPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -645,33 +766,7 @@ export function ProfileSettingsPage() {
 
     if (activeSection === 'general') {
       return (
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">General Settings</h2>
-          <p className="text-gray-500 mb-6">Manage your app preferences</p>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-gray-900">Notifications</h3>
-                <p className="text-sm text-gray-500">Receive push notifications for updates</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></div>
-              </label>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-gray-900">Email Updates</h3>
-                <p className="text-sm text-gray-500">Receive market updates via email</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></div>
-              </label>
-            </div>
-          </div>
-        </div>
+        <GeneralSettings />
       );
     }
 

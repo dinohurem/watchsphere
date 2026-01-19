@@ -61,10 +61,11 @@ class FCMTokenRequest(BaseModel):
 
 
 class NotificationPreferencesRequest(BaseModel):
-    notifications_enabled: Optional[bool] = None
-    notify_price_changes: Optional[bool] = None
-    notify_buy_offers: Optional[bool] = None
-    notify_messages: Optional[bool] = None
+    notifications_enabled: Optional[bool] = None  # Push notifications
+    email_notifications_enabled: Optional[bool] = None  # Email notifications
+    notify_price_changes: Optional[bool] = None  # Price alerts
+    notify_buy_offers: Optional[bool] = None  # Buy order offers
+    notify_messages: Optional[bool] = None  # Chat messages
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -97,6 +98,7 @@ async def get_profile(
         "profile_image_url": current_user.profile_image_url,
         "profile_image_thumbnail_url": current_user.profile_image_thumbnail_url,
         "notifications_enabled": current_user.notifications_enabled,
+        "email_notifications_enabled": current_user.email_notifications_enabled,
         "notify_price_changes": current_user.notify_price_changes,
         "notify_buy_offers": current_user.notify_buy_offers,
         "notify_messages": current_user.notify_messages,
@@ -226,6 +228,7 @@ async def update_notification_preferences(
 
     return {
         "notifications_enabled": current_user.notifications_enabled,
+        "email_notifications_enabled": current_user.email_notifications_enabled,
         "notify_price_changes": current_user.notify_price_changes,
         "notify_buy_offers": current_user.notify_buy_offers,
         "notify_messages": current_user.notify_messages,

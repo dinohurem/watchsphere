@@ -43,10 +43,11 @@ class User(Document):
     fcm_tokens: List[str] = Field(default_factory=list)
 
     # Notification preferences
-    notifications_enabled: bool = True
-    notify_price_changes: bool = True
-    notify_buy_offers: bool = True
-    notify_messages: bool = True
+    notifications_enabled: bool = True  # Push notifications master toggle
+    email_notifications_enabled: bool = True  # Email notifications master toggle
+    notify_price_changes: bool = True  # Price alerts
+    notify_buy_offers: bool = True  # New buy order offers
+    notify_messages: bool = True  # Chat messages
 
     # Review stats (cached for performance)
     average_rating: float = 0.0
