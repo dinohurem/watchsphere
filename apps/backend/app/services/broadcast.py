@@ -196,6 +196,42 @@ class UnifiedBroadcastService:
             except Exception as e:
                 logger.error(f"Failed to send unread update to Socket.IO: {e}")
 
+    async def broadcast_notification(
+        self,
+        user_id: str,
+        notification_data: dict,
+    ):
+        """
+        Broadcast a notification to a specific user.
+        Used for real-time notification banner display.
+
+        Args:
+            user_id: The user to notify
+            notification_data: Notification data including id, type, title, body, etc.
+        """
+        logger.info(f"=== NOTIFICATION BROADCAST: user={user_id}, type={notification_data.get('type')} ===")
+
+        # Send to WebSocket clients
+        if self._ws_manager:
+            try:
+                await self._ws_manager.send_personal_message({
+                    "type": "notification:new",
+                    "data": notification_data
+                }, user_id)
+                logger.info(f"Sent notification to WebSocket user {user_id}")
+            except Exception as e:
+                logger.error(f"Failed to send notification to WebSocket: {e}")
+
+        # Send to Socket.IO clients directly to the user's sids
+        if self._socketio_server and self._socketio_manager:
+            try:
+                sids = self._socketio_manager.get_user_sids(user_id)
+                for sid in sids:
+                    await self._socketio_server.emit('notification:new', notification_data, to=sid)
+                    logger.info(f"Sent notification to Socket.IO sid {sid} (user {user_id})")
+            except Exception as e:
+                logger.error(f"Failed to send notification to Socket.IO: {e}")
+
     def _normalize_message_data(self, data: dict) -> dict:
         """
         Normalize message data to use camelCase for all clients.

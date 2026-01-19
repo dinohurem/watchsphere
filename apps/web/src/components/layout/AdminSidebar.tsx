@@ -73,7 +73,7 @@ const adminNavigation: NavSection[] = [
   {
     title: 'Support',
     items: [
-      { name: 'Disputes & Issues', to: '/admin/support', icon: Headphones },
+      { name: 'Support', to: '/admin/support', icon: Headphones },
     ]
   },
 ]

@@ -32,19 +32,19 @@ function PlusIcon() {
 }
 
 // Watch Icon for Empty State
-function WatchIcon() {
+function WatchIcon({ size = 32, color = '#1D1D1F' }: { size?: number; color?: string }) {
   return (
-    <Svg width={sp(32)} height={sp(32)} viewBox="0 0 32 32" fill="none">
+    <Svg width={sp(size)} height={sp(size)} viewBox="0 0 32 32" fill="none">
       <Path
         d="M10 8L11.33 2.67H20.67L22 8"
-        stroke="#1D1D1F"
+        stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M10 24L11.33 29.33H20.67L22 24"
-        stroke="#1D1D1F"
+        stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -53,15 +53,53 @@ function WatchIcon() {
         cx={16}
         cy={16}
         r={10}
-        stroke="#1D1D1F"
+        stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M16 10V16L19.5 19.5"
-        stroke="#1D1D1F"
+        stroke={color}
         strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// Small Watch Icon for "No buy orders" button
+function SmallWatchIcon() {
+  return (
+    <Svg width={sp(14)} height={sp(14)} viewBox="0 0 32 32" fill="none">
+      <Path
+        d="M10 8L11.33 2.67H20.67L22 8"
+        stroke="rgba(33, 33, 33, 0.5)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 24L11.33 29.33H20.67L22 24"
+        stroke="rgba(33, 33, 33, 0.5)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle
+        cx={16}
+        cy={16}
+        r={10}
+        stroke="rgba(33, 33, 33, 0.5)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 10V16L19.5 19.5"
+        stroke="rgba(33, 33, 33, 0.5)"
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -301,14 +339,14 @@ export default function DashboardScreen() {
         <View style={styles.watchDetails}>
           {/* Brand and Reference */}
           <View style={styles.watchNameContainer}>
-            <Text style={styles.watchBrand}>{watch.displayName}</Text>
+            <Text style={styles.watchBrand} numberOfLines={1}>{watch.displayName}</Text>
             <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
           </View>
 
           {/* Price Row */}
           <View style={styles.watchPriceRow}>
             <View style={styles.priceContainer}>
-              <Text style={styles.soldOrderLabel}>Sold order:</Text>
+              <Text style={styles.soldOrderLabel}>Sell order:</Text>
               <Text style={styles.soldOrderPrice}>{watch.soldOrder}</Text>
             </View>
             <View style={[
@@ -324,16 +362,49 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Sell Now Button */}
+        {/* Sell Now / No Buy Orders Button */}
         <View style={styles.sellButtonContainer}>
           {watch.sellNowPrice ? (
-            <TouchableOpacity style={styles.sellNowButton} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.sellNowButton}
+              activeOpacity={0.8}
+              onPress={(e) => {
+                e.stopPropagation();
+                // Navigate to watch details page for this reference
+                router.push({
+                  pathname: '/market/[id]',
+                  params: {
+                    id: watch.reference,
+                    reference: watch.reference,
+                    brand: watch.brand,
+                    model: watch.model,
+                  },
+                } as any);
+              }}
+            >
               <Text style={styles.sellNowButtonText}>Sell now {watch.sellNowPrice}</Text>
             </TouchableOpacity>
           ) : (
-            <View style={styles.noBuyOrdersButton}>
-              <Text style={styles.noBuyOrdersText}>No buy now orders</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.noBuyOrdersButton}
+              activeOpacity={0.8}
+              onPress={(e) => {
+                e.stopPropagation();
+                // Navigate to watch details page for this reference
+                router.push({
+                  pathname: '/market/[id]',
+                  params: {
+                    id: watch.reference,
+                    reference: watch.reference,
+                    brand: watch.brand,
+                    model: watch.model,
+                  },
+                } as any);
+              }}
+            >
+              <SmallWatchIcon />
+              <Text style={styles.noBuyOrdersText}>No buy orders</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -674,12 +745,15 @@ const styles = StyleSheet.create({
     paddingTop: hp(12),
     paddingBottom: hp(16),
     gap: hp(12),
+    height: hp(150),
+    justifyContent: 'space-between',
   },
   watchDetails: {
     gap: hp(8),
   },
   watchNameContainer: {
     gap: 0,
+    height: hp(34),
   },
   watchBrand: {
     fontFamily: 'HankenGrotesk_600SemiBold',
@@ -757,6 +831,9 @@ const styles = StyleSheet.create({
     borderRadius: sp(99),
     alignSelf: 'stretch',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: wp(6),
   },
   noBuyOrdersText: {
     fontFamily: 'HankenGrotesk_600SemiBold',

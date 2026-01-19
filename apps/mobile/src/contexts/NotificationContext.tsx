@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { NotificationData } from '@/components/NotificationBanner';
+import { chatService } from '@/services/chatService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface NotificationContextType {
   currentNotification: NotificationData | null;
@@ -13,6 +15,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [currentNotification, setCurrentNotification] = useState<NotificationData | null>(null);
   const [notificationQueue, setNotificationQueue] = useState<NotificationData[]>([]);
 
+  // Use ref to track current notification in callbacks without causing re-registration
+  const currentNotificationRef = useRef<NotificationData | null>(null);
+  useEffect(() => {
+    currentNotificationRef.current = currentNotification;
+  }, [currentNotification]);
+
   const showNotification = useCallback((notification: Omit<NotificationData, 'id' | 'timestamp'>) => {
     const newNotification: NotificationData = {
       ...notification,
@@ -20,13 +28,48 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       timestamp: new Date(),
     };
 
+    console.log('NotificationContext: showNotification called', newNotification.type, newNotification.title);
+
     // If there's already a notification showing, queue this one
-    if (currentNotification) {
+    if (currentNotificationRef.current) {
+      console.log('NotificationContext: Queueing notification (one already showing)');
       setNotificationQueue(prev => [...prev, newNotification]);
     } else {
+      console.log('NotificationContext: Showing notification immediately');
       setCurrentNotification(newNotification);
     }
-  }, [currentNotification]);
+  }, []); // No dependencies - uses ref instead
+
+  // Listen for real-time notifications via Socket.IO
+  useEffect(() => {
+    const handleNotification = (data: any) => {
+      console.log('NotificationContext: Received notification:new event', data.type);
+      // Map WebSocket notification to banner format
+      // Handle different notification types appropriately
+      let notifType: 'buy_offer' | 'message' | 'price_alert' = 'message';
+      if (data.type === 'new_offer' || data.type === 'new_listing' || data.type === 'buy_order_offer') {
+        notifType = 'buy_offer';
+      } else if (data.type === 'price_undercut' || data.type === 'price_alert_up' || data.type === 'price_alert_down') {
+        notifType = 'price_alert';
+      }
+
+      const bannerNotification = {
+        type: notifType,
+        title: data.title || 'Notification',
+        body: data.body || '',
+        reference: data.reference,
+        orderId: data.orderId,
+      };
+
+      showNotification(bannerNotification);
+    };
+
+    chatService.on('notification:new', handleNotification);
+
+    return () => {
+      chatService.off('notification:new', handleNotification);
+    };
+  }, [showNotification]);
 
   const dismissNotification = useCallback(() => {
     setCurrentNotification(null);

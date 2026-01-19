@@ -26,6 +26,7 @@ import { InventoryPage } from './features/inventory/pages/InventoryPage'
 import { CreateListingPage } from './features/inventory/pages/CreateListingPage'
 import { SearchPage } from './features/search/pages/SearchPage'
 import { LandingPage } from './features/landing/pages/LandingPage'
+import { NotificationsPage } from './features/notifications/pages/NotificationsPage'
 import { useAuthStore } from '@watchsphere/shared/stores'
 import { api } from './services/api'
 
@@ -188,6 +189,7 @@ function App() {
         <Route path="profile/billing" element={<ProfileSettingsPage />} />
         <Route path="user/:userId" element={<UserProfilePage />} />
         <Route path="news/:newsId" element={<NewsDetailsPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
       </Route>
     </Routes>
   )

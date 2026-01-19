@@ -11,6 +11,15 @@ import {
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { useConfig, type FieldCategory } from '@/hooks/useConfig';
+
+// Category configuration for display
+const CATEGORY_CONFIG: { key: FieldCategory; title: string }[] = [
+  { key: 'basic', title: 'Basic info' },
+  { key: 'caliber', title: 'Caliber' },
+  { key: 'case', title: 'Case' },
+  { key: 'bracelet', title: 'Bracelet/strap' },
+];
 
 // Edit icon matching Figma design
 function EditIcon({ className }: { className?: string }) {
@@ -41,6 +50,40 @@ function TrashIcon({ className }: { className?: string }) {
   );
 }
 
+interface WatchDetails {
+  image_url?: string;
+  images?: string[];
+  // Basic information
+  year?: number;
+  size?: string;
+  movement?: string;
+  case_material?: string;
+  bracelet_material?: string;
+  case_size?: string;
+  gender?: string;
+  availability?: string;
+  // Caliber information
+  movement_type?: string;
+  caliber?: string;
+  base_caliber?: string;
+  power_reserve?: string;
+  number_of_jewels?: number;
+  // Case information
+  case_diameter?: string;
+  water_resistance?: string;
+  bezel_material?: string;
+  crystal?: string;
+  dial?: string;
+  dial_numerals?: string;
+  // Bracelet/strap information
+  bracelet_color?: string;
+  clasp_type?: string;
+  clasp_material?: string;
+  clasp?: string;
+  // Allow dynamic keys for any other fields
+  [key: string]: string | number | string[] | undefined;
+}
+
 interface OrderDetail {
   id: string;
   order_type: 'buy' | 'sell';
@@ -63,30 +106,14 @@ interface OrderDetail {
   has_box: boolean;
   has_papers: boolean;
   created_at: string;
-  // Watch details
-  watch_details?: {
-    image_url?: string;
-    images?: string[];
-    year?: number;
-    movement?: string;
-    case_material?: string;
-    bracelet_material?: string;
-    case_size?: string;
-    water_resistance?: string;
-    caliber?: string;
-    power_reserve?: string;
-    number_of_jewels?: number;
-    crystal?: string;
-    dial?: string;
-    bezel_material?: string;
-    clasp?: string;
-  };
+  watch_details?: WatchDetails;
 }
 
 export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { getFieldsByCategory } = useConfig();
   const menuRef = useRef<HTMLDivElement>(null);
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
@@ -100,11 +127,84 @@ export function OrderDetailPage() {
   const [showSaleComplete, setShowSaleComplete] = useState(false);
   const [markingAsSold, setMarkingAsSold] = useState(false);
 
+  // Mark as completed state (for buy orders)
+  const [showMarkCompletedModal, setShowMarkCompletedModal] = useState(false);
+  const [showPurchaseComplete, setShowPurchaseComplete] = useState(false);
+  const [markingAsCompleted, setMarkingAsCompleted] = useState(false);
+
   // Delete state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const isOwnOrder = user?.id === order?.user_id;
+
+  // Get field value from order/watch_details dynamically
+  const getFieldValue = (fieldKey: string): string | undefined => {
+    if (!order) return undefined;
+
+    // Check watch_details first
+    if (order.watch_details && order.watch_details[fieldKey] !== undefined) {
+      const val = order.watch_details[fieldKey];
+      if (val === null || val === undefined || val === '') return undefined;
+      return String(val);
+    }
+
+    // Check top-level order properties
+    const orderAny = order as unknown as Record<string, unknown>;
+    if (orderAny[fieldKey] !== undefined) {
+      const val = orderAny[fieldKey];
+      if (val === null || val === undefined || val === '') return undefined;
+      return String(val);
+    }
+
+    return undefined;
+  };
+
+  // Render dynamic specs for a category
+  const renderCategorySpecs = (category: FieldCategory) => {
+    const fields = getFieldsByCategory(category);
+    const specsWithValues: { label: string; value: string }[] = [];
+
+    fields.forEach(field => {
+      const value = getFieldValue(field.key);
+      if (value) {
+        specsWithValues.push({ label: field.name, value });
+      }
+    });
+
+    // Add special fields that aren't in listing fields config
+    if (category === 'basic') {
+      // Add core order fields
+      if (order?.brand) specsWithValues.unshift({ label: 'Brand', value: order.brand });
+      if (order?.model) specsWithValues.splice(1, 0, { label: 'Model', value: order.model });
+      if (order?.reference) specsWithValues.splice(2, 0, { label: 'Reference', value: order.reference });
+
+      // Add box & papers
+      const boxPapers = order?.has_box && order?.has_papers
+        ? 'Original box and papers'
+        : order?.has_box
+        ? 'Box only'
+        : order?.has_papers
+        ? 'Papers only'
+        : undefined;
+      if (boxPapers) specsWithValues.push({ label: 'Box & Papers', value: boxPapers });
+
+      // Add location
+      if (order?.country_name || order?.country_code) {
+        specsWithValues.push({
+          label: 'Location',
+          value: `${getFlagEmoji(order.country_code)} ${order.country_name || order.country_code}`
+        });
+      }
+
+      // Add price
+      if (order?.price) {
+        specsWithValues.push({ label: 'Price', value: `€${order.price.toLocaleString()}` });
+      }
+    }
+
+    return specsWithValues;
+  };
 
   useEffect(() => {
     fetchOrderDetails();
@@ -146,6 +246,21 @@ export function OrderDetailPage() {
       console.error('Failed to mark as sold:', error);
     } finally {
       setMarkingAsSold(false);
+    }
+  };
+
+  const handleMarkAsCompleted = async () => {
+    if (!orderId) return;
+
+    setMarkingAsCompleted(true);
+    try {
+      await api.post(`/orders/${orderId}/mark-completed`);
+      setShowMarkCompletedModal(false);
+      setShowPurchaseComplete(true);
+    } catch (error) {
+      console.error('Failed to mark as completed:', error);
+    } finally {
+      setMarkingAsCompleted(false);
     }
   };
 
@@ -242,8 +357,55 @@ export function OrderDetailPage() {
     );
   }
 
+  // Purchase completed screen - for buy orders
+  if (showPurchaseComplete) {
+    return (
+      <div className="bg-[#fafafa] min-h-screen relative">
+        {/* Top border line */}
+        <div className="absolute top-[136px] left-1/2 -translate-x-1/2 w-full max-w-[1400px] h-[1px] bg-[rgba(0,0,0,0.1)]" />
+
+        {/* Content */}
+        <div className="flex flex-col items-center justify-center min-h-screen px-[68px] py-0">
+          {/* Green check icon */}
+          <div className="w-16 h-16 bg-[rgba(74,160,120,0.1)] rounded-full flex items-center justify-center mb-10">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M26.6667 8L12 22.6667L5.33333 16" stroke="#4AA078" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+
+          {/* Text content */}
+          <div className="flex flex-col gap-4 items-center text-center max-w-[514px] mb-10">
+            <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
+              Purchase completed
+            </h1>
+            <p className="text-[18px] font-normal text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-[22px]">
+              Your buy order has been marked as completed. It has been removed from the order book.
+            </p>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-6 items-start w-[404px]">
+            <button
+              onClick={() => navigate('/app/profile')}
+              className="flex-1 h-[48px] bg-[#212121] text-white text-[15px] font-semibold tracking-[0.075px] leading-[20px] rounded-full hover:bg-black transition-colors"
+            >
+              Go to Profile
+            </button>
+            <button
+              onClick={() => navigate('/app')}
+              className="flex-1 h-[44px] text-[#1d1d1f] text-[15px] font-semibold tracking-[0.075px] leading-[20px] hover:opacity-70 transition-opacity flex items-center justify-center"
+            >
+              Back to homepage
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const images = order.watch_details?.images || [];
-  const mainImage = order.watch_details?.image_url || images[selectedImage];
+  // Use selectedImage from images array if available, otherwise fall back to image_url
+  const mainImage = images.length > 0 ? images[selectedImage] : order.watch_details?.image_url;
 
   return (
     <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
@@ -258,6 +420,29 @@ export function OrderDetailPage() {
             <ArrowLeft className="w-4 sm:w-5 h-4 sm:h-5 text-gray-900" />
           </button>
           <div>
+            {/* Order Type Badge and Status Label */}
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`inline-block px-3 py-1 rounded-lg text-[13px] font-semibold ${
+                order.order_type === 'buy'
+                  ? 'bg-[rgba(74,160,120,0.1)] text-[#4AA078]'
+                  : 'bg-[rgba(0,136,255,0.1)] text-[#0088FF]'
+              }`}>
+                {order.order_type === 'buy' ? 'Buy Order' : 'Sell Order'}
+              </span>
+              {/* Status Label for Sold/Completed orders
+                  - Sell orders show "Sold" when status is sold or completed
+                  - Buy orders show "Completed" when status is completed or sold (defensive) */}
+              {order.order_type === 'sell' && (order.status === 'sold' || order.status === 'completed') && (
+                <span className="inline-block px-3 py-1 rounded-lg text-[13px] font-semibold bg-[rgba(201,57,39,0.1)] text-[#c93927]">
+                  Sold
+                </span>
+              )}
+              {order.order_type === 'buy' && (order.status === 'completed' || order.status === 'sold') && (
+                <span className="inline-block px-3 py-1 rounded-lg text-[13px] font-semibold bg-[rgba(128,128,128,0.1)] text-[#666666]">
+                  Completed
+                </span>
+              )}
+            </div>
             <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
               {order.brand} {order.model}
             </h1>
@@ -290,16 +475,31 @@ export function OrderDetailPage() {
                     <EditIcon className="w-5 h-5 text-[#1d1d1f]" />
                     Edit
                   </button>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      setShowMarkSoldModal(true);
-                    }}
-                    className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
-                  >
-                    <CheckboxIcon className="w-5 h-5 text-[#1d1d1f]" />
-                    Mark as sold
-                  </button>
+                  {/* Show Mark as Sold only for sell orders, Mark as Completed only for buy orders */}
+                  {order.order_type === 'sell' && order.status === 'active' && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowMarkSoldModal(true);
+                      }}
+                      className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
+                    >
+                      <CheckboxIcon className="w-5 h-5 text-[#1d1d1f]" />
+                      Mark as sold
+                    </button>
+                  )}
+                  {order.order_type === 'buy' && order.status === 'active' && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowMarkCompletedModal(true);
+                      }}
+                      className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
+                    >
+                      <CheckboxIcon className="w-5 h-5 text-[#1d1d1f]" />
+                      Mark as completed
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setShowMenu(false);
@@ -330,7 +530,7 @@ export function OrderDetailPage() {
       {/* Main Content */}
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Left Column - Images & Info */}
-        <div className="lg:w-[400px] space-y-6">
+        <div className="lg:w-[400px] space-y-4">
           {/* Main Image */}
           <div className="bg-gradient-to-b from-gray-50 to-gray-100 rounded-2xl aspect-square flex items-center justify-center overflow-hidden">
             {mainImage ? (
@@ -344,15 +544,17 @@ export function OrderDetailPage() {
             )}
           </div>
 
-          {/* Thumbnail Gallery */}
+          {/* Thumbnail Gallery - horizontal scrollable */}
           {images.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto">
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
               {images.map((img, idx) => (
                 <button
                   key={idx}
                   onClick={() => setSelectedImage(idx)}
-                  className={`w-16 h-16 rounded-lg overflow-hidden border-2 shrink-0 ${
-                    selectedImage === idx ? 'border-gray-900' : 'border-transparent'
+                  className={`w-[72px] h-[72px] rounded-xl overflow-hidden shrink-0 transition-all ${
+                    selectedImage === idx
+                      ? 'ring-2 ring-[#212121] ring-offset-2'
+                      : 'opacity-60 hover:opacity-100'
                   }`}
                 >
                   <img src={img} alt="" className="w-full h-full object-cover" />
@@ -361,159 +563,104 @@ export function OrderDetailPage() {
             </div>
           )}
 
-          {/* Price & Quick Info */}
-          <div className="space-y-4">
-            <div>
-              <p className="text-3xl font-bold text-gray-900">
-                €{order.price.toLocaleString()}
-              </p>
-              <p className="text-sm text-gray-500">
-                Added {new Date(order.created_at).toLocaleDateString()}
-              </p>
+          {/* 4 Info Rows - matching Figma design */}
+          <div className="space-y-0">
+            {/* Condition Row */}
+            <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
+              <span className="text-[15px] text-[#1d1d1f] opacity-50">Condition</span>
+              <span className="text-[15px] text-[#1d1d1f] font-semibold">{order.condition}</span>
             </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-gray-500">Condition:</p>
-                <p className="font-medium text-gray-900">{order.condition}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Case size:</p>
-                <p className="font-medium text-gray-900">{order.watch_details?.case_size || '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Box/papers:</p>
-                <p className="font-medium text-gray-900">
-                  {order.has_box && order.has_papers
-                    ? 'Original box and papers'
-                    : order.has_box
-                    ? 'Box only'
-                    : order.has_papers
-                    ? 'Papers only'
-                    : 'None'}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Location:</p>
-                <p className="font-medium text-gray-900 flex items-center gap-1">
-                  {getFlagEmoji(order.country_code)} {order.country_name || order.country_code}
-                </p>
-              </div>
+            {/* Case Size Row */}
+            <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
+              <span className="text-[15px] text-[#1d1d1f] opacity-50">Case size</span>
+              <span className="text-[15px] text-[#1d1d1f] font-semibold">{order.watch_details?.case_size || '—'}</span>
             </div>
-
-            {/* Contact Button - only for non-owners */}
-            {!isOwnOrder && (
-              <button
-                onClick={() => navigate(`/app/chat/${order.user_id}`)}
-                className="w-full h-[48px] bg-[#212121] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-full hover:bg-black transition-colors flex items-center justify-center gap-2"
-              >
-                <MessageCircle className="w-5 h-5" />
-                Contact
-              </button>
-            )}
+            {/* Box/Papers Row */}
+            <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
+              <span className="text-[15px] text-[#1d1d1f] opacity-50">Box/papers</span>
+              <span className="text-[15px] text-[#1d1d1f] font-semibold">
+                {order.has_box && order.has_papers
+                  ? 'Box and papers'
+                  : order.has_box
+                  ? 'Box only'
+                  : order.has_papers
+                  ? 'Papers only'
+                  : 'None'}
+              </span>
+            </div>
+            {/* Location Row */}
+            <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
+              <span className="text-[15px] text-[#1d1d1f] opacity-50">Location</span>
+              <span className="text-[15px] text-[#1d1d1f] font-semibold flex items-center gap-1">
+                {getFlagEmoji(order.country_code)} {order.country_name || order.country_code}
+              </span>
+            </div>
           </div>
+
+          {/* Contact Button - only for non-owners */}
+          {!isOwnOrder && (
+            <button
+              onClick={() => navigate(`/app/chat/${order.user_id}`)}
+              className="w-full h-[48px] bg-[#212121] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-full hover:bg-black transition-colors flex items-center justify-center gap-2 mt-4"
+            >
+              <MessageCircle className="w-5 h-5" />
+              Contact
+            </button>
+          )}
         </div>
 
-        {/* Right Column - Specifications */}
+        {/* Right Column - Specifications - Dynamic rendering by category */}
         <div className="flex-1 space-y-8">
-          {/* Basic Info */}
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic info</h2>
-            <div className="space-y-3">
-              <SpecRow label="Brand" value={order.brand} />
-              <SpecRow label="Model" value={order.model} />
-              <SpecRow label="Reference" value={order.reference} />
-              <SpecRow label="Year" value={order.watch_details?.year?.toString() || '—'} />
-              <SpecRow label="Movement" value={order.watch_details?.movement || '—'} />
-              <SpecRow label="Case material" value={order.watch_details?.case_material || '—'} />
-              <SpecRow label="Bracelet material" value={order.watch_details?.bracelet_material || '—'} />
-              <SpecRow label="Condition" value={order.condition} hasInfo />
-              <SpecRow
-                label="Box & Papers"
-                value={
-                  order.has_box && order.has_papers
-                    ? 'Original box and papers'
-                    : order.has_box
-                    ? 'Box only'
-                    : order.has_papers
-                    ? 'Papers only'
-                    : 'None'
-                }
-              />
-              <SpecRow
-                label="Location"
-                value={`${getFlagEmoji(order.country_code)} ${order.country_name || order.country_code}`}
-              />
-              {/* Seller/Buyer Row */}
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500 text-sm">{order.order_type === 'sell' ? 'Seller' : 'Buyer'}</span>
-                <button
-                  onClick={() => navigate(`/app/user/${order.user_id}`)}
-                  className="flex items-center gap-2 hover:opacity-70 transition-opacity"
-                >
-                  <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                    {order.user_profile_image ? (
-                      <img src={order.user_profile_image} alt={order.user_name || ''} className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-3 h-3 text-gray-500" />
-                    )}
-                  </div>
-                  <span className="text-gray-900 text-sm font-medium">{order.user_name || 'Unknown'}</span>
-                  <Star className="w-3.5 h-3.5 text-gray-900 fill-gray-900" />
-                  <span className="text-gray-900 text-sm font-medium">
-                    {order.user_rating?.toFixed(1) || '0.0'} ({order.user_review_count || 0})
-                  </span>
-                </button>
-              </div>
-              <SpecRow label="Price" value={`€${order.price.toLocaleString()}`} />
-              <SpecRow label="Availability" value={order.status === 'active' ? 'Item is in stock' : order.status} />
-            </div>
-          </div>
+          {CATEGORY_CONFIG.map(({ key, title }) => {
+            const specs = renderCategorySpecs(key);
 
-          {/* Caliber */}
-          {order.watch_details?.caliber && (
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Caliber</h2>
-              <div className="space-y-3">
-                <SpecRow label="Movement" value={order.watch_details?.movement || '—'} />
-                <SpecRow label="Caliber/movement" value={order.watch_details?.caliber || '—'} />
-                <SpecRow label="Power reserve" value={order.watch_details?.power_reserve || '—'} />
-                <SpecRow label="Number of jewels" value={order.watch_details?.number_of_jewels?.toString() || '—'} />
-              </div>
-            </div>
-          )}
+            // For basic category, always show (it has required fields)
+            // For other categories, only show if there are values
+            if (key !== 'basic' && specs.length === 0) return null;
 
-          {/* Case */}
-          {order.watch_details?.case_material && (
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Case</h2>
-              <div className="space-y-3">
-                <SpecRow label="Case material" value={order.watch_details?.case_material || '—'} />
-                <SpecRow label="Case diameter" value={order.watch_details?.case_size || '—'} />
-                <SpecRow label="Water resistance" value={order.watch_details?.water_resistance || '—'} />
-                <SpecRow label="Bezel material" value={order.watch_details?.bezel_material || '—'} />
-                <SpecRow label="Crystal" value={order.watch_details?.crystal || '—'} />
-                <SpecRow label="Dial" value={order.watch_details?.dial || '—'} />
-              </div>
-            </div>
-          )}
+            return (
+              <div key={key}>
+                <h2 className="text-[18px] font-semibold text-[#1d1d1f] mb-4">{title}</h2>
+                <div className="space-y-0">
+                  {specs.map((spec, idx) => (
+                    <SpecRow key={`${key}-${idx}`} label={spec.label} value={spec.value} />
+                  ))}
 
-          {/* Bracelet/strap */}
-          {order.watch_details?.bracelet_material && (
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Bracelet/strap</h2>
-              <div className="space-y-3">
-                <SpecRow label="Bracelet material" value={order.watch_details?.bracelet_material || '—'} />
-                <SpecRow label="Clasp" value={order.watch_details?.clasp || '—'} />
+                  {/* Seller/Buyer Row - only in basic section */}
+                  {key === 'basic' && (
+                    <div className="flex items-start py-[8px] border-b border-[rgba(0,0,0,0.1)]">
+                      <span className="w-[168px] shrink-0 text-[15px] text-[#1d1d1f] opacity-50">
+                        {order.order_type === 'sell' ? 'Seller' : 'Buyer'}
+                      </span>
+                      <button
+                        onClick={() => navigate(`/app/user/${order.user_id}`)}
+                        className="flex items-center gap-2 hover:opacity-70 transition-opacity"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                          {order.user_profile_image ? (
+                            <img src={order.user_profile_image} alt={order.user_name || ''} className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-3 h-3 text-gray-500" />
+                          )}
+                        </div>
+                        <span className="text-[15px] text-[#1d1d1f] font-semibold">{order.user_name || 'Unknown'}</span>
+                        <Star className="w-3.5 h-3.5 text-[#1d1d1f] fill-[#1d1d1f]" />
+                        <span className="text-[15px] text-[#1d1d1f] font-semibold">
+                          {order.user_rating?.toFixed(1) || '0.0'} ({order.user_review_count || 0})
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
 
           {/* Notes */}
           {order.notes && (
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Other</h2>
-              <div className="space-y-3">
+              <h2 className="text-[18px] font-semibold text-[#1d1d1f] mb-4">Other</h2>
+              <div className="space-y-0">
                 <SpecRow label="More details" value={order.notes} />
               </div>
             </div>
@@ -590,20 +737,55 @@ export function OrderDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Mark as Completed Modal (for buy orders) */}
+      {showMarkCompletedModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Mark as Completed</h2>
+              <button
+                onClick={() => setShowMarkCompletedModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to mark this buy order as completed? This action will remove it from the order book.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowMarkCompletedModal(false)}
+                className="flex-1 py-3 border border-gray-200 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMarkAsCompleted}
+                disabled={markingAsCompleted}
+                className="flex-1 py-3 bg-gray-900 text-white font-medium rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50"
+              >
+                {markingAsCompleted ? 'Marking...' : 'Mark as Completed'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
 }
 
-// Specification row component
+// Specification row component - matching Figma design
 function SpecRow({ label, value, hasInfo }: { label: string; value: string; hasInfo?: boolean }) {
   return (
-    <div className="flex items-start justify-between py-2 border-b border-gray-100">
-      <span className="text-gray-500 text-sm">{label}</span>
-      <span className="text-gray-900 text-sm font-medium text-right flex items-center gap-1">
+    <div className="flex items-start py-[8px] border-b border-[rgba(0,0,0,0.1)]">
+      <span className="w-[168px] shrink-0 text-[15px] text-[#1d1d1f] opacity-50">{label}</span>
+      <span className="text-[15px] text-[#1d1d1f] font-semibold flex items-center gap-1">
         {value}
         {hasInfo && (
-          <span className="w-4 h-4 rounded-full border border-gray-300 text-gray-400 text-xs flex items-center justify-center cursor-help">
+          <span className="w-4 h-4 rounded-full border border-[rgba(0,0,0,0.2)] text-[rgba(0,0,0,0.4)] text-xs flex items-center justify-center cursor-help ml-1">
             i
           </span>
         )}

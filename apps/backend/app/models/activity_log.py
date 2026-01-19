@@ -24,6 +24,7 @@ class ActivityType(str, Enum):
     SELL_ORDER_PLACED = "sell_order_placed"
     ORDER_CONFIRMED = "order_confirmed"
     ORDER_CANCELLED = "order_cancelled"
+    ORDER_COMPLETED = "order_completed"
     TRANSACTION_COMPLETED = "transaction_completed"
 
     # Watchlist events

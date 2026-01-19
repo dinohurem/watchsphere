@@ -52,6 +52,17 @@ export interface Option {
   label: string
 }
 
+// Category type for listing fields (maps to steps in create listing)
+export type FieldCategory = 'basic' | 'caliber' | 'case' | 'bracelet'
+
+// Step mapping for categories
+export const CATEGORY_STEPS: Record<FieldCategory, { step: number; title: string }> = {
+  basic: { step: 0, title: 'Basic information' },
+  caliber: { step: 1, title: 'Caliber information' },
+  case: { step: 2, title: 'Case information' },
+  bracelet: { step: 3, title: 'Bracelet/Strap information' },
+}
+
 // Fetch functions
 const fetchListingFields = async (): Promise<ListingField[]> => {
   const response = await api.get('/listing-fields')
@@ -164,6 +175,13 @@ export function useConfig() {
     return field !== undefined
   }
 
+  // Helper function to get fields by category (for dynamic step rendering)
+  const getFieldsByCategory = (category: FieldCategory): ListingField[] => {
+    return listingFields
+      .filter((f) => f.category === category)
+      .sort((a, b) => a.display_order - b.display_order)
+  }
+
   // Helper function to get filter by key
   const getFilterByKey = (
     category: 'market' | 'social' | 'order_book',
@@ -215,6 +233,7 @@ export function useConfig() {
     getFieldByKey,
     getFieldOptions,
     isFieldEnabled,
+    getFieldsByCategory,
     getFilterByKey,
     getFilterOptions,
     getFilterConfig,

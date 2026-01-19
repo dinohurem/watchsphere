@@ -49,6 +49,8 @@ interface ActivityItem {
   reference: string;
   price: number;
   time: string;
+  orderId: string | null;
+  orderType: 'buy' | 'sell' | null;
 }
 
 interface QuickAccessItem {
@@ -192,15 +194,28 @@ export default function HomeScreen() {
 
   const loadActivity = async () => {
     try {
-      const response = await api.get('/activity/admin/activity?limit=3');
-      if (response.data && response.data.length > 0) {
-        setActivityItems(response.data.map((item: any) => ({
-          id: item.id,
-          type: item.activity_type === 'price_alert' ? 'price_alert' : 'new_offer',
-          reference: item.metadata?.reference || item.entity_id || '',
-          price: item.metadata?.price || 0,
-          time: formatTimeAgo(item.created_at),
-        })));
+      // Use notifications endpoint for latest activity (same as web)
+      const response = await api.get('/notifications?limit=3');
+      if (response.data?.notifications && response.data.notifications.length > 0) {
+        setActivityItems(response.data.notifications.map((item: any) => {
+          // Determine order type from notification type
+          let orderType: 'buy' | 'sell' | null = null;
+          if (item.type === 'new_offer') {
+            orderType = 'buy';
+          } else if (item.type === 'new_listing') {
+            orderType = 'sell';
+          }
+
+          return {
+            id: item.id,
+            type: item.type === 'price_alert_up' || item.type === 'price_alert_down' ? 'price_alert' : 'new_offer',
+            reference: item.reference || '',
+            price: item.price || 0,
+            time: formatTimeAgo(item.created_at),
+            orderId: item.order_id || null,
+            orderType: orderType,
+          };
+        }));
       } else {
         setActivityItems([]);
       }
@@ -737,7 +752,29 @@ export default function HomeScreen() {
             </View>
           ) : (
             activityItems.map((item) => (
-              <View key={item.id} style={styles.activityItem}>
+              <TouchableOpacity
+                key={item.id}
+                style={styles.activityItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  // Navigate to watch-details if we have an order ID
+                  if (item.orderId) {
+                    router.push({
+                      pathname: '/market/watch-details',
+                      params: {
+                        orderId: item.orderId,
+                        reference: item.reference,
+                        price: item.price.toString(),
+                        order_type: item.orderType || 'buy',
+                        fromOrderBook: 'true',
+                      },
+                    } as any);
+                  } else if (item.reference) {
+                    // Fallback to watch page by reference
+                    router.push(`/watch/${encodeURIComponent(item.reference)}` as any);
+                  }
+                }}
+              >
                 <View
                   style={[
                     styles.activityIconContainer,
@@ -760,7 +797,7 @@ export default function HomeScreen() {
                   </View>
                   <Text style={styles.activityTime}>{item.time}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </View>

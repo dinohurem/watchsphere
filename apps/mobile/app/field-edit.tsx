@@ -13,7 +13,7 @@ export default function FieldEditScreen() {
   const { field, value: initialValue } = useLocalSearchParams<{ field: string; value?: string }>();
   const [value, setValue] = useState(initialValue || '');
   const [saving, setSaving] = useState(false);
-  const { user, setUser } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
 
   const getFieldTitle = () => {
     switch (field) {
@@ -91,12 +91,9 @@ export default function FieldEditScreen() {
 
       await api.patch('/profile/me', updateData);
 
-      // Update the auth store if the name was changed
-      if (field === 'name' && user) {
-        setUser({
-          ...user,
-          name: value.trim(),
-        });
+      // Sync relevant fields to auth store for global access
+      if (['name', 'phone', 'whatsapp_phone', 'telegram_username'].includes(field)) {
+        updateUser({ [field]: value.trim() });
       }
 
       router.back();

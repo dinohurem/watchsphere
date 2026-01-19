@@ -586,9 +586,12 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
     )
 
 
-@router.get("/{watch_id}", response_model=WatchResponse)
+@router.get("/{watch_id:path}", response_model=WatchResponse)
 async def get_watch(watch_id: str) -> Any:
-    """Get watch by ID or reference (public - only active watches)"""
+    """Get watch by ID or reference (public - only active watches)
+
+    Note: Using :path parameter type to handle references containing slashes (e.g., 5711/1A-010)
+    """
 
     watch = None
 

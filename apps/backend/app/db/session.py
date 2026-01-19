@@ -30,6 +30,7 @@ async def connect_to_mongo():
     from app.models.support import Dispute, Issue, Report
     from app.models.review import Review
     from app.models.auth_handoff import AuthHandoffToken
+    from app.models.notification import Notification
 
     await init_beanie(
         database=mongodb_client[settings.MONGODB_DB_NAME],
@@ -41,7 +42,8 @@ async def connect_to_mongo():
             WhatsAppImport, WhatsAppMessage, ExtractedWatchListing,
             VerificationCode, Order,
             ListingField, Filter,
-            Dispute, Issue, Report, Review, AuthHandoffToken
+            Dispute, Issue, Report, Review, AuthHandoffToken,
+            Notification
         ]
     )
 

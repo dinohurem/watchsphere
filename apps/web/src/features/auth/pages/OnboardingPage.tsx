@@ -1,7 +1,8 @@
-import { useState, FormEvent, useRef, KeyboardEvent } from 'react';
+import { useState, useRef, KeyboardEvent, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
+import watchsphereLogo from '@/assets/watchsphere-logo-full.svg';
 
 type Step = 1 | 2 | 3;
 
@@ -9,28 +10,40 @@ interface OnboardingData {
   verificationCode: string;
   firstName: string;
   lastName: string;
-  gender: string;
+  userName: string;
   role: string;
 }
 
 const ROLES = [
-  { id: 'beginner', label: 'Beginner', description: 'Just starting my watch journey' },
-  { id: 'collector', label: 'Collector', description: 'Building my collection' },
-  { id: 'blogger', label: 'Blogger / Journalist', description: 'Writing about watches' },
-  { id: 'expert', label: 'Expert', description: 'Deep knowledge of horology' },
-  { id: 'private_seller', label: 'Private Seller', description: 'Selling from my collection' },
-  { id: 'commercial_dealer', label: 'Commercial Dealer', description: 'Professional watch dealer' },
+  { id: 'independent_dealer', label: 'Independent Watch Dealer' },
+  { id: 'authorized_dealer', label: 'Authorized Dealer (AD)' },
+];
+
+const QUOTES = [
+  {
+    text: '"A gentleman\'s choice of timepiece says as much about him as does his Saville Row suit,"',
+    author: 'Ian Fleming',
+  },
+  {
+    text: '"You never really own a Patek Philippe. You simply look after it for the next generation".',
+    author: 'Patek Philippe',
+  },
+  {
+    text: '"Everyone looks at your watch and it represents who you are, your values and your personal style."',
+    author: 'Kobe Bryant',
+  },
 ];
 
 export function OnboardingPage() {
   const [step, setStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resendCountdown, setResendCountdown] = useState(20);
   const [data, setData] = useState<OnboardingData>({
     verificationCode: '',
     firstName: '',
     lastName: '',
-    gender: '',
+    userName: '',
     role: '',
   });
 
@@ -41,14 +54,52 @@ export function OnboardingPage() {
   // Refs for verification code inputs
   const codeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  // Resend countdown timer
+  useEffect(() => {
+    if (step === 1 && resendCountdown > 0) {
+      const timer = setTimeout(() => setResendCountdown(resendCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [step, resendCountdown]);
+
+  // Auto-verify function
+  const verifyCode = useCallback(async (code: string) => {
+    if (loading) return;
+    setError('');
+    setLoading(true);
+    try {
+      await api.post('/auth/verify-email', {
+        code: code,
+      });
+      setStep(2);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Invalid verification code');
+      // Clear the code on error so user can re-enter
+      setData(prev => ({ ...prev, verificationCode: '' }));
+      // Focus the first input
+      codeInputRefs.current[0]?.focus();
+    } finally {
+      setLoading(false);
+    }
+  }, [loading]);
+
+  // Auto-verify when code is complete (6 digits)
+  useEffect(() => {
+    if (data.verificationCode.length === 6 && step === 1 && !loading) {
+      verifyCode(data.verificationCode);
+    }
+  }, [data.verificationCode, step, loading, verifyCode]);
+
   const handleCodeChange = (index: number, value: string) => {
-    if (value.length > 1) {
-      value = value.slice(-1);
+    // Only allow numeric input
+    if (value && !/^\d$/.test(value)) {
+      return;
     }
 
     const newCode = data.verificationCode.split('');
     newCode[index] = value;
-    setData({ ...data, verificationCode: newCode.join('') });
+    const updatedCode = newCode.join('');
+    setData({ ...data, verificationCode: updatedCode });
 
     // Auto-focus next input
     if (value && index < 5) {
@@ -62,6 +113,17 @@ export function OnboardingPage() {
     }
   };
 
+  const handleCodePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pastedData) {
+      setData({ ...data, verificationCode: pastedData });
+      // Focus the appropriate input after paste
+      const focusIndex = Math.min(pastedData.length, 5);
+      codeInputRefs.current[focusIndex]?.focus();
+    }
+  };
+
   const handleBack = () => {
     if (step > 1) {
       setStep((step - 1) as Step);
@@ -70,28 +132,21 @@ export function OnboardingPage() {
     }
   };
 
-  const handleNext = async (e?: FormEvent) => {
-    e?.preventDefault();
+  const handleResendCode = async () => {
+    if (resendCountdown > 0) return;
+    try {
+      await api.post('/auth/resend-verification');
+      setError('');
+      setResendCountdown(20);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to resend code');
+    }
+  };
+
+  const handleNext = async () => {
     setError('');
 
-    if (step === 1) {
-      // Verify email code
-      if (data.verificationCode.length !== 6) {
-        setError('Please enter the 6-digit code');
-        return;
-      }
-      setLoading(true);
-      try {
-        await api.post('/auth/verify-email', {
-          code: data.verificationCode,
-        });
-        setStep(2);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Invalid verification code');
-      } finally {
-        setLoading(false);
-      }
-    } else if (step === 2) {
+    if (step === 2) {
       // Validate personal info
       if (!data.firstName.trim() || !data.lastName.trim()) {
         setError('Please fill in all required fields');
@@ -109,7 +164,7 @@ export function OnboardingPage() {
         const response = await api.post('/auth/complete-onboarding', {
           first_name: data.firstName,
           last_name: data.lastName,
-          gender: data.gender || undefined,
+          user_name: data.userName || undefined,
           role: data.role,
           watch_count: 0,
         });
@@ -127,101 +182,111 @@ export function OnboardingPage() {
     }
   };
 
+  const getBackgroundImage = () => {
+    switch (step) {
+      case 1:
+        return '/images/auth-background-step1.png';
+      case 2:
+        return '/images/auth-background-step2.png';
+      case 3:
+        return '/images/auth-background-step3.png';
+    }
+  };
+
   const renderStepContent = () => {
     switch (step) {
       case 1:
         return (
-          <div className="space-y-8">
-            <div>
-              <h1 className="text-[32px] font-bold text-[#1D1D1F] tracking-wide">
-                Verify Your Email
-              </h1>
-              <p className="mt-2 text-[15px] text-black/60">
-                We've sent a 6-digit code to {user?.email || 'your email'}. Enter it below to verify your account.
-              </p>
-            </div>
-
-            {error && (
-              <div className="rounded-2xl bg-red-50 p-4 border border-red-100">
-                <p className="text-sm text-red-800">{error}</p>
+          <>
+            <div className="flex flex-col gap-10">
+              <div className="flex flex-col gap-4">
+                <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
+                  Verify your email
+                </h1>
+                <p className="text-[18px] text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-6">
+                  Enter the 6 digit code we sent to{' '}
+                  <span className="font-medium text-[#1d1d1f]">{user?.email || 'your email'}</span>
+                </p>
               </div>
-            )}
 
-            <form onSubmit={handleNext} className="space-y-6">
-              <div className="space-y-1.5">
-                <label className="block text-[15px] font-semibold text-[#1D1D1F]">
-                  Verification Code
-                </label>
-                <div className="flex gap-3">
+              {error && (
+                <div className="rounded-2xl bg-red-50 p-4 border border-red-100">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-6 items-start">
+                <div className="flex gap-1.5" onPaste={handleCodePaste}>
                   {[0, 1, 2, 3, 4, 5].map((index) => (
-                    <input
+                    <div
                       key={index}
-                      ref={(el) => (codeInputRefs.current[index] = el)}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={data.verificationCode[index] || ''}
-                      onChange={(e) => handleCodeChange(index, e.target.value)}
-                      onKeyDown={(e) => handleCodeKeyDown(index, e)}
-                      className="w-14 h-14 text-center text-2xl font-semibold border border-[#1D1D1F]/10 rounded-2xl text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-[#1D1D1F]/20 focus:border-[#1D1D1F]/20"
-                    />
+                      className={`w-16 h-16 relative bg-white border border-[rgba(0,0,0,0.1)] rounded-2xl overflow-hidden ${
+                        loading ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <input
+                        ref={(el) => (codeInputRefs.current[index] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        disabled={loading}
+                        value={data.verificationCode[index] || ''}
+                        onChange={(e) => handleCodeChange(index, e.target.value)}
+                        onKeyDown={(e) => handleCodeKeyDown(index, e)}
+                        className="absolute inset-0 w-full h-full text-center text-2xl font-normal text-[#1d1d1f] bg-transparent focus:outline-none disabled:cursor-not-allowed"
+                        style={{ lineHeight: '1.3' }}
+                      />
+                    </div>
                   ))}
                 </div>
+
+                <p className="text-[15px] text-[#1d1d1f] tracking-[-0.075px] leading-6">
+                  Didn't get the code?{' '}
+                  {resendCountdown > 0 ? (
+                    <span className="text-[rgba(29,29,31,0.5)]">
+                      Resend in 00:{resendCountdown.toString().padStart(2, '0')}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResendCode}
+                      className="text-[#1d1d1f] font-medium hover:underline"
+                    >
+                      Resend
+                    </button>
+                  )}
+                </p>
               </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 bg-[#1D1D1F] text-white text-[16px] font-semibold rounded-2xl hover:bg-[#1D1D1F]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1D1D1F] disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Verifying...' : 'Verify'}
-              </button>
-
-              <p className="text-center text-[15px] text-black/60">
-                Didn't receive the code?{' '}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await api.post('/auth/resend-verification');
-                      setError('');
-                      alert('Verification code resent!');
-                    } catch (err: any) {
-                      setError(err.response?.data?.detail || 'Failed to resend code');
-                    }
-                  }}
-                  className="font-medium text-[#1D1D1F] hover:underline"
-                >
-                  Resend
-                </button>
-              </p>
-            </form>
-          </div>
+            </div>
+            {/* Empty spacer to maintain consistent layout */}
+            <div />
+          </>
         );
 
       case 2:
         return (
-          <div className="space-y-8">
-            <div>
-              <h1 className="text-[32px] font-bold text-[#1D1D1F] tracking-wide">
-                Personal Info
-              </h1>
-              <p className="mt-2 text-[15px] text-black/60">
-                Tell us a bit about yourself
-              </p>
-            </div>
-
-            {error && (
-              <div className="rounded-2xl bg-red-50 p-4 border border-red-100">
-                <p className="text-sm text-red-800">{error}</p>
+          <>
+            <div className="flex flex-col gap-10">
+              <div className="flex flex-col gap-4">
+                <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
+                  Tell us who you are
+                </h1>
+                <p className="text-[18px] text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-[22px]">
+                  Add your name, last name, and optionally your user name to personalize your experience.
+                </p>
               </div>
-            )}
 
-            <form onSubmit={handleNext} className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="firstName" className="block text-[15px] font-semibold text-[#1D1D1F]">
-                    First Name
+              {error && (
+                <div className="rounded-2xl bg-red-50 p-4 border border-red-100">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-4">
+                {/* First Name */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="firstName" className="text-[15px] font-semibold text-[#1d1d1f] leading-5 tracking-[0.075px]">
+                    First Name<span className="text-[#c93927]">*</span>
                   </label>
                   <input
                     id="firstName"
@@ -229,14 +294,15 @@ export function OnboardingPage() {
                     required
                     value={data.firstName}
                     onChange={(e) => setData({ ...data, firstName: e.target.value })}
-                    className="w-full px-4 py-3.5 border border-[#1D1D1F]/10 rounded-2xl text-[15px] text-[#1D1D1F] placeholder:text-[#1D1D1F]/60 focus:outline-none focus:ring-2 focus:ring-[#1D1D1F]/20 focus:border-[#1D1D1F]/20"
+                    className="w-full h-[44px] px-4 border border-[rgba(29,29,31,0.1)] rounded-full text-[15px] text-[#1d1d1f] placeholder:text-[rgba(29,29,31,0.6)] leading-5 tracking-[0.075px] focus:outline-none focus:border-[#1d1d1f] focus:border-2"
                     placeholder="Enter your first name"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label htmlFor="lastName" className="block text-[15px] font-semibold text-[#1D1D1F]">
-                    Last Name
+                {/* Last Name */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="lastName" className="text-[15px] font-semibold text-[#1d1d1f] leading-5 tracking-[0.075px]">
+                    Last Name<span className="text-[#c93927]">*</span>
                   </label>
                   <input
                     id="lastName"
@@ -244,175 +310,148 @@ export function OnboardingPage() {
                     required
                     value={data.lastName}
                     onChange={(e) => setData({ ...data, lastName: e.target.value })}
-                    className="w-full px-4 py-3.5 border border-[#1D1D1F]/10 rounded-2xl text-[15px] text-[#1D1D1F] placeholder:text-[#1D1D1F]/60 focus:outline-none focus:ring-2 focus:ring-[#1D1D1F]/20 focus:border-[#1D1D1F]/20"
+                    className="w-full h-[44px] px-4 border border-[rgba(29,29,31,0.1)] rounded-full text-[15px] text-[#1d1d1f] placeholder:text-[rgba(29,29,31,0.6)] leading-5 tracking-[0.075px] focus:outline-none focus:border-[#1d1d1f] focus:border-2"
                     placeholder="Enter your last name"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label htmlFor="gender" className="block text-[15px] font-semibold text-[#1D1D1F]">
-                    Gender <span className="font-normal text-black/40">(Optional)</span>
+                {/* User Name */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="userName" className="text-[15px] font-semibold text-[#1d1d1f] leading-5 tracking-[0.075px]">
+                    User Name
                   </label>
-                  <select
-                    id="gender"
-                    value={data.gender}
-                    onChange={(e) => setData({ ...data, gender: e.target.value })}
-                    className="w-full px-4 py-3.5 border border-[#1D1D1F]/10 rounded-2xl text-[15px] text-[#1D1D1F] focus:outline-none focus:ring-2 focus:ring-[#1D1D1F]/20 focus:border-[#1D1D1F]/20 appearance-none bg-white"
-                  >
-                    <option value="">Select gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                    <option value="prefer_not_to_say">Prefer not to say</option>
-                  </select>
+                  <input
+                    id="userName"
+                    type="text"
+                    value={data.userName}
+                    onChange={(e) => setData({ ...data, userName: e.target.value })}
+                    className="w-full h-[44px] px-4 border border-[rgba(29,29,31,0.1)] rounded-full text-[15px] text-[#1d1d1f] placeholder:text-[rgba(29,29,31,0.6)] leading-5 tracking-[0.075px] focus:outline-none focus:border-[#1d1d1f] focus:border-2"
+                    placeholder="Enter your user name"
+                  />
                 </div>
               </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 bg-[#1D1D1F] text-white text-[16px] font-semibold rounded-2xl hover:bg-[#1D1D1F]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1D1D1F] disabled:opacity-50 transition-colors"
-              >
-                Continue
-              </button>
-            </form>
-          </div>
+            <button
+              onClick={handleNext}
+              disabled={loading}
+              className="h-[44px] px-8 bg-[#ddd] border border-[rgba(29,29,31,0.1)] text-black text-[16px] font-semibold rounded-2xl hover:bg-[#ccc] focus:outline-none disabled:opacity-50 transition-colors tracking-[0.08px] leading-5 w-fit"
+            >
+              Continue
+            </button>
+          </>
         );
 
       case 3:
         return (
-          <div className="space-y-8">
-            <div>
-              <h1 className="text-[32px] font-bold text-[#1D1D1F] tracking-wide">
-                Select Your Role
-              </h1>
-              <p className="mt-2 text-[15px] text-black/60">
-                How would you describe yourself in the watch community?
-              </p>
-            </div>
-
-            {error && (
-              <div className="rounded-2xl bg-red-50 p-4 border border-red-100">
-                <p className="text-sm text-red-800">{error}</p>
+          <>
+            <div className="flex flex-col gap-10">
+              <div className="flex flex-col gap-4">
+                <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
+                  Which best describes your role in the watch market?
+                </h1>
+                <p className="text-[18px] text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-[22px]">
+                  Choose the role that best matches your business.
+                </p>
               </div>
-            )}
 
-            <form onSubmit={handleNext} className="space-y-6">
-              <div className="space-y-3">
+              {error && (
+                <div className="rounded-2xl bg-red-50 p-4 border border-red-100">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
                 {ROLES.map((role) => (
                   <button
                     key={role.id}
                     type="button"
                     onClick={() => setData({ ...data, role: role.id })}
-                    className={`w-full p-4 text-left border rounded-2xl transition-all ${
+                    className={`w-full h-[44px] px-4 text-left border rounded-2xl transition-all flex items-center ${
                       data.role === role.id
-                        ? 'border-[#1D1D1F] bg-[#1D1D1F]/5'
-                        : 'border-[#1D1D1F]/10 hover:border-[#1D1D1F]/30'
+                        ? 'border-[#1d1d1f] bg-[#1d1d1f]/5'
+                        : 'border-[rgba(29,29,31,0.1)] hover:border-[rgba(29,29,31,0.3)]'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[15px] font-semibold text-[#1D1D1F]">{role.label}</p>
-                        <p className="text-[13px] text-black/60">{role.description}</p>
-                      </div>
-                      <div
-                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                          data.role === role.id
-                            ? 'border-[#1D1D1F] bg-[#1D1D1F]'
-                            : 'border-[#1D1D1F]/30'
-                        }`}
-                      >
-                        {data.role === role.id && (
-                          <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                          </svg>
-                        )}
-                      </div>
-                    </div>
+                    <span className="text-[15px] font-medium text-[#1d1d1f] leading-[1.3]">{role.label}</span>
                   </button>
                 ))}
               </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading || !data.role}
-                className="w-full py-3.5 bg-[#1D1D1F] text-white text-[16px] font-semibold rounded-2xl hover:bg-[#1D1D1F]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1D1D1F] disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Completing...' : 'Complete'}
-              </button>
-            </form>
-          </div>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={loading || !data.role}
+              className="w-full h-[44px] bg-[#212121] text-white text-[16px] font-semibold rounded-full hover:bg-[#212121]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#212121] disabled:opacity-50 transition-colors tracking-[0.08px] leading-5"
+            >
+              {loading ? 'Completing...' : 'Complete'}
+            </button>
+          </>
         );
     }
   };
 
   return (
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex bg-white relative">
+      {/* Logo - Centered at the very top of the entire viewport */}
+      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-10">
+        <img src={watchsphereLogo} alt="WatchSphere" className="h-[22px]" />
+      </div>
+
       {/* Left Side - Form */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="p-5 flex items-center justify-between">
+      <div className="flex-1 flex flex-col relative">
+        {/* Back Button - positioned at left */}
+        <div className="absolute top-[18px] left-[141px]">
           <button
             onClick={handleBack}
-            className="flex items-center gap-2 text-[15px] font-medium text-[#1D1D1F] hover:text-[#1D1D1F]/70 transition-colors"
+            className="h-[44px] w-[44px] flex items-center justify-center bg-[#f0f0f0] rounded-full hover:bg-[#e0e0e0] transition-colors"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
+            <svg className="w-5 h-5 text-[#404040]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 19l-7-7 7-7" />
             </svg>
-            Back
           </button>
-          <img src="/images/logo.svg" alt="WatchSphere" className="h-10" />
         </div>
 
-        {/* Form Container */}
-        <div className="flex-1 flex items-center justify-center px-8">
-          <div className="w-full max-w-[450px]">
+        {/* Form Container - positioned to the left of center */}
+        <div className="flex-1 flex flex-col pt-[176px] pb-[90px]" style={{ paddingLeft: 'calc(50% - 351px)', paddingRight: '32px' }}>
+          <div className="w-[448px] flex-1 flex flex-col justify-between">
             {renderStepContent()}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-8 flex items-center justify-center">
-          <div className="flex gap-2">
-            {[1, 2, 3].map((s) => (
-              <div
-                key={s}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  s === step ? 'bg-[#1D1D1F]' : 'bg-[#1D1D1F]/20'
-                }`}
-              />
-            ))}
           </div>
         </div>
       </div>
 
-      {/* Right Side - Image */}
-      <div className="hidden lg:block w-[641px] p-[90px] pr-10">
+      {/* Right Side - Image with Quote */}
+      <div className="hidden lg:block w-[641px] py-[90px] pr-10">
         <div
-          className="w-full h-full rounded-3xl bg-cover bg-center relative overflow-hidden"
-          style={{ backgroundImage: 'url(/images/auth-background.png)' }}
+          className="w-full h-[770px] rounded-3xl bg-cover bg-center relative overflow-hidden"
+          style={{ backgroundImage: `url(${getBackgroundImage()})` }}
         >
-          {/* Overlay with quote */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-10 left-10 right-10 text-white">
-            <p className="text-[24px] font-medium leading-snug">
-              "The best time to buy a watch was yesterday. The second best time is now."
-            </p>
-            <p className="mt-4 text-[14px] text-white/70">
-              — WatchSphere Community
-            </p>
-          </div>
+          {/* Gradient overlay */}
+          <div className="absolute inset-0 rounded-3xl" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0) 46.688%, rgba(0,0,0,1) 100%)' }} />
 
-          {/* Step indicators */}
-          <div className="absolute top-10 right-10 flex gap-2">
-            {[1, 2, 3].map((s) => (
-              <div
-                key={s}
-                className={`w-8 h-1 rounded-full transition-colors ${
-                  s <= step ? 'bg-white' : 'bg-white/30'
-                }`}
-              />
-            ))}
+          {/* Quote panel at bottom */}
+          <div className="absolute bottom-0 left-0 right-0 p-8 rounded-b-3xl backdrop-blur-[5.6px] bg-[rgba(0,0,0,0.05)]">
+            <div className="flex flex-col gap-6">
+              <p className="text-white text-[32px] font-bold tracking-[0.4px] leading-[1.2]">
+                {QUOTES[step - 1].text}
+              </p>
+              <p className="text-white text-[16px] font-normal">
+                {QUOTES[step - 1].author}
+              </p>
+            </div>
+
+            {/* Step indicators */}
+            <div className="flex gap-2 mt-8 justify-center">
+              {[1, 2, 3].map((s) => (
+                <div
+                  key={s}
+                  className={`w-[55px] h-[4px] rounded-sm ${
+                    s === step ? 'bg-[rgba(255,255,255,0.8)]' : 'bg-[rgba(255,255,255,0.25)]'
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>

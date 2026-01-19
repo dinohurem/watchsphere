@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal, Alert, Platform, ActivityIndicator, FlatList, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -9,6 +9,8 @@ import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 // Country flag component using flag CDN
 function CountryFlag({ countryCode, size = 20 }: { countryCode: string; size?: number }) {
@@ -237,6 +239,7 @@ interface WatchDetailsParams {
   user_review_count?: string;
   fromOrderBook?: string;
   order_type?: string;
+  case_size?: string;
 }
 
 interface WatchSpec {
@@ -244,38 +247,39 @@ interface WatchSpec {
   value: string;
 }
 
-// Mock watch specifications
-const MOCK_SPECS = {
-  basic: [
-    { label: 'Brand', value: 'Audemars Piguet' },
-    { label: 'Model', value: 'Royal Oak' },
-    { label: 'Reference', value: '26240OR Blue' },
-    { label: 'Year', value: '2023' },
-  ],
-  caliber: [
-    { label: 'Movement', value: 'Automatic' },
-    { label: 'Caliber', value: '4401' },
-    { label: 'Power Reserve', value: '70 hours' },
-    { label: 'Frequency', value: '28,800 vph' },
-  ],
-  case: [
-    { label: 'Material', value: '18k Rose Gold' },
-    { label: 'Diameter', value: '41mm' },
-    { label: 'Thickness', value: '10.4mm' },
-    { label: 'Water Resistance', value: '50m' },
-    { label: 'Crystal', value: 'Sapphire' },
-  ],
-  bracelet: [
-    { label: 'Material', value: '18k Rose Gold' },
-    { label: 'Clasp', value: 'Folding Clasp' },
-    { label: 'Buckle Material', value: '18k Rose Gold' },
-  ],
-  other: [
-    { label: 'Dial Color', value: 'Blue Grande Tapisserie' },
-    { label: 'Bezel', value: 'Fixed' },
-    { label: 'Functions', value: 'Hours, Minutes, Seconds, Chronograph, Date' },
-  ],
-};
+interface WatchDetails {
+  image_url?: string;
+  images?: string[];
+  // Basic information
+  year?: number;
+  size?: string;
+  movement?: string;
+  case_material?: string;
+  bracelet_material?: string;
+  case_size?: string;
+  gender?: string;
+  availability?: string;
+  // Caliber information
+  movement_type?: string;
+  caliber?: string;
+  base_caliber?: string;
+  power_reserve?: string;
+  number_of_jewels?: number;
+  // Case information
+  case_diameter?: string;
+  water_resistance?: string;
+  bezel_material?: string;
+  crystal?: string;
+  dial?: string;
+  dial_numerals?: string;
+  // Bracelet/strap information
+  bracelet_color?: string;
+  clasp_type?: string;
+  clasp_material?: string;
+  clasp?: string;
+  // Allow dynamic access
+  [key: string]: string | number | string[] | undefined;
+}
 
 export default function WatchDetailsScreen() {
   const params = useLocalSearchParams() as WatchDetailsParams;
@@ -288,6 +292,21 @@ export default function WatchDetailsScreen() {
   const [userRating, setUserRating] = useState<number>(0);
   const [userReviewCount, setUserReviewCount] = useState<number>(0);
   const [displayUserName, setDisplayUserName] = useState<string | null>(null);
+  const [caseSize, setCaseSize] = useState<string | null>(params.case_size || null);
+  const [watchDetails, setWatchDetails] = useState<WatchDetails | null>(null);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
+  const [fetchedUserId, setFetchedUserId] = useState<string | null>(null);
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
+
+  // Mark as Sold/Completed modal states
+  const [showMarkSoldModal, setShowMarkSoldModal] = useState(false);
+  const [showMarkCompletedModal, setShowMarkCompletedModal] = useState(false);
+  const [markingAsSold, setMarkingAsSold] = useState(false);
+  const [markingAsCompleted, setMarkingAsCompleted] = useState(false);
+
+  // Image carousel state
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const imageListRef = useRef<FlatList>(null);
 
   // Debug: log all params received
   console.log('WatchDetails params:', JSON.stringify(params, null, 2));
@@ -307,9 +326,11 @@ export default function WatchDetailsScreen() {
   const orderType = params.order_type;
 
   // Check if this is the current user's order (either buy or sell)
-  const isOwnOrder = orderUserId === user?.id;
+  // Use fetchedUserId (from API) as fallback since params.user_id may not always be passed
+  const effectiveOrderUserId = orderUserId || fetchedUserId;
+  const isOwnOrder = effectiveOrderUserId === user?.id;
 
-  // Fetch order details to get user rating info and name
+  // Fetch order details to get user rating info, name, and watch details
   useEffect(() => {
     const fetchOrderDetails = async () => {
       if (params.orderId) {
@@ -322,6 +343,26 @@ export default function WatchDetailsScreen() {
             // Use user_name from API response if available
             if (response.data.user_name) {
               setDisplayUserName(response.data.user_name);
+            }
+            // Store user_id from API response for profile navigation
+            if (response.data.user_id) {
+              setFetchedUserId(response.data.user_id);
+            }
+            // Store created_at for "Added X ago" display
+            if (response.data.created_at) {
+              setCreatedAt(response.data.created_at);
+            }
+            // Store order status for labels
+            if (response.data.status) {
+              setOrderStatus(response.data.status);
+            }
+            // Get watch_details from API response
+            if (response.data.watch_details) {
+              setWatchDetails(response.data.watch_details);
+              // Also set case_size if available
+              if (response.data.watch_details.case_size) {
+                setCaseSize(response.data.watch_details.case_size);
+              }
             }
           }
         } catch (error) {
@@ -382,8 +423,172 @@ export default function WatchDetailsScreen() {
   // Use API-fetched name, or params name, or fallback
   const effectiveUserName = displayUserName || userName;
 
+  // Handler for marking sell order as sold
+  const handleMarkAsSold = async () => {
+    if (!params.orderId) {
+      Alert.alert('Error', 'Order ID is missing');
+      return;
+    }
+
+    setMarkingAsSold(true);
+    try {
+      await api.post(`/orders/${params.orderId}/mark-sold`);
+      setShowMarkSoldModal(false);
+      setOrderStatus('sold');
+      Alert.alert('Success', 'Your watch has been marked as sold.', [
+        { text: 'Go to Inventory', onPress: () => { router.dismissAll(); router.replace('/(tabs)/dashboard'); } },
+        { text: 'OK', style: 'cancel' },
+      ]);
+    } catch (error: any) {
+      console.error('Failed to mark as sold:', error);
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to mark as sold. Please try again.');
+    } finally {
+      setMarkingAsSold(false);
+    }
+  };
+
+  // Handler for marking buy order as completed
+  const handleMarkAsCompleted = async () => {
+    if (!params.orderId) {
+      Alert.alert('Error', 'Order ID is missing');
+      return;
+    }
+
+    setMarkingAsCompleted(true);
+    try {
+      await api.post(`/orders/${params.orderId}/mark-completed`);
+      setShowMarkCompletedModal(false);
+      setOrderStatus('completed');
+      Alert.alert('Success', 'Your buy order has been marked as completed.', [
+        { text: 'Go to Profile', onPress: () => { router.dismissAll(); router.replace('/(tabs)/profile'); } },
+        { text: 'OK', style: 'cancel' },
+      ]);
+    } catch (error: any) {
+      console.error('Failed to mark as completed:', error);
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to mark as completed. Please try again.');
+    } finally {
+      setMarkingAsCompleted(false);
+    }
+  };
+
   const formatPrice = (price: number) => {
     return `€${price.toLocaleString('de-DE')}`;
+  };
+
+  const formatTimeAgo = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  };
+
+  // Effective user ID for profile navigation (from params or fetched from API)
+  const effectiveUserId = orderUserId || fetchedUserId;
+
+  // Build dynamic specs from watch_details - showing ALL populated fields
+  const getBasicSpecs = (): WatchSpec[] => {
+    const specs: WatchSpec[] = [
+      { label: 'Brand', value: brand },
+      { label: 'Model', value: model },
+      { label: 'Reference', value: reference },
+    ];
+    if (watchDetails?.year) {
+      specs.push({ label: 'Year', value: watchDetails.year.toString() });
+    }
+    if (watchDetails?.size || watchDetails?.case_size || caseSize) {
+      specs.push({ label: 'Size', value: watchDetails?.size || watchDetails?.case_size || caseSize || '' });
+    }
+    if (watchDetails?.movement) {
+      specs.push({ label: 'Movement', value: watchDetails.movement });
+    }
+    if (watchDetails?.case_material) {
+      specs.push({ label: 'Case material', value: watchDetails.case_material });
+    }
+    if (watchDetails?.bracelet_material) {
+      specs.push({ label: 'Bracelet material', value: watchDetails.bracelet_material });
+    }
+    if (watchDetails?.gender) {
+      specs.push({ label: 'Gender', value: watchDetails.gender });
+    }
+    if (watchDetails?.availability) {
+      specs.push({ label: 'Availability', value: watchDetails.availability });
+    }
+    return specs;
+  };
+
+  const getCaliberSpecs = (): WatchSpec[] => {
+    const specs: WatchSpec[] = [];
+    if (watchDetails?.movement_type) {
+      specs.push({ label: 'Movement type', value: watchDetails.movement_type });
+    }
+    if (watchDetails?.caliber) {
+      specs.push({ label: 'Caliber', value: watchDetails.caliber });
+    }
+    if (watchDetails?.base_caliber) {
+      specs.push({ label: 'Base caliber', value: watchDetails.base_caliber });
+    }
+    if (watchDetails?.power_reserve) {
+      specs.push({ label: 'Power reserve', value: watchDetails.power_reserve });
+    }
+    if (watchDetails?.number_of_jewels) {
+      specs.push({ label: 'Number of jewels', value: watchDetails.number_of_jewels.toString() });
+    }
+    return specs;
+  };
+
+  const getCaseSpecs = (): WatchSpec[] => {
+    const specs: WatchSpec[] = [];
+    if (watchDetails?.case_material) {
+      specs.push({ label: 'Material', value: watchDetails.case_material });
+    }
+    if (caseSize || watchDetails?.case_diameter || watchDetails?.case_size) {
+      specs.push({ label: 'Diameter', value: caseSize || watchDetails?.case_diameter || watchDetails?.case_size || '' });
+    }
+    if (watchDetails?.water_resistance) {
+      specs.push({ label: 'Water resistance', value: watchDetails.water_resistance });
+    }
+    if (watchDetails?.bezel_material) {
+      specs.push({ label: 'Bezel material', value: watchDetails.bezel_material });
+    }
+    if (watchDetails?.crystal) {
+      specs.push({ label: 'Crystal', value: watchDetails.crystal });
+    }
+    if (watchDetails?.dial) {
+      specs.push({ label: 'Dial', value: watchDetails.dial });
+    }
+    if (watchDetails?.dial_numerals) {
+      specs.push({ label: 'Dial numerals', value: watchDetails.dial_numerals });
+    }
+    return specs;
+  };
+
+  const getBraceletSpecs = (): WatchSpec[] => {
+    const specs: WatchSpec[] = [];
+    if (watchDetails?.bracelet_material) {
+      specs.push({ label: 'Material', value: watchDetails.bracelet_material });
+    }
+    if (watchDetails?.bracelet_color) {
+      specs.push({ label: 'Color', value: watchDetails.bracelet_color });
+    }
+    if (watchDetails?.clasp_type || watchDetails?.clasp) {
+      specs.push({ label: 'Clasp type', value: watchDetails?.clasp_type || watchDetails?.clasp || '' });
+    }
+    if (watchDetails?.clasp_material) {
+      specs.push({ label: 'Clasp material', value: watchDetails.clasp_material });
+    }
+    return specs;
+  };
+
+  const getOtherSpecs = (): WatchSpec[] => {
+    // No longer needed - dial moved to Case specs
+    return [];
   };
 
   const handleContactNow = async () => {
@@ -466,35 +671,118 @@ export default function WatchDetailsScreen() {
             locations={[0.067, 1]}
             style={styles.heroGradient}
           />
-          {/* Watch Image Placeholder - WatchSphere Logo */}
-          <View style={styles.heroImagePlaceholder}>
-            <LogoIcon width={80} height={50} color="rgba(33, 33, 33, 0.2)" />
-          </View>
+          {/* Watch Images Carousel */}
+          {watchDetails?.images && watchDetails.images.length > 0 ? (
+            <View style={styles.imageCarouselContainer}>
+              <FlatList
+                ref={imageListRef}
+                data={watchDetails.images}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(e) => {
+                  const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                  setCurrentImageIndex(index);
+                }}
+                keyExtractor={(item, index) => `image-${index}`}
+                renderItem={({ item }) => (
+                  <View style={styles.heroImageWrapper}>
+                    <Image
+                      source={{ uri: item }}
+                      style={styles.heroImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                )}
+              />
+              {/* Pagination dots */}
+              {watchDetails.images.length > 1 && (
+                <View style={styles.paginationDots}>
+                  {watchDetails.images.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.paginationDot,
+                        index === currentImageIndex && styles.paginationDotActive,
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : watchDetails?.image_url ? (
+            <View style={styles.heroImageWrapper}>
+              <Image
+                source={{ uri: watchDetails.image_url }}
+                style={styles.heroImage}
+                resizeMode="contain"
+              />
+            </View>
+          ) : (
+            <View style={styles.heroImagePlaceholder}>
+              <LogoIcon width={80} height={50} color="rgba(33, 33, 33, 0.2)" />
+            </View>
+          )}
 
           {/* Header overlay */}
           <SafeAreaView style={styles.headerOverlay} edges={['top']}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
               <BackArrow />
             </TouchableOpacity>
-            {/* Show 3-dots menu for owner only, nothing for non-owners */}
-            {isOwnOrder && (
+            {/* Watch Title in Header */}
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitle} numberOfLines={1}>{brand} {model}</Text>
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {reference}, {condition}{caseSize ? `, ${caseSize}` : ''}
+              </Text>
+            </View>
+            {/* Show 3-dots menu for owner only, empty spacer for non-owners */}
+            {isOwnOrder ? (
               <TouchableOpacity
                 style={styles.moreButton}
                 onPress={() => setShowMenu(true)}
               >
                 <MoreIcon />
               </TouchableOpacity>
+            ) : (
+              <View style={styles.headerSpacer} />
             )}
           </SafeAreaView>
         </View>
 
         {/* Watch Info */}
         <View style={styles.infoSection}>
+          {/* Order Type Badge and Status Label */}
+          {orderType && (
+            <View style={styles.badgeRow}>
+              <View style={[styles.orderTypeBadge, orderType === 'buy' ? styles.buyBadge : styles.sellBadge]}>
+                <Text style={[styles.orderTypeText, orderType === 'buy' ? styles.buyText : styles.sellText]}>
+                  {orderType === 'buy' ? 'Buy Order' : 'Sell Order'}
+                </Text>
+              </View>
+              {/* Status Label for Sold/Completed orders
+                  - Sell orders show "Sold" when status is sold
+                  - Buy orders show "Completed" when status is completed or sold (defensive) */}
+              {orderType === 'sell' && (orderStatus === 'sold' || orderStatus === 'completed') && (
+                <View style={styles.soldBadge}>
+                  <Text style={styles.soldText}>Sold</Text>
+                </View>
+              )}
+              {orderType === 'buy' && (orderStatus === 'completed' || orderStatus === 'sold') && (
+                <View style={styles.completedBadge}>
+                  <Text style={styles.completedText}>Completed</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Price Row - Price on left, star on right */}
           <View style={styles.priceStarRow}>
             <View style={styles.priceColumn}>
               <Text style={styles.priceValue}>{formatPrice(price)}</Text>
-              <Text style={styles.addedTime}>Added 2 hrs ago</Text>
+              <Text style={styles.addedTime}>
+                {createdAt ? `Added ${formatTimeAgo(createdAt)}` : 'Added recently'}
+              </Text>
             </View>
             {!isOwnOrder && (
               <TouchableOpacity
@@ -515,7 +803,7 @@ export default function WatchDetailsScreen() {
             </View>
             <View style={styles.quickInfoRow}>
               <Text style={styles.quickInfoLabel}>Case size:</Text>
-              <Text style={styles.quickInfoValue}>45mm</Text>
+              <Text style={styles.quickInfoValue}>{caseSize || '—'}</Text>
             </View>
             <View style={styles.quickInfoRow}>
               <Text style={styles.quickInfoLabel}>Box/papers</Text>
@@ -535,9 +823,9 @@ export default function WatchDetailsScreen() {
             {/* Seller/Buyer Row */}
             <TouchableOpacity
               style={styles.quickInfoRow}
-              onPress={() => orderUserId && router.push(`/user/${orderUserId}` as any)}
+              onPress={() => effectiveUserId && router.push(`/user/${effectiveUserId}` as any)}
               activeOpacity={0.7}
-              disabled={!orderUserId}
+              disabled={!effectiveUserId}
             >
               <Text style={styles.quickInfoLabel}>{orderType === 'sell' ? 'Seller' : 'Buyer'}</Text>
               <View style={styles.sellerRow}>
@@ -550,7 +838,7 @@ export default function WatchDetailsScreen() {
                     )}
                   </View>
                 )}
-                <Text style={[styles.sellerName, orderUserId ? styles.sellerNameClickable : undefined]}>{effectiveUserName}</Text>
+                <Text style={[styles.sellerName, effectiveUserId ? styles.sellerNameClickable : undefined]}>{effectiveUserName}</Text>
                 {effectiveUserName !== 'N/A' && (
                   <>
                     <RatingStarIcon />
@@ -564,11 +852,11 @@ export default function WatchDetailsScreen() {
 
         {/* Specifications */}
         <View style={styles.specsContainer}>
-          {renderSpecSection('Basic info', MOCK_SPECS.basic)}
-          {renderSpecSection('Caliber', MOCK_SPECS.caliber)}
-          {renderSpecSection('Case', MOCK_SPECS.case)}
-          {renderSpecSection('Bracelet/strap', MOCK_SPECS.bracelet)}
-          {renderSpecSection('Other', MOCK_SPECS.other)}
+          {renderSpecSection('Basic info', getBasicSpecs())}
+          {getCaliberSpecs().length > 0 && renderSpecSection('Caliber', getCaliberSpecs())}
+          {getCaseSpecs().length > 0 && renderSpecSection('Case', getCaseSpecs())}
+          {getBraceletSpecs().length > 0 && renderSpecSection('Bracelet/strap', getBraceletSpecs())}
+          {getOtherSpecs().length > 0 && renderSpecSection('Other', getOtherSpecs())}
         </View>
 
         {/* Bottom spacing for action bar */}
@@ -632,27 +920,34 @@ export default function WatchDetailsScreen() {
                   <Text style={styles.actionSheetItemText}>Edit</Text>
                 </TouchableOpacity>
 
-                {/* Mark as Sold - only show for sell orders */}
-                {orderType === 'sell' && (
+                {/* Mark as Sold - only show for active sell orders (not sold or completed) */}
+                {orderType === 'sell' && orderStatus === 'active' && (
                   <>
                     <View style={styles.actionSheetDivider} />
                     <TouchableOpacity
                       style={styles.actionSheetItem}
                       onPress={() => {
                         setShowMenu(false);
-                        router.push({
-                          pathname: '/market/mark-sold',
-                          params: {
-                            orderId: params.orderId || '',
-                            brand,
-                            model,
-                            reference,
-                            price: price.toString(),
-                          },
-                        });
+                        setShowMarkSoldModal(true);
                       }}
                     >
                       <Text style={styles.actionSheetItemText}>Mark as Sold</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {/* Mark as Completed - only show for active buy orders (not completed or sold) */}
+                {orderType === 'buy' && orderStatus === 'active' && (
+                  <>
+                    <View style={styles.actionSheetDivider} />
+                    <TouchableOpacity
+                      style={styles.actionSheetItem}
+                      onPress={() => {
+                        setShowMenu(false);
+                        setShowMarkCompletedModal(true);
+                      }}
+                    >
+                      <Text style={styles.actionSheetItemText}>Mark as Completed</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -699,6 +994,92 @@ export default function WatchDetailsScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Mark as Sold Confirmation Modal */}
+      <Modal
+        visible={showMarkSoldModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMarkSoldModal(false)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalContainer}>
+            <View style={styles.confirmModalContent}>
+              <Text style={styles.confirmModalTitle}>Mark as Sold</Text>
+              <Text style={styles.confirmModalWatch}>{brand} {model}</Text>
+              <Text style={styles.confirmModalReference}>{reference}</Text>
+              <Text style={styles.confirmModalPrice}>{formatPrice(price)}</Text>
+
+              <Text style={styles.confirmModalMessage}>
+                Are you sure you want to mark this watch as sold? This will remove it from your inventory and the order book.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.confirmModalButton, markingAsSold && styles.buttonDisabled]}
+                onPress={handleMarkAsSold}
+                disabled={markingAsSold}
+              >
+                {markingAsSold ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmModalButtonText}>Confirm Sale</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmModalCancelButton}
+                onPress={() => setShowMarkSoldModal(false)}
+                disabled={markingAsSold}
+              >
+                <Text style={styles.confirmModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Mark as Completed Confirmation Modal */}
+      <Modal
+        visible={showMarkCompletedModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMarkCompletedModal(false)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalContainer}>
+            <View style={styles.confirmModalContent}>
+              <Text style={styles.confirmModalTitle}>Mark as Completed</Text>
+              <Text style={styles.confirmModalWatch}>{brand} {model}</Text>
+              <Text style={styles.confirmModalReference}>{reference}</Text>
+              <Text style={styles.confirmModalPrice}>{formatPrice(price)}</Text>
+
+              <Text style={styles.confirmModalMessage}>
+                Are you sure you want to mark this buy order as completed? This will remove it from the order book.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.confirmModalButton, markingAsCompleted && styles.buttonDisabled]}
+                onPress={handleMarkAsCompleted}
+                disabled={markingAsCompleted}
+              >
+                {markingAsCompleted ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmModalButtonText}>Confirm Completion</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmModalCancelButton}
+                onPress={() => setShowMarkCompletedModal(false)}
+                disabled={markingAsCompleted}
+              >
+                <Text style={styles.confirmModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -728,10 +1109,15 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   heroImage: {
-    width: '80%',
-    height: '70%',
-    alignSelf: 'center',
-    marginTop: hp(100),
+    width: SCREEN_WIDTH * 0.7,
+    height: hp(200),
+  },
+  heroImageWrapper: {
+    width: SCREEN_WIDTH,
+    height: hp(380),
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: hp(40),
   },
   heroImagePlaceholder: {
     width: '100%',
@@ -740,6 +1126,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: hp(60),
   },
+  imageCarouselContainer: {
+    width: '100%',
+    height: hp(380),
+    position: 'relative',
+  },
+  paginationDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    bottom: hp(8),
+    left: 0,
+    right: 0,
+    gap: sp(8),
+  },
+  paginationDot: {
+    width: sp(8),
+    height: sp(8),
+    borderRadius: sp(4),
+    backgroundColor: 'rgba(33, 33, 33, 0.2)',
+  },
+  paginationDotActive: {
+    backgroundColor: '#212121',
+  },
   headerOverlay: {
     position: 'absolute',
     top: 0,
@@ -747,6 +1157,7 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: wp(16),
     paddingTop: hp(8),
   },
@@ -757,6 +1168,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F8F8',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    marginHorizontal: wp(12),
+    alignItems: 'flex-start',
+  },
+  headerTitle: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(17),
+    color: '#1D1D1F',
+    lineHeight: fp(22),
+  },
+  headerSubtitle: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: fp(13),
+    color: 'rgba(29, 29, 31, 0.5)',
+    lineHeight: fp(18),
+  },
+  headerSpacer: {
+    width: sp(44),
+    height: sp(44),
   },
   headerRightButtons: {
     flexDirection: 'row',
@@ -781,6 +1213,55 @@ const styles = StyleSheet.create({
   infoSection: {
     paddingHorizontal: wp(16),
     paddingTop: hp(24),
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(8),
+    marginBottom: hp(12),
+  },
+  orderTypeBadge: {
+    paddingVertical: hp(6),
+    paddingHorizontal: wp(12),
+    borderRadius: sp(8),
+  },
+  buyBadge: {
+    backgroundColor: 'rgba(74, 160, 120, 0.1)',
+  },
+  sellBadge: {
+    backgroundColor: 'rgba(0, 136, 255, 0.1)',
+  },
+  soldBadge: {
+    paddingVertical: hp(6),
+    paddingHorizontal: wp(12),
+    borderRadius: sp(8),
+    backgroundColor: 'rgba(201, 57, 39, 0.1)',
+  },
+  completedBadge: {
+    paddingVertical: hp(6),
+    paddingHorizontal: wp(12),
+    borderRadius: sp(8),
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  orderTypeText: {
+    fontSize: fp(13),
+    fontFamily: 'HankenGrotesk_600SemiBold',
+  },
+  buyText: {
+    color: '#4AA078',
+  },
+  sellText: {
+    color: '#0088FF',
+  },
+  soldText: {
+    fontSize: fp(13),
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    color: '#c93927',
+  },
+  completedText: {
+    fontSize: fp(13),
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    color: '#666666',
   },
   titleRow: {
     flexDirection: 'row',
@@ -1010,5 +1491,82 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
     marginHorizontal: wp(16),
+  },
+  // Confirmation Modal styles
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmModalContainer: {
+    width: SCREEN_WIDTH - wp(48),
+    maxWidth: wp(340),
+  },
+  confirmModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: sp(24),
+    padding: wp(24),
+    alignItems: 'center',
+  },
+  confirmModalTitle: {
+    fontFamily: 'HankenGrotesk_700Bold',
+    fontSize: fp(20),
+    color: '#212121',
+    marginBottom: hp(16),
+  },
+  confirmModalWatch: {
+    fontFamily: 'HankenGrotesk_700Bold',
+    fontSize: fp(18),
+    color: '#212121',
+    textAlign: 'center',
+  },
+  confirmModalReference: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(14),
+    color: '#999999',
+    marginTop: hp(4),
+  },
+  confirmModalPrice: {
+    fontFamily: 'HankenGrotesk_700Bold',
+    fontSize: fp(24),
+    color: '#212121',
+    marginTop: hp(12),
+    marginBottom: hp(16),
+  },
+  confirmModalMessage: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: fp(15),
+    color: '#666666',
+    textAlign: 'center',
+    lineHeight: fp(22),
+    marginBottom: hp(24),
+  },
+  confirmModalButton: {
+    backgroundColor: '#212121',
+    borderRadius: sp(99),
+    paddingVertical: hp(14),
+    paddingHorizontal: wp(32),
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: wp(180),
+  },
+  confirmModalButtonText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(16),
+    color: '#FFFFFF',
+  },
+  confirmModalCancelButton: {
+    marginTop: hp(12),
+    paddingVertical: hp(12),
+    paddingHorizontal: wp(24),
+  },
+  confirmModalCancelText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(16),
+    color: '#666666',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

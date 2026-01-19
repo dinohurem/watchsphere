@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Svg, { Path, Circle, Line, Rect, G, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -531,6 +531,14 @@ export default function WatchDetailsScreen() {
     loadWatchDetails();
     loadOrderBook();
   }, [id, reference]);
+
+  // Reload data when screen comes into focus (e.g., after creating an order)
+  useFocusEffect(
+    useCallback(() => {
+      loadWatchDetails();
+      loadOrderBook();
+    }, [id, reference])
+  );
 
   // Check watchlist status when authentication changes or reference changes
   useEffect(() => {

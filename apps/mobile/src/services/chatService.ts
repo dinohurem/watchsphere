@@ -168,12 +168,19 @@ class ChatService {
         unreadCount: data.unreadCount ?? 0,
       });
     });
+
+    // Notification events (for buy orders, price alerts, etc.)
+    this.socket.on('notification:new', (data: any) => {
+      console.log('ChatService: Received notification:new event', data);
+      this.emit('notification:new', data);
+    });
   }
 
   disconnect() {
     this.socket?.disconnect();
     this.socket = null;
-    this.listeners.clear();
+    // Don't clear listeners - they are managed by components and need to persist across reconnects
+    // Components will call off() when they unmount
     this.typingTimeouts.forEach(timeout => clearTimeout(timeout));
     this.typingTimeouts.clear();
   }

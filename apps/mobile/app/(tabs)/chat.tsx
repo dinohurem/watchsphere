@@ -42,6 +42,7 @@ interface Conversation {
   timestamp: string;
   unread: number;
   avatar?: string;
+  participant_id?: string;  // The other participant's user ID
 }
 
 interface AIChat {

@@ -151,6 +151,14 @@ interface Order {
   priceChange: number;
   image: string;
   status: string;
+  orderType: 'buy' | 'sell';
+  condition: string;
+  country_code: string;
+  country_name: string;
+  has_box: boolean;
+  has_papers: boolean;
+  user_name: string;
+  user_id: string;
 }
 
 // Shopping Bag Icon for Buy Orders
@@ -222,12 +230,14 @@ function RatingStarIcon() {
 
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
+  const updateUser = useAuthStore((state) => state.updateUser);
   const [favoriteWatches, setFavoriteWatches] = useState<FavoriteWatch[]>([]);
   const [buyOrders, setBuyOrders] = useState<Order[]>([]);
   const [sellOrders, setSellOrders] = useState<Order[]>([]);
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
-  const [averageRating, setAverageRating] = useState<number>(0);
-  const [reviewCount, setReviewCount] = useState<number>(0);
+  // Use profile image from auth store for reactive updates
+  const profileImageUrl = user?.profile_image_url || null;
+  const averageRating = user?.average_rating || 0;
+  const reviewCount = user?.review_count || 0;
 
   // Load data when screen comes into focus
   useFocusEffect(
@@ -242,15 +252,17 @@ export default function ProfileScreen() {
     try {
       const response = await api.get('/profile/me');
       console.log('Profile API response:', JSON.stringify(response.data, null, 2));
-      if (response.data?.profile_image_url) {
-        console.log('Setting profile image URL:', response.data.profile_image_url);
-        setProfileImageUrl(response.data.profile_image_url);
-      } else {
-        console.log('No profile_image_url in response');
-      }
-      // Set rating data
-      setAverageRating(response.data?.average_rating || 0);
-      setReviewCount(response.data?.review_count || 0);
+      // Sync profile data to auth store for global access
+      updateUser({
+        name: response.data.name,
+        profile_image_url: response.data.profile_image_url,
+        profile_image_thumbnail_url: response.data.profile_image_thumbnail_url,
+        phone: response.data.phone,
+        whatsapp_phone: response.data.whatsapp_phone,
+        telegram_username: response.data.telegram_username,
+        average_rating: response.data.average_rating || 0,
+        review_count: response.data.review_count || 0,
+      });
     } catch (error) {
       console.error('Failed to load profile:', error);
     }
@@ -273,6 +285,14 @@ export default function ProfileScreen() {
             priceChange: order.price_change || 0,
             image: order.cover_image || '',
             status: order.status || 'active',
+            orderType: order.order_type as 'buy' | 'sell',
+            condition: order.condition || 'Unworn',
+            country_code: order.country_code || 'US',
+            country_name: order.country_name || 'United States',
+            has_box: order.has_box || false,
+            has_papers: order.has_papers || false,
+            user_name: order.user_name || '',
+            user_id: order.user_id || '',
           };
 
           if (order.order_type === 'buy') {
@@ -374,17 +394,29 @@ export default function ProfileScreen() {
 
   const renderOrderCard = (order: Order, isSingleItem: boolean = false) => {
     const isPositive = order.priceChange >= 0;
+    const isSold = order.status === 'sold';
+    const isCompleted = order.status === 'completed';
     return (
       <TouchableOpacity
         key={order.id}
         style={[styles.watchCard, isSingleItem && styles.watchCardHalf]}
         onPress={() => router.push({
-          pathname: '/market/[id]',
+          pathname: '/market/watch-details',
           params: {
-            // Encode to handle references with special characters (e.g., 5711/1A-010)
-            id: encodeURIComponent(order.reference || order.id),
+            orderId: order.id,
             reference: order.reference,
             brand: order.brand,
+            model: order.model,
+            price: String(order.price),
+            condition: order.condition,
+            country_code: order.country_code,
+            country_name: order.country_name,
+            has_box: String(order.has_box),
+            has_papers: String(order.has_papers),
+            user_name: order.user_name,
+            user_id: order.user_id,
+            fromOrderBook: 'true',
+            order_type: order.orderType,
           },
         } as any)}
         activeOpacity={0.8}
@@ -405,6 +437,18 @@ export default function ProfileScreen() {
               <LogoIcon size={sp(48)} color="rgba(33, 33, 33, 0.15)" />
             )}
           </LinearGradient>
+          {/* Status Badge - Sold for sell orders */}
+          {isSold && order.orderType === 'sell' && (
+            <View style={styles.orderSoldBadge}>
+              <Text style={styles.orderSoldBadgeText}>Sold</Text>
+            </View>
+          )}
+          {/* Status Badge - Completed for buy orders */}
+          {isCompleted && order.orderType === 'buy' && (
+            <View style={styles.orderCompletedBadge}>
+              <Text style={styles.orderCompletedBadgeText}>Completed</Text>
+            </View>
+          )}
         </View>
 
         {/* Watch Info */}
@@ -797,6 +841,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: sp(12),
     borderTopRightRadius: sp(12),
     overflow: 'hidden',
+    position: 'relative',
   },
   watchImageGradient: {
     flex: 1,
@@ -806,6 +851,34 @@ const styles = StyleSheet.create({
   watchImage: {
     width: '66%',
     height: '86%',
+  },
+  orderSoldBadge: {
+    position: 'absolute',
+    top: hp(8),
+    right: wp(8),
+    backgroundColor: 'rgba(201, 57, 39, 0.1)',
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(4),
+    borderRadius: sp(6),
+  },
+  orderSoldBadgeText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(10),
+    color: '#c93927',
+  },
+  orderCompletedBadge: {
+    position: 'absolute',
+    top: hp(8),
+    right: wp(8),
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(4),
+    borderRadius: sp(6),
+  },
+  orderCompletedBadgeText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(10),
+    color: '#666666',
   },
   watchInfo: {
     padding: wp(16),

@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useConfig } from '@/contexts/ConfigContext';
+import { useConfig, ListingField, FieldCategory, CATEGORY_STEPS } from '@/contexts/ConfigContext';
 import { api } from '@/services/api';
 import { BackArrow, ChevronDown, ChevronRight, Plus, X, Trash2, Check } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
@@ -24,60 +24,31 @@ function ImageUploadIcon({ size = 48, color = '#212121' }: { size?: number; colo
   );
 }
 
-// Form data type
+// Form data type - dynamic key-value pairs
 interface ListingFormData {
-  // Step 1: Basic Information
-  brand: string;
-  model: string;
-  reference: string;
-  year: string;
-  size: string;
-  movement: string;
-  caseMaterial: string;
-  braceletMaterial: string;
-  condition: string;
-  conditionDescription: string;
-  boxAndPapers: string;
-  gender: string;
-  location: string;
-  price: string;
-  currency: string;
-  availability: string;
-
-  // Step 2: Caliber Information
-  movementType: string;
-  caliberMovement: string;
-  baseCaliber: string;
-  powerReserve: string;
-  numberOfJewels: string;
-
-  // Step 3: Case Information
-  caseMaterialDetail: string;
-  caseDiameter: string;
-  waterResistance: string;
-  bezelMaterial: string;
-  crystal: string;
-  dialColor: string;
-  dialNumbers: string;
-
-  // Step 4: Bracelet/Strap Information
-  braceletMaterialDetail: string;
-  braceletColor: string;
-  claspType: string;
-  claspMaterial: string;
-
-  // Step 5: Photos
+  [key: string]: string | string[];
   photos: string[];
 }
 
+// Form step configuration
+const FORM_STEPS: { key: FieldCategory | 'photos' | 'overview'; label: string }[] = [
+  { key: 'basic', label: 'Basic information' },
+  { key: 'caliber', label: 'Caliber information' },
+  { key: 'case', label: 'Case information' },
+  { key: 'bracelet', label: 'Bracelet / Strap information' },
+  { key: 'photos', label: 'Photos' },
+  { key: 'overview', label: 'Listing overview' },
+];
+
 export default function CreateListingScreen() {
   const { colors, fonts } = useTheme();
-  const { getFieldOptions, loadListingFields, isLoadingListingFields, isFieldEnabled, listingFields, error: configError } = useConfig();
+  const { getFieldOptions, loadListingFields, isLoadingListingFields, listingFields, error: configError, getFieldsByCategory } = useConfig();
 
   // Load listing fields when component mounts
   useEffect(() => {
     loadListingFields();
   }, [loadListingFields]);
+
   const params = useLocalSearchParams<{
     watchId?: string;
     brand?: string;
@@ -102,6 +73,7 @@ export default function CreateListingScreen() {
   const orderId = params.orderId;
   const isBuyOrder = params.orderType === 'buy';
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingOrder, setIsLoadingOrder] = useState(isEditMode);
 
   // Current step (1-6)
   const [currentStep, setCurrentStep] = useState(1);
@@ -114,80 +86,107 @@ export default function CreateListingScreen() {
 
   // Dropdown modal state
   const [showDropdown, setShowDropdown] = useState(false);
-  const [dropdownField, setDropdownField] = useState<keyof ListingFormData | null>(null);
+  const [dropdownField, setDropdownField] = useState<string | null>(null);
   const [dropdownOptions, setDropdownOptions] = useState<string[]>([]);
   const [dropdownTitle, setDropdownTitle] = useState('');
 
-  // Derive box and papers value for edit mode
-  const getBoxAndPapersValue = () => {
-    const hasBox = params.has_box === 'true';
-    const hasPapers = params.has_papers === 'true';
-    if (hasBox && hasPapers) return 'Box and Papers';
-    if (hasBox) return 'Box Only';
-    if (hasPapers) return 'Papers Only';
-    return '';
-  };
-
-  // Derive condition value for edit mode
-  const getConditionValue = () => {
-    if (params.condition === 'unworn' || params.condition === 'Unworn') return 'Unworn';
-    if (params.condition) return 'Used';
-    return '';
-  };
-
-  // Form data - pre-populated if coming from sell order or edit mode
-  const [formData, setFormData] = useState<ListingFormData>({
-    // Step 1: Basic Information - pre-populate from params
-    brand: params.brand || '',
-    model: params.model || '',
-    reference: params.reference || '',
-    year: '',
-    size: '',
-    movement: '',
-    caseMaterial: '',
-    braceletMaterial: '',
-    condition: isEditMode ? getConditionValue() : '',
-    conditionDescription: '',
-    boxAndPapers: isEditMode ? getBoxAndPapersValue() : '',
-    gender: '',
-    location: isEditMode ? (params.country_name || '') : '',
-    price: isEditMode ? (params.price || '') : '',
-    currency: 'EUR',
-    availability: '',
-
-    // Step 2: Caliber Information
-    movementType: '',
-    caliberMovement: '',
-    baseCaliber: '',
-    powerReserve: '',
-    numberOfJewels: '',
-
-    // Step 3: Case Information
-    caseMaterialDetail: '',
-    caseDiameter: '',
-    waterResistance: '',
-    bezelMaterial: '',
-    crystal: '',
-    dialColor: '',
-    dialNumbers: '',
-
-    // Step 4: Bracelet/Strap Information
-    braceletMaterialDetail: '',
-    braceletColor: '',
-    claspType: '',
-    claspMaterial: '',
-
-    // Step 5: Photos
-    photos: [],
+  // Form data - dynamic, pre-populated if coming from sell order or edit mode
+  const [formData, setFormData] = useState<ListingFormData>(() => {
+    const initialData: ListingFormData = {
+      photos: [],
+      // Pre-populate from params if available (basic info only, full details loaded via API)
+      brand: params.brand || '',
+      model: params.model || '',
+      reference: params.reference || '',
+      condition: '',
+      box_papers: '',
+      location: '',
+      price: '',
+      currency: 'EUR',
+    };
+    return initialData;
   });
 
+  // Load order details when in edit mode
+  useEffect(() => {
+    const loadOrderDetails = async () => {
+      if (!isEditMode || !orderId) {
+        setIsLoadingOrder(false);
+        return;
+      }
+
+      try {
+        setIsLoadingOrder(true);
+        const response = await api.get(`/orders/${orderId}`);
+        const order = response.data;
+
+        // Determine box and papers value
+        let boxPapersValue = '';
+        if (order.has_box && order.has_papers) boxPapersValue = 'Box and Papers';
+        else if (order.has_box) boxPapersValue = 'Box Only';
+        else if (order.has_papers) boxPapersValue = 'Papers Only';
+
+        // Determine condition value
+        let conditionValue = '';
+        if (order.condition === 'unworn' || order.condition === 'Unworn') conditionValue = 'Unworn';
+        else if (order.condition) conditionValue = 'Used';
+
+        // Build form data from order details
+        const orderFormData: ListingFormData = {
+          // Basic info
+          brand: order.brand || '',
+          model: order.model || '',
+          reference: order.reference || '',
+          condition: conditionValue,
+          box_papers: boxPapersValue,
+          location: order.country_name || '',
+          price: order.price ? order.price.toLocaleString('de-DE') : '',
+          currency: order.currency || 'EUR',
+          year: order.watch_details?.year?.toString() || '',
+          // Caliber info
+          movementType: order.watch_details?.movement_type || '',
+          caliberMovement: order.watch_details?.caliber || '',
+          baseCaliber: order.watch_details?.base_caliber || '',
+          powerReserve: order.watch_details?.power_reserve || '',
+          number_of_jewels: order.watch_details?.number_of_jewels?.toString() || '',
+          // Case info
+          caseDiameter: order.watch_details?.case_diameter || order.watch_details?.case_size || '',
+          caseMaterial: order.watch_details?.case_material || '',
+          waterResistance: order.watch_details?.water_resistance || '',
+          bezelMaterial: order.watch_details?.bezel_material || '',
+          crystal: order.watch_details?.crystal || '',
+          dialColor: order.watch_details?.dial || '',
+          dialNumbers: order.watch_details?.dial_numerals || '',
+          // Bracelet info
+          braceletMaterial: order.watch_details?.bracelet_material || '',
+          braceletColor: order.watch_details?.bracelet_color || '',
+          claspType: order.watch_details?.clasp_type || '',
+          claspMaterial: order.watch_details?.clasp_material || '',
+          // Photos
+          photos: order.watch_details?.images || [],
+          // Notes
+          conditionDescription: order.notes || '',
+        };
+
+        setFormData(orderFormData);
+      } catch (error) {
+        console.error('Failed to load order details:', error);
+        Alert.alert('Error', 'Failed to load order details. Please try again.');
+      } finally {
+        setIsLoadingOrder(false);
+      }
+    };
+
+    loadOrderDetails();
+  }, [isEditMode, orderId]);
+
   // Update form field
-  const updateField = useCallback((field: keyof ListingFormData, value: string | string[]) => {
+  const updateField = useCallback((field: string, value: string | string[]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
   // Open dropdown
-  const openDropdown = useCallback((field: keyof ListingFormData, options: string[], title: string) => {
+  const openDropdown = useCallback((field: string, options: string[], title: string) => {
     setDropdownField(field);
     setDropdownOptions(options);
     setDropdownTitle(title);
@@ -205,11 +204,6 @@ export default function CreateListingScreen() {
     }
     setShowDropdown(false);
   }, [dropdownField, updateField]);
-
-  // Get model options based on selected brand
-  const getModelOptions = useCallback(() => {
-    return getOptionsForField('model', formData.brand);
-  }, [formData.brand, getOptionsForField]);
 
   // Handle photo pick
   const handlePickPhotos = async () => {
@@ -252,6 +246,13 @@ export default function CreateListingScreen() {
     }
   }, [currentStep]);
 
+  // Helper to get form value as string
+  const getFormValue = useCallback((key: string): string => {
+    const value = formData[key];
+    if (Array.isArray(value)) return '';
+    return value || '';
+  }, [formData]);
+
   // Handle save listing (create or update)
   const handleSave = useCallback(async () => {
     if (isSaving) return;
@@ -291,12 +292,15 @@ export default function CreateListingScreen() {
       }
 
       // Create/Update the order/listing
-      const priceValue = parseInt(formData.price.replace(/[^0-9]/g, ''), 10) || 0;
+      const priceStr = getFormValue('price');
+      const priceValue = parseInt(priceStr.replace(/[^0-9]/g, ''), 10) || 0;
 
       // Parse year if provided
-      const yearValue = formData.year ? parseInt(formData.year, 10) : undefined;
+      const yearStr = getFormValue('year');
+      const yearValue = yearStr ? parseInt(yearStr, 10) : undefined;
       // Parse number of jewels if provided
-      const jewelsValue = formData.numberOfJewels ? parseInt(formData.numberOfJewels, 10) : undefined;
+      const jewelsStr = getFormValue('number_of_jewels');
+      const jewelsValue = jewelsStr ? parseInt(jewelsStr, 10) : undefined;
 
       // Build extended watch details
       const extendedFields = {
@@ -328,11 +332,12 @@ export default function CreateListingScreen() {
 
       if (isEditMode && orderId) {
         // Update existing order - send all updatable fields
+        const boxPapersValue = getFormValue('box_papers');
         const updateData = {
           price: priceValue,
           condition: formData.condition === 'Unworn' ? 'Unworn' : 'Used',
-          has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
-          has_papers: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Papers Only',
+          has_box: boxPapersValue === 'Box and Papers' || boxPapersValue === 'Box Only',
+          has_papers: boxPapersValue === 'Box and Papers' || boxPapersValue === 'Papers Only',
           notes: formData.conditionDescription || null,
           ...extendedFields,
         };
@@ -344,6 +349,7 @@ export default function CreateListingScreen() {
         ]);
       } else {
         // Create new order - send all fields
+        const createBoxPapersValue = getFormValue('box_papers');
         const orderData = {
           order_type: 'sell',
           brand: formData.brand,
@@ -354,8 +360,8 @@ export default function CreateListingScreen() {
           condition: formData.condition === 'Unworn' ? 'Unworn' : 'Used',
           country_code: params.country_code || 'US',
           country_name: formData.location,
-          has_box: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Box Only',
-          has_papers: formData.boxAndPapers === 'Box and Papers' || formData.boxAndPapers === 'Papers Only',
+          has_box: createBoxPapersValue === 'Box and Papers' || createBoxPapersValue === 'Box Only',
+          has_papers: createBoxPapersValue === 'Box and Papers' || createBoxPapersValue === 'Papers Only',
           notes: formData.conditionDescription,
           ...extendedFields,
         };
@@ -371,7 +377,7 @@ export default function CreateListingScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [formData, isEditMode, orderId, params.country_code, isBuyOrder, isSaving]);
+  }, [formData, isEditMode, orderId, params.country_code, isBuyOrder, isSaving, getFormValue]);
 
   // Format price input
   const formatPriceInput = (text: string) => {
@@ -692,724 +698,279 @@ export default function CreateListingScreen() {
     },
   }), [colors, fonts]);
 
-  // Render step content
+  // Get options for a field, handling parent-child relationships
+  const getOptionsForFieldDynamic = useCallback((field: ListingField): string[] => {
+    // Special case: model depends on brand
+    if (field.parent_field_key) {
+      const parentValue = getFormValue(field.parent_field_key);
+      return getOptionsForField(field.key, parentValue);
+    }
+    return getOptionsForField(field.key);
+  }, [getOptionsForField, getFormValue]);
+
+  // Render a single dynamic field based on its type
+  const renderDynamicField = useCallback((field: ListingField) => {
+    const value = getFormValue(field.key);
+    const options = getOptionsForFieldDynamic(field);
+    const placeholder = field.placeholder || `Enter ${field.name.toLowerCase()}`;
+
+    // Dropdown field
+    if (field.field_type === 'dropdown' || field.field_type === 'multi_select') {
+      return (
+        <View key={field.key} style={styles.fieldContainer}>
+          <Text style={styles.fieldLabel}>{field.name}</Text>
+          <TouchableOpacity
+            style={styles.fieldInputContainer}
+            onPress={() => openDropdown(field.key, options, `Select ${field.name}`)}
+          >
+            {value ? (
+              <Text style={styles.fieldValue}>{value}</Text>
+            ) : (
+              <Text style={styles.fieldPlaceholder}>{placeholder}</Text>
+            )}
+            <ChevronDown size={sp(18)} color="#1D1D1F" />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Textarea field
+    if (field.field_type === 'textarea') {
+      return (
+        <View key={field.key} style={styles.fieldContainer}>
+          <Text style={styles.fieldLabel}>{field.name}</Text>
+          <View style={[styles.fieldInputContainer, { alignItems: 'flex-start' }]}>
+            <TextInput
+              style={[styles.fieldInput, styles.textArea]}
+              value={value}
+              onChangeText={(text) => updateField(field.key, text)}
+              placeholder={placeholder}
+              placeholderTextColor="rgba(29, 29, 31, 0.5)"
+              multiline
+            />
+          </View>
+        </View>
+      );
+    }
+
+    // Number field
+    if (field.field_type === 'number') {
+      // Special handling for price field
+      if (field.key === 'price') {
+        return (
+          <View key={field.key} style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>{field.name}</Text>
+            <View style={styles.fieldInputContainer}>
+              <TextInput
+                style={styles.fieldInput}
+                value={value}
+                onChangeText={(text) => updateField(field.key, formatPriceInput(text))}
+                placeholder={placeholder}
+                placeholderTextColor="rgba(29, 29, 31, 0.5)"
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+        );
+      }
+
+      return (
+        <View key={field.key} style={styles.fieldContainer}>
+          <Text style={styles.fieldLabel}>{field.name}</Text>
+          <View style={styles.fieldInputContainer}>
+            <TextInput
+              style={styles.fieldInput}
+              value={value}
+              onChangeText={(text) => updateField(field.key, text)}
+              placeholder={placeholder}
+              placeholderTextColor="rgba(29, 29, 31, 0.5)"
+              keyboardType="numeric"
+              maxLength={field.key === 'year' ? 4 : undefined}
+            />
+          </View>
+        </View>
+      );
+    }
+
+    // Default: text field
+    return (
+      <View key={field.key} style={styles.fieldContainer}>
+        <Text style={styles.fieldLabel}>{field.name}</Text>
+        <View style={styles.fieldInputContainer}>
+          <TextInput
+            style={styles.fieldInput}
+            value={value}
+            onChangeText={(text) => updateField(field.key, text)}
+            placeholder={placeholder}
+            placeholderTextColor="rgba(29, 29, 31, 0.5)"
+          />
+        </View>
+      </View>
+    );
+  }, [getFormValue, getOptionsForFieldDynamic, openDropdown, updateField, formatPriceInput, styles]);
+
+  // Render fields for a category step
+  const renderCategoryFields = useCallback((category: FieldCategory) => {
+    const fields = getFieldsByCategory(category);
+    return fields.map(field => renderDynamicField(field));
+  }, [getFieldsByCategory, renderDynamicField]);
+
+  // Render step content dynamically
   const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <>
-            <Text style={styles.sectionTitle}>Basic information</Text>
+    const stepConfig = FORM_STEPS[currentStep - 1];
+    if (!stepConfig) return null;
 
-            {/* Brand */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Brand</Text>
+    // Category steps (1-4)
+    if (stepConfig.key === 'basic' || stepConfig.key === 'caliber' || stepConfig.key === 'case' || stepConfig.key === 'bracelet') {
+      const categoryConfig = CATEGORY_STEPS[stepConfig.key];
+      return (
+        <>
+          <Text style={styles.sectionTitle}>{categoryConfig.title}</Text>
+          {renderCategoryFields(stepConfig.key)}
+        </>
+      );
+    }
+
+    // Photos step (5)
+    if (stepConfig.key === 'photos') {
+      const photos = formData.photos as string[];
+      return (
+        <>
+          <Text style={styles.sectionTitle}>
+            {photos.length > 0 ? 'Manage your photos' : 'Add your photos'}
+          </Text>
+
+          {photos.length === 0 ? (
+            <>
+              {/* Upload Area */}
               <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('brand', getOptionsForField('brand'), 'Select Brand')}
+                style={styles.photoUploadContainer}
+                onPress={handlePickPhotos}
               >
-                {formData.brand ? (
-                  <Text style={styles.fieldValue}>{formData.brand}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>e.g. Rolex</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
+                <ImageUploadIcon size={sp(48)} color="#212121" />
+                <Text style={styles.photoUploadText}>
+                  <Text style={styles.photoUploadTextBold}>Upload</Text> photos of your watch
+                </Text>
               </TouchableOpacity>
-            </View>
 
-            {/* Model */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Model</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('model', getModelOptions(), 'Select Model')}
-              >
-                {formData.model ? (
-                  <Text style={styles.fieldValue}>{formData.model}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>e.g. Submariner Date</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Reference & Year */}
-            <View style={styles.rowFields}>
-              {isFieldEnabled('reference') && (
-                <View style={[styles.fieldContainer, isFieldEnabled('year') ? styles.halfField : { flex: 1 }]}>
-                  <Text style={styles.fieldLabel}>Reference</Text>
-                  <View style={styles.fieldInputContainer}>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={formData.reference}
-                      onChangeText={(text) => updateField('reference', text)}
-                      placeholder="e.g., 126610LN"
-                      placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                    />
-                  </View>
+              {/* Requirements */}
+              <View style={styles.photoRequirements}>
+                <Text style={styles.photoRequirementsTitle}>Your photos must have</Text>
+                <View style={styles.photoRequirementItem}>
+                  <Text style={styles.photoRequirementBullet}>•</Text>
+                  <Text style={styles.photoRequirementText}>A clear, well-lit view of the watch</Text>
                 </View>
-              )}
-              {isFieldEnabled('year') && (
-                <View style={[styles.fieldContainer, isFieldEnabled('reference') ? styles.halfField : { flex: 1 }]}>
-                  <Text style={styles.fieldLabel}>Year</Text>
-                  <View style={styles.fieldInputContainer}>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={formData.year}
-                      onChangeText={(text) => updateField('year', text)}
-                      placeholder="e.g.,2024"
-                      placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                      keyboardType="numeric"
-                      maxLength={4}
-                    />
-                  </View>
+                <View style={styles.photoRequirementItem}>
+                  <Text style={styles.photoRequirementBullet}>•</Text>
+                  <Text style={styles.photoRequirementText}>Close-up of the dial, case, and bracelet</Text>
                 </View>
-              )}
-            </View>
-
-            {/* Size */}
-            {isFieldEnabled('size') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Size</Text>
-                <View style={styles.fieldInputContainer}>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={formData.size}
-                    onChangeText={(text) => updateField('size', text)}
-                    placeholder="e.g., 41mm"
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                  />
+                <View style={styles.photoRequirementItem}>
+                  <Text style={styles.photoRequirementBullet}>•</Text>
+                  <Text style={styles.photoRequirementText}>Real condition, filters and editing should be avoided</Text>
                 </View>
               </View>
-            )}
-
-            {/* Movement */}
-            {isFieldEnabled('movement') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Movement</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('movement', getOptionsForField('movement'), 'Select Movement')}
-                >
-                  {formData.movement ? (
-                    <Text style={styles.fieldValue}>{formData.movement}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select movement type</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Case Material */}
-            {isFieldEnabled('case_material') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Case Material</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('caseMaterial', getOptionsForField('case_material'), 'Select Case Material')}
-                >
-                  {formData.caseMaterial ? (
-                    <Text style={styles.fieldValue}>{formData.caseMaterial}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select case material</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Bracelet Material */}
-            {isFieldEnabled('bracelet_material') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Bracelet material</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('braceletMaterial', getOptionsForField('bracelet_material'), 'Select Bracelet Material')}
-                >
-                  {formData.braceletMaterial ? (
-                    <Text style={styles.fieldValue}>{formData.braceletMaterial}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Please select bracelet material</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Condition */}
-            {isFieldEnabled('condition') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Condition</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('condition', getOptionsForField('condition'), 'Select Condition')}
-                >
-                  {formData.condition ? (
-                    <Text style={styles.fieldValue}>{formData.condition}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Please select condition</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Condition Description */}
-            {isFieldEnabled('condition_description') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Condition description</Text>
-                <View style={[styles.fieldInputContainer, { alignItems: 'flex-start' }]}>
-                  <TextInput
-                    style={[styles.fieldInput, styles.textArea]}
-                    value={formData.conditionDescription}
-                    onChangeText={(text) => updateField('conditionDescription', text)}
-                    placeholder="Write a short description..."
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                    multiline
-                  />
+            </>
+          ) : (
+            /* Photo Grid */
+            <View style={styles.photoGrid}>
+              {photos.map((photo, index) => (
+                <View key={index} style={styles.photoItem}>
+                  <Image source={{ uri: photo }} style={styles.photoImage} />
+                  <TouchableOpacity
+                    style={styles.photoDeleteButton}
+                    onPress={() => removePhoto(index)}
+                  >
+                    <Trash2 size={sp(16)} color="#212121" />
+                  </TouchableOpacity>
                 </View>
-              </View>
-            )}
-
-            {/* Box and Papers */}
-            {isFieldEnabled('box_papers') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Box and papers</Text>
+              ))}
+              {photos.length < 10 && (
                 <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('boxAndPapers', getOptionsForField('box_papers'), 'Select Box and Papers')}
-                >
-                  {formData.boxAndPapers ? (
-                    <Text style={styles.fieldValue}>{formData.boxAndPapers}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Please select condition</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Gender */}
-            {isFieldEnabled('gender') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Gender</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('gender', getOptionsForField('gender'), 'Select Gender')}
-                >
-                  {formData.gender ? (
-                    <Text style={styles.fieldValue}>{formData.gender}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Please select condition</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Location */}
-            {isFieldEnabled('location') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Location</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('location', getOptionsForField('location'), 'Select Location')}
-                >
-                  {formData.location ? (
-                    <Text style={styles.fieldValue}>{formData.location}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Please select location</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Price */}
-            {isFieldEnabled('price') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Price</Text>
-                <View style={styles.fieldInputContainer}>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={formData.price}
-                    onChangeText={(text) => updateField('price', formatPriceInput(text))}
-                    placeholder="e.g., 12,450"
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Currency */}
-            {isFieldEnabled('currency') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Currency</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('currency', getOptionsForField('currency'), 'Select Currency')}
-                >
-                  {formData.currency ? (
-                    <Text style={styles.fieldValue}>{formData.currency}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Please select currency for payments</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Availability */}
-            {isFieldEnabled('availability') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Availability</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('availability', getOptionsForField('availability'), 'Select Availability')}
-                >
-                  {formData.availability ? (
-                    <Text style={styles.fieldValue}>{formData.availability}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Please select availability</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </>
-        );
-
-      case 2:
-        return (
-          <>
-            <Text style={styles.sectionTitle}>Caliber information</Text>
-
-            {/* Movement Type */}
-            {isFieldEnabled('movement_type') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Movement</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('movementType', getOptionsForField('movement_type'), 'Select Movement')}
-                >
-                  {formData.movementType ? (
-                    <Text style={styles.fieldValue}>{formData.movementType}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select type of movement</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Caliber/Movement */}
-            {isFieldEnabled('caliber') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Caliber/movement</Text>
-                <View style={styles.fieldInputContainer}>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={formData.caliberMovement}
-                    onChangeText={(text) => updateField('caliberMovement', text)}
-                    placeholder="e.g. 3235"
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Base Caliber */}
-            {isFieldEnabled('base_caliber') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Base Caliber</Text>
-                <View style={styles.fieldInputContainer}>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={formData.baseCaliber}
-                    onChangeText={(text) => updateField('baseCaliber', text)}
-                    placeholder="e.g., 3235"
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Power Reserve */}
-            {isFieldEnabled('power_reserve') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Power reserve</Text>
-                <View style={styles.fieldInputContainer}>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={formData.powerReserve}
-                    onChangeText={(text) => updateField('powerReserve', text)}
-                    placeholder="e.g. 70h"
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Number of Jewels */}
-            {isFieldEnabled('number_of_jewels') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Number of jewels</Text>
-                <View style={styles.fieldInputContainer}>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={formData.numberOfJewels}
-                    onChangeText={(text) => updateField('numberOfJewels', text)}
-                    placeholder="e.g. 20"
-                    placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
-            )}
-          </>
-        );
-
-      case 3:
-        return (
-          <>
-            <Text style={styles.sectionTitle}>Case information</Text>
-
-            {/* Case Material */}
-            {isFieldEnabled('case_material') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Case material</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('caseMaterialDetail', getOptionsForField('case_material'), 'Select Case Material')}
-                >
-                  {formData.caseMaterialDetail ? (
-                    <Text style={styles.fieldValue}>{formData.caseMaterialDetail}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select case material</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Case Diameter */}
-            {isFieldEnabled('case_diameter') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Case diameter</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('caseDiameter', getOptionsForField('case_diameter'), 'Select Case Diameter')}
-                >
-                  {formData.caseDiameter ? (
-                    <Text style={styles.fieldValue}>{formData.caseDiameter}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select case diameter</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Water Resistance */}
-            {isFieldEnabled('water_resistance') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Water resistance</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('waterResistance', getOptionsForField('water_resistance'), 'Select Water Resistance')}
-                >
-                  {formData.waterResistance ? (
-                    <Text style={styles.fieldValue}>{formData.waterResistance}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select water resistance standard</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Bezel Material */}
-            {isFieldEnabled('bezel_material') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Bezel material</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('bezelMaterial', getOptionsForField('bezel_material'), 'Select Bezel Material')}
-                >
-                  {formData.bezelMaterial ? (
-                    <Text style={styles.fieldValue}>{formData.bezelMaterial}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select bezel material</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Crystal */}
-            {isFieldEnabled('crystal') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Crystal</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('crystal', getOptionsForField('crystal'), 'Select Crystal')}
-                >
-                  {formData.crystal ? (
-                    <Text style={styles.fieldValue}>{formData.crystal}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select crystal type</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Dial */}
-            {isFieldEnabled('dial_color') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Dial</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('dialColor', getOptionsForField('dial_color'), 'Select Dial Color')}
-                >
-                  {formData.dialColor ? (
-                    <Text style={styles.fieldValue}>{formData.dialColor}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select dial color</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Dial Numbers */}
-            {isFieldEnabled('dial_numbers') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Dial Numbers</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('dialNumbers', getOptionsForField('dial_numbers'), 'Select Dial Numbers')}
-                >
-                  {formData.dialNumbers ? (
-                    <Text style={styles.fieldValue}>{formData.dialNumbers}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select dial numbers</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </>
-        );
-
-      case 4:
-        return (
-          <>
-            <Text style={styles.sectionTitle}>Bracelet / Strap information</Text>
-
-            {/* Bracelet Material */}
-            {isFieldEnabled('bracelet_material') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Bracelet material</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('braceletMaterialDetail', getOptionsForField('bracelet_material'), 'Select Material')}
-                >
-                  {formData.braceletMaterialDetail ? (
-                    <Text style={styles.fieldValue}>{formData.braceletMaterialDetail}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select bracelet material</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Bracelet Color */}
-            {isFieldEnabled('bracelet_color') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Bracelet color</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('braceletColor', getOptionsForField('bracelet_color'), 'Select Color')}
-                >
-                  {formData.braceletColor ? (
-                    <Text style={styles.fieldValue}>{formData.braceletColor}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select bracelet color</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Clasp */}
-            {isFieldEnabled('clasp_type') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Clasp</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('claspType', getOptionsForField('clasp_type'), 'Select Clasp Type')}
-                >
-                  {formData.claspType ? (
-                    <Text style={styles.fieldValue}>{formData.claspType}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select clasp type</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Clasp Material */}
-            {isFieldEnabled('clasp_material') && (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Clasp material</Text>
-                <TouchableOpacity
-                  style={styles.fieldInputContainer}
-                  onPress={() => openDropdown('claspMaterial', getOptionsForField('clasp_material'), 'Select Clasp Material')}
-                >
-                  {formData.claspMaterial ? (
-                    <Text style={styles.fieldValue}>{formData.claspMaterial}</Text>
-                  ) : (
-                    <Text style={styles.fieldPlaceholder}>Select clasp material</Text>
-                  )}
-                  <ChevronDown size={sp(18)} color="#1D1D1F" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </>
-        );
-
-      case 5:
-        return (
-          <>
-            <Text style={styles.sectionTitle}>
-              {formData.photos.length > 0 ? 'Manage your photos' : 'Add your photos'}
-            </Text>
-
-            {formData.photos.length === 0 ? (
-              <>
-                {/* Upload Area */}
-                <TouchableOpacity
-                  style={styles.photoUploadContainer}
+                  style={styles.addPhotoButton}
                   onPress={handlePickPhotos}
                 >
-                  <ImageUploadIcon size={sp(48)} color="#212121" />
-                  <Text style={styles.photoUploadText}>
-                    <Text style={styles.photoUploadTextBold}>Upload</Text> photos of your watch
-                  </Text>
+                  <View style={styles.addPhotoIcon}>
+                    <Plus size={sp(24)} color="#FFFFFF" />
+                  </View>
                 </TouchableOpacity>
-
-                {/* Requirements */}
-                <View style={styles.photoRequirements}>
-                  <Text style={styles.photoRequirementsTitle}>Your photos must have</Text>
-                  <View style={styles.photoRequirementItem}>
-                    <Text style={styles.photoRequirementBullet}>•</Text>
-                    <Text style={styles.photoRequirementText}>A clear, well-lit view of the watch</Text>
-                  </View>
-                  <View style={styles.photoRequirementItem}>
-                    <Text style={styles.photoRequirementBullet}>•</Text>
-                    <Text style={styles.photoRequirementText}>Close-up of the dial, case, and bracelet</Text>
-                  </View>
-                  <View style={styles.photoRequirementItem}>
-                    <Text style={styles.photoRequirementBullet}>•</Text>
-                    <Text style={styles.photoRequirementText}>Real condition, filters and editing should be avoided</Text>
-                  </View>
-                </View>
-              </>
-            ) : (
-              /* Photo Grid */
-              <View style={styles.photoGrid}>
-                {formData.photos.map((photo, index) => (
-                  <View key={index} style={styles.photoItem}>
-                    <Image source={{ uri: photo }} style={styles.photoImage} />
-                    <TouchableOpacity
-                      style={styles.photoDeleteButton}
-                      onPress={() => removePhoto(index)}
-                    >
-                      <Trash2 size={sp(16)} color="#212121" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-                {formData.photos.length < 10 && (
-                  <TouchableOpacity
-                    style={styles.addPhotoButton}
-                    onPress={handlePickPhotos}
-                  >
-                    <View style={styles.addPhotoIcon}>
-                      <Plus size={sp(24)} color="#FFFFFF" />
-                    </View>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </>
-        );
-
-      case 6:
-        return (
-          <>
-            <Text style={styles.sectionTitle}>Listing overview</Text>
-
-            <TouchableOpacity
-              style={styles.overviewItem}
-              onPress={() => setCurrentStep(1)}
-            >
-              <Text style={styles.overviewItemText}>Basics</Text>
-              <ChevronRight size={sp(20)} color="#C7C7CC" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.overviewItem}
-              onPress={() => setCurrentStep(2)}
-            >
-              <Text style={styles.overviewItemText}>Caliber Information</Text>
-              <ChevronRight size={sp(20)} color="#C7C7CC" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.overviewItem}
-              onPress={() => setCurrentStep(3)}
-            >
-              <Text style={styles.overviewItemText}>Bracelet / Strap information</Text>
-              <ChevronRight size={sp(20)} color="#C7C7CC" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.overviewItem}
-              onPress={() => setCurrentStep(5)}
-            >
-              <Text style={styles.overviewItemText}>Photos</Text>
-              <ChevronRight size={sp(20)} color="#C7C7CC" />
-            </TouchableOpacity>
-          </>
-        );
-
-      default:
-        return null;
+              )}
+            </View>
+          )}
+        </>
+      );
     }
+
+    // Overview step (6)
+    if (stepConfig.key === 'overview') {
+      return (
+        <>
+          <Text style={styles.sectionTitle}>Listing overview</Text>
+
+          <TouchableOpacity
+            style={styles.overviewItem}
+            onPress={() => setCurrentStep(1)}
+          >
+            <Text style={styles.overviewItemText}>Basic information</Text>
+            <ChevronRight size={sp(20)} color="#C7C7CC" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.overviewItem}
+            onPress={() => setCurrentStep(2)}
+          >
+            <Text style={styles.overviewItemText}>Caliber information</Text>
+            <ChevronRight size={sp(20)} color="#C7C7CC" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.overviewItem}
+            onPress={() => setCurrentStep(3)}
+          >
+            <Text style={styles.overviewItemText}>Case information</Text>
+            <ChevronRight size={sp(20)} color="#C7C7CC" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.overviewItem}
+            onPress={() => setCurrentStep(4)}
+          >
+            <Text style={styles.overviewItemText}>Bracelet / Strap information</Text>
+            <ChevronRight size={sp(20)} color="#C7C7CC" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.overviewItem}
+            onPress={() => setCurrentStep(5)}
+          >
+            <Text style={styles.overviewItemText}>Photos</Text>
+            <ChevronRight size={sp(20)} color="#C7C7CC" />
+          </TouchableOpacity>
+        </>
+      );
+    }
+
+    return null;
   };
 
-  // Get button text based on step
+  // Get button text based on step and mode
   const getButtonText = () => {
-    if (currentStep === 6) return 'Save';
+    if (currentStep === 6) return isEditMode ? 'Update' : 'Save';
     if (currentStep === 5 && formData.photos.length === 0) return 'Continue';
-    if (currentStep === 5) return isEditMode ? 'Update Listing' : 'Create Listing';
+    if (currentStep === 5) return isEditMode ? 'Update' : 'Create Listing';
     return 'Continue';
   };
 
   // Check if continue button should be disabled
+  // For buy orders and edit mode, photos are optional
   const isButtonDisabled = () => {
-    if (currentStep === 5 && formData.photos.length === 0) return true;
+    if (currentStep === 5 && formData.photos.length === 0 && !isBuyOrder && !isEditMode) return true;
     return false;
   };
 
-  // Show loading state while listing fields are loading or not yet loaded
+  // Show loading state while listing fields are loading or order details are loading
   // This prevents rendering the form before we know which fields are enabled
   const isConfigReady = listingFields.length > 0;
-  const showLoading = isLoadingListingFields || (!isConfigReady && !configError);
+  const showLoading = isLoadingListingFields || isLoadingOrder || (!isConfigReady && !configError);
 
   if (showLoading) {
     return (
@@ -1455,155 +1016,6 @@ export default function CreateListingScreen() {
     );
   }
 
-  // Simplified edit view for buy orders
-  if (isEditMode && isBuyOrder) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        {/* Header with Update button */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <BackArrow size={sp(24)} color="#212121" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Buy Order</Text>
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={isSaving}
-            style={{ paddingHorizontal: wp(8) }}
-          >
-            <Text style={{
-              fontSize: fp(16),
-              fontFamily: fonts.semiBold,
-              color: isSaving ? 'rgba(33, 33, 33, 0.4)' : '#212121',
-            }}>
-              {isSaving ? 'Saving...' : 'Update'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Buy Order Edit Content */}
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.sectionTitle}>Edit your buy order</Text>
-
-          {/* Watch Info (read-only) */}
-          <View style={[styles.fieldContainer, { backgroundColor: '#F8F8F8', borderRadius: sp(12), padding: wp(16), marginBottom: hp(24) }]}>
-            <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(16), color: '#212121' }}>
-              {formData.brand} {formData.model}
-            </Text>
-            <Text style={{ fontFamily: fonts.regular, fontSize: fp(14), color: '#666666', marginTop: hp(4) }}>
-              {formData.reference}
-            </Text>
-          </View>
-
-          {/* Price */}
-          {isFieldEnabled('price') && (
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Price</Text>
-              <View style={styles.fieldInputContainer}>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={formData.price}
-                  onChangeText={(text) => updateField('price', formatPriceInput(text))}
-                  placeholder="e.g., 12,450"
-                  placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Condition */}
-          {isFieldEnabled('condition') && (
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Condition</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('condition', getOptionsForField('condition'), 'Select Condition')}
-              >
-                {formData.condition ? (
-                  <Text style={styles.fieldValue}>{formData.condition}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select condition</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Box and Papers */}
-          {isFieldEnabled('box_papers') && (
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Box and papers</Text>
-              <TouchableOpacity
-                style={styles.fieldInputContainer}
-                onPress={() => openDropdown('boxAndPapers', getOptionsForField('box_papers'), 'Select Box and Papers')}
-              >
-                {formData.boxAndPapers ? (
-                  <Text style={styles.fieldValue}>{formData.boxAndPapers}</Text>
-                ) : (
-                  <Text style={styles.fieldPlaceholder}>Please select</Text>
-                )}
-                <ChevronDown size={sp(18)} color="#1D1D1F" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
-
-        {/* Dropdown Modal */}
-        <Modal
-          visible={showDropdown}
-          animationType="none"
-          transparent={true}
-          onRequestClose={() => setShowDropdown(false)}
-        >
-          <View style={styles.dropdownOverlay}>
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              activeOpacity={1}
-              onPress={() => setShowDropdown(false)}
-            />
-            <View style={styles.dropdownContent}>
-              <View style={styles.dropdownHeader}>
-                <Text style={styles.dropdownTitle}>{dropdownTitle}</Text>
-                <TouchableOpacity
-                  style={styles.dropdownCloseButton}
-                  onPress={() => setShowDropdown(false)}
-                >
-                  <X size={sp(18)} color="#212121" />
-                </TouchableOpacity>
-              </View>
-              <ScrollView contentContainerStyle={styles.dropdownScrollContent}>
-                {dropdownOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={styles.dropdownOption}
-                    onPress={() => selectOption(option)}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownOptionText,
-                        dropdownField && formData[dropdownField] === option && styles.dropdownOptionSelected,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                    {dropdownField && formData[dropdownField] === option && (
-                      <Check size={sp(20)} color="#212121" />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -1612,24 +1024,10 @@ export default function CreateListingScreen() {
           <BackArrow size={sp(24)} color="#212121" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {currentStep === 6 ? 'Listing overview' : (isEditMode ? 'Edit Listing' : 'Create new listing')}
+          {currentStep === 6 ? 'Listing overview' : (isEditMode ? (isBuyOrder ? 'Edit Buy Order' : 'Edit Listing') : 'Create new listing')}
         </Text>
-        {/* Update button for sell order edit mode */}
-        {isEditMode && !isBuyOrder && (
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={isSaving}
-            style={{ paddingHorizontal: wp(8) }}
-          >
-            <Text style={{
-              fontSize: fp(16),
-              fontFamily: fonts.semiBold,
-              color: isSaving ? 'rgba(33, 33, 33, 0.4)' : '#212121',
-            }}>
-              {isSaving ? 'Saving...' : 'Update'}
-            </Text>
-          </TouchableOpacity>
-        )}
+        {/* Placeholder to balance header when not in edit mode */}
+        {!isEditMode && <View style={{ width: sp(44) }} />}
       </View>
 
       {/* Content */}
@@ -1642,33 +1040,33 @@ export default function CreateListingScreen() {
         {renderStepContent()}
       </ScrollView>
 
-      {/* Bottom Section - Progress Indicator and Button (hide for edit mode) */}
-      {!isEditMode && (
-        <View style={styles.bottomButtonsContainer}>
-          {/* Progress Indicator */}
-          <View style={styles.progressContainer}>
-            {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.progressDot,
-                  index < currentStep && styles.progressDotActive,
-                ]}
-              />
-            ))}
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.continueButton,
-              isButtonDisabled() && styles.continueButtonDisabled,
-            ]}
-            onPress={currentStep === 6 ? handleSave : (currentStep === 5 && formData.photos.length > 0 ? () => setCurrentStep(6) : handleNext)}
-            disabled={isButtonDisabled()}
-          >
-            <Text style={styles.continueButtonText}>{getButtonText()}</Text>
-          </TouchableOpacity>
+      {/* Bottom Section - Progress Indicator and Button */}
+      <View style={styles.bottomButtonsContainer}>
+        {/* Progress Indicator */}
+        <View style={styles.progressContainer}>
+          {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.progressDot,
+                index < currentStep && styles.progressDotActive,
+              ]}
+            />
+          ))}
         </View>
-      )}
+        <TouchableOpacity
+          style={[
+            styles.continueButton,
+            (isButtonDisabled() || isSaving) && styles.continueButtonDisabled,
+          ]}
+          onPress={currentStep === 6 ? handleSave : (currentStep === 5 && formData.photos.length > 0 ? () => setCurrentStep(6) : handleNext)}
+          disabled={isButtonDisabled() || isSaving}
+        >
+          <Text style={styles.continueButtonText}>
+            {isSaving ? 'Saving...' : getButtonText()}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Dropdown Modal */}
       <Modal
@@ -1694,25 +1092,28 @@ export default function CreateListingScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.dropdownScrollContent}>
-              {dropdownOptions.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={styles.dropdownOption}
-                  onPress={() => selectOption(option)}
-                >
-                  <Text
-                    style={[
-                      styles.dropdownOptionText,
-                      dropdownField && formData[dropdownField] === option && styles.dropdownOptionSelected,
-                    ]}
+              {dropdownOptions.map((option) => {
+                const isSelected = dropdownField ? getFormValue(dropdownField) === option : false;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={styles.dropdownOption}
+                    onPress={() => selectOption(option)}
                   >
-                    {option}
-                  </Text>
-                  {dropdownField && formData[dropdownField] === option && (
-                    <Check size={sp(20)} color="#212121" />
-                  )}
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.dropdownOptionText,
+                        isSelected && styles.dropdownOptionSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                    {isSelected && (
+                      <Check size={sp(20)} color="#212121" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </View>

@@ -389,6 +389,7 @@ class DirectConversationResponse(BaseModel):
     timestamp: Optional[str] = None
     unread: int = 0
     avatar: Optional[str] = None
+    participant_id: Optional[str] = None  # The other participant's user ID
 
 
 class CreateDirectConversationRequest(BaseModel):
@@ -533,6 +534,7 @@ async def list_conversations(
             "timestamp": last_msg.created_at.strftime("%H:%M") if last_msg else None,
             "unread": unread_count,
             "avatar": other_avatar,
+            "participant_id": other_participant_id,
         })
 
     return result
