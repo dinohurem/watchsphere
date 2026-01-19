@@ -362,51 +362,53 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Sell Now / No Buy Orders Button */}
-        <View style={styles.sellButtonContainer}>
-          {watch.sellNowPrice ? (
-            <TouchableOpacity
-              style={styles.sellNowButton}
-              activeOpacity={0.8}
-              onPress={(e) => {
-                e.stopPropagation();
-                // Navigate to watch details page for this reference
-                router.push({
-                  pathname: '/market/[id]',
-                  params: {
-                    id: watch.reference,
-                    reference: watch.reference,
-                    brand: watch.brand,
-                    model: watch.model,
-                  },
-                } as any);
-              }}
-            >
-              <Text style={styles.sellNowButtonText}>Sell now {watch.sellNowPrice}</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.noBuyOrdersButton}
-              activeOpacity={0.8}
-              onPress={(e) => {
-                e.stopPropagation();
-                // Navigate to watch details page for this reference
-                router.push({
-                  pathname: '/market/[id]',
-                  params: {
-                    id: watch.reference,
-                    reference: watch.reference,
-                    brand: watch.brand,
-                    model: watch.model,
-                  },
-                } as any);
-              }}
-            >
-              <SmallWatchIcon />
-              <Text style={styles.noBuyOrdersText}>No buy orders</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* Sell Now / No Buy Orders Button - only show for active orders */}
+        {!isSold(watch.status) && (
+          <View style={styles.sellButtonContainer}>
+            {watch.sellNowPrice ? (
+              <TouchableOpacity
+                style={styles.sellNowButton}
+                activeOpacity={0.8}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  // Navigate to watch details page for this reference
+                  router.push({
+                    pathname: '/market/[id]',
+                    params: {
+                      id: watch.reference,
+                      reference: watch.reference,
+                      brand: watch.brand,
+                      model: watch.model,
+                    },
+                  } as any);
+                }}
+              >
+                <Text style={styles.sellNowButtonText}>Sell now {watch.sellNowPrice}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.noBuyOrdersButton}
+                activeOpacity={0.8}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  // Navigate to watch details page for this reference
+                  router.push({
+                    pathname: '/market/[id]',
+                    params: {
+                      id: watch.reference,
+                      reference: watch.reference,
+                      brand: watch.brand,
+                      model: watch.model,
+                    },
+                  } as any);
+                }}
+              >
+                <SmallWatchIcon />
+                <Text style={styles.noBuyOrdersText}>No buy orders</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );

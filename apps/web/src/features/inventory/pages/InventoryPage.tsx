@@ -189,28 +189,30 @@ export function InventoryPage() {
                   )}
                 </div>
 
-                {/* Sell Now / No Buy Orders Button */}
-                {item.best_bid ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/app/watch/${encodeURIComponent(item.reference || '')}`);
-                    }}
-                    className="w-full py-2 px-3 bg-gray-900 text-white text-xs font-semibold rounded-full hover:bg-gray-800 transition-colors"
-                  >
-                    Sell now {item.best_bid.toLocaleString()}€
-                  </button>
-                ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/app/watch/${encodeURIComponent(item.reference || '')}`);
-                    }}
-                    className="w-full py-2 px-3 bg-gray-100 text-gray-500 text-xs font-semibold rounded-full hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <SmallWatchIcon />
-                    No buy orders
-                  </button>
+                {/* Sell Now / No Buy Orders Button - only show for active orders */}
+                {item.status !== 'sold' && (
+                  item.best_bid ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/app/watch/${encodeURIComponent(item.reference || '')}`);
+                      }}
+                      className="w-full py-2 px-3 bg-gray-900 text-white text-xs font-semibold rounded-full hover:bg-gray-800 transition-colors"
+                    >
+                      Sell now {item.best_bid.toLocaleString()}€
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/app/watch/${encodeURIComponent(item.reference || '')}`);
+                      }}
+                      className="w-full py-2 px-3 bg-gray-100 text-gray-500 text-xs font-semibold rounded-full hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <SmallWatchIcon />
+                      No buy orders
+                    </button>
+                  )
                 )}
               </div>
             </div>
