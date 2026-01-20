@@ -34,7 +34,6 @@ function BackArrow() {
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
 
   // Focus state for input
   const [emailFocused, setEmailFocused] = useState(false);
@@ -60,75 +59,24 @@ export default function ForgotPasswordScreen() {
 
     try {
       await api.post('/auth/forgot-password', { email });
-      setEmailSent(true);
+      // Navigate to verification code screen
+      router.push({
+        pathname: '/(auth)/reset-verify-code',
+        params: { email },
+      } as any);
     } catch (error: any) {
       // Don't reveal if email exists or not for security
-      // Always show success message
-      setEmailSent(true);
+      // Always navigate to verification screen
+      router.push({
+        pathname: '/(auth)/reset-verify-code',
+        params: { email },
+      } as any);
     } finally {
       setLoading(false);
     }
   };
 
   const canSubmit = email.length > 0;
-
-  if (emailSent) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <BackArrow />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.successContent}>
-          <View style={styles.successIconContainer}>
-            <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z"
-                stroke="#1D1D1F"
-                strokeWidth={1.5}
-              />
-              <Path
-                d="M8 12L11 15L16 9"
-                stroke="#1D1D1F"
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </View>
-
-          <Text style={styles.successTitle}>Check your email</Text>
-          <Text style={styles.successSubtitle}>
-            We've sent password reset instructions to{'\n'}
-            <Text style={styles.emailHighlight}>{email}</Text>
-          </Text>
-
-          <Text style={styles.successNote}>
-            If you don't see the email, check your spam folder or make sure you entered the correct email address.
-          </Text>
-        </View>
-
-        <View style={styles.bottomButtons}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => router.replace('/(auth)/login')}
-          >
-            <Text style={styles.primaryButtonText}>Back to Sign in</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => setEmailSent(false)}
-          >
-            <Text style={styles.secondaryButtonText}>Try another email</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -190,7 +138,7 @@ export default function ForgotPasswordScreen() {
               styles.primaryButtonText,
               (!canSubmit || loading) && styles.buttonTextDisabled
             ]}>
-              {loading ? 'Sending...' : 'Send reset link'}
+              {loading ? 'Sending...' : 'Send verification code'}
             </Text>
           </TouchableOpacity>
 
@@ -326,64 +274,5 @@ const styles = StyleSheet.create({
     fontSize: fp(14),
     fontWeight: '600',
     color: '#1D1D1F',
-  },
-  // Success state styles
-  successContent: {
-    flex: 1,
-    paddingHorizontal: wp(24),
-    paddingTop: hp(40),
-    alignItems: 'center',
-  },
-  successIconContainer: {
-    width: sp(80),
-    height: sp(80),
-    borderRadius: sp(40),
-    backgroundColor: 'rgba(29, 29, 31, 0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: hp(24),
-  },
-  successTitle: {
-    fontFamily: 'HankenGrotesk_700Bold',
-    fontSize: fp(28),
-    fontWeight: '700',
-    color: '#1D1D1F',
-    marginBottom: hp(12),
-    letterSpacing: -0.6,
-    textAlign: 'center',
-  },
-  successSubtitle: {
-    fontFamily: 'HankenGrotesk_400Regular',
-    fontSize: fp(17),
-    color: 'rgba(29, 29, 31, 0.6)',
-    lineHeight: fp(24),
-    textAlign: 'center',
-    marginBottom: hp(24),
-  },
-  emailHighlight: {
-    fontFamily: 'HankenGrotesk_600SemiBold',
-    color: '#1D1D1F',
-  },
-  successNote: {
-    fontFamily: 'HankenGrotesk_400Regular',
-    fontSize: fp(14),
-    color: 'rgba(29, 29, 31, 0.5)',
-    lineHeight: fp(20),
-    textAlign: 'center',
-    paddingHorizontal: wp(16),
-  },
-  secondaryButton: {
-    borderRadius: sp(999),
-    height: hp(48),
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: hp(12),
-  },
-  secondaryButtonText: {
-    fontFamily: 'HankenGrotesk_600SemiBold',
-    fontSize: fp(16),
-    fontWeight: '600',
-    color: '#1D1D1F',
-    letterSpacing: 0.08,
   },
 });

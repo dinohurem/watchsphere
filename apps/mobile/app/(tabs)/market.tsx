@@ -31,8 +31,10 @@ interface WatchMarketData {
 
 // Mini sparkline component for price chart
 function MiniSparkline({ data, width = 40, height = 16, isPositive = true }: { data: number[], width?: number, height?: number, isPositive?: boolean }) {
-  // Only render if we have actual price history data (at least 2 points)
-  if (!data || data.length < 2) return null;
+  // Always render empty view to maintain consistent layout
+  if (!data || data.length < 2) {
+    return <View style={{ width, height }} />;
+  }
 
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -608,6 +610,7 @@ export default function MarketScreen() {
     },
     watchPriceInfo: {
       alignItems: 'flex-end',
+      width: wp(90),
     },
     watchPrice: {
       fontSize: fp(15),

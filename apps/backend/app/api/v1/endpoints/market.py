@@ -3,11 +3,48 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from beanie import PydanticObjectId
+import random
 
 from app.core.deps import get_current_active_user, get_current_admin_user
 from app.models.user import User
 from app.models.watch import Watch, WatchCondition, WatchStatus
 from app.models.order import Order, OrderType, OrderStatus, OrderCondition
+
+
+def generate_price_history_from_change(base_price: float, price_change: float, points: int = 20) -> List[float]:
+    """
+    Generate a synthetic price history that reflects the given price change.
+    The graph will show an upward or downward trend based on the price_change percentage.
+    """
+    if not base_price or base_price <= 0:
+        return []
+
+    # Calculate start price based on price change
+    # If price_change is +5%, start price was base_price / 1.05
+    # If price_change is -5%, start price was base_price / 0.95
+    if price_change != 0:
+        start_price = base_price / (1 + price_change / 100)
+    else:
+        start_price = base_price
+
+    # Generate points with some realistic variation
+    history = []
+    for i in range(points):
+        # Linear interpolation from start to current price
+        progress = i / (points - 1) if points > 1 else 1
+        interpolated_price = start_price + (base_price - start_price) * progress
+
+        # Add small random variation (±2% of price)
+        variation = random.uniform(-0.02, 0.02) * interpolated_price
+        price_point = interpolated_price + variation
+
+        history.append(round(price_point, 2))
+
+    # Ensure the last point is close to the current price
+    if history:
+        history[-1] = base_price
+
+    return history
 
 
 # Map WatchCondition to OrderCondition
@@ -510,6 +547,23 @@ async def get_aggregated_market_data(
             admin_price = watch.price
             display_price = lowest_order_price if lowest_order_price else admin_price
 
+            # Calculate price_change based on SELL orders (lowest ask) vs admin base price
+            price_change = 0.0
+            if admin_price and admin_price > 0:
+                if lowest_order_price:
+                    # Price change = (current lowest ask - base price) / base price * 100
+                    price_change = ((lowest_order_price - admin_price) / admin_price) * 100
+                else:
+                    # No sell orders - use stored price_change or 0
+                    price_change = watch.price_change or 0.0
+            else:
+                # Fallback to stored price_change
+                price_change = watch.price_change or 0.0
+
+            # Generate price history that matches the calculated price_change
+            # This ensures the graph trend matches the displayed percentage
+            generated_history = generate_price_history_from_change(display_price, price_change)
+
             result.append(AggregatedWatchResponse(
                 reference=watch.reference or str(watch.id),
                 brand=watch.brand,
@@ -519,8 +573,8 @@ async def get_aggregated_market_data(
                 lowest_order_price=lowest_order_price,
                 admin_price=admin_price,
                 currency=watch.currency,
-                price_change=watch.price_change or 0.0,
-                price_history=watch.price_history or [],
+                price_change=price_change,
+                price_history=generated_history if generated_history else (watch.price_history or []),
                 total_orders=order_counts_by_ref.get(watch.reference, 0) + (watch.order_count or 0),
                 trending=watch.trending or False,
             ))
@@ -570,6 +624,23 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
         Order.status == OrderStatus.ACTIVE,
     ).count()
 
+    # Calculate price_change based on SELL orders (lowest ask) vs admin base price
+    price_change = 0.0
+    admin_price = watch.price
+    if admin_price and admin_price > 0:
+        if lowest_order_price:
+            # Price change = (current lowest ask - base price) / base price * 100
+            price_change = ((lowest_order_price - admin_price) / admin_price) * 100
+        else:
+            # No sell orders - use stored price_change or 0
+            price_change = watch.price_change or 0.0
+    else:
+        # Fallback to stored price_change
+        price_change = watch.price_change or 0.0
+
+    # Generate price history that matches the calculated price_change
+    generated_history = generate_price_history_from_change(display_price, price_change)
+
     return AggregatedWatchResponse(
         reference=watch.reference,
         brand=watch.brand,
@@ -579,8 +650,8 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
         lowest_order_price=lowest_order_price,
         admin_price=watch.price,
         currency=watch.currency,
-        price_change=watch.price_change,
-        price_history=watch.price_history,
+        price_change=price_change,
+        price_history=generated_history if generated_history else (watch.price_history or []),
         total_orders=order_count + watch.order_count,
         trending=watch.trending,
     )
