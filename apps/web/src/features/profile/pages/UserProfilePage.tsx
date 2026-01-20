@@ -127,8 +127,8 @@ export function UserProfilePage() {
     if (!userId) return
 
     try {
-      const response = await api.post('/chat/direct', {
-        participant_id: userId,
+      const response = await api.post('/chat/conversations/direct', {
+        recipient_id: userId,
       })
       navigate(`/app/chat?conversation=${response.data.id}`)
     } catch (err: any) {

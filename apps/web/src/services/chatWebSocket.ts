@@ -9,6 +9,7 @@ export interface WebSocketMessage {
   conversationId: string;
   senderId: string;
   senderName: string;
+  senderAvatar?: string;
   content: string;
   type: 'text' | 'image' | 'file';
   status: 'sending' | 'sent' | 'delivered' | 'read';
@@ -45,6 +46,9 @@ export interface NotificationData {
   fromUserName?: string;
   fromUserAvatar?: string;
   createdAt: string;
+  // Chat message specific fields
+  conversationId?: string;
+  isGroup?: boolean;
 }
 
 type MessageHandler = (message: WebSocketMessage) => void;
@@ -69,6 +73,7 @@ class ChatWebSocketService {
   private onMessageReadHandlers: ((data: { conversationId: string; messageIds: string[]; readerId: string }) => void)[] = [];
   private onUnreadUpdateHandlers: ((data: { conversationId: string; unreadCount: number }) => void)[] = [];
   private onNotificationHandlers: NotificationHandler[] = [];
+  private onChatNotificationHandlers: ((message: WebSocketMessage) => void)[] = [];
 
   connect(token: string): void {
     if (this.socket?.readyState === WebSocket.OPEN) {
@@ -76,8 +81,19 @@ class ChatWebSocketService {
       return;
     }
 
+    // Clean up existing socket if it exists but isn't open
+    if (this.socket) {
+      console.log('WebSocket: Cleaning up old socket, state:', this.socket.readyState);
+      this.socket.close();
+      this.socket = null;
+    }
+
     this.token = token;
     const wsUrl = `${API_CONFIG.wsURL}?token=${encodeURIComponent(token)}`;
+
+    console.log('=== WebSocket: Initiating connection ===');
+    console.log('WebSocket: URL:', wsUrl.replace(/token=[^&]+/, 'token=<redacted>'));
+    console.log('WebSocket: Token present:', !!token);
 
     try {
       this.socket = new WebSocket(wsUrl);
@@ -92,14 +108,15 @@ class ChatWebSocketService {
     if (!this.socket) return;
 
     this.socket.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('=== WebSocket: CONNECTED ===');
       this.reconnectAttempts = 0;
       this.notifyConnectionHandlers('connected');
       this.startPingInterval();
     };
 
     this.socket.onclose = (event) => {
-      console.log('WebSocket closed:', event.code, event.reason);
+      console.log('=== WebSocket: CLOSED ===');
+      console.log('WebSocket: Close code:', event.code, 'reason:', event.reason);
       this.notifyConnectionHandlers('disconnected');
       this.stopPingInterval();
 
@@ -131,6 +148,8 @@ class ChatWebSocketService {
 
       case 'message:new':
         this.onMessageHandlers.forEach(handler => handler(data.data));
+        // Also trigger chat notification handlers for notification banners
+        this.onChatNotificationHandlers.forEach(handler => handler(data.data));
         break;
 
       case 'typing':
@@ -332,6 +351,14 @@ class ChatWebSocketService {
     return () => {
       const index = this.onNotificationHandlers.indexOf(handler);
       if (index > -1) this.onNotificationHandlers.splice(index, 1);
+    };
+  }
+
+  onChatNotification(handler: (message: WebSocketMessage) => void): () => void {
+    this.onChatNotificationHandlers.push(handler);
+    return () => {
+      const index = this.onChatNotificationHandlers.indexOf(handler);
+      if (index > -1) this.onChatNotificationHandlers.splice(index, 1);
     };
   }
 

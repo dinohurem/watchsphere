@@ -5,6 +5,7 @@ import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { chatWebSocket, WebSocketMessage } from '@/services/chatWebSocket';
 import { useChatStore, useAuthStore } from '@watchsphere/shared/stores';
+import { useNotification } from '@/contexts/NotificationContext';
 
 interface UserProfile {
   id: string;
@@ -142,6 +143,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const conversationParam = searchParams.get('conversation');
   const authUser = useAuthStore((state) => state.user);
+  const { setActiveConversation } = useNotification();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -169,20 +171,32 @@ export function ChatPage() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedChatRef = useRef<ChatItem | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Track processed message IDs to prevent duplicates from WebSocket
+  const processedMessageIds = useRef<Set<string>>(new Set());
 
-  // Keep ref in sync with state
+  // Keep ref in sync with state and update notification context
   useEffect(() => {
     selectedChatRef.current = selectedChat;
-  }, [selectedChat]);
+    // Update notification context with active conversation to prevent showing
+    // notifications for the chat the user is currently viewing
+    setActiveConversation(selectedChat?.id || null);
+  }, [selectedChat, setActiveConversation]);
 
-  // WebSocket connection and event handling
+  // Clear active conversation when leaving the chat page
   useEffect(() => {
+    return () => {
+      setActiveConversation(null);
+    };
+  }, [setActiveConversation]);
+
+  // WebSocket event handling (connection is managed in UserLayout)
+  useEffect(() => {
+    // WebSocket is connected at app level in UserLayout
+    // Just ensure connection if not already connected (edge case)
     const token = localStorage.getItem('auth_token');
-    console.log('ChatPage: Attempting WebSocket connection, token exists:', !!token);
-    if (token) {
+    if (token && !chatWebSocket.isConnected()) {
+      console.log('ChatPage: WebSocket not connected, connecting...');
       chatWebSocket.connect(token);
-    } else {
-      console.warn('ChatPage: No auth_token found in localStorage');
     }
 
     // Connection status handler
@@ -195,21 +209,36 @@ export function ChatPage() {
     const unsubMessage = chatWebSocket.onMessage((wsMessage: WebSocketMessage) => {
       console.log('Received WebSocket message:', wsMessage);
 
+      // Use ref to check if we already processed this message (prevents duplicates from StrictMode)
+      if (processedMessageIds.current.has(wsMessage.id)) {
+        console.log('Skipping already processed message:', wsMessage.id);
+        return;
+      }
+      processedMessageIds.current.add(wsMessage.id);
+
       // Add message to list if it's for the current chat
       setMessages(prev => {
-        // Check if message already exists (by id or tempId)
-        const exists = prev.some(m =>
-          m.id === wsMessage.id ||
-          (wsMessage.tempId && m.id === wsMessage.tempId)
-        );
+        // Check if message already exists by real ID
+        const existsById = prev.some(m => m.id === wsMessage.id);
+        if (existsById) {
+          // Message already exists, skip
+          return prev;
+        }
 
-        if (exists) {
+        // Check if this is replacing a temp message
+        const tempIndex = wsMessage.tempId
+          ? prev.findIndex(m => m.id === wsMessage.tempId)
+          : -1;
+
+        if (tempIndex !== -1) {
           // Replace temp message with real one
-          return prev.map(m =>
-            (m.id === wsMessage.tempId || m.id === wsMessage.id)
-              ? { ...m, id: wsMessage.id, content: wsMessage.content }
-              : m
-          );
+          const newMessages = [...prev];
+          newMessages[tempIndex] = {
+            ...newMessages[tempIndex],
+            id: wsMessage.id,
+            content: wsMessage.content,
+          };
+          return newMessages;
         }
 
         // Use ref to get current selectedChat value (avoids stale closure)
@@ -300,7 +329,8 @@ export function ChatPage() {
       unsubMessage();
       unsubTyping();
       unsubUnread();
-      chatWebSocket.disconnect();
+      // DO NOT disconnect WebSocket here - it's managed at the app level (UserLayout)
+      // Disconnecting here would kill the connection when navigating away from chat
     };
   }, []); // Empty dependency - only run once on mount
 
@@ -339,8 +369,8 @@ export function ChatPage() {
       if (recipientId) {
         try {
           // Create or get existing conversation
-          const response = await api.post('/chat/direct', {
-            participant_id: recipientId,
+          const response = await api.post('/chat/conversations/direct', {
+            recipient_id: recipientId,
           });
           if (response.data) {
             // Reload conversations and select the new one
@@ -463,6 +493,8 @@ export function ChatPage() {
 
   const loadMessages = async (chatId: string, chatType: string) => {
     setIsLoadingMessages(true);
+    // Clear processed message IDs when loading new conversation
+    processedMessageIds.current.clear();
     try {
       const endpoint = chatType === 'group'
         ? `/chat/groups/${chatId}/messages`
@@ -476,6 +508,8 @@ export function ChatPage() {
       }
       if (response.data) {
         setMessages(response.data);
+        // Add loaded message IDs to processed set to prevent duplicates from WebSocket
+        response.data.forEach((msg: Message) => processedMessageIds.current.add(msg.id));
       }
 
       // Load group members if it's a group chat
@@ -523,8 +557,8 @@ export function ChatPage() {
   const handleReplyPrivately = async (message: Message) => {
     if (message.sender_id === currentUserId) return;
     try {
-      const response = await api.post('/chat/direct', {
-        participant_id: message.sender_id,
+      const response = await api.post('/chat/conversations/direct', {
+        recipient_id: message.sender_id,
       });
       if (response.data) {
         await loadConversations();

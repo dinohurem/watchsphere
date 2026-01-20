@@ -52,6 +52,7 @@ function NotificationHandler() {
   useEffect(() => {
     setNotificationCallback((data) => {
       showNotification({
+        type: 'message',  // Set type to 'message' so avatar is displayed
         title: data.title,
         body: data.body,
         avatar: data.avatar,
