@@ -592,21 +592,25 @@ export default function WatchDetailsScreen() {
   };
 
   const handleContactNow = async () => {
+    // Use effectiveOrderUserId which includes fetchedUserId from API as fallback
+    const targetUserId = orderUserId || fetchedUserId;
+    const targetUserName = displayUserName || userName;
+
     // Debug: log the user_id being used
-    console.log('Contact Now - orderUserId:', orderUserId, 'userName:', userName);
+    console.log('Contact Now - targetUserId:', targetUserId, 'targetUserName:', targetUserName);
 
     // Check if user is trying to contact themselves
-    if (orderUserId && orderUserId === user?.id) {
+    if (targetUserId && targetUserId === user?.id) {
       Alert.alert('Info', 'This is your own listing.');
       return;
     }
 
     // If we have a real user_id, try to create a conversation
-    if (orderUserId) {
+    if (targetUserId) {
       try {
         // Create or find an existing direct conversation with this user
         const response = await api.post('/chat/conversations/direct', {
-          recipient_id: orderUserId,
+          recipient_id: targetUserId,
         });
 
         if (response.data?.id) {
@@ -616,7 +620,8 @@ export default function WatchDetailsScreen() {
             pathname: '/chat/[id]',
             params: {
               id: response.data.id,
-              name: response.data.name || userName,
+              name: response.data.name || targetUserName,
+              avatar: response.data.avatar || userProfileImage || undefined,
               watchId: params.orderId || '',
               watchBrand: brand,
               watchModel: model,

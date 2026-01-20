@@ -242,6 +242,7 @@ class UnifiedBroadcastService:
             'conversation_id': 'conversationId',
             'sender_id': 'senderId',
             'sender_name': 'senderName',
+            'sender_avatar': 'senderAvatar',
             'created_at': 'timestamp',  # Use timestamp consistently
             'temp_id': 'tempId',
             'reply_to': 'replyTo',
