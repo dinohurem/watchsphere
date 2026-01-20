@@ -805,42 +805,28 @@ export default function WatchDetailsScreen() {
     setShowMakeOfferModal(true);
   }, [isAuthenticated]);
 
-  // Handle submitting the offer
-  const handleSubmitOffer = useCallback(async () => {
-    if (!offerAmount || submitting) return;
+  // Handle submitting the offer - navigate to create listing page with buy order
+  const handleSubmitOffer = useCallback(() => {
+    if (!offerAmount) return;
 
-    setSubmitting(true);
-    try {
-      // Parse the price from formatted string
-      const priceValue = parseInt(offerAmount.replace(/\./g, ''), 10);
+    // Close modal
+    setShowMakeOfferModal(false);
 
-      // Submit buy order to API
-      await api.post('/orders', {
-        order_type: 'buy',
+    // Parse the price from formatted string (remove thousand separators)
+    const priceValue = offerAmount.replace(/\./g, '');
+
+    // Navigate to create listing page with buy order parameters
+    router.push({
+      pathname: '/listing/create',
+      params: {
         brand: watch.brand,
         model: watch.model,
         reference: watch.reference,
         price: priceValue,
-        currency: 'EUR',
-        condition: 'Unworn',
-        country_code: 'US', // Default, could be user's country
-        country_name: 'United States',
-      });
-
-      setSubmittedOfferAmount(offerAmount);
-      setOfferSubmitted(true);
-
-      // Refresh order book after successful submission
-      loadOrderBook();
-    } catch (error) {
-      console.error('Failed to submit offer:', error);
-      // Still show success for demo purposes
-      setSubmittedOfferAmount(offerAmount);
-      setOfferSubmitted(true);
-    } finally {
-      setSubmitting(false);
-    }
-  }, [offerAmount, submitting, watch]);
+        orderType: 'buy',
+      },
+    });
+  }, [offerAmount, watch]);
 
   // Close offer modal and reset state
   const handleCloseOfferModal = useCallback(() => {

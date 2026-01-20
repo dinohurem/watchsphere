@@ -44,7 +44,10 @@ interface DynamicFilterState {
 
 // Mini chart component for price trend visualization - matching Figma design
 function MiniChart({ data, isPositive = true }: { data?: number[]; isPositive?: boolean }) {
-  if (!data || data.length < 2) return null;
+  // Always render container to maintain consistent layout
+  if (!data || data.length < 2) {
+    return <div style={{ width: 168, height: 50 }} />;
+  }
 
   const height = 50;
   const width = 168;

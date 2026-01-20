@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { BackArrow, ClipboardList } from '@/components/icons';
 import { api } from '@/services/api';
@@ -82,9 +82,12 @@ export default function OrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadOrders();
-  }, [orderType]);
+  // Refresh orders when screen comes into focus (after deletion, etc.)
+  useFocusEffect(
+    useCallback(() => {
+      loadOrders();
+    }, [orderType])
+  );
 
   const loadOrders = async () => {
     setLoading(true);

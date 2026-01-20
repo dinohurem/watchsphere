@@ -388,6 +388,14 @@ export function CreateListingPage() {
   };
 
   const handleSubmit = async () => {
+    // Validate required fields
+    const yearStr = (formData.year as string) || '';
+    const yearValue = yearStr ? parseInt(yearStr, 10) : null;
+    if (!yearValue || isNaN(yearValue)) {
+      alert('Year is required for all orders');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const currentPhotos = (formData.photos || []) as File[];
@@ -424,8 +432,6 @@ export function CreateListingPage() {
         priceValue = parseInt(digitsOnly, 10) || 0;
       }
       console.log('Price parsing:', { priceRaw, priceValue });
-      const yearStr = (formData.year as string) || '';
-      const yearValue = yearStr ? parseInt(yearStr, 10) : undefined;
       const jewelsStr = (formData.number_of_jewels as string) || '';
       const jewelsValue = jewelsStr ? parseInt(jewelsStr, 10) : undefined;
 
@@ -449,12 +455,16 @@ export function CreateListingPage() {
       };
 
       // Add all enabled listing fields dynamically
+      // Skip fields already handled above (price, currency, condition, etc.)
+      const handledFields = ['price', 'currency', 'condition', 'condition_description', 'box_papers', 'location', 'brand', 'model', 'reference'];
       listingFields.forEach(field => {
+        if (handledFields.includes(field.key)) return; // Skip already-handled fields
         const value = formData[field.key];
         if (value !== undefined && value !== null && value !== '') {
-          // Handle numeric fields
+          // Handle numeric fields - strip non-digits first (like price formatting)
           if (field.field_type === 'number') {
-            const numVal = parseInt(String(value), 10);
+            const digitsOnly = String(value).replace(/[^0-9]/g, '');
+            const numVal = parseInt(digitsOnly, 10);
             if (!isNaN(numVal)) {
               orderData[field.key] = numVal;
             }

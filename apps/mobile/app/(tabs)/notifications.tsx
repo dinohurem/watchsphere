@@ -7,7 +7,7 @@ import { ChevronLeft, TagPlus, PriceAlertUp, PriceAlertDown } from '@/components
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
 
-type NotificationType = 'new_offer' | 'price_alert_up' | 'price_alert_down' | 'offer_accepted' | 'offer_rejected';
+type NotificationType = 'new_offer' | 'buy_order_offer' | 'price_undercut' | 'price_alert_up' | 'price_alert_down' | 'offer_accepted' | 'offer_rejected';
 
 interface NotificationItem {
   id: string;
@@ -158,7 +158,15 @@ export default function NotificationsScreen() {
     // Navigate to watch-details page with order info
     if (item.orderId) {
       // Determine order type from notification type
-      const orderType = item.type === 'new_offer' ? 'buy' : 'sell';
+      // new_offer = someone placed a BUY order on user's listing
+      // buy_order_offer = someone created a SELL order that matches user's buy bid
+      // price_undercut = another seller created a SELL order at lower price
+      let orderType: 'buy' | 'sell' = 'buy';
+      if (item.type === 'new_offer') {
+        orderType = 'buy'; // The notification is about a BUY order
+      } else if (item.type === 'buy_order_offer' || item.type === 'price_undercut') {
+        orderType = 'sell'; // The notification is about a SELL order
+      }
       router.push({
         pathname: '/market/watch-details',
         params: {
@@ -177,6 +185,7 @@ export default function NotificationsScreen() {
   const getIconConfig = (type: NotificationType) => {
     switch (type) {
       case 'new_offer':
+      case 'buy_order_offer':
         return {
           Icon: TagPlus,
           color: '#0088FF',
@@ -190,6 +199,7 @@ export default function NotificationsScreen() {
           bgColor: 'rgba(74, 160, 120, 0.05)',
         };
       case 'price_alert_down':
+      case 'price_undercut':
       case 'offer_rejected':
         return {
           Icon: PriceAlertDown,
@@ -214,6 +224,8 @@ export default function NotificationsScreen() {
     const IconComponent = iconConfig.Icon;
 
     const displayTitle = item.type === 'new_offer' ? 'New offer' :
+                         item.type === 'buy_order_offer' ? 'New listing' :
+                         item.type === 'price_undercut' ? 'Price undercut' :
                          item.type === 'price_alert_up' ? 'Price changed for' :
                          item.type === 'price_alert_down' ? 'Price changed for' :
                          item.title;

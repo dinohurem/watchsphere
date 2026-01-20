@@ -283,16 +283,36 @@ export function HomePage() {
         // Use notifications endpoint
         const notifResponse = await api.get('/notifications?limit=3');
         if (notifResponse.data?.notifications && notifResponse.data.notifications.length > 0) {
-          data = notifResponse.data.notifications.map((item: any) => ({
-            id: item.id,
-            type: item.type === 'new_offer' ? 'offer' :
-                  item.type === 'price_alert_up' || item.type === 'price_alert_down' ? 'alert' : 'offer',
-            reference: item.reference || '',
-            price: item.price || 0,
-            currency: item.currency || 'EUR',
-            time: formatTimeAgo(item.created_at),
-            orderId: item.order_id,
-          }));
+          data = notifResponse.data.notifications.map((item: any) => {
+            // Map notification types to display types
+            let displayType = 'offer';
+            switch (item.type) {
+              case 'new_offer':
+                displayType = 'offer';
+                break;
+              case 'buy_order_offer':
+                displayType = 'listing';
+                break;
+              case 'price_undercut':
+                displayType = 'undercut';
+                break;
+              case 'price_alert_up':
+              case 'price_alert_down':
+                displayType = 'alert';
+                break;
+              default:
+                displayType = 'offer';
+            }
+            return {
+              id: item.id,
+              type: displayType,
+              reference: item.reference || '',
+              price: item.price || 0,
+              currency: item.currency || 'EUR',
+              time: formatTimeAgo(item.created_at),
+              orderId: item.order_id,
+            };
+          });
         }
       }
 
@@ -423,9 +443,9 @@ export function HomePage() {
                     className="flex items-center gap-3 p-4 rounded-2xl hover:bg-[rgba(29,29,31,0.02)] transition-colors cursor-pointer"
                   >
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                      activity.type === 'offer' ? 'bg-[rgba(0,136,255,0.05)]' : 'bg-[rgba(217,4,41,0.05)]'
+                      activity.type === 'offer' || activity.type === 'listing' ? 'bg-[rgba(0,136,255,0.05)]' : 'bg-[rgba(217,4,41,0.05)]'
                     }`}>
-                      {activity.type === 'offer' ? (
+                      {activity.type === 'offer' || activity.type === 'listing' ? (
                         <Tag className="w-[18px] h-[18px] text-[#0088ff]" />
                       ) : (
                         <TrendingDown className="w-[18px] h-[18px] text-[#d90429]" />
@@ -435,7 +455,10 @@ export function HomePage() {
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[15px] leading-[19px] tracking-[0.075px] truncate">
                           <span className="font-normal text-[#212121]">
-                            {activity.type === 'offer' ? 'New offer ' : 'Price alert triggered '}
+                            {activity.type === 'offer' ? 'New offer ' :
+                             activity.type === 'listing' ? 'New listing ' :
+                             activity.type === 'undercut' ? 'Price undercut ' :
+                             'Price alert '}
                           </span>
                           <span className="font-semibold text-[#212121]">{activity.reference}</span>
                         </p>
