@@ -43,15 +43,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Listen for real-time notifications via Socket.IO
   useEffect(() => {
     const handleNotification = (data: any) => {
-      console.log('NotificationContext: Received notification:new event', data.type);
+      console.log('=== NotificationContext: Received notification:new event ===');
+      console.log('NotificationContext: data.type:', data.type);
+      console.log('NotificationContext: data.title:', data.title);
+      console.log('NotificationContext: data.body:', data.body);
+      console.log('NotificationContext: data.reference:', data.reference);
+      console.log('NotificationContext: data.orderId:', data.orderId);
+
       // Map WebSocket notification to banner format
-      // Handle different notification types appropriately
+      // Handle all notification types appropriately
       let notifType: 'buy_offer' | 'message' | 'price_alert' = 'message';
-      if (data.type === 'new_offer' || data.type === 'new_listing' || data.type === 'buy_order_offer') {
+      if (data.type === 'new_offer' || data.type === 'new_listing' || data.type === 'buy_order_offer' || data.type === 'offer_accepted') {
         notifType = 'buy_offer';
-      } else if (data.type === 'price_undercut' || data.type === 'price_alert_up' || data.type === 'price_alert_down') {
+      } else if (data.type === 'price_undercut' || data.type === 'price_alert_up' || data.type === 'price_alert_down' || data.type === 'offer_rejected') {
         notifType = 'price_alert';
       }
+
+      console.log('NotificationContext: mapped to notifType:', notifType);
 
       const bannerNotification = {
         type: notifType,
@@ -61,13 +69,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         orderId: data.orderId,
       };
 
+      console.log('NotificationContext: calling showNotification with:', JSON.stringify(bannerNotification));
+
       showNotification(bannerNotification);
     };
 
     chatService.on('notification:new', handleNotification);
+    console.log('NotificationContext: Registered notification:new listener');
 
     return () => {
       chatService.off('notification:new', handleNotification);
+      console.log('NotificationContext: Unregistered notification:new listener');
     };
   }, [showNotification]);
 

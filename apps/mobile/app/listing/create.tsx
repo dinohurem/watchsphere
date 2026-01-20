@@ -68,10 +68,11 @@ export default function CreateListingScreen() {
     has_papers?: string;
   }>();
 
-  // Check if we're in edit mode
+  // Check if we're in edit mode or creating a buy order
   const isEditMode = params.editMode === 'true';
   const orderId = params.orderId;
   const isBuyOrder = params.orderType === 'buy';
+  const isNewBuyOrder = isBuyOrder && !isEditMode;
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingOrder, setIsLoadingOrder] = useState(isEditMode);
 
@@ -92,6 +93,15 @@ export default function CreateListingScreen() {
 
   // Form data - dynamic, pre-populated if coming from sell order or edit mode
   const [formData, setFormData] = useState<ListingFormData>(() => {
+    // Format price with thousand separators if provided
+    let priceFormatted = '';
+    if (params.price) {
+      const priceNum = parseInt(params.price.replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(priceNum)) {
+        priceFormatted = priceNum.toLocaleString('de-DE');
+      }
+    }
+
     const initialData: ListingFormData = {
       photos: [],
       // Pre-populate from params if available (basic info only, full details loaded via API)
@@ -101,7 +111,7 @@ export default function CreateListingScreen() {
       condition: '',
       box_papers: '',
       location: '',
-      price: '',
+      price: priceFormatted,
       currency: 'EUR',
     };
     return initialData;
@@ -256,6 +266,15 @@ export default function CreateListingScreen() {
   // Handle save listing (create or update)
   const handleSave = useCallback(async () => {
     if (isSaving) return;
+
+    // Validate required fields - year is mandatory for all orders
+    const yearStr = getFormValue('year');
+    const yearValue = yearStr ? parseInt(yearStr, 10) : null;
+    if (!yearValue || isNaN(yearValue)) {
+      Alert.alert('Missing Field', 'Year is required for all orders');
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -295,9 +314,8 @@ export default function CreateListingScreen() {
       const priceStr = getFormValue('price');
       const priceValue = parseInt(priceStr.replace(/[^0-9]/g, ''), 10) || 0;
 
-      // Parse year if provided
-      const yearStr = getFormValue('year');
-      const yearValue = yearStr ? parseInt(yearStr, 10) : undefined;
+      // Parse year (already validated above)
+      const parsedYear = parseInt(getFormValue('year'), 10);
       // Parse number of jewels if provided
       const jewelsStr = getFormValue('number_of_jewels');
       const jewelsValue = jewelsStr ? parseInt(jewelsStr, 10) : undefined;
@@ -305,7 +323,7 @@ export default function CreateListingScreen() {
       // Build extended watch details
       const extendedFields = {
         images: uploadedPhotoUrls,
-        year: yearValue,
+        year: parsedYear,
         size: formData.size || formData.caseDiameter || undefined,
         movement: formData.movement || undefined,
         case_material: formData.caseMaterial || formData.caseMaterialDetail || undefined,
@@ -351,7 +369,7 @@ export default function CreateListingScreen() {
         // Create new order - send all fields
         const createBoxPapersValue = getFormValue('box_papers');
         const orderData = {
-          order_type: 'sell',
+          order_type: isNewBuyOrder ? 'buy' : 'sell',
           brand: formData.brand,
           model: formData.model,
           reference: formData.reference,
@@ -367,7 +385,7 @@ export default function CreateListingScreen() {
         };
 
         await api.post('/orders', orderData);
-        Alert.alert('Success', 'Your listing has been created!', [
+        Alert.alert('Success', isNewBuyOrder ? 'Your buy order has been created!' : 'Your listing has been created!', [
           { text: 'OK', onPress: () => router.back() }
         ]);
       }
@@ -1024,7 +1042,7 @@ export default function CreateListingScreen() {
           <BackArrow size={sp(24)} color="#212121" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {currentStep === 6 ? 'Listing overview' : (isEditMode ? (isBuyOrder ? 'Edit Buy Order' : 'Edit Listing') : 'Create new listing')}
+          {currentStep === 6 ? 'Listing overview' : (isEditMode ? (isBuyOrder ? 'Edit Buy Order' : 'Edit Listing') : (isNewBuyOrder ? 'Create Buy Order' : 'Create new listing'))}
         </Text>
         {/* Placeholder to balance header when not in edit mode */}
         {!isEditMode && <View style={{ width: sp(44) }} />}

@@ -45,7 +45,7 @@ interface WatchlistItem {
 
 interface ActivityItem {
   id: string;
-  type: 'new_offer' | 'price_alert';
+  type: 'new_offer' | 'new_listing' | 'price_undercut' | 'price_alert';
   reference: string;
   price: number;
   time: string;
@@ -198,17 +198,38 @@ export default function HomeScreen() {
       const response = await api.get('/notifications?limit=3');
       if (response.data?.notifications && response.data.notifications.length > 0) {
         setActivityItems(response.data.notifications.map((item: any) => {
-          // Determine order type from notification type
+          // Determine order type and display type from notification type
           let orderType: 'buy' | 'sell' | null = null;
-          if (item.type === 'new_offer') {
-            orderType = 'buy';
-          } else if (item.type === 'new_listing') {
-            orderType = 'sell';
+          let displayType: string = item.type;
+
+          // Map notification types to display types and order types
+          switch (item.type) {
+            case 'new_offer':
+              // Someone placed a buy order on user's listing
+              displayType = 'new_offer';
+              orderType = 'buy';
+              break;
+            case 'buy_order_offer':
+              // New listing matches user's buy order (sell order created)
+              displayType = 'new_listing';
+              orderType = 'sell';
+              break;
+            case 'price_undercut':
+              // Another seller undercut user's price
+              displayType = 'price_undercut';
+              orderType = 'sell';
+              break;
+            case 'price_alert_up':
+            case 'price_alert_down':
+              displayType = 'price_alert';
+              break;
+            default:
+              displayType = item.type;
           }
 
           return {
             id: item.id,
-            type: item.type === 'price_alert_up' || item.type === 'price_alert_down' ? 'price_alert' : 'new_offer',
+            type: displayType,
             reference: item.reference || '',
             price: item.price || 0,
             time: formatTimeAgo(item.created_at),
@@ -778,10 +799,10 @@ export default function HomeScreen() {
                 <View
                   style={[
                     styles.activityIconContainer,
-                    item.type === 'new_offer' ? styles.activityIconBlue : styles.activityIconRed,
+                    (item.type === 'new_offer' || item.type === 'new_listing') ? styles.activityIconBlue : styles.activityIconRed,
                   ]}
                 >
-                  {item.type === 'new_offer' ? (
+                  {(item.type === 'new_offer' || item.type === 'new_listing') ? (
                     <TagPlus size={18} color="#0088FF" />
                   ) : (
                     <PriceAlertDown size={20} color="#C93927" />
@@ -790,7 +811,10 @@ export default function HomeScreen() {
                 <View style={styles.activityContent}>
                   <View style={styles.activityRow}>
                     <Text style={styles.activityText}>
-                      {item.type === 'new_offer' ? 'New offer ' : 'Price alert triggered '}
+                      {item.type === 'new_offer' ? 'New offer ' :
+                       item.type === 'new_listing' ? 'New listing ' :
+                       item.type === 'price_undercut' ? 'Price undercut ' :
+                       'Price alert '}
                       <Text style={styles.activityReference}>{item.reference}</Text>
                     </Text>
                     <Text style={styles.activityPrice}>{formatPrice(item.price)}</Text>

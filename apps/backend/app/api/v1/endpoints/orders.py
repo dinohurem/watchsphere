@@ -5,6 +5,7 @@ from datetime import datetime
 from beanie import PydanticObjectId
 import asyncio
 import logging
+import random
 
 from app.core.deps import get_current_active_user, get_current_admin_user
 from app.models.user import User
@@ -18,6 +19,35 @@ from app.services.notifications import notify_buy_offer, send_notification_to_mu
 from app.services.broadcast import broadcast_service
 
 logger = logging.getLogger(__name__)
+
+
+def generate_price_history_from_change(base_price: float, price_change: float, points: int = 20) -> List[float]:
+    """
+    Generate a synthetic price history that reflects the given price change.
+    The graph will show an upward or downward trend based on the price_change percentage.
+    """
+    if not base_price or base_price <= 0:
+        return []
+
+    # Calculate start price based on price change
+    if price_change != 0:
+        start_price = base_price / (1 + price_change / 100)
+    else:
+        start_price = base_price
+
+    # Generate points with some realistic variation
+    history = []
+    for i in range(points):
+        progress = i / (points - 1) if points > 1 else 1
+        interpolated_price = start_price + (base_price - start_price) * progress
+        variation = random.uniform(-0.02, 0.02) * interpolated_price
+        price_point = interpolated_price + variation
+        history.append(round(price_point, 2))
+
+    if history:
+        history[-1] = base_price
+
+    return history
 
 router = APIRouter()
 
@@ -143,7 +173,8 @@ class OrderCreate(BaseModel):
     # Images (for sell orders)
     images: list[str] = []
     # Extended watch details (for sell listings)
-    year: Optional[int] = None
+    # Year is required for all orders (buy and sell)
+    year: int  # Required field
     size: Optional[str] = None
     movement: Optional[str] = None
     case_material: Optional[str] = None
@@ -291,10 +322,12 @@ async def get_market_price(reference: str) -> Any:
     Get market price for a specific watch reference.
 
     Price logic:
-    1. Show lowest price from all active sell orders
+    1. Show lowest price from all active sell orders (lowest ask)
     2. If no orders, show admin's set price from the watch model
+
+    Price change is calculated based on sell orders only (lowest ask price vs admin base price).
     """
-    # Get all active sell orders for this reference
+    # Get all active SELL orders for this reference (not buy orders)
     sell_orders = await Order.find(
         Order.reference == reference,
         Order.order_type == OrderType.SELL,
@@ -311,12 +344,28 @@ async def get_market_price(reference: str) -> Any:
     highest_price = sell_orders[-1].price if sell_orders else None
     admin_price = watch.price if watch else None
 
-    # Display price: lowest order price, or admin price if no orders
+    # Display price: lowest sell order price, or admin price if no sell orders
     display_price = lowest_price if lowest_price else (admin_price if admin_price else 0)
 
-    # Get price history and change from watch model
+    # Get price history from watch model (for chart display)
     price_history = watch.price_history if watch else []
-    price_change = watch.price_change if watch else 0.0
+
+    # Calculate price_change based on SELL orders only
+    # Compare lowest sell order (lowest ask) to admin base price
+    price_change = 0.0
+    if admin_price and admin_price > 0:
+        if lowest_price:
+            # Price change = (current lowest ask - base price) / base price * 100
+            price_change = ((lowest_price - admin_price) / admin_price) * 100
+        else:
+            # No sell orders - no change from base
+            price_change = 0.0
+    elif watch and watch.price_change:
+        # Fallback to stored price_change if no admin price to compare
+        price_change = watch.price_change
+
+    # Generate price history that matches the calculated price_change
+    generated_history = generate_price_history_from_change(display_price, price_change)
 
     return MarketPriceInfo(
         reference=reference,
@@ -327,7 +376,7 @@ async def get_market_price(reference: str) -> Any:
         admin_price=admin_price,
         display_price=display_price,
         total_orders=len(sell_orders),
-        price_history=price_history,
+        price_history=generated_history if generated_history else price_history,
         price_change=price_change,
     )
 
