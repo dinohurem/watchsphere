@@ -6,6 +6,7 @@ export interface Message {
   conversationId: string;
   senderId: string;
   senderName: string;
+  senderAvatar?: string;
   content: string;
   type: 'text' | 'image' | 'file';
   status: 'sending' | 'sent' | 'delivered' | 'read';
@@ -49,28 +50,39 @@ class ChatService {
   private typingTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
   connect(token: string) {
+    // If already connected, don't reconnect
     if (this.socket?.connected) {
+      console.log('ChatService: Already connected, skipping');
       return;
+    }
+
+    // If there's an existing disconnected socket, clean it up
+    if (this.socket) {
+      console.log('ChatService: Cleaning up old disconnected socket');
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+      this.socket = null;
     }
 
     // Use Socket.IO URL from config (HTTP URL - Socket.IO handles WebSocket upgrade)
     const socketUrl = API_CONFIG.socketIOURL || API_CONFIG.baseURL.replace('/api/v1', '');
 
     // Debug: Log connection details
-    console.log('ChatService: Connecting to Socket.IO');
+    console.log('=== ChatService: Initiating Socket.IO connection ===');
     console.log('ChatService: URL:', socketUrl);
+    console.log('ChatService: Path: /socket.io/');
     console.log('ChatService: Token present:', !!token);
     console.log('ChatService: Token length:', token?.length);
-    console.log('ChatService: Token prefix:', token?.substring(0, 20) + '...');
 
     this.socket = io(socketUrl, {
       auth: { token },
       path: '/socket.io/',  // Socket.IO path on server
-      transports: ['websocket'],
+      transports: ['polling', 'websocket'],  // Allow polling as fallback, then upgrade
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: this.maxReconnectAttempts,
+      timeout: 20000,  // Connection timeout
     });
 
     this.setupEventListeners();
@@ -96,6 +108,9 @@ class ChatService {
     this.socket.on('connect_error', (error) => {
       console.log('=== ChatService: CONNECTION ERROR ===');
       console.log('ChatService: Error:', error.message);
+      console.log('ChatService: Error details:', JSON.stringify(error, null, 2));
+      // Log additional context for debugging
+      console.log('ChatService: Socket state - connected:', this.socket?.connected, 'disconnected:', this.socket?.disconnected);
     });
 
     // Catch ALL events for debugging
@@ -117,6 +132,7 @@ class ChatService {
         conversationId: data.conversationId,
         senderId: data.senderId,
         senderName: data.senderName,
+        senderAvatar: data.senderAvatar,
         content: data.content,
         type: data.type || 'text',
         status: data.status || 'sent',

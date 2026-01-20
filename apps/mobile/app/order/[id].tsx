@@ -175,6 +175,7 @@ export default function OrderDetailScreen() {
           params: {
             id: response.data.id,
             name: response.data.name || order.user_name || 'User',
+            avatar: response.data.avatar || order.user_profile_image || undefined,
             watchId: order.id,
             watchBrand: order.brand,
             watchModel: order.model,

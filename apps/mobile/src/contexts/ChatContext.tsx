@@ -92,10 +92,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Connect to chat service when user logs in
+  // Use stable dependencies (user.id string instead of user object)
+  const userId = user?.id;
+  const isAuthenticated = !!(userId && token);
+
   useEffect(() => {
-    if (user && token) {
+    if (isAuthenticated && token) {
       console.log('=== ChatContext: Connecting to chat service ===');
-      console.log('ChatContext: User ID:', user.id);
+      console.log('ChatContext: User ID:', userId);
       console.log('ChatContext: Token present:', !!token);
       console.log('ChatContext: Token length:', token?.length);
       chatService.connect(token);
@@ -108,14 +112,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         });
       }
     } else {
-      console.log('ChatContext: NOT connecting - user:', !!user, 'token:', !!token);
+      console.log('ChatContext: NOT connecting - userId:', !!userId, 'token:', !!token);
+      // Disconnect if user logged out
+      if (!isAuthenticated) {
+        console.log('ChatContext: User not authenticated, disconnecting');
+        chatService.disconnect();
+      }
     }
 
+    // Don't disconnect in cleanup - only disconnect when user logs out (handled above)
+    // This prevents disconnection when effect re-runs due to dependency changes
+  }, [isAuthenticated, token, userId]);
+
+  // Cleanup on unmount only (when app closes)
+  useEffect(() => {
     return () => {
-      console.log('ChatContext: Disconnecting chat service');
+      console.log('ChatContext: Component unmounting, disconnecting chat service');
       chatService.disconnect();
     };
-  }, [user, token]);
+  }, []); // Empty deps = only runs on unmount
 
   // Setup event listeners
   useEffect(() => {
@@ -200,10 +215,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Show in-app notification banner only (not system notification)
         // System notifications are only shown when app is in background
         if (notificationCallback) {
+          // For direct messages: show sender's name and avatar
+          // For group messages: show group name but still use sender's avatar (or fallback to group avatar)
+          const notificationTitle = isGroup
+            ? `${message.senderName} in ${conversationName}`  // e.g., "John in Watch Collectors"
+            : message.senderName;  // e.g., "John"
+          const notificationAvatar = message.senderAvatar || conversationAvatar;
+
           notificationCallback({
-            title: conversationName || message.senderName,
+            title: notificationTitle,
             body: message.content,
-            avatar: conversationAvatar,
+            avatar: notificationAvatar,
             conversationId: message.conversationId,
             isGroup,
           });

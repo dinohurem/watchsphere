@@ -70,6 +70,29 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@fastapi_app.get("/debug/connections")
+async def debug_connections():
+    """Debug endpoint to check current WebSocket/Socket.IO connections"""
+    from app.services.socketio_manager import manager as socketio_manager
+
+    ws_users = list(manager.active_connections.keys())
+    ws_conversation_members = {k: list(v) for k, v in manager.conversation_members.items()}
+
+    sio_users = list(socketio_manager.user_to_sids.keys())
+    sio_sids = {k: list(v) for k, v in socketio_manager.user_to_sids.items()}
+
+    return {
+        "websocket": {
+            "connected_users": ws_users,
+            "conversation_members": ws_conversation_members,
+        },
+        "socketio": {
+            "connected_users": sio_users,
+            "user_sids": sio_sids,
+        }
+    }
+
+
 # ============== Native WebSocket Endpoint (for web clients) ==============
 
 @fastapi_app.websocket("/ws")
@@ -84,6 +107,7 @@ async def websocket_endpoint(
     logger.info(f"Native WebSocket: Connection attempt received")
     user_id = None
     user_name = None
+    user_avatar = None
 
     try:
         # Verify token
@@ -103,6 +127,7 @@ async def websocket_endpoint(
             return
 
         user_name = user.name
+        user_avatar = user.profile_image_url or user.profile_image_thumbnail_url
 
         # Connect the user
         await manager.connect(websocket, user_id, user_name)
@@ -121,7 +146,7 @@ async def websocket_endpoint(
         # Handle incoming messages
         while True:
             data = await websocket.receive_json()
-            await handle_websocket_message(websocket, user_id, user_name, data)
+            await handle_websocket_message(websocket, user_id, user_name, user_avatar, data)
 
     except WebSocketDisconnect:
         logger.info(f"Native WebSocket: User {user_id} disconnected")
@@ -138,6 +163,7 @@ async def handle_websocket_message(
     websocket: WebSocket,
     user_id: str,
     user_name: str,
+    user_avatar: str,
     data: dict
 ):
     """Handle incoming WebSocket messages."""
@@ -215,6 +241,7 @@ async def handle_websocket_message(
                     "conversationId": conversation_id,
                     "senderId": user_id,
                     "senderName": user_name,
+                    "senderAvatar": user_avatar,
                     "content": content,
                     "type": "text",
                     "status": "sent",

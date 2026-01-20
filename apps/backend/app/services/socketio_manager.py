@@ -44,7 +44,7 @@ class SocketIOManager:
         # Map of user_id -> user info
         self.user_info: Dict[str, dict] = {}
 
-    def register_user(self, sid: str, user_id: str, user_name: str):
+    def register_user(self, sid: str, user_id: str, user_name: str, user_avatar: str = None):
         """Register a connected user."""
         self.sid_to_user[sid] = user_id
 
@@ -54,6 +54,7 @@ class SocketIOManager:
 
         self.user_info[user_id] = {
             "name": user_name,
+            "avatar": user_avatar,
             "connected_at": datetime.utcnow()
         }
         logger.info(f"Socket.IO REGISTER: User '{user_id}' ({user_name}) with sid {sid}")
@@ -120,8 +121,9 @@ async def connect(sid, environ, auth):
             logger.warning(f"Socket.IO: User {user_id} not found for {sid}")
             return False
 
-        # Register user
-        manager.register_user(sid, user_id, user.name)
+        # Register user with avatar
+        user_avatar = user.profile_image_url or user.profile_image_thumbnail_url
+        manager.register_user(sid, user_id, user.name, user_avatar)
         logger.info(f"Socket.IO: Registered user {user_id} ({user.name}) with sid {sid}")
 
         # Send connection success
@@ -154,7 +156,7 @@ async def disconnect(sid):
             await broadcast_presence(user_id, online=False)
 
 
-@sio.event
+@sio.on('conversation:join')
 async def conversation_join(sid, data):
     """Join a conversation room."""
     conversation_id = data.get('conversationId') or data.get('conversation_id')
@@ -167,7 +169,7 @@ async def conversation_join(sid, data):
         }, to=sid)
 
 
-@sio.event
+@sio.on('conversation:leave')
 async def conversation_leave(sid, data):
     """Leave a conversation room."""
     conversation_id = data.get('conversationId') or data.get('conversation_id')
@@ -177,7 +179,7 @@ async def conversation_leave(sid, data):
         logger.info(f"{sid} left room {room}")
 
 
-@sio.event
+@sio.on('typing:start')
 async def typing_start(sid, data):
     """Handle typing start event."""
     user_id = manager.get_user_id(sid)
@@ -199,7 +201,7 @@ async def typing_start(sid, data):
     }, room=room, skip_sid=sid)
 
 
-@sio.event
+@sio.on('typing:stop')
 async def typing_stop(sid, data):
     """Handle typing stop event."""
     user_id = manager.get_user_id(sid)
@@ -221,7 +223,7 @@ async def typing_stop(sid, data):
     }, room=room, skip_sid=sid)
 
 
-@sio.event
+@sio.on('message:send')
 async def message_send(sid, data, callback=None):
     """Handle sending a new message."""
     user_id = manager.get_user_id(sid)
@@ -250,6 +252,7 @@ async def message_send(sid, data, callback=None):
 
         user_info = manager.user_info.get(user_id, {})
         sender_name = user_info.get('name', 'Unknown')
+        sender_avatar = user_info.get('avatar')
 
         # Create and save message
         logger.info(f"message_send: Creating message with conversation_id={conversation_id} (type: {type(conversation_id)})")
@@ -272,6 +275,7 @@ async def message_send(sid, data, callback=None):
             'conversationId': conversation_id,
             'senderId': user_id,
             'senderName': sender_name,
+            'senderAvatar': sender_avatar,
             'content': content,
             'type': 'text',
             'status': 'sent',
@@ -311,7 +315,7 @@ async def message_send(sid, data, callback=None):
             await callback({'success': False, 'error': str(e)})
 
 
-@sio.event
+@sio.on('messages:read')
 async def messages_read(sid, data):
     """Handle marking messages as read."""
     user_id = manager.get_user_id(sid)
