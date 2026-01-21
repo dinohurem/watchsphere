@@ -212,6 +212,11 @@ export function LoginPage() {
                     className="w-full h-[44px] px-4 border border-[rgba(29,29,31,0.1)] rounded-2xl text-[15px] text-[#1d1d1f] placeholder:text-[rgba(29,29,31,0.6)] leading-5 tracking-[0.075px] focus:outline-none focus:ring-2 focus:ring-[#1d1d1f]/20 focus:border-[#1d1d1f]/20"
                     placeholder="Enter your password"
                   />
+                  <div className="flex justify-end">
+                    <Link to="/forgot-password" className="text-[14px] font-semibold text-[#1d1d1f] hover:underline tracking-[0.075px]">
+                      Forgot password?
+                    </Link>
+                  </div>
                 </div>
               </div>
 
