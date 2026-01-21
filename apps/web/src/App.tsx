@@ -6,6 +6,9 @@ import { LoginPage } from './features/auth/pages/LoginPage'
 import { RegisterPage } from './features/auth/pages/RegisterPage'
 import { OnboardingPage } from './features/auth/pages/OnboardingPage'
 import { AuthHandoffPage } from './features/auth/pages/AuthHandoffPage'
+import { ForgotPasswordPage } from './features/auth/pages/ForgotPasswordPage'
+import { VerifyResetCodePage } from './features/auth/pages/VerifyResetCodePage'
+import { ResetPasswordPage } from './features/auth/pages/ResetPasswordPage'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 import { AdminRoute } from './features/auth/components/AdminRoute'
 import { HomePage } from './features/home/pages/HomePage'
@@ -128,6 +131,9 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/verify-reset-code" element={<VerifyResetCodePage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
       <Route path="/terms-conditions" element={<TermsConditionsPage />} />
       <Route path="/contact" element={<ContactPage />} />
