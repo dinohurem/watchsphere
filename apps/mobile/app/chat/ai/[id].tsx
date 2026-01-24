@@ -455,9 +455,46 @@ export default function AIChatScreen() {
         return;
       }
 
+      // Check for bullet points (lines starting with • or -)
+      const bulletMatch = line.match(/^[•\-]\s*(.*)$/);
+      if (bulletMatch) {
+        const bulletContent = bulletMatch[1];
+        const parts = parseInlineFormatting(bulletContent);
+        elements.push(
+          <View key={lineIndex} style={styles.bulletItem}>
+            <Text style={[styles.aiText, { fontFamily: fonts.regular }]}>
+              •{' '}
+              {parts.map((part, partIndex) => {
+                if (part.bold) {
+                  return (
+                    <Text key={partIndex} style={{ fontFamily: fonts.bold }}>
+                      {part.text}
+                    </Text>
+                  );
+                }
+                if (part.italic) {
+                  return (
+                    <Text key={partIndex} style={{ fontStyle: 'italic' }}>
+                      {part.text}
+                    </Text>
+                  );
+                }
+                return part.text;
+              })}
+            </Text>
+          </View>
+        );
+        return;
+      }
+
+      // Skip empty lines to avoid excessive spacing
+      if (line === '') {
+        return;
+      }
+
       // Process inline formatting
       const parts = parseInlineFormatting(line);
-      if (parts.length > 0 || line === '') {
+      if (parts.length > 0) {
         elements.push(
           <Text key={lineIndex} style={[styles.aiText, { fontFamily: fonts.regular }]}>
             {parts.map((part, partIndex) => {
@@ -477,7 +514,6 @@ export default function AIChatScreen() {
               }
               return part.text;
             })}
-            {lineIndex < lines.length - 1 ? '\n' : ''}
           </Text>
         );
       }
@@ -595,6 +631,10 @@ export default function AIChatScreen() {
     },
     listItem: {
       marginBottom: hp(8),
+      marginLeft: wp(4),
+    },
+    bulletItem: {
+      marginBottom: hp(4),
       marginLeft: wp(4),
     },
     loadingContainer: {
