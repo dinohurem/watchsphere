@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { useChat } from '@/contexts/ChatContext';
 import { MessageSquare, Users, AISparkle, Plus } from '@/components/icons';
 import { SwipeableChatItem } from '@/components/SwipeableChatItem';
@@ -64,6 +65,7 @@ interface Group {
 
 export default function ChatScreen() {
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const {
     updateConversationsFromApi,
     updateGroupsFromApi,
@@ -319,7 +321,7 @@ export default function ChatScreen() {
         <View style={styles.conversationContent}>
           <Text style={styles.conversationName}>{item.name}</Text>
           <Text style={styles.lastMessage} numberOfLines={1}>
-            {item.lastMessage || item.description || 'No messages yet'}
+            {item.lastMessage || item.description || t('chat.noMessagesYet')}
           </Text>
         </View>
         <View style={styles.rightSection}>
@@ -370,9 +372,9 @@ export default function ChatScreen() {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <MessageSquare size={48} color={colors.border} />
-                <Text style={styles.emptyText}>No conversations yet</Text>
+                <Text style={styles.emptyText}>{t('chat.noConversations')}</Text>
                 <Text style={styles.emptySubtext}>
-                  Start chatting with other users about watches
+                  {t('chat.startChatting')}
                 </Text>
               </View>
             }
@@ -391,9 +393,9 @@ export default function ChatScreen() {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Users size={48} color={colors.border} />
-                <Text style={styles.emptyText}>No groups yet</Text>
+                <Text style={styles.emptyText}>{t('chat.noGroups')}</Text>
                 <Text style={styles.emptySubtext}>
-                  You'll see groups here when admin adds you
+                  {t('chat.groupsAppearHere')}
                 </Text>
               </View>
             }
@@ -416,7 +418,7 @@ export default function ChatScreen() {
                 onPress={() => router.push('/chat/ai/new')}
               >
                 <Plus size={18} color="#212121" />
-                <Text style={styles.newAiChatButtonText}>New Chat</Text>
+                <Text style={styles.newAiChatButtonText}>{t('common.newChat')}</Text>
               </TouchableOpacity>
             }
             ListEmptyComponent={
@@ -424,9 +426,9 @@ export default function ChatScreen() {
                 <View style={styles.emptyIcon}>
                   <AISparkle size={32} color="#9747FF" />
                 </View>
-                <Text style={styles.emptyText}>No conversations yet</Text>
+                <Text style={styles.emptyText}>{t('chat.noAIConversations')}</Text>
                 <Text style={styles.emptySubtext}>
-                  Start a new chat to ask questions about watches
+                  {t('chat.startAIChat')}
                 </Text>
               </View>
             }
@@ -650,7 +652,7 @@ export default function ChatScreen() {
               <Text
                 style={[styles.tabText, activeTab === 'conversations' && styles.activeTabText]}
               >
-                Conversations
+                {t('chat.conversations')}
               </Text>
             </TouchableOpacity>
 
@@ -659,7 +661,7 @@ export default function ChatScreen() {
               onPress={() => setActiveTab('groups')}
             >
               <Text style={[styles.tabText, activeTab === 'groups' && styles.activeTabText]}>
-                Groups
+                {t('chat.groups')}
               </Text>
             </TouchableOpacity>
 
@@ -667,7 +669,7 @@ export default function ChatScreen() {
               style={[styles.tab, activeTab === 'ai' && styles.activeTab]}
               onPress={() => setActiveTab('ai')}
             >
-              <Text style={[styles.tabText, activeTab === 'ai' && styles.activeTabText]}>AI</Text>
+              <Text style={[styles.tabText, activeTab === 'ai' && styles.activeTabText]}>{t('chat.ai')}</Text>
             </TouchableOpacity>
           </View>
         </View>

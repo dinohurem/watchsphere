@@ -5,6 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { LockedSection } from '@/components/SubscriptionOverlay';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -55,6 +56,8 @@ function MenuItem({ title, onPress }: MenuItemProps) {
 }
 
 export default function OrdersMenuScreen() {
+  const { t } = useTranslation();
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
@@ -72,18 +75,18 @@ export default function OrdersMenuScreen() {
       <View style={styles.content}>
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Orders</Text>
+          <Text style={styles.title}>{t('orders.orders')}</Text>
         </View>
 
         {/* Menu Items */}
         <LockedSection message="Premium feature">
           <View style={styles.menuList}>
             <MenuItem
-              title="Buy Orders"
+              title={t('orders.buyOrders')}
               onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'buy' } } as any)}
             />
             <MenuItem
-              title="Sell Orders"
+              title={t('orders.sellOrders')}
               onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'sell' } } as any)}
             />
           </View>

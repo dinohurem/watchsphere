@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ChevronLeft, TagPlus, PriceAlertUp, PriceAlertDown } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
+import { useTranslation } from 'react-i18next';
 
 type NotificationType = 'new_offer' | 'buy_order_offer' | 'price_undercut' | 'price_alert_up' | 'price_alert_down' | 'offer_accepted' | 'offer_rejected';
 
@@ -40,6 +41,7 @@ interface NotificationResponse {
 }
 
 export default function NotificationsScreen() {
+  const { t } = useTranslation();
   const { colors, fonts } = useTheme();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,10 +55,10 @@ export default function NotificationsScreen() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 1) return t('common.justNow');
+    if (diffMins < 60) return `${diffMins} ${t('common.minAgo')}`;
+    if (diffHours < 24) return `${diffHours} ${diffHours > 1 ? t('common.hoursAgo') : t('common.hourAgo')}`;
+    return `${diffDays} ${diffDays > 1 ? t('common.daysAgo') : t('common.dayAgo')}`;
   };
 
   const loadNotifications = async () => {
@@ -223,11 +225,11 @@ export default function NotificationsScreen() {
     const iconConfig = getIconConfig(item.type);
     const IconComponent = iconConfig.Icon;
 
-    const displayTitle = item.type === 'new_offer' ? 'New offer' :
-                         item.type === 'buy_order_offer' ? 'New listing' :
-                         item.type === 'price_undercut' ? 'Price undercut' :
-                         item.type === 'price_alert_up' ? 'Price changed for' :
-                         item.type === 'price_alert_down' ? 'Price changed for' :
+    const displayTitle = item.type === 'new_offer' ? t('notifications.newOffer') :
+                         item.type === 'buy_order_offer' ? t('notifications.newListing') :
+                         item.type === 'price_undercut' ? t('notifications.priceUndercut') :
+                         item.type === 'price_alert_up' ? t('notifications.priceChangedFor') :
+                         item.type === 'price_alert_down' ? t('notifications.priceChangedFor') :
                          item.title;
 
     const priceDisplay = item.price
@@ -415,7 +417,7 @@ export default function NotificationsScreen() {
           >
             <ChevronLeft size={24} color="#212121" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerTitle}>{t('notifications.notifications')}</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#212121" />
@@ -433,7 +435,7 @@ export default function NotificationsScreen() {
         >
           <ChevronLeft size={24} color="#212121" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text style={styles.headerTitle}>{t('notifications.notifications')}</Text>
       </View>
 
       <ScrollView
@@ -445,14 +447,14 @@ export default function NotificationsScreen() {
       >
         {notifications.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No notifications yet</Text>
+            <Text style={styles.emptyText}>{t('notifications.noNotifications')}</Text>
           </View>
         ) : (
           <View style={styles.contentContainer}>
             {/* NEW Section */}
             {newNotifications.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>NEW</Text>
+                <Text style={styles.sectionTitle}>{t('notifications.new')}</Text>
                 {newNotifications.map((item, index) =>
                   renderNotificationItem(item, index === newNotifications.length - 1)
                 )}
@@ -462,7 +464,7 @@ export default function NotificationsScreen() {
             {/* EARLIER Section */}
             {earlierNotifications.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>EARLIER</Text>
+                <Text style={styles.sectionTitle}>{t('notifications.earlier')}</Text>
                 {earlierNotifications.map((item, index) =>
                   renderNotificationItem(item, index === earlierNotifications.length - 1)
                 )}

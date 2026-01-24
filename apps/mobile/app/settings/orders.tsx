@@ -9,6 +9,7 @@ import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LogoIcon } from '@/components/LogoIcon';
+import { useTranslation } from 'react-i18next';
 
 // Trend Up Icon
 function TrendUpIcon() {
@@ -76,6 +77,7 @@ interface Order {
 
 export default function OrdersScreen() {
   const { fonts } = useTheme();
+  const { t } = useTranslation();
   const { type } = useLocalSearchParams<{ type?: string }>();
   const orderType = (type === 'sell' ? 'sell' : 'buy') as 'buy' | 'sell';
   const [orders, setOrders] = useState<Order[]>([]);
@@ -189,7 +191,7 @@ export default function OrdersScreen() {
                 styles.statusLabelText,
                 isSold ? styles.soldLabelText : styles.completedLabelText
               ]}>
-                {isSold ? 'Sold' : 'Completed'}
+                {isSold ? t('orders.sold') : t('orders.completed')}
               </Text>
             </View>
           )}
@@ -235,7 +237,7 @@ export default function OrdersScreen() {
     return rows;
   };
 
-  const pageTitle = orderType === 'buy' ? 'Buy Orders' : 'Sell Orders';
+  const pageTitle = orderType === 'buy' ? t('orders.buyOrders') : t('orders.sellOrders');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -256,12 +258,12 @@ export default function OrdersScreen() {
             <ClipboardList size={28} color="rgba(33, 33, 33, 0.4)" />
           </View>
           <Text style={[styles.emptyTitle, { fontFamily: fonts.semiBold }]}>
-            No {orderType} orders
+            {orderType === 'buy' ? t('orders.noBuyOrders') : t('orders.noSellOrders')}
           </Text>
           <Text style={[styles.emptySubtitle, { fontFamily: fonts.regular }]}>
             {orderType === 'buy'
-              ? 'Your buy orders will appear here when you place them'
-              : 'Your sell orders will appear here when you create listings'}
+              ? t('orders.noBuyOrdersDesc')
+              : t('orders.noSellOrdersDesc')}
           </Text>
         </View>
       ) : (

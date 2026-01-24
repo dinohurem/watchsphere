@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { BackArrow, Magnifier } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path } from 'react-native-svg';
@@ -42,6 +43,7 @@ const POPULAR_SEARCHES = [
 
 export default function SearchScreen() {
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isFocused, setIsFocused] = useState(true);
@@ -235,7 +237,7 @@ export default function SearchScreen() {
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search WatchSphere"
+            placeholder={t('search.searchPlaceholder')}
             placeholderTextColor="rgba(33, 33, 33, 0.5)"
             autoFocus
             returnKeyType="search"
@@ -264,12 +266,12 @@ export default function SearchScreen() {
         {recentSearches.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent searches</Text>
+              <Text style={styles.sectionTitle}>{t('search.recentSearches')}</Text>
               <TouchableOpacity
                 style={styles.clearAllButton}
                 onPress={clearRecentSearches}
               >
-                <Text style={styles.clearAllText}>Clear all</Text>
+                <Text style={styles.clearAllText}>{t('search.clearAll')}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.searchList}>
@@ -289,7 +291,7 @@ export default function SearchScreen() {
         {/* Popular Searches */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Popular searches</Text>
+            <Text style={styles.sectionTitle}>{t('search.popularSearches')}</Text>
           </View>
           <View style={styles.searchList}>
             {POPULAR_SEARCHES.map((search, index) => (

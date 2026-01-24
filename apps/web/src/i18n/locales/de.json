@@ -1,0 +1,604 @@
+{
+  "common": {
+    "loading": "Wird geladen...",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "close": "Schließen",
+    "confirm": "Bestätigen",
+    "back": "Zurück",
+    "next": "Weiter",
+    "done": "Fertig",
+    "or": "ODER",
+    "search": "Suchen...",
+    "noResults": "Keine Ergebnisse gefunden",
+    "viewDetails": "Details anzeigen",
+    "seeAll": "Alle anzeigen",
+    "copied": "Kopiert",
+    "copyToClipboard": "In Zwischenablage kopieren"
+  },
+  "nav": {
+    "features": "Funktionen",
+    "howItWorks": "So funktioniert's",
+    "markets": "Märkte",
+    "contact": "Kontakt",
+    "signIn": "Anmelden",
+    "signUp": "Registrieren",
+    "login": "Einloggen",
+    "logout": "Abmelden",
+    "getStarted": "Jetzt starten"
+  },
+  "auth": {
+    "login": {
+      "title": "Anmelden",
+      "emailLabel": "E-Mail-Adresse",
+      "emailPlaceholder": "Bitte E-Mail-Adresse eingeben",
+      "passwordLabel": "Passwort",
+      "passwordPlaceholder": "Passwort eingeben",
+      "submitButton": "Anmelden",
+      "loggingIn": "Wird angemeldet...",
+      "forgotPassword": "Passwort vergessen?",
+      "noAccount": "Noch kein Konto?",
+      "signUp": "Registrieren",
+      "or": "ODER",
+      "continueWithApple": "Mit Apple fortfahren",
+      "continueWithGoogle": "Mit Google fortfahren",
+      "signingIn": "Wird angemeldet...",
+      "failed": "Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+      "pendingApproval": "Ihr Konto wartet auf Genehmigung. Bitte warten Sie, bis ein Administrator Ihr Konto freigegeben hat.",
+      "googleFailed": "Google-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+      "appleFailed": "Apple-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut."
+    },
+    "register": {
+      "title": "Registrieren",
+      "emailLabel": "E-Mail-Adresse",
+      "emailPlaceholder": "Bitte E-Mail-Adresse eingeben",
+      "passwordLabel": "Passwort",
+      "passwordPlaceholder": "Passwort eingeben",
+      "submitButton": "Registrieren",
+      "creatingAccount": "Konto wird erstellt...",
+      "haveAccount": "Bereits ein Konto?",
+      "logIn": "Jetzt anmelden",
+      "failed": "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+      "successTitle": "Konto erstellt!",
+      "successMessage": "Ihr Konto wurde erfolgreich erstellt. Bitte warten Sie, bis ein Administrator Ihr Konto freigegeben hat.",
+      "goToLogin": "Zur Anmeldung"
+    },
+    "forgotPassword": {
+      "title": "Passwort vergessen?",
+      "description": "Geben Sie Ihre E-Mail-Adresse ein und wir senden Ihnen Anweisungen zum Zurücksetzen Ihres Passworts.",
+      "emailLabel": "E-Mail-Adresse",
+      "emailPlaceholder": "max.mustermann@beispiel.de",
+      "submitButton": "Bestätigungscode senden",
+      "submitting": "Wird gesendet...",
+      "rememberPassword": "Passwort doch bekannt?",
+      "signIn": "Anmelden",
+      "emailRequired": "Bitte geben Sie Ihre E-Mail-Adresse ein",
+      "invalidEmail": "Bitte geben Sie eine gültige E-Mail-Adresse ein"
+    },
+    "verifyCode": {
+      "title": "Bestätigungscode eingeben",
+      "description": "Wir haben einen 6-stelligen Code gesendet an",
+      "submitButton": "Weiter",
+      "submitting": "Wird überprüft...",
+      "resend": "Erneut senden",
+      "resending": "Wird gesendet...",
+      "didntReceive": "Keinen Code erhalten?",
+      "codeRequired": "Bitte geben Sie den vollständigen Bestätigungscode ein"
+    },
+    "resetPassword": {
+      "title": "Neues Passwort erstellen",
+      "description": "Ihr neues Passwort muss sich von zuvor verwendeten Passwörtern unterscheiden.",
+      "newPasswordLabel": "Neues Passwort",
+      "newPasswordPlaceholder": "Neues Passwort eingeben",
+      "confirmPasswordLabel": "Passwort bestätigen",
+      "confirmPasswordPlaceholder": "Neues Passwort bestätigen",
+      "submitButton": "Passwort zurücksetzen",
+      "submitting": "Wird zurückgesetzt...",
+      "successTitle": "Passwort zurückgesetzt",
+      "successMessage": "Ihr Passwort wurde erfolgreich zurückgesetzt. Sie können sich jetzt mit Ihrem neuen Passwort anmelden.",
+      "signIn": "Anmelden",
+      "requirements": {
+        "minLength": "Mindestens 8 Zeichen",
+        "uppercase": "Ein Großbuchstabe",
+        "lowercase": "Ein Kleinbuchstabe",
+        "number": "Eine Zahl"
+      },
+      "passwordsMatch": "Passwörter stimmen überein",
+      "passwordsDontMatch": "Passwörter stimmen nicht überein",
+      "requirementsError": "Bitte stellen Sie sicher, dass Ihr Passwort alle Anforderungen erfüllt",
+      "matchError": "Passwörter stimmen nicht überein"
+    },
+    "onboarding": {
+      "verifyTitle": "E-Mail bestätigen",
+      "verifyDescription": "Geben Sie den 6-stelligen Code ein, den wir gesendet haben an",
+      "yourEmail": "Ihre E-Mail",
+      "didntGetCode": "Keinen Code erhalten?",
+      "resendIn": "Erneut senden in",
+      "resend": "Erneut senden",
+      "resendFailed": "Code konnte nicht erneut gesendet werden",
+      "invalidCode": "Ungültiger Bestätigungscode",
+      "personalInfoTitle": "Erzählen Sie uns von sich",
+      "personalInfoDescription": "Fügen Sie Ihren Namen, Nachnamen und optional Ihren Benutzernamen hinzu, um Ihr Erlebnis zu personalisieren.",
+      "firstNameLabel": "Vorname",
+      "firstNamePlaceholder": "Geben Sie Ihren Vornamen ein",
+      "lastNameLabel": "Nachname",
+      "lastNamePlaceholder": "Geben Sie Ihren Nachnamen ein",
+      "userNameLabel": "Benutzername",
+      "userNamePlaceholder": "Geben Sie Ihren Benutzernamen ein",
+      "continue": "Weiter",
+      "roleTitle": "Was beschreibt Ihre Rolle im Uhrenmarkt am besten?",
+      "roleDescription": "Wählen Sie die Rolle, die am besten zu Ihrem Geschäft passt.",
+      "fillAllFields": "Bitte füllen Sie alle erforderlichen Felder aus",
+      "selectRole": "Bitte wählen Sie Ihre Rolle",
+      "completeFailed": "Onboarding konnte nicht abgeschlossen werden",
+      "completing": "Wird abgeschlossen...",
+      "complete": "Abschließen",
+      "roles": {
+        "independentDealer": "Unabhängiger Uhrenhändler",
+        "authorizedDealer": "Autorisierter Händler (AD)"
+      },
+      "quotes": {
+        "quote1": "\"Die Wahl der Armbanduhr eines Gentleman sagt genauso viel über ihn aus wie sein Savile Row Anzug.\"",
+        "author1": "Ian Fleming",
+        "quote2": "\"Man besitzt eine Patek Philippe nie wirklich. Man bewahrt sie nur für die nächste Generation auf.\"",
+        "author2": "Patek Philippe",
+        "quote3": "\"Jeder schaut auf Ihre Uhr und sie repräsentiert, wer Sie sind, Ihre Werte und Ihren persönlichen Stil.\"",
+        "author3": "Kobe Bryant"
+      }
+    },
+    "handoff": {
+      "signingIn": "Sie werden angemeldet...",
+      "pleaseWait": "Bitte warten Sie, während wir Ihre Sitzung authentifizieren.",
+      "failed": "Authentifizierung fehlgeschlagen",
+      "invalidLink": "Ungültiger Weiterleitungslink. Bitte versuchen Sie es erneut über die mobile App.",
+      "error": "Authentifizierung fehlgeschlagen. Bitte versuchen Sie es erneut über die mobile App.",
+      "goToLogin": "Zur Anmeldung",
+      "goToHome": "Zur Startseite"
+    }
+  },
+  "home": {
+    "latestActivity": "Neueste Aktivitäten",
+    "noRecentActivity": "Keine aktuellen Aktivitäten",
+    "quickAccess": {
+      "title": "Schnellzugriff",
+      "activityCenter": "Aktivitätszentrum",
+      "aiAssistant": "KI-Assistent fragen",
+      "myInventory": "Mein Inventar",
+      "myOrders": "Meine Bestellungen",
+      "socialSearch": "Soziale Suche"
+    },
+    "watchlist": {
+      "title": "Beobachtungsliste",
+      "empty": "Ihre Beobachtungsliste ist leer",
+      "emptyDescription": "Beginnen Sie, Uhren zu beobachten, um deren Preise und Markttrends zu verfolgen"
+    },
+    "marketActivity": {
+      "title": "Marktaktivität",
+      "empty": "Keine Marktdaten verfügbar",
+      "emptyDescription": "Marktangebote werden hier angezeigt, sobald verfügbar",
+      "watch": "Uhr",
+      "chart": "Chart",
+      "change": "% Änderung",
+      "price": "Preis",
+      "actions": "Aktionen",
+      "viewDetails": "Details anzeigen"
+    },
+    "trendingNews": {
+      "title": "Aktuelle Nachrichten",
+      "empty": "Keine Nachrichten verfügbar",
+      "emptyDescription": "Aktuelle Uhrennachrichten werden hier angezeigt"
+    },
+    "activity": {
+      "newOffer": "Neues Angebot",
+      "newListing": "Neues Inserat",
+      "priceUndercut": "Preisunterbietung",
+      "priceAlert": "Preisalarm"
+    },
+    "time": {
+      "justNow": "Gerade eben",
+      "minAgo": "vor {{count}} Min.",
+      "hourAgo_one": "vor {{count}} Stunde",
+      "hourAgo_other": "vor {{count}} Stunden",
+      "dayAgo_one": "vor {{count}} Tag",
+      "dayAgo_other": "vor {{count}} Tagen"
+    }
+  },
+  "market": {
+    "trendingWatches": "Trendige Uhren",
+    "marketActivity": "Marktaktivität",
+    "categories": {
+      "hot": "Beliebt",
+      "gainers": "Gewinner",
+      "losers": "Verlierer",
+      "new": "Neu",
+      "trending": "Im Trend"
+    },
+    "filters": "Filter",
+    "table": {
+      "watch": "Uhr",
+      "chart": "Chart",
+      "change": "% Änderung",
+      "price": "Preis",
+      "actions": "Aktionen"
+    },
+    "noMatchingFilters": "Keine Uhren entsprechen Ihren Filtern",
+    "noWatchesFound": "Keine Uhren gefunden",
+    "viewDetails": "Details anzeigen",
+    "reset": "Zurücksetzen",
+    "save": "Speichern",
+    "searchPlaceholder": "Suchen...",
+    "selectFilter": "Wählen Sie links einen Filter aus, um Optionen anzuzeigen",
+    "filterCategories": {
+      "conditionDelivery": "Zustand & Lieferumfang",
+      "caseSize": "Gehäusegröße",
+      "watchType": "Uhrentyp",
+      "movementFunctions": "Uhrwerk & Funktionen",
+      "dial": "Zifferblatt",
+      "case": "Gehäuse",
+      "strapBracelet": "Armband",
+      "clasp": "Schließe"
+    }
+  },
+  "watchDetails": {
+    "marketPrice": "Marktpreis",
+    "bestBid": "Bestes Gebot",
+    "bestAsk": "Bestes Angebot",
+    "spread": "Spread",
+    "placeBuyOrder": "Kauforder aufgeben",
+    "placeSellOrder": "Verkaufsorder aufgeben",
+    "seeOrderBook": "Orderbuch anzeigen",
+    "buy": "Kaufen",
+    "sell": "Verkaufen",
+    "makeOffer": "Angebot machen",
+    "offerSent": "Angebot gesendet",
+    "market": "Markt",
+    "date": "Datum",
+    "condition": "Zustand",
+    "price": "Preis"
+  },
+  "orderDetails": {
+    "buyOrder": "Kauforder",
+    "sellOrder": "Verkaufsorder",
+    "sold": "Verkauft",
+    "completed": "Abgeschlossen",
+    "condition": "Zustand",
+    "caseSize": "Gehäusegröße",
+    "boxPapers": "Box/Papiere",
+    "location": "Standort",
+    "basicInfo": "Grundinformationen",
+    "caliber": "Kaliber",
+    "case": "Gehäuse",
+    "braceletStrap": "Armband",
+    "seller": "Verkäufer",
+    "buyer": "Käufer",
+    "edit": "Bearbeiten",
+    "markAsSold": "Als verkauft markieren",
+    "markAsCompleted": "Als abgeschlossen markieren",
+    "delete": "Löschen",
+    "contact": "Kontaktieren",
+    "goToInventory": "Zum Inventar",
+    "backToHomepage": "Zurück zur Startseite",
+    "goToProfile": "Zum Profil",
+    "boxPapersOptions": {
+      "both": "Originalbox und Papiere",
+      "boxOnly": "Nur Box",
+      "papersOnly": "Nur Papiere",
+      "none": "Keine"
+    },
+    "markAsSoldModal": {
+      "title": "Als verkauft markieren",
+      "message": "Sind Sie sicher, dass Sie diese Uhr als verkauft markieren möchten?"
+    },
+    "deleteModal": {
+      "title": "Angebot löschen"
+    },
+    "saleCompleted": "Verkauf abgeschlossen",
+    "purchaseCompleted": "Kauf abgeschlossen"
+  },
+  "chat": {
+    "title": "Chat",
+    "groupMembers": "Gruppenmitglieder",
+    "live": "Live",
+    "isTyping": "schreibt...",
+    "areTyping": "schreiben...",
+    "noConversations": "Noch keine Unterhaltungen",
+    "directMessage": "Direktnachricht",
+    "members": "{{count}} Mitglieder",
+    "startConversation": "Starten Sie die Unterhaltung",
+    "askAbout": "Fragen Sie nach Preis, Verfügbarkeit oder Zustand.",
+    "replyingTo": "Antwort an {{name}}",
+    "placeholder": "Nachricht senden...",
+    "deleteConversation": "Unterhaltung löschen",
+    "reportConversation": "Unterhaltung melden",
+    "markAsRead": "Als gelesen markieren",
+    "report": "Melden",
+    "delete": "Löschen",
+    "today": "Heute",
+    "selectConversation": "Wählen Sie eine Unterhaltung",
+    "selectConversationHint": "Wählen Sie eine Unterhaltung aus der Liste, um zu chatten",
+    "reply": "Antworten",
+    "replyPrivately": "Privat antworten",
+    "viewProfile": "Profil anzeigen",
+    "you": "Sie",
+    "deleteConfirmation": "Möchten Sie diese Unterhaltung mit {{name}} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "deleting": "Wird gelöscht...",
+    "reportFor": "{{name}} wegen unangemessenen Verhaltens melden",
+    "reasonLabel": "Grund der Meldung *",
+    "selectReason": "Wählen Sie einen Grund",
+    "additionalDetails": "Zusätzliche Details (optional)",
+    "submitReport": "Meldung absenden",
+    "submitting": "Wird gesendet...",
+    "reportReasons": {
+      "spam": "Spam oder Betrug",
+      "harassment": "Belästigung oder Mobbing",
+      "inappropriate": "Unangemessene Inhalte",
+      "fraud": "Betrug oder gefälschte Angebote",
+      "impersonation": "Identitätsdiebstahl",
+      "other": "Sonstiges"
+    },
+    "reportSubmitted": "Meldung eingereicht",
+    "reportThanks": "Vielen Dank für Ihre Meldung. Wir werden sie in Kürze prüfen und entsprechende Maßnahmen ergreifen.",
+    "provideContext": "Geben Sie mehr Details zu Ihrer Meldung an..."
+  },
+  "aiChat": {
+    "title": "KI-Assistent",
+    "placeholder": "Fragen Sie etwas",
+    "loading": "Einen Moment bitte...",
+    "noConversations": "Noch keine Unterhaltungen",
+    "suggestions": {
+      "authentic": "Wie erkenne ich, ob eine Uhr echt ist?",
+      "service": "Wie oft sollte ich meine Uhr warten lassen?",
+      "popular": "Welche Luxusuhrenmarken sind derzeit am beliebtesten?"
+    }
+  },
+  "profile": {
+    "title": "Mein Profil",
+    "buyOrders": "Kauforders",
+    "sellOrders": "Verkaufsorders",
+    "favorites": "Favoriten",
+    "noBuyOrders": "Noch keine Kauforders",
+    "createBuyOrders": "Erstellen Sie Kauforders, um sie hier zu sehen",
+    "noSellOrders": "Noch keine Verkaufsorders",
+    "createSellOrders": "Erstellen Sie Verkaufsorders, um sie hier zu sehen",
+    "noFavorites": "Noch keine Favoriten",
+    "addToWatchlist": "Fügen Sie Uhren zu Ihrer Beobachtungsliste hinzu, um sie hier zu sehen",
+    "reviews": "{{count}} Bewertungen",
+    "seeAll": "Alle anzeigen"
+  },
+  "settings": {
+    "title": "Profileinstellungen",
+    "accountDetails": "Kontodaten",
+    "billingSubscription": "Abrechnung & Abonnement",
+    "orders": "Bestellungen",
+    "general": "Allgemein",
+    "termsPrivacy": "AGB und Datenschutz",
+    "support": "Support",
+    "pushNotifications": "Push-Benachrichtigungen",
+    "pushNotificationsDesc": "Erhalten Sie Push-Benachrichtigungen auf Ihrem Gerät",
+    "emailNotifications": "E-Mail-Benachrichtigungen",
+    "emailNotificationsDesc": "Erhalten Sie Updates per E-Mail",
+    "priceAlerts": "Preisalarme",
+    "priceAlertsDesc": "Werden Sie benachrichtigt, wenn sich Uhrenpreise ändern",
+    "generalSettings": "Allgemeine Einstellungen",
+    "managePreferences": "Verwalten Sie Ihre App-Einstellungen",
+    "language": "Sprache",
+    "appLanguage": "App-Sprache",
+    "appLanguageDesc": "Wählen Sie Ihre bevorzugte Sprache",
+    "selectLanguage": "Sprache auswählen",
+    "english": "Englisch",
+    "german": "Deutsch",
+    "email": "E-Mail-Adresse",
+    "currentPassword": "Aktuelles Passwort",
+    "newPassword": "Neues Passwort",
+    "confirmNewPassword": "Neues Passwort bestätigen",
+    "changePassword": "Passwort ändern",
+    "upgradeToPremium": "Auf Premium upgraden",
+    "subscribeNow": "Jetzt abonnieren",
+    "faq": "FAQ",
+    "faqFull": "Häufig gestellte Fragen",
+    "faqDescription": "Finden Sie Antworten auf häufige Fragen zu WatchSphere",
+    "helpCenter": "Hilfecenter",
+    "demo": "Demo",
+    "disputes": "Streitfälle",
+    "fileDispute": "Streitfall einreichen",
+    "reportIssue": "Problem melden",
+    "getInTouch": "Kontakt aufnehmen",
+    "contactEmail": "info@watchsphere.io",
+    "deleteAccount": "Konto löschen",
+    "newDispute": "Neuer Streitfall",
+    "watchReference": "Uhrenreferenz",
+    "brand": "Marke",
+    "model": "Modell",
+    "description": "Beschreibung"
+  },
+  "landing": {
+    "hero": {
+      "badge": "Die Zukunft des Uhrenhandels ist da",
+      "trustedBy": "Vertraut von Uhrenliebhabern",
+      "title": "Der globale Marktplatz für Luxusuhren",
+      "description": "Verbinden Sie sich mit verifizierten Händlern weltweit. Verfolgen Sie Preise in Echtzeit. Kaufen und verkaufen Sie mit Vertrauen auf dem transparentesten Uhrenmarktplatz.",
+      "startTrading": "Handel starten"
+    },
+    "brands": {
+      "rolex": "ROLEX",
+      "patek": "PATEK",
+      "ap": "AP",
+      "omega": "OMEGA",
+      "cartier": "CARTIER",
+      "iwc": "IWC",
+      "panerai": "PANERAI",
+      "tudor": "TUDOR"
+    },
+    "features": {
+      "title": "Alles, was Sie für den Uhrenhandel brauchen",
+      "description": "Leistungsstarke Funktionen für seriöse Sammler und Händler.",
+      "realTimeData": {
+        "title": "Echtzeit-Marktdaten",
+        "description": "Verfolgen Sie Uhrenpreise auf globalen Märkten mit Live-Updates und historischen Charts."
+      },
+      "globalMarketplace": {
+        "title": "Globaler Marktplatz",
+        "description": "Verbinden Sie sich mit verifizierten Händlern in den USA, der EU, den VAE und Hongkong."
+      },
+      "verifiedDealers": {
+        "title": "Verifizierte Händler",
+        "description": "Jeder Händler wird auf Authentizität und Zuverlässigkeit geprüft."
+      },
+      "trading247": {
+        "title": "24/7 Handel",
+        "description": "Geben Sie Aufträge jederzeit auf. Unser Marktplatz schläft nie."
+      },
+      "communityDriven": {
+        "title": "Community-orientiert",
+        "description": "Treten Sie Tausenden von Uhrenliebhabern bei, die Einblicke und Möglichkeiten teilen."
+      },
+      "aiPowered": {
+        "title": "KI-gestützte Einblicke",
+        "description": "Erhalten Sie personalisierte Empfehlungen und Marktanalysen von unserem KI-Assistenten."
+      },
+      "transparentPricing": {
+        "title": "Transparente Preisgestaltung",
+        "description": "Sehen Sie Geld-Brief-Spannen und historische Preise für fundierte Entscheidungen."
+      },
+      "watchlistAlerts": {
+        "title": "Beobachtungslisten-Alarme",
+        "description": "Werden Sie benachrichtigt, wenn Ihre Lieblingsuhren Ihren Zielpreis erreichen."
+      }
+    },
+    "howItWorks": {
+      "title": "So funktioniert WatchSphere",
+      "description": "Vom Stöbern bis zum Kauf - Ihre Reise mit WatchSphere.",
+      "step1": {
+        "label": "Schritt 1",
+        "title": "Konto erstellen",
+        "description": "Registrieren Sie sich in Sekunden mit Ihrer E-Mail. Verifizieren Sie Ihre Identität, um alle Handelsfunktionen freizuschalten und sich mit verifizierten Händlern weltweit zu verbinden."
+      },
+      "step2": {
+        "label": "Schritt 2",
+        "title": "Markt durchstöbern",
+        "description": "Entdecken Sie Tausende von Luxusuhren von Marken wie Rolex, Patek Philippe und Audemars Piguet. Filtern Sie nach Marke, Zustand, Jahr und Standort."
+      },
+      "step3": {
+        "label": "Schritt 3",
+        "title": "Bestellung aufgeben",
+        "description": "Die perfekte Uhr gefunden? Geben Sie eine Kauforder zu Ihrem Preis auf oder akzeptieren Sie ein bestehendes Angebot. Unser Orderbuch sorgt für transparente, faire Preise."
+      },
+      "step4": {
+        "label": "Schritt 4",
+        "title": "Sichere Transaktion",
+        "description": "Schließen Sie Ihren Kauf über unser sicheres Treuhandsystem ab. Wir kümmern uns um Authentifizierung, Zahlung und Lieferung, damit Sie mit Vertrauen kaufen können."
+      }
+    },
+    "globalMarkets": {
+      "title": "Globale Märkte, eine Plattform",
+      "description": "Handeln Sie auf den wichtigsten Uhrenmärkten weltweit. Verbinden Sie sich mit Händlern in den USA, Europa, den VAE und Hongkong.",
+      "activeListings": "aktive Angebote",
+      "locations": {
+        "sanFrancisco": "San Francisco",
+        "newYork": "New York",
+        "miami": "Miami",
+        "london": "London",
+        "zurich": "Zürich",
+        "dubai": "Dubai",
+        "beijing": "Peking",
+        "hongKong": "Hongkong",
+        "paris": "Paris",
+        "singapore": "Singapur"
+      },
+      "markets": {
+        "us": "Vereinigte Staaten",
+        "uk": "Vereinigtes Königreich",
+        "switzerland": "Schweiz",
+        "uae": "VAE",
+        "china": "China",
+        "hongKong": "Hongkong"
+      }
+    },
+    "testimonials": {
+      "title": "Vertraut von Sammlern weltweit",
+      "description": "Schließen Sie sich Tausenden von Uhrenliebhabern und Händlern an, die WatchSphere für ihre Luxusuhrentransaktionen vertrauen.",
+      "items": {
+        "1": {
+          "quote": "WatchSphere hat meine Art, Uhren zu kaufen und zu verkaufen, komplett verändert. Die Transparenz und globale Reichweite sind unübertroffen.",
+          "name": "Marcus Chen",
+          "title": "Uhrensammler, Hongkong"
+        },
+        "2": {
+          "quote": "Als Händler habe ich mein Geschäft dank WatchSphere international ausgebaut. Die Plattform verbindet mich mit ernsthaften Käufern weltweit.",
+          "name": "Sophie Laurent",
+          "title": "Luxusuhrenhändlerin, Paris"
+        },
+        "3": {
+          "quote": "Die Echtzeit-Marktdaten helfen mir, fundierte Entscheidungen zu treffen. Ich war noch nie so sicher beim Kauf gebrauchter Luxusuhren.",
+          "name": "James Mitchell",
+          "title": "Investor, New York"
+        },
+        "4": {
+          "quote": "Endlich eine Plattform, die die Uhren-Community versteht. Der Verifizierungsprozess gibt mir bei jeder Transaktion Sicherheit.",
+          "name": "Alexandra Weber",
+          "title": "Uhrenliebhaberin, Zürich"
+        },
+        "5": {
+          "quote": "Die Orderbuch-Funktion ist brillant. Ich kann genau sehen, wohin sich der Markt bewegt, und meine Käufe perfekt timen.",
+          "name": "David Kim",
+          "title": "Privatsammler, Singapur"
+        },
+        "6": {
+          "quote": "Der KI-Assistent von WatchSphere hat mir geholfen, die perfekte Rolex für meine Sammlung zu finden. Die Technologie ist beeindruckend.",
+          "name": "Michael Torres",
+          "title": "Uhrensammler, Miami"
+        }
+      }
+    },
+    "cta": {
+      "title": "Bereit zum Handeln?",
+      "description": "Treten Sie der globalen Gemeinschaft von Uhrensammlern und Händlern bei. Erstellen Sie noch heute Ihr kostenloses Konto und entdecken Sie eine neue Art, Luxusuhren zu kaufen und zu verkaufen.",
+      "button": "Kostenlos starten",
+      "noCreditCard": "Keine Kreditkarte erforderlich. Der kostenlose Plan enthält alle Grundfunktionen.",
+      "stats": {
+        "users": "10K+ aktive Nutzer",
+        "volume": "50M€+ Handelsvolumen",
+        "countries": "50+ Länder"
+      }
+    },
+    "contact": {
+      "title": "Kontaktieren Sie uns",
+      "description": "Treten Sie mit dem WatchSphere-Team in Kontakt.",
+      "email": "E-Mail",
+      "emailDesc": "Wir antworten auf alle E-Mails innerhalb von 24 Stunden.",
+      "headquarters": "Hauptsitz",
+      "headquartersDesc": "Besuchen Sie uns in New York City.",
+      "address": "123 Watch Street, Suite 100\nNew York, NY 10001",
+      "phone": "Telefon",
+      "phoneDesc": "Montag bis Freitag, 9-18 Uhr EST.",
+      "phoneNumber": "+1 (555) 123-4567",
+      "emailAddress": "info@watchsphere.io",
+      "findUsOnline": "Finden Sie uns online"
+    },
+    "footer": {
+      "about": "Der globale Marktplatz für Luxusuhren. Kaufen und verkaufen Sie mit Vertrauen.",
+      "product": "Produkt",
+      "company": "Unternehmen",
+      "legal": "Rechtliches",
+      "aboutUs": "Über uns",
+      "careers": "Karriere",
+      "privacyPolicy": "Datenschutzrichtlinie",
+      "termsOfService": "Nutzungsbedingungen",
+      "cookiePolicy": "Cookie-Richtlinie",
+      "copyright": "© {{year}} WatchSphere. Alle Rechte vorbehalten.",
+      "contact": "Kontakt"
+    }
+  },
+  "legal": {
+    "privacyPolicy": "Datenschutzrichtlinie",
+    "termsAndConditions": "Allgemeine Geschäftsbedingungen"
+  },
+  "errors": {
+    "generic": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+    "networkError": "Netzwerkfehler. Bitte überprüfen Sie Ihre Verbindung.",
+    "unauthorized": "Sie sind nicht berechtigt, diese Aktion auszuführen.",
+    "notFound": "Die angeforderte Ressource wurde nicht gefunden."
+  }
+}

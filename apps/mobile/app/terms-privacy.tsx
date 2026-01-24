@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
@@ -53,6 +54,8 @@ function LegalItem({ title, onPress }: LegalItemProps) {
 }
 
 export default function TermsPrivacyScreen() {
+  const { t } = useTranslation();
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
@@ -70,20 +73,20 @@ export default function TermsPrivacyScreen() {
       <View style={styles.content}>
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Terms and Privacy</Text>
+          <Text style={styles.title}>{t('termsPrivacy.title')}</Text>
           <Text style={styles.subtitle}>
-            Review our legal documents and get in touch with us
+            {t('termsPrivacy.subtitle')}
           </Text>
         </View>
 
         {/* Legal Items */}
         <View style={styles.legalList}>
           <LegalItem
-            title="Privacy Policy"
+            title={t('termsPrivacy.privacyPolicy')}
             onPress={() => router.push('/privacy-policy' as any)}
           />
           <LegalItem
-            title="Terms and Conditions"
+            title={t('termsPrivacy.termsAndConditions')}
             onPress={() => router.push('/terms-conditions' as any)}
           />
         </View>
@@ -91,10 +94,10 @@ export default function TermsPrivacyScreen() {
         {/* Info Text */}
         <View style={styles.infoSection}>
           <Text style={styles.infoText}>
-            By using WatchSphere, you agree to our Terms and Conditions and Privacy Policy.
+            {t('termsPrivacy.agreement')}
           </Text>
           <Text style={styles.versionText}>
-            Version 1.0.0
+            {t('termsPrivacy.version', { version: '1.0.0' })}
           </Text>
         </View>
       </View>

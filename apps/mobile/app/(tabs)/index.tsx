@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { User } from '@/components/icons';
@@ -71,6 +72,7 @@ interface NewsItem {
 
 export default function HomeScreen() {
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
 
   // State for API data
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
@@ -86,36 +88,36 @@ export default function HomeScreen() {
   const quickAccessItems: QuickAccessItem[] = [
     {
       id: '1',
-      title: 'Activity Center',
-      subtitle: 'Track your watchlist, orders, and price alerts',
+      title: t('home.activityCenter'),
+      subtitle: t('home.activityCenterDesc'),
       icon: 'activity',
       color: '#FF7373',
     },
     {
       id: '2',
-      title: 'Ask AI Assistant',
-      subtitle: 'Your personal assistant, 24/7.',
+      title: t('home.askAI'),
+      subtitle: t('home.askAIDesc'),
       icon: 'sparkle',
       color: '#D573FF',
     },
     {
       id: '3',
-      title: 'My Inventory',
-      subtitle: 'Manage, edit and track your full watch stock.',
+      title: t('home.myInventory'),
+      subtitle: t('home.myInventoryDesc'),
       icon: 'watch',
       color: '#767676',
     },
     {
       id: '4',
-      title: 'My Orders',
-      subtitle: 'View and manage all your active buy orders.',
+      title: t('home.myOrders'),
+      subtitle: t('home.myOrdersDesc'),
       icon: 'file',
       color: '#32D287',
     },
     {
       id: '5',
-      title: 'Social search',
-      subtitle: 'Look up watches from different social channels.',
+      title: t('home.socialSearch'),
+      subtitle: t('home.socialSearchDesc'),
       icon: 'social',
       color: '#7C73FF',
     },
@@ -140,10 +142,10 @@ export default function HomeScreen() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 1) return t('home.justNow');
+    if (diffMins < 60) return `${diffMins} ${t('home.minAgo')}`;
+    if (diffHours < 24) return `${diffHours} ${diffHours > 1 ? t('home.hoursAgo') : t('home.hourAgo')}`;
+    return `${diffDays} ${diffDays > 1 ? t('home.daysAgo') : t('home.dayAgo')}`;
   };
 
   const loadWatchlist = async () => {
@@ -724,7 +726,7 @@ export default function HomeScreen() {
           <View style={styles.searchIcon}>
             <Magnifier size={18} color="#212121" />
           </View>
-          <Text style={styles.searchPlaceholder}>Search watches...</Text>
+          <Text style={styles.searchPlaceholder}>{t('home.searchPlaceholder')}</Text>
         </TouchableOpacity>
 
         {/* Profile Button */}
@@ -754,9 +756,9 @@ export default function HomeScreen() {
         {/* Latest Activity Section */}
         <View style={styles.activitySection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Latest activity</Text>
+            <Text style={styles.sectionTitle}>{t('home.latestActivity')}</Text>
             <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/(tabs)/notifications' as any)}>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -769,7 +771,7 @@ export default function HomeScreen() {
               <View style={styles.activityEmptyIconContainer}>
                 <ActivityChart size={20} color="rgba(33, 33, 33, 0.4)" />
               </View>
-              <Text style={styles.activityEmptyText}>No recent activity</Text>
+              <Text style={styles.activityEmptyText}>{t('home.noRecentActivity')}</Text>
             </View>
           ) : (
             activityItems.map((item) => (
@@ -811,10 +813,10 @@ export default function HomeScreen() {
                 <View style={styles.activityContent}>
                   <View style={styles.activityRow}>
                     <Text style={styles.activityText}>
-                      {item.type === 'new_offer' ? 'New offer ' :
-                       item.type === 'new_listing' ? 'New listing ' :
-                       item.type === 'price_undercut' ? 'Price undercut ' :
-                       'Price alert '}
+                      {item.type === 'new_offer' ? `${t('home.newOffer')} ` :
+                       item.type === 'new_listing' ? `${t('home.newListing')} ` :
+                       item.type === 'price_undercut' ? `${t('home.priceUndercut')} ` :
+                       `${t('home.priceAlert')} `}
                       <Text style={styles.activityReference}>{item.reference}</Text>
                     </Text>
                     <Text style={styles.activityPrice}>{formatPrice(item.price)}</Text>
@@ -829,9 +831,9 @@ export default function HomeScreen() {
         {/* Watchlist Section */}
         <View style={styles.watchlistSection}>
           <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
-            <Text style={styles.sectionTitle}>Watchlist</Text>
+            <Text style={styles.sectionTitle}>{t('home.watchlist')}</Text>
             <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/market')}>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -844,9 +846,9 @@ export default function HomeScreen() {
               <View style={styles.emptyIconContainer}>
                 <Heart size={28} color="rgba(33, 33, 33, 0.4)" />
               </View>
-              <Text style={styles.emptyTitle}>Your watchlist is empty</Text>
+              <Text style={styles.emptyTitle}>{t('home.emptyWatchlist')}</Text>
               <Text style={styles.emptySubtitle}>
-                Start tracking watches to monitor their prices and market trends
+                {t('home.emptyWatchlistDesc')}
               </Text>
             </View>
           ) : (
@@ -922,7 +924,7 @@ export default function HomeScreen() {
         {/* Quick Access Section */}
         <View style={styles.quickAccessSection}>
           <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
-            <Text style={styles.sectionTitle}>Quick Access</Text>
+            <Text style={styles.sectionTitle}>{t('home.quickAccess')}</Text>
           </View>
 
           <View style={styles.quickAccessList}>
@@ -931,15 +933,15 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   style={styles.quickAccessItem}
                   onPress={() => {
-                    if (item.title === 'Activity Center') {
+                    if (item.id === '1') {
                       router.push('/(auth)/notifications' as any);
-                    } else if (item.title === 'My Inventory') {
+                    } else if (item.id === '3') {
                       router.push('/(tabs)/dashboard' as any);
-                    } else if (item.title === 'Ask AI Assistant') {
+                    } else if (item.id === '2') {
                       router.push('/chat/ai');
-                    } else if (item.title === 'My Orders') {
+                    } else if (item.id === '4') {
                       router.push({ pathname: '/settings/orders', params: { type: 'buy' } } as any);
-                    } else if (item.title === 'Social search') {
+                    } else if (item.id === '5') {
                       router.push('/social-search');
                     }
                   }}
@@ -969,9 +971,9 @@ export default function HomeScreen() {
         {/* Trending News Section */}
         <View style={styles.newsSection}>
           <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
-            <Text style={styles.sectionTitle}>Trending news</Text>
+            <Text style={styles.sectionTitle}>{t('home.trendingNews')}</Text>
             <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/news' as any)}>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -984,8 +986,8 @@ export default function HomeScreen() {
               <View style={styles.emptyIconContainer}>
                 <Newspaper size={28} color="rgba(33, 33, 33, 0.4)" />
               </View>
-              <Text style={styles.emptyTitle}>No news available</Text>
-              <Text style={styles.emptySubtitle}>Latest watch news will appear here</Text>
+              <Text style={styles.emptyTitle}>{t('home.noNewsAvailable')}</Text>
+              <Text style={styles.emptySubtitle}>{t('home.newsAppearHere')}</Text>
             </View>
           ) : (
             newsItems.map((item) => (

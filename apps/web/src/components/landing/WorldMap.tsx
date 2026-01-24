@@ -2,6 +2,7 @@
 
 import { useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 interface MapProps {
   dots?: Array<{
@@ -302,6 +303,7 @@ function generateContinentDots(
 }
 
 export function GlobalMarketsSection() {
+  const { t } = useTranslation();
   const connections = [
     // San Francisco to New York
     {
@@ -335,39 +337,44 @@ export function GlobalMarketsSection() {
     },
   ];
 
+  const markets = [
+    { flag: '🇺🇸', nameKey: 'us', deals: '2,500+' },
+    { flag: '🇬🇧', nameKey: 'uk', deals: '1,400+' },
+    { flag: '🇨🇭', nameKey: 'switzerland', deals: '1,100+' },
+    { flag: '🇦🇪', nameKey: 'uae', deals: '950+' },
+    { flag: '🇨🇳', nameKey: 'china', deals: '1,600+' },
+    { flag: '🇭🇰', nameKey: 'hongKong', deals: '1,200+' },
+  ];
+
   return (
     <section id="markets" className="py-20 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Global Markets, One Platform
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="text-center mb-12 sm:mb-16">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+            {t('landing.globalMarkets.title')}
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Trade across major watch markets worldwide. Connect with dealers in
-            the US, Europe, UAE, and Hong Kong.
+          <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto">
+            {t('landing.globalMarkets.description')}
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-8">
+        <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-8">
           <WorldMap dots={connections} />
         </div>
 
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mt-12">
-          {[
-            { flag: '🇺🇸', name: 'United States', deals: '2,500+' },
-            { flag: '🇬🇧', name: 'United Kingdom', deals: '1,400+' },
-            { flag: '🇨🇭', name: 'Switzerland', deals: '1,100+' },
-            { flag: '🇦🇪', name: 'UAE', deals: '950+' },
-            { flag: '🇨🇳', name: 'China', deals: '1,600+' },
-            { flag: '🇭🇰', name: 'Hong Kong', deals: '1,200+' },
-          ].map((market) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4 mt-8 sm:mt-12">
+          {markets.map((market) => (
             <div
-              key={market.name}
-              className="bg-white rounded-xl p-6 text-center shadow-sm hover:shadow-md transition-shadow"
+              key={market.nameKey}
+              className="bg-white rounded-xl p-4 sm:p-6 text-center shadow-sm hover:shadow-md transition-shadow"
             >
-              <span className="text-4xl mb-3 block">{market.flag}</span>
-              <h3 className="font-semibold text-gray-900">{market.name}</h3>
-              <p className="text-sm text-gray-500">{market.deals} active listings</p>
+              <span className="text-3xl sm:text-4xl mb-2 sm:mb-3 block">{market.flag}</span>
+              <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
+                {t(`landing.globalMarkets.markets.${market.nameKey}`)}
+              </h3>
+              <p className="text-xs sm:text-sm text-gray-500">
+                {market.deals} {t('landing.globalMarkets.activeListings')}
+              </p>
             </div>
           ))}
         </div>

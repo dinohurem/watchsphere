@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { BackArrow } from '@/components/icons';
 
 // Mock data for watch details
@@ -64,6 +65,7 @@ const mockWatchDetails = {
 
 export default function WatchDetailsScreen() {
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams();
 
   const styles = StyleSheet.create({
@@ -320,19 +322,19 @@ export default function WatchDetailsScreen() {
           {/* Quick Info */}
           <View style={styles.quickInfoSection}>
             <View style={styles.quickInfoRow}>
-              <Text style={styles.quickInfoLabel}>Condition:</Text>
+              <Text style={styles.quickInfoLabel}>{t('watchDetails.condition')}</Text>
               <Text style={styles.quickInfoValue}>{mockWatchDetails.quickInfo.condition}</Text>
             </View>
             <View style={styles.quickInfoRow}>
-              <Text style={styles.quickInfoLabel}>Case size:</Text>
+              <Text style={styles.quickInfoLabel}>{t('watchDetails.caseSize')}</Text>
               <Text style={styles.quickInfoValue}>{mockWatchDetails.quickInfo.caseSize}</Text>
             </View>
             <View style={styles.quickInfoRow}>
-              <Text style={styles.quickInfoLabel}>Box/papers</Text>
+              <Text style={styles.quickInfoLabel}>{t('watchDetails.boxPapers')}</Text>
               <Text style={styles.quickInfoValue}>{mockWatchDetails.quickInfo.boxPapers}</Text>
             </View>
             <View style={styles.quickInfoRow}>
-              <Text style={styles.quickInfoLabel}>Location</Text>
+              <Text style={styles.quickInfoLabel}>{t('watchDetails.location')}</Text>
               <Text style={styles.quickInfoValue}>{mockWatchDetails.quickInfo.location}</Text>
             </View>
           </View>
@@ -340,10 +342,10 @@ export default function WatchDetailsScreen() {
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity style={styles.buyButton}>
-              <Text style={styles.buyButtonText}>Buy Now</Text>
+              <Text style={styles.buyButtonText}>{t('watchDetails.buyNow')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.offerButton}>
-              <Text style={styles.offerButtonText}>Make offer</Text>
+              <Text style={styles.offerButtonText}>{t('watchDetails.makeOffer')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -353,68 +355,68 @@ export default function WatchDetailsScreen() {
           {/* Basic Info Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Basic info</Text>
+              <Text style={styles.sectionTitle}>{t('watchDetails.basicInfo')}</Text>
             </View>
-            {renderInfoRow('Brand', mockWatchDetails.basicInfo.brand)}
-            {renderInfoRow('Model', mockWatchDetails.basicInfo.model)}
-            {renderInfoRow('Reference', mockWatchDetails.basicInfo.reference)}
-            {renderInfoRow('Year', mockWatchDetails.basicInfo.year)}
-            {renderInfoRow('Size', mockWatchDetails.basicInfo.size)}
-            {renderInfoRow('Movement', mockWatchDetails.basicInfo.movement)}
-            {renderInfoRow('Case material', mockWatchDetails.basicInfo.caseMaterial)}
-            {renderInfoRow('Bracelet material', mockWatchDetails.basicInfo.braceletMaterial)}
+            {renderInfoRow(t('watchDetails.brand'), mockWatchDetails.basicInfo.brand)}
+            {renderInfoRow(t('watchDetails.model'), mockWatchDetails.basicInfo.model)}
+            {renderInfoRow(t('watchDetails.reference'), mockWatchDetails.basicInfo.reference)}
+            {renderInfoRow(t('watchDetails.year'), mockWatchDetails.basicInfo.year)}
+            {renderInfoRow(t('watchDetails.size'), mockWatchDetails.basicInfo.size)}
+            {renderInfoRow(t('watchDetails.movement'), mockWatchDetails.basicInfo.movement)}
+            {renderInfoRow(t('watchDetails.caseMaterial'), mockWatchDetails.basicInfo.caseMaterial)}
+            {renderInfoRow(t('watchDetails.braceletMaterial'), mockWatchDetails.basicInfo.braceletMaterial)}
             {renderConditionRow()}
-            {renderInfoRow('Box & Papers', mockWatchDetails.basicInfo.boxPapers)}
-            {renderInfoRow('Gender', mockWatchDetails.basicInfo.gender)}
-            {renderInfoRow('Location', mockWatchDetails.basicInfo.location)}
-            {renderInfoRow('Price', mockWatchDetails.basicInfo.price)}
-            {renderInfoRow('Availability', mockWatchDetails.basicInfo.availability, true)}
+            {renderInfoRow(t('watchDetails.boxAndPapers'), mockWatchDetails.basicInfo.boxPapers)}
+            {renderInfoRow(t('watchDetails.gender'), mockWatchDetails.basicInfo.gender)}
+            {renderInfoRow(t('watchDetails.location'), mockWatchDetails.basicInfo.location)}
+            {renderInfoRow(t('watchDetails.price'), mockWatchDetails.basicInfo.price)}
+            {renderInfoRow(t('watchDetails.availability'), mockWatchDetails.basicInfo.availability, true)}
           </View>
 
           {/* Caliber Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Caliber</Text>
+              <Text style={styles.sectionTitle}>{t('watchDetails.caliber')}</Text>
             </View>
-            {renderInfoRow('Movement', mockWatchDetails.caliber.movement)}
-            {renderInfoRow('Caliber/movement', mockWatchDetails.caliber.caliberMovement)}
-            {renderInfoRow('Base caliber', mockWatchDetails.caliber.baseCaliber)}
-            {renderInfoRow('Power reserve', mockWatchDetails.caliber.powerReserve)}
-            {renderInfoRow('Number of jewels', mockWatchDetails.caliber.numberOfJewels, true)}
+            {renderInfoRow(t('watchDetails.movement'), mockWatchDetails.caliber.movement)}
+            {renderInfoRow(t('watchDetails.calibreMovement'), mockWatchDetails.caliber.caliberMovement)}
+            {renderInfoRow(t('watchDetails.baseCaliber'), mockWatchDetails.caliber.baseCaliber)}
+            {renderInfoRow(t('watchDetails.powerReserve'), mockWatchDetails.caliber.powerReserve)}
+            {renderInfoRow(t('watchDetails.numberOfJewels'), mockWatchDetails.caliber.numberOfJewels, true)}
           </View>
 
           {/* Case Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Case</Text>
+              <Text style={styles.sectionTitle}>{t('watchDetails.case')}</Text>
             </View>
-            {renderInfoRow('Case material', mockWatchDetails.case.caseMaterial)}
-            {renderInfoRow('Case diameter', mockWatchDetails.case.caseDiameter)}
-            {renderInfoRow('Water resistance', mockWatchDetails.case.waterResistance)}
-            {renderInfoRow('Bezel material', mockWatchDetails.case.bezelMaterial)}
-            {renderInfoRow('Crystal', mockWatchDetails.case.crystal)}
-            {renderInfoRow('Dial', mockWatchDetails.case.dial)}
-            {renderInfoRow('Dial numerals', mockWatchDetails.case.dialNumerals, true)}
+            {renderInfoRow(t('watchDetails.caseMaterial'), mockWatchDetails.case.caseMaterial)}
+            {renderInfoRow(t('watchDetails.caseDiameter'), mockWatchDetails.case.caseDiameter)}
+            {renderInfoRow(t('watchDetails.waterResistance'), mockWatchDetails.case.waterResistance)}
+            {renderInfoRow(t('watchDetails.bezelMaterial'), mockWatchDetails.case.bezelMaterial)}
+            {renderInfoRow(t('watchDetails.crystal'), mockWatchDetails.case.crystal)}
+            {renderInfoRow(t('watchDetails.dial'), mockWatchDetails.case.dial)}
+            {renderInfoRow(t('watchDetails.dialNumerals'), mockWatchDetails.case.dialNumerals, true)}
           </View>
 
           {/* Bracelet/strap Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Bracelet/strap</Text>
+              <Text style={styles.sectionTitle}>{t('watchDetails.braceletStrap')}</Text>
             </View>
-            {renderInfoRow('Bracelet material', mockWatchDetails.bracelet.braceletMaterial)}
-            {renderInfoRow('Bracelet color', mockWatchDetails.bracelet.braceletColor)}
-            {renderInfoRow('Clasp', mockWatchDetails.bracelet.clasp)}
-            {renderInfoRow('Clasp material', mockWatchDetails.bracelet.claspMaterial, true)}
+            {renderInfoRow(t('watchDetails.braceletMaterial'), mockWatchDetails.bracelet.braceletMaterial)}
+            {renderInfoRow(t('watchDetails.braceletColor'), mockWatchDetails.bracelet.braceletColor)}
+            {renderInfoRow(t('watchDetails.clasp'), mockWatchDetails.bracelet.clasp)}
+            {renderInfoRow(t('watchDetails.claspMaterial'), mockWatchDetails.bracelet.claspMaterial, true)}
           </View>
 
           {/* Other Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Other</Text>
+              <Text style={styles.sectionTitle}>{t('watchDetails.other')}</Text>
             </View>
             <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-              <Text style={styles.infoLabel}>More details</Text>
+              <Text style={styles.infoLabel}>{t('watchDetails.moreDetails')}</Text>
               <Text style={styles.infoValue}>{mockWatchDetails.other.moreDetails}</Text>
             </View>
           </View>

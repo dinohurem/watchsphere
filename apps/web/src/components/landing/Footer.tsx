@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
   e.preventDefault();
@@ -9,6 +10,8 @@ const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string) =
 };
 
 export function Footer() {
+  const { t } = useTranslation();
+
   return (
     <footer className="bg-gray-900 text-white py-16">
       <div className="max-w-7xl mx-auto px-6">
@@ -20,12 +23,11 @@ export function Footer() {
               className="h-8 w-auto mb-4 brightness-0 invert"
             />
             <p className="text-gray-400 text-sm">
-              The global marketplace for luxury watches. Buy and sell with
-              confidence.
+              {t('landing.footer.about')}
             </p>
           </div>
           <div>
-            <h4 className="font-semibold mb-4">Product</h4>
+            <h4 className="font-semibold mb-4">{t('landing.footer.product')}</h4>
             <ul className="space-y-2 text-gray-400 text-sm">
               <li>
                 <a
@@ -33,7 +35,7 @@ export function Footer() {
                   onClick={(e) => scrollToSection(e, '#features')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
-                  Features
+                  {t('nav.features')}
                 </a>
               </li>
               <li>
@@ -42,7 +44,7 @@ export function Footer() {
                   onClick={(e) => scrollToSection(e, '#markets')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
-                  Markets
+                  {t('nav.markets')}
                 </a>
               </li>
               <li>
@@ -51,22 +53,22 @@ export function Footer() {
                   onClick={(e) => scrollToSection(e, '#timeline')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
-                  How It Works
+                  {t('nav.howItWorks')}
                 </a>
               </li>
             </ul>
           </div>
           <div>
-            <h4 className="font-semibold mb-4">Company</h4>
+            <h4 className="font-semibold mb-4">{t('landing.footer.company')}</h4>
             <ul className="space-y-2 text-gray-400 text-sm">
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  About Us
+                  {t('landing.footer.aboutUs')}
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Careers
+                  {t('landing.footer.careers')}
                 </a>
               </li>
               <li>
@@ -75,27 +77,27 @@ export function Footer() {
                   onClick={(e) => scrollToSection(e, '#contact')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
-                  Contact
+                  {t('landing.footer.contact')}
                 </a>
               </li>
             </ul>
           </div>
           <div>
-            <h4 className="font-semibold mb-4">Legal</h4>
+            <h4 className="font-semibold mb-4">{t('landing.footer.legal')}</h4>
             <ul className="space-y-2 text-gray-400 text-sm">
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Privacy Policy
+                  {t('landing.footer.privacyPolicy')}
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Terms of Service
+                  {t('landing.footer.termsOfService')}
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Cookie Policy
+                  {t('landing.footer.cookiePolicy')}
                 </a>
               </li>
             </ul>
@@ -103,20 +105,20 @@ export function Footer() {
         </div>
         <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-gray-400 text-sm">
-            &copy; {new Date().getFullYear()} WatchSphere. All rights reserved.
+            {t('landing.footer.copyright', { year: new Date().getFullYear() })}
           </p>
           <div className="flex gap-6">
             <Link
               to="/login"
               className="text-gray-400 hover:text-white text-sm transition-colors"
             >
-              Sign In
+              {t('nav.signIn')}
             </Link>
             <Link
               to="/register"
               className="text-gray-400 hover:text-white text-sm transition-colors"
             >
-              Sign Up
+              {t('nav.signUp')}
             </Link>
           </div>
         </div>

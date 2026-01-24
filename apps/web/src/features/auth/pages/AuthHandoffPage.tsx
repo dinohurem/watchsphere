@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { api } from '@/services/api';
 
 export function AuthHandoffPage() {
+  const { t } = useTranslation();
   const [error, setError] = useState('');
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -15,7 +17,7 @@ export function AuthHandoffPage() {
       const redirect = searchParams.get('redirect') || '/app/profile/billing';
 
       if (!token) {
-        setError('Invalid handoff link. Please try again from the mobile app.');
+        setError(t('auth.handoff.invalidLink'));
         return;
       }
 
@@ -34,13 +36,13 @@ export function AuthHandoffPage() {
         // Redirect to the intended page
         navigate(redirect, { replace: true });
       } catch (err: any) {
-        const errorDetail = err.response?.data?.detail || 'Failed to authenticate. Please try again from the mobile app.';
+        const errorDetail = err.response?.data?.detail || t('auth.handoff.error');
         setError(errorDetail);
       }
     };
 
     redeemToken();
-  }, [searchParams, navigate, login]);
+  }, [searchParams, navigate, login, t]);
 
   if (error) {
     return (
@@ -52,7 +54,7 @@ export function AuthHandoffPage() {
             </svg>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mt-6">
-            Authentication Failed
+            {t('auth.handoff.failed')}
           </h1>
           <p className="text-gray-500 mt-2 text-sm sm:text-base">
             {error}
@@ -62,13 +64,13 @@ export function AuthHandoffPage() {
               onClick={() => navigate('/login')}
               className="w-full px-6 py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
             >
-              Go to Login
+              {t('auth.handoff.goToLogin')}
             </button>
             <button
               onClick={() => navigate('/')}
               className="w-full px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
             >
-              Go to Home
+              {t('auth.handoff.goToHome')}
             </button>
           </div>
         </div>
@@ -86,10 +88,10 @@ export function AuthHandoffPage() {
           </svg>
         </div>
         <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 mt-6">
-          Signing you in...
+          {t('auth.handoff.signingIn')}
         </h1>
         <p className="text-gray-500 mt-2 text-sm sm:text-base">
-          Please wait while we authenticate your session.
+          {t('auth.handoff.pleaseWait')}
         </p>
       </div>
     </div>

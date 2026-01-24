@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, StatusBar } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -20,8 +21,8 @@ interface HighlightArea {
 
 interface GuideStep {
   id: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   route?: string;
   routeParams?: Record<string, string>;
   getHighlightArea: () => HighlightArea;
@@ -125,59 +126,59 @@ const orderButtonsHighlight = (): HighlightArea => ({
 const guideSteps: GuideStep[] = [
   {
     id: 'profile',
-    title: 'Your Profile & Settings',
-    description: 'Tap here to access your profile, settings, notifications, and account preferences.',
+    titleKey: 'guide.profileTitle',
+    descriptionKey: 'guide.profileDescription',
     route: '/(tabs)',
     getHighlightArea: profileHighlight,
   },
   {
     id: 'search',
-    title: 'Search Watches',
-    description: 'Search for watches by brand, model, or reference number to see market data and pricing.',
+    titleKey: 'guide.searchTitle',
+    descriptionKey: 'guide.searchDescription',
     route: '/(tabs)',
     getHighlightArea: searchHighlight,
   },
   {
     id: 'market',
-    title: 'Market Tab',
-    description: 'Browse trending watches, track prices, and discover market opportunities from the Market tab.',
+    titleKey: 'guide.marketTitle',
+    descriptionKey: 'guide.marketDescription',
     route: '/(tabs)',
     getHighlightArea: marketTabHighlight,
   },
   {
     id: 'filters',
-    title: 'Watch Filters',
-    description: 'Use filters to narrow down watches by brand, price, condition, and more.',
+    titleKey: 'guide.filtersTitle',
+    descriptionKey: 'guide.filtersDescription',
     route: '/(tabs)/market',
     getHighlightArea: filtersHighlight,
   },
   {
     id: 'watch-details',
-    title: 'Watch Details',
-    description: 'Tap on any watch to see detailed market data, price history, and order book information.',
+    titleKey: 'guide.watchDetailsTitle',
+    descriptionKey: 'guide.watchDetailsDescription',
     route: '/(tabs)/market',
     getHighlightArea: watchRowHighlight,
   },
   {
     id: 'order-book',
-    title: 'Order Book',
-    description: 'View buy and sell orders for this watch. See current market prices, best bids, and asks from traders worldwide.',
+    titleKey: 'guide.orderBookTitle',
+    descriptionKey: 'guide.orderBookDescription',
     route: '/market/[id]',
     routeParams: { id: '126610LN', reference: '126610LN' },
     getHighlightArea: orderBookHighlight,
   },
   {
     id: 'ai-assistant',
-    title: 'AI Watch Expert',
-    description: 'Chat with our AI assistant to get expert advice on watches, pricing, and market trends.',
+    titleKey: 'guide.aiAssistantTitle',
+    descriptionKey: 'guide.aiAssistantDescription',
     route: '/market/[id]',
     routeParams: { id: '126610LN', reference: '126610LN' },
     getHighlightArea: aiChatHighlight,
   },
   {
     id: 'place-orders',
-    title: 'Place Orders',
-    description: 'Ready to buy or sell? Use these buttons to place buy or sell orders for this watch.',
+    titleKey: 'guide.placeOrdersTitle',
+    descriptionKey: 'guide.placeOrdersDescription',
     route: '/market/[id]',
     routeParams: { id: '126610LN', reference: '126610LN' },
     getHighlightArea: orderButtonsHighlight,
@@ -242,6 +243,8 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     setCurrentStep(0);
     setHasSeenGuideState(true);
     await AsyncStorage.setItem(GUIDE_SEEN_KEY, 'true');
+    // Navigate back to home tab after ending the guide
+    router.replace('/(tabs)');
   }, []);
 
   const nextStep = useCallback(() => {
@@ -307,6 +310,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
 }
 
 function GuideOverlay() {
+  const { t } = useTranslation();
   const context = useContext(GuideContext);
 
   if (!context || !context.isGuideActive || !context.currentGuideStep) {
@@ -387,11 +391,11 @@ function GuideOverlay() {
             onPress={endGuide}
             activeOpacity={0.7}
           >
-            <Text style={styles.skipButtonText}>Skip</Text>
+            <Text style={styles.skipButtonText}>{t('guide.skip')}</Text>
           </TouchableOpacity>
 
-          <Text style={styles.title}>{currentGuideStep.title}</Text>
-          <Text style={styles.description}>{currentGuideStep.description}</Text>
+          <Text style={styles.title}>{t(currentGuideStep.titleKey)}</Text>
+          <Text style={styles.description}>{t(currentGuideStep.descriptionKey)}</Text>
 
           <View style={styles.footer}>
             {/* Step indicators - tappable */}
@@ -420,7 +424,7 @@ function GuideOverlay() {
                   onPress={previousStep}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.backButtonText}>Back</Text>
+                  <Text style={styles.backButtonText}>{t('guide.back')}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -429,7 +433,7 @@ function GuideOverlay() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.nextButtonText}>
-                  {isLastStep ? 'Done' : 'Next'}
+                  {isLastStep ? t('guide.done') : t('guide.next')}
                 </Text>
               </TouchableOpacity>
             </View>

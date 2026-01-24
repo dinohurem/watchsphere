@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Constants from 'expo-constants';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -57,20 +58,21 @@ function SettingsItem({ title, onPress }: SettingsItemProps) {
 }
 
 export default function SettingsScreen() {
+  const { t } = useTranslation();
   const logout = useAuthStore((state) => state.logout);
   const appVersion = Constants.expoConfig?.version || '0.1.0';
 
   const handleLogout = () => {
     Alert.alert(
-      'Log out',
-      'Are you sure you want to log out?',
+      t('common.logOut'),
+      t('common.logOutConfirm'),
       [
         {
-          text: 'Cancel',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Log out',
+          text: t('common.logOut'),
           style: 'destructive',
           onPress: async () => {
             // Clear auth tokens from AsyncStorage to prevent auto-refresh on next launch
@@ -102,33 +104,33 @@ export default function SettingsScreen() {
       <View style={styles.content}>
         {/* Settings Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Settings</Text>
+          <Text style={styles.title}>{t('settings.settings')}</Text>
         </View>
 
         {/* Settings Items */}
         <View style={styles.settingsList}>
           <SettingsItem
-            title="Profile Settings"
+            title={t('settings.profileSettings')}
             onPress={() => router.push('/profile-settings')}
           />
           <SettingsItem
-            title="Account Details"
+            title={t('settings.accountDetails')}
             onPress={() => router.push('/account-details' as any)}
           />
           <SettingsItem
-            title="Orders"
+            title={t('settings.orders')}
             onPress={() => router.push('/settings/orders-menu' as any)}
           />
           <SettingsItem
-            title="General"
+            title={t('settings.general')}
             onPress={() => router.push('/settings/general' as any)}
           />
           <SettingsItem
-            title="Terms and Privacy"
+            title={t('settings.termsAndPrivacy')}
             onPress={() => router.push('/terms-privacy' as any)}
           />
           <SettingsItem
-            title="Support"
+            title={t('settings.support')}
             onPress={() => router.push('/support' as any)}
           />
         </View>
@@ -137,7 +139,7 @@ export default function SettingsScreen() {
         <View style={styles.spacer} />
 
         {/* Version */}
-        <Text style={styles.versionText}>Version {appVersion}</Text>
+        <Text style={styles.versionText}>{t('common.version')} {appVersion}</Text>
 
         {/* Logout Button */}
         <TouchableOpacity
@@ -145,7 +147,7 @@ export default function SettingsScreen() {
           onPress={handleLogout}
           activeOpacity={0.7}
         >
-          <Text style={styles.logoutButtonText}>Log out</Text>
+          <Text style={styles.logoutButtonText}>{t('common.logOut')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

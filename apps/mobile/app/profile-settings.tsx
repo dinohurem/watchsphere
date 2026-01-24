@@ -9,6 +9,7 @@ import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import * as ImagePicker from 'expo-image-picker';
+import { useTranslation } from 'react-i18next';
 
 interface ProfileData {
   id: string;
@@ -22,6 +23,7 @@ interface ProfileData {
 }
 
 export default function ProfileSettingsScreen() {
+  const { t } = useTranslation();
   const { colors, fonts } = useTheme();
   const { user, updateUser } = useAuthStore();
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -77,7 +79,7 @@ export default function ProfileSettingsScreen() {
       if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission Required', 'Please grant access to your photo library to upload a profile photo.');
+          Alert.alert(t('profileSettings.permissionRequired'), t('profileSettings.photoLibraryPermission'));
           return;
         }
       }
@@ -132,13 +134,13 @@ export default function ProfileSettingsScreen() {
           profile_image_thumbnail_url: response.data.thumbnail_url || response.data.url,
         });
 
-        Alert.alert('Success', 'Profile photo updated successfully!');
+        Alert.alert(t('common.success'), t('profileSettings.photoUpdatedSuccess'));
       }
     } catch (error: any) {
       console.error('Error uploading photo:', error);
       Alert.alert(
-        'Upload Failed',
-        error.response?.data?.detail || 'Failed to upload photo. Please try again.'
+        t('profileSettings.uploadFailed'),
+        error.response?.data?.detail || t('profileSettings.uploadFailedMessage')
       );
     } finally {
       setUploading(false);
@@ -266,7 +268,7 @@ export default function ProfileSettingsScreen() {
           >
             <BackArrow size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile Settings</Text>
+          <Text style={styles.headerTitle}>{t('profileSettings.title')}</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.text} />
@@ -285,15 +287,15 @@ export default function ProfileSettingsScreen() {
         >
           <BackArrow size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile Settings</Text>
+        <Text style={styles.headerTitle}>{t('profileSettings.title')}</Text>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Title Section */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Profile Settings</Text>
+          <Text style={styles.title}>{t('profileSettings.title')}</Text>
           <Text style={styles.subtitle}>
-            Manage your personal information and contact preferences
+            {t('profileSettings.subtitle')}
           </Text>
         </View>
 
@@ -317,7 +319,7 @@ export default function ProfileSettingsScreen() {
             disabled={uploading}
           >
             <Text style={styles.uploadButtonText}>
-              {uploading ? 'Uploading...' : 'Upload Photo'}
+              {uploading ? t('profileSettings.uploading') : t('profileSettings.uploadPhoto')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -331,10 +333,10 @@ export default function ProfileSettingsScreen() {
               params: { field: 'name', value: profile?.name || '' }
             } as any)}
           >
-            <Text style={styles.fieldLabel}>Name</Text>
+            <Text style={styles.fieldLabel}>{t('profileSettings.name')}</Text>
             <View style={styles.fieldRow}>
               <Text style={profile?.name ? styles.fieldValue : styles.fieldPlaceholder}>
-                {profile?.name || 'Enter your name'}
+                {profile?.name || t('profileSettings.enterName')}
               </Text>
               <ChevronRight size={20} color={colors.textSecondary} />
             </View>
@@ -347,10 +349,10 @@ export default function ProfileSettingsScreen() {
               params: { field: 'phone', value: profile?.phone || '' }
             } as any)}
           >
-            <Text style={styles.fieldLabel}>Contact information</Text>
+            <Text style={styles.fieldLabel}>{t('profileSettings.contactInfo')}</Text>
             <View style={styles.fieldRow}>
               <Text style={profile?.phone ? styles.fieldValue : styles.fieldPlaceholder}>
-                {profile?.phone || 'Enter phone number'}
+                {profile?.phone || t('profileSettings.enterPhone')}
               </Text>
               <ChevronRight size={20} color={colors.textSecondary} />
             </View>
@@ -363,10 +365,10 @@ export default function ProfileSettingsScreen() {
               params: { field: 'whatsapp_phone', value: profile?.whatsapp_phone || '' }
             } as any)}
           >
-            <Text style={styles.fieldLabel}>WhatsApp Info</Text>
+            <Text style={styles.fieldLabel}>{t('profileSettings.whatsappInfo')}</Text>
             <View style={styles.fieldRow}>
               <Text style={profile?.whatsapp_phone ? styles.fieldValue : styles.fieldPlaceholder}>
-                {profile?.whatsapp_phone || 'Enter WhatsApp phone number'}
+                {profile?.whatsapp_phone || t('profileSettings.enterWhatsapp')}
               </Text>
               <ChevronRight size={20} color={colors.textSecondary} />
             </View>
@@ -379,10 +381,10 @@ export default function ProfileSettingsScreen() {
               params: { field: 'telegram_username', value: profile?.telegram_username || '' }
             } as any)}
           >
-            <Text style={styles.fieldLabel}>Telegram Info</Text>
+            <Text style={styles.fieldLabel}>{t('profileSettings.telegramInfo')}</Text>
             <View style={styles.fieldRow}>
               <Text style={profile?.telegram_username ? styles.fieldValue : styles.fieldPlaceholder}>
-                {profile?.telegram_username || 'Enter @username'}
+                {profile?.telegram_username || t('profileSettings.enterTelegram')}
               </Text>
               <ChevronRight size={20} color={colors.textSecondary} />
             </View>

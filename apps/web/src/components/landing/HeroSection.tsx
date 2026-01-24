@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, ChevronRight, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatedGroup } from '@/components/ui/animated-group';
 import { cn } from '@/lib/utils';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 const transitionVariants = {
   item: {
@@ -26,6 +28,8 @@ const transitionVariants = {
 };
 
 export function HeroSection() {
+  const { t } = useTranslation();
+
   return (
     <>
       <HeroHeader />
@@ -52,7 +56,7 @@ export function HeroSection() {
                     className="hover:bg-gray-50 bg-gray-100 group mx-auto flex w-fit items-center gap-4 rounded-full border p-1 pl-4 shadow-md shadow-black/5 transition-all duration-300"
                   >
                     <span className="text-gray-900 text-sm">
-                      The Future of Watch Trading is Here
+                      {t('landing.hero.badge')}
                     </span>
                     <span className="block h-4 w-0.5 border-l bg-gray-300"></span>
                     <div className="bg-white group-hover:bg-gray-100 size-6 overflow-hidden rounded-full duration-500">
@@ -67,13 +71,11 @@ export function HeroSection() {
                     </div>
                   </Link>
 
-                  <h1 className="mt-8 max-w-4xl mx-auto text-balance text-6xl md:text-7xl lg:mt-16 xl:text-[5.25rem] font-bold text-gray-900">
-                    The Global Marketplace for Luxury Watches
+                  <h1 className="mt-8 max-w-4xl mx-auto text-balance text-4xl sm:text-5xl md:text-6xl lg:mt-16 xl:text-[5.25rem] font-bold text-gray-900">
+                    {t('landing.hero.title')}
                   </h1>
-                  <p className="mx-auto mt-8 max-w-2xl text-balance text-lg text-gray-600">
-                    Connect with verified dealers worldwide. Track prices in
-                    real-time. Buy and sell with confidence on the most
-                    transparent watch marketplace.
+                  <p className="mx-auto mt-8 max-w-2xl text-balance text-base sm:text-lg text-gray-600">
+                    {t('landing.hero.description')}
                   </p>
                 </AnimatedGroup>
 
@@ -94,7 +96,7 @@ export function HeroSection() {
                   <div className="bg-gray-900/10 rounded-[14px] border p-0.5">
                     <Button asChild size="lg" className="rounded-xl px-5 text-base">
                       <Link to="/register">
-                        <span className="text-nowrap">Start Trading</span>
+                        <span className="text-nowrap">{t('landing.hero.startTrading')}</span>
                       </Link>
                     </Button>
                   </div>
@@ -105,7 +107,7 @@ export function HeroSection() {
                     className="h-10 rounded-xl px-5"
                   >
                     <Link to="/login">
-                      <span className="text-nowrap">Sign In</span>
+                      <span className="text-nowrap">{t('nav.signIn')}</span>
                     </Link>
                   </Button>
                 </AnimatedGroup>
@@ -164,34 +166,34 @@ export function HeroSection() {
           <div className="group relative m-auto max-w-5xl px-6">
             <div className="absolute inset-0 z-10 flex scale-95 items-center justify-center opacity-0 duration-500 group-hover:scale-100 group-hover:opacity-100">
               <span className="block text-sm duration-150 hover:opacity-75">
-                <span>Trusted by Watch Enthusiasts</span>
+                <span>{t('landing.hero.trustedBy')}</span>
                 <ChevronRight className="ml-1 inline-block size-3" />
               </span>
             </div>
             <div className="group-hover:blur-sm mx-auto mt-12 grid max-w-2xl grid-cols-4 gap-x-12 gap-y-8 transition-all duration-500 group-hover:opacity-50 sm:gap-x-16 sm:gap-y-14">
               <div className="flex items-center justify-center">
-                <span className="text-2xl font-bold text-gray-400">ROLEX</span>
+                <span className="text-xl sm:text-2xl font-bold text-gray-400">{t('landing.brands.rolex')}</span>
               </div>
               <div className="flex items-center justify-center">
-                <span className="text-2xl font-bold text-gray-400">PATEK</span>
+                <span className="text-xl sm:text-2xl font-bold text-gray-400">{t('landing.brands.patek')}</span>
               </div>
               <div className="flex items-center justify-center">
-                <span className="text-2xl font-bold text-gray-400">AP</span>
+                <span className="text-xl sm:text-2xl font-bold text-gray-400">{t('landing.brands.ap')}</span>
               </div>
               <div className="flex items-center justify-center">
-                <span className="text-2xl font-bold text-gray-400">OMEGA</span>
+                <span className="text-xl sm:text-2xl font-bold text-gray-400">{t('landing.brands.omega')}</span>
               </div>
               <div className="flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-400">CARTIER</span>
+                <span className="text-lg sm:text-xl font-bold text-gray-400">{t('landing.brands.cartier')}</span>
               </div>
               <div className="flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-400">IWC</span>
+                <span className="text-lg sm:text-xl font-bold text-gray-400">{t('landing.brands.iwc')}</span>
               </div>
               <div className="flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-400">PANERAI</span>
+                <span className="text-lg sm:text-xl font-bold text-gray-400">{t('landing.brands.panerai')}</span>
               </div>
               <div className="flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-400">TUDOR</span>
+                <span className="text-lg sm:text-xl font-bold text-gray-400">{t('landing.brands.tudor')}</span>
               </div>
             </div>
           </div>
@@ -201,16 +203,17 @@ export function HeroSection() {
   );
 }
 
-const menuItems = [
-  { name: 'Features', href: '#features' },
-  { name: 'How It Works', href: '#timeline' },
-  { name: 'Markets', href: '#markets' },
-  { name: 'Contact', href: '#contact' },
-];
-
 const HeroHeader = () => {
+  const { t } = useTranslation();
   const [menuState, setMenuState] = React.useState(false);
   const [isScrolled, setIsScrolled] = React.useState(false);
+
+  const menuItems = [
+    { name: t('nav.features'), href: '#features' },
+    { name: t('nav.howItWorks'), href: '#timeline' },
+    { name: t('nav.markets'), href: '#markets' },
+    { name: t('nav.contact'), href: '#contact' },
+  ];
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -249,14 +252,17 @@ const HeroHeader = () => {
                 />
               </Link>
 
-              <button
-                onClick={() => setMenuState(!menuState)}
-                aria-label={menuState === true ? 'Close Menu' : 'Open Menu'}
-                className="relative z-20 -m-2.5 -mr-4 block cursor-pointer p-2.5 lg:hidden"
-              >
-                <Menu className="group-data-[state=active]:scale-0 group-data-[state=active]:opacity-0 m-auto size-6 duration-200" />
-                <X className="group-data-[state=active]:scale-100 group-data-[state=active]:opacity-100 absolute inset-0 m-auto size-6 scale-0 opacity-0 duration-200" />
-              </button>
+              <div className="flex items-center gap-2 lg:hidden">
+                <LanguageSwitcher />
+                <button
+                  onClick={() => setMenuState(!menuState)}
+                  aria-label={menuState === true ? 'Close Menu' : 'Open Menu'}
+                  className="relative z-20 -m-2.5 -mr-4 block cursor-pointer p-2.5"
+                >
+                  <Menu className="group-data-[state=active]:scale-0 group-data-[state=active]:opacity-0 m-auto size-6 duration-200" />
+                  <X className="group-data-[state=active]:scale-100 group-data-[state=active]:opacity-100 absolute inset-0 m-auto size-6 scale-0 opacity-0 duration-200" />
+                </button>
+              </div>
             </div>
 
             <div className="absolute inset-0 m-auto hidden size-fit lg:block">
@@ -291,6 +297,9 @@ const HeroHeader = () => {
                   ))}
                 </ul>
               </div>
+              <div className="hidden lg:block">
+                <LanguageSwitcher />
+              </div>
               <div className="flex w-full flex-col space-y-3 sm:flex-row sm:gap-3 sm:space-y-0 md:w-fit">
                 <Button
                   asChild
@@ -299,12 +308,12 @@ const HeroHeader = () => {
                   className={cn(isScrolled && 'lg:hidden')}
                 >
                   <Link to="/login">
-                    <span>Login</span>
+                    <span>{t('nav.login')}</span>
                   </Link>
                 </Button>
                 <Button asChild size="sm" className={cn(isScrolled && 'lg:hidden')}>
                   <Link to="/register">
-                    <span>Sign Up</span>
+                    <span>{t('nav.signUp')}</span>
                   </Link>
                 </Button>
                 <Button
@@ -313,7 +322,7 @@ const HeroHeader = () => {
                   className={cn(isScrolled ? 'lg:inline-flex' : 'hidden')}
                 >
                   <Link to="/register">
-                    <span>Get Started</span>
+                    <span>{t('nav.getStarted')}</span>
                   </Link>
                 </Button>
               </div>

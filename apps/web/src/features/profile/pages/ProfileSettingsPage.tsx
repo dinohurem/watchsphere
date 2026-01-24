@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@watchsphere/shared/stores';
-import { User, CreditCard, Settings, ChevronRight, ChevronDown, LogOut, Crown, Check, Loader2, ShoppingBag, Sliders, FileText, HelpCircle, BookOpen, PlayCircle, AlertTriangle, Bug, Mail, Plus, ArrowLeft, Trash2, TrendingUp, TrendingDown, Tag } from 'lucide-react';
+import { User, CreditCard, Settings, ChevronRight, ChevronDown, LogOut, Crown, Check, Loader2, ShoppingBag, Sliders, FileText, HelpCircle, BookOpen, PlayCircle, AlertTriangle, Bug, Mail, Plus, ArrowLeft, Trash2, TrendingUp, TrendingDown, Tag, Globe } from 'lucide-react';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
@@ -99,11 +100,20 @@ type ActiveSection = 'profile' | 'account' | 'billing' | 'orders' | 'general' | 
 
 // General Settings Component
 function GeneralSettings() {
+  const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+
+  const languages = [
+    { code: 'en', name: t('settings.english') },
+    { code: 'de', name: t('settings.german') },
+  ];
+
+  const currentLanguage = languages.find(lang => lang.code === i18n.language) || languages[0];
 
   useEffect(() => {
     loadSettings();
@@ -151,6 +161,11 @@ function GeneralSettings() {
     updateSetting('notify_price_changes', checked);
   };
 
+  const handleLanguageChange = (langCode: string) => {
+    i18n.changeLanguage(langCode);
+    setShowLanguageModal(false);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -161,14 +176,15 @@ function GeneralSettings() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">General Settings</h2>
-      <p className="text-gray-500 mb-6">Manage your app preferences</p>
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.generalSettings')}</h2>
+      <p className="text-gray-500 mb-6">{t('settings.managePreferences')}</p>
 
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6">
+      {/* Notifications Section */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6 mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-medium text-gray-900">Push Notifications</h3>
-            <p className="text-sm text-gray-500">Receive push notifications on your device</p>
+            <h3 className="font-medium text-gray-900">{t('settings.pushNotifications')}</h3>
+            <p className="text-sm text-gray-500">{t('settings.pushNotificationsDesc')}</p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
@@ -183,8 +199,8 @@ function GeneralSettings() {
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-medium text-gray-900">Email Notifications</h3>
-            <p className="text-sm text-gray-500">Receive updates via email</p>
+            <h3 className="font-medium text-gray-900">{t('settings.emailNotifications')}</h3>
+            <p className="text-sm text-gray-500">{t('settings.emailNotificationsDesc')}</p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
@@ -199,8 +215,8 @@ function GeneralSettings() {
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-medium text-gray-900">Price Alerts</h3>
-            <p className="text-sm text-gray-500">Get notified when watch prices change</p>
+            <h3 className="font-medium text-gray-900">{t('settings.priceAlerts')}</h3>
+            <p className="text-sm text-gray-500">{t('settings.priceAlertsDesc')}</p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
@@ -214,6 +230,60 @@ function GeneralSettings() {
           </label>
         </div>
       </div>
+
+      {/* Language Section */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Globe className="w-5 h-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-900">{t('settings.language')}</h3>
+        </div>
+        <button
+          onClick={() => setShowLanguageModal(true)}
+          className="w-full flex items-center justify-between py-3 text-left"
+        >
+          <div>
+            <h4 className="font-medium text-gray-900">{t('settings.appLanguage')}</h4>
+            <p className="text-sm text-gray-500">{t('settings.appLanguageDesc')}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600">{currentLanguage.name}</span>
+            <ChevronRight className="w-5 h-5 text-gray-400" />
+          </div>
+        </button>
+      </div>
+
+      {/* Language Selection Modal */}
+      {showLanguageModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('settings.selectLanguage')}</h3>
+            <div className="space-y-2">
+              {languages.map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => handleLanguageChange(lang.code)}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl transition-colors ${
+                    i18n.language === lang.code
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'hover:bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <span className="font-medium">{lang.name}</span>
+                  {i18n.language === lang.code && (
+                    <Check className="w-5 h-5 text-gray-900" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowLanguageModal(false)}
+              className="w-full mt-4 py-3 text-gray-600 font-medium hover:bg-gray-50 rounded-xl transition-colors"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

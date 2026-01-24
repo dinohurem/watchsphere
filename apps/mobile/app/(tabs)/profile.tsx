@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuthStore } from '@watchsphere/shared/stores';
+import { useTranslation } from 'react-i18next';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -229,6 +230,7 @@ function RatingStarIcon() {
 }
 
 export default function ProfileScreen() {
+  const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
   const [favoriteWatches, setFavoriteWatches] = useState<FavoriteWatch[]>([]);
@@ -440,13 +442,13 @@ export default function ProfileScreen() {
           {/* Status Badge - Sold for sell orders */}
           {isSold && order.orderType === 'sell' && (
             <View style={styles.orderSoldBadge}>
-              <Text style={styles.orderSoldBadgeText}>Sold</Text>
+              <Text style={styles.orderSoldBadgeText}>{t('profile.sold')}</Text>
             </View>
           )}
           {/* Status Badge - Completed for buy orders */}
           {isCompleted && order.orderType === 'buy' && (
             <View style={styles.orderCompletedBadge}>
-              <Text style={styles.orderCompletedBadgeText}>Completed</Text>
+              <Text style={styles.orderCompletedBadgeText}>{t('profile.completed')}</Text>
             </View>
           )}
         </View>
@@ -520,7 +522,7 @@ export default function ProfileScreen() {
           <ChevronLeftIcon />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>My Profile</Text>
+        <Text style={styles.headerTitle}>{t('profile.myProfile')}</Text>
 
         <TouchableOpacity
           style={styles.headerButton}
@@ -575,7 +577,7 @@ export default function ProfileScreen() {
             >
               <RatingStarIcon />
               <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
-              <Text style={styles.reviewCountText}>({reviewCount} reviews)</Text>
+              <Text style={styles.reviewCountText}>({reviewCount} {t('common.reviews')})</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -586,14 +588,14 @@ export default function ProfileScreen() {
             {/* Buy Orders Section */}
             <View style={styles.favoritesSection}>
               <View style={styles.favoritesHeader}>
-                <Text style={styles.favoritesTitle}>Buy Orders</Text>
+                <Text style={styles.favoritesTitle}>{t('profile.buyOrders')}</Text>
                 {buyOrders.length > 0 && (
                   <TouchableOpacity
                     style={styles.seeAllButton}
                     activeOpacity={0.7}
                     onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'buy' } } as any)}
                   >
-                    <Text style={styles.seeAllText}>See All</Text>
+                    <Text style={styles.seeAllText}>{t('common.seeAll')}</Text>
                     <ChevronRightSmall />
                   </TouchableOpacity>
                 )}
@@ -608,9 +610,9 @@ export default function ProfileScreen() {
                   <View style={styles.emptyIconContainer}>
                     <ShoppingBagIcon />
                   </View>
-                  <Text style={styles.emptyTitle}>No buy orders yet</Text>
+                  <Text style={styles.emptyTitle}>{t('profile.noBuyOrders')}</Text>
                   <Text style={styles.emptySubtitle}>
-                    Create buy orders to see them here
+                    {t('profile.createBuyOrders')}
                   </Text>
                 </View>
               )}
@@ -619,14 +621,14 @@ export default function ProfileScreen() {
             {/* Sell Orders Section */}
             <View style={styles.favoritesSection}>
               <View style={styles.favoritesHeader}>
-                <Text style={styles.favoritesTitle}>Sell Orders</Text>
+                <Text style={styles.favoritesTitle}>{t('profile.sellOrders')}</Text>
                 {sellOrders.length > 0 && (
                   <TouchableOpacity
                     style={styles.seeAllButton}
                     activeOpacity={0.7}
                     onPress={() => router.push({ pathname: '/settings/orders', params: { type: 'sell' } } as any)}
                   >
-                    <Text style={styles.seeAllText}>See All</Text>
+                    <Text style={styles.seeAllText}>{t('common.seeAll')}</Text>
                     <ChevronRightSmall />
                   </TouchableOpacity>
                 )}
@@ -641,9 +643,9 @@ export default function ProfileScreen() {
                   <View style={styles.emptyIconContainer}>
                     <TagIcon />
                   </View>
-                  <Text style={styles.emptyTitle}>No sell orders yet</Text>
+                  <Text style={styles.emptyTitle}>{t('profile.noSellOrders')}</Text>
                   <Text style={styles.emptySubtitle}>
-                    Create sell orders to see them here
+                    {t('profile.createSellOrders')}
                   </Text>
                 </View>
               )}
@@ -652,14 +654,14 @@ export default function ProfileScreen() {
             {/* Favorites Section */}
             <View style={styles.favoritesSection}>
               <View style={styles.favoritesHeader}>
-                <Text style={styles.favoritesTitle}>Favorites</Text>
+                <Text style={styles.favoritesTitle}>{t('profile.favorites')}</Text>
                 {favoriteWatches.length > 0 && (
                   <TouchableOpacity
                     style={styles.seeAllButton}
                     activeOpacity={0.7}
                     onPress={() => router.push('/profile/favorites' as any)}
                   >
-                    <Text style={styles.seeAllText}>See All</Text>
+                    <Text style={styles.seeAllText}>{t('common.seeAll')}</Text>
                     <ChevronRightSmall />
                   </TouchableOpacity>
                 )}
@@ -675,9 +677,9 @@ export default function ProfileScreen() {
                   <View style={styles.emptyIconContainer}>
                     <HeartIcon />
                   </View>
-                  <Text style={styles.emptyTitle}>No favorites yet</Text>
+                  <Text style={styles.emptyTitle}>{t('profile.noFavorites')}</Text>
                   <Text style={styles.emptySubtitle}>
-                    Add watches to your watchlist to see them here
+                    {t('profile.addToWatchlist')}
                   </Text>
                 </View>
               )}

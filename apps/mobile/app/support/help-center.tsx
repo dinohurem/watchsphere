@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { useGuide } from '@/contexts/GuideContext';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -101,6 +102,7 @@ function HelpItem({ title, description, icon, onPress }: HelpItemProps) {
 
 export default function HelpCenterScreen() {
   const { startGuide } = useGuide();
+  const { t } = useTranslation();
 
   const handleDemo = () => {
     // Navigate to home first, then start the guide
@@ -127,23 +129,23 @@ export default function HelpCenterScreen() {
       <View style={styles.content}>
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Help Center</Text>
+          <Text style={styles.title}>{t('support.helpCenter')}</Text>
           <Text style={styles.subtitle}>
-            Find answers to common questions or take a guided tour
+            {t('support.helpCenterSubtitle')}
           </Text>
         </View>
 
         {/* Help Items */}
         <View style={styles.helpList}>
           <HelpItem
-            title="FAQ"
-            description="Frequently asked questions and answers"
+            title={t('support.faq')}
+            description={t('support.faqSubtitle')}
             icon={<BookOpenIcon />}
             onPress={() => router.push('/support/faq' as any)}
           />
           <HelpItem
-            title="Demo"
-            description="Take a guided tour of the app"
+            title={t('support.demo')}
+            description={t('support.demoSubtitle')}
             icon={<PlayCircleIcon />}
             onPress={handleDemo}
           />

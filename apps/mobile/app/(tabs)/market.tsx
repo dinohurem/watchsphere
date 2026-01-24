@@ -4,16 +4,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { useFilters } from '@/contexts/FilterContext';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
 import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, Filter, User } from '@/components/icons';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Line } from 'react-native-svg';
 
-// Category tabs
-const CATEGORIES = ['Hot', 'Gainers', 'Losers', 'New', 'Trending'];
+// Category tabs - values used for API, keys for translation
+const CATEGORY_KEYS = [
+  { value: 'Hot', key: 'market.hot' },
+  { value: 'Gainers', key: 'market.gainers' },
+  { value: 'Losers', key: 'market.losers' },
+  { value: 'New', key: 'market.new' },
+  { value: 'Trending', key: 'market.trending' },
+];
 
 interface WatchMarketData {
   id: string;
@@ -49,8 +56,22 @@ function MiniSparkline({ data, width = 40, height = 16, isPositive = true }: { d
   // Use green for positive, red for negative price change
   const color = isPositive ? '#4AA078' : '#D90429';
 
+  // Middle horizontal line position
+  const middleY = height / 2;
+
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      {/* Horizontal dashed baseline */}
+      <Line
+        x1={0}
+        y1={middleY}
+        x2={width}
+        y2={middleY}
+        stroke="#A8C5DA"
+        strokeWidth={1}
+        strokeDasharray="2,2"
+      />
+      {/* Price line */}
       <Path
         d={pathData}
         stroke={color}
@@ -63,6 +84,7 @@ function MiniSparkline({ data, width = 40, height = 16, isPositive = true }: { d
 
 export default function MarketScreen() {
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const { filters, getTotalFilterCount, hasActiveFilters } = useFilters();
   const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
   const totalFilterCount = getTotalFilterCount();
@@ -680,7 +702,7 @@ export default function MarketScreen() {
             <Magnifier size={18} color="#212121" />
           </View>
           <Text style={searchQuery ? styles.searchText : styles.searchPlaceholder}>
-            {searchQuery || 'Search watches...'}
+            {searchQuery || t('home.searchPlaceholder')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
@@ -708,7 +730,7 @@ export default function MarketScreen() {
         {/* Trending / Featured Watches Section */}
         <View style={styles.trendingSection}>
           <Text style={styles.sectionTitle}>
-            {trendingWatches.length > 0 ? 'Trending watches' : 'Featured watches'}
+            {trendingWatches.length > 0 ? t('market.trendingWatches') : t('market.featuredWatches')}
           </Text>
           {/* Show trending watches if available */}
           {trendingWatches.length > 0 ? (
@@ -797,21 +819,21 @@ export default function MarketScreen() {
           ) : !loading && (
             /* Centered empty state when no trending or featured watches */
             <View style={styles.trendingEmptyContainer}>
-              <Text style={styles.emptyText}>No watches available</Text>
+              <Text style={styles.emptyText}>{t('market.noWatchesAvailable')}</Text>
             </View>
           )}
         </View>
 
         {/* Watches Section Header */}
         <View style={styles.watchesHeader}>
-          <Text style={styles.watchesTitle}>Watches</Text>
+          <Text style={styles.watchesTitle}>{t('market.watches')}</Text>
           <TouchableOpacity
             style={styles.filtersButton}
             onPress={() => router.push('/market/filters' as any)}
             activeOpacity={0.7}
           >
             <Filter size={26} color="#212121" />
-            <Text style={styles.filtersButtonText}>Filters</Text>
+            <Text style={styles.filtersButtonText}>{t('market.filters')}</Text>
             {totalFilterCount > 0 && (
               <View style={styles.filterBadge}>
                 <Text style={styles.filterBadgeText}>{totalFilterCount}</Text>
@@ -826,21 +848,21 @@ export default function MarketScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryTabs}
         >
-          {CATEGORIES.map((category) => (
+          {CATEGORY_KEYS.map((category) => (
             <TouchableOpacity
-              key={category}
+              key={category.value}
               style={[
                 styles.categoryTab,
-                selectedCategory === category && styles.categoryTabActive
+                selectedCategory === category.value && styles.categoryTabActive
               ]}
-              onPress={() => setSelectedCategory(category)}
+              onPress={() => setSelectedCategory(category.value)}
               activeOpacity={0.7}
             >
               <Text style={[
                 styles.categoryTabText,
-                selectedCategory === category && styles.categoryTabTextActive
+                selectedCategory === category.value && styles.categoryTabTextActive
               ]}>
-                {category}
+                {t(category.key)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -897,7 +919,7 @@ export default function MarketScreen() {
             })
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No watches found</Text>
+              <Text style={styles.emptyText}>{t('market.noWatchesFound')}</Text>
             </View>
           )}
         </View>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/services/api';
 import { SlidersHorizontal, Star } from 'lucide-react';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
@@ -160,6 +161,7 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
 }
 
 export function MarketPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [watches, setWatches] = useState<WatchData[]>([]);
@@ -180,11 +182,11 @@ export function MarketPage() {
   }, [searchParams]);
 
   const categories = [
-    { key: 'hot', label: 'Hot' },
-    { key: 'gainers', label: 'Gainers' },
-    { key: 'losers', label: 'Losers' },
-    { key: 'new', label: 'New' },
-    { key: 'trending', label: 'Trending' },
+    { key: 'hot', labelKey: 'market.categories.hot' },
+    { key: 'gainers', labelKey: 'market.categories.gainers' },
+    { key: 'losers', labelKey: 'market.categories.losers' },
+    { key: 'new', labelKey: 'market.categories.new' },
+    { key: 'trending', labelKey: 'market.categories.trending' },
   ];
 
   useEffect(() => {
@@ -325,7 +327,7 @@ export function MarketPage() {
       <div className="max-w-[1000px] mx-auto flex flex-col gap-16">
         {/* Trending Watches Section */}
         <div className="flex flex-col gap-8">
-          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Trending watches</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">{t('market.trendingWatches')}</h2>
 
           <div className="flex gap-8 overflow-x-auto pb-2">
             {loading ? (
@@ -358,7 +360,7 @@ export function MarketPage() {
 
         {/* Market Activity Section */}
         <div className="flex flex-col gap-8">
-          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Market activity</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">{t('market.marketActivity')}</h2>
 
           {/* Filters Row */}
           <div className="flex items-center justify-between">
@@ -374,7 +376,7 @@ export function MarketPage() {
                       : 'text-[#212121] font-normal hover:bg-[rgba(29,29,31,0.02)]'
                   }`}
                 >
-                  {category.label}
+                  {t(category.labelKey)}
                 </button>
               ))}
             </div>
@@ -386,7 +388,7 @@ export function MarketPage() {
             >
               <SlidersHorizontal className="w-[26px] h-[26px]" />
               <span className="text-[15px] font-medium leading-[20px] tracking-[0.075px] text-black">
-                Filters
+                {t('market.filters')}
               </span>
             </button>
           </div>
@@ -398,19 +400,19 @@ export function MarketPage() {
               {/* Header */}
               <div className="flex items-center justify-between gap-3 pr-6 mb-4">
                 <div className="w-[200px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Watch</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.watch')}</p>
                 </div>
                 <div className="w-[168px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Chart</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.chart')}</p>
                 </div>
                 <div className="w-[168px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">% Change</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.change')}</p>
                 </div>
                 <div className="w-[168px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Price</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.price')}</p>
                 </div>
                 <div className="w-[129px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Actions</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.actions')}</p>
                 </div>
               </div>
               {/* Rows */}
@@ -439,7 +441,7 @@ export function MarketPage() {
                   ))
                 ) : filteredWatches.length === 0 ? (
                   <div className="py-12 text-center text-[#212121]/50">
-                    {activeFilterCount > 0 ? 'No watches match your filters' : 'No watches found'}
+                    {activeFilterCount > 0 ? t('market.noMatchingFilters') : t('market.noWatchesFound')}
                   </div>
                 ) : (
                   filteredWatches.map((watch, index) => {
@@ -484,7 +486,7 @@ export function MarketPage() {
                             }}
                             className="px-5 py-3 bg-[#212121] text-white text-base font-semibold leading-[20px] tracking-[0.08px] rounded-full hover:bg-black transition-colors"
                           >
-                            View details
+                            {t('market.viewDetails')}
                           </button>
                         </div>
                       </div>
@@ -556,7 +558,7 @@ export function MarketPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <p className="text-lg font-semibold text-[#212121]">€{watch.price?.toLocaleString() || '0'}</p>
-                        <span className="text-sm font-medium text-[#212121]/50">View details →</span>
+                        <span className="text-sm font-medium text-[#212121]/50">{t('market.viewDetails')} →</span>
                       </div>
                     </div>
                   );
