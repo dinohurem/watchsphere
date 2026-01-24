@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
@@ -175,11 +176,13 @@ function SocialButton({ icon, onPress }: SocialButtonProps) {
 }
 
 export default function ContactScreen() {
+  const { t } = useTranslation();
+
   const handleEmail = async () => {
     try {
       await Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
     } catch (error) {
-      Alert.alert('Error', 'Could not open email client');
+      Alert.alert(t('contact.error'), t('contact.couldNotOpenEmail'));
     }
   };
 
@@ -223,7 +226,7 @@ export default function ContactScreen() {
         >
           <ChevronLeftIcon />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Contact Us</Text>
+        <Text style={styles.headerTitle}>{t('contact.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -235,9 +238,9 @@ export default function ContactScreen() {
       >
         {/* Intro Section */}
         <View style={styles.introSection}>
-          <Text style={styles.introTitle}>Get in Touch</Text>
+          <Text style={styles.introTitle}>{t('contact.getInTouch')}</Text>
           <Text style={styles.introText}>
-            Have questions about WatchSphere? We're here to help. Reach out to us through any of the channels below.
+            {t('contact.intro')}
           </Text>
         </View>
 
@@ -245,7 +248,7 @@ export default function ContactScreen() {
         <View style={styles.contactList}>
           <ContactItem
             icon={<EmailIcon />}
-            title="Email Us"
+            title={t('contact.emailUs')}
             subtitle={SUPPORT_EMAIL}
             onPress={handleEmail}
           />

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Activity,
   Sparkles,
@@ -157,6 +158,7 @@ interface NewsItem {
 }
 
 export function HomePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loadingWatchlist, setLoadingWatchlist] = useState(true);
@@ -169,11 +171,11 @@ export function HomePage() {
 
   // Quick access items - matching mobile
   const quickAccessItems = [
-    { icon: Activity, title: 'Activity Center', color: 'bg-[#ff7373]', href: '/app/notifications', customIcon: false },
-    { icon: Sparkles, title: 'Ask AI Assistant', color: 'bg-[#d573ff]', href: '/app/ai-assistant', customIcon: false },
-    { icon: Watch, title: 'My Inventory', color: 'bg-[#767676]', href: '/app/inventory', customIcon: false },
-    { icon: FileCheck, title: 'My Orders', color: 'bg-[#32d287]', href: '/app/orders', customIcon: false },
-    { icon: null, title: 'Social Search', color: 'bg-[#7c73ff]', href: '/app/social-search', customIcon: true },
+    { icon: Activity, titleKey: 'home.quickAccess.activityCenter', color: 'bg-[#ff7373]', href: '/app/notifications', customIcon: false },
+    { icon: Sparkles, titleKey: 'home.quickAccess.aiAssistant', color: 'bg-[#d573ff]', href: '/app/ai-assistant', customIcon: false },
+    { icon: Watch, titleKey: 'home.quickAccess.myInventory', color: 'bg-[#767676]', href: '/app/inventory', customIcon: false },
+    { icon: FileCheck, titleKey: 'home.quickAccess.myOrders', color: 'bg-[#32d287]', href: '/app/orders', customIcon: false },
+    { icon: null, titleKey: 'home.quickAccess.socialSearch', color: 'bg-[#7c73ff]', href: '/app/social-search', customIcon: true },
   ];
 
   useEffect(() => {
@@ -397,10 +399,10 @@ export function HomePage() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 1) return t('home.time.justNow');
+    if (diffMins < 60) return t('home.time.minAgo', { count: diffMins });
+    if (diffHours < 24) return t('home.time.hourAgo', { count: diffHours });
+    return t('home.time.dayAgo', { count: diffDays });
   };
 
   const handleWatchClick = (watch: WatchlistItem | MarketItem) => {
@@ -417,7 +419,7 @@ export function HomePage() {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Latest Activity */}
         <div className="w-full lg:w-[472px] flex flex-col gap-8">
-          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Latest activity</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">{t('home.latestActivity')}</h2>
           <div className="border border-black/5 rounded-2xl p-4">
             {loadingActivities ? (
               <div className="flex items-center justify-center py-8">
@@ -426,7 +428,7 @@ export function HomePage() {
             ) : activities.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <Activity className="w-10 h-10 text-gray-300 mb-3" />
-                <p className="text-sm text-gray-500">No recent activity</p>
+                <p className="text-sm text-gray-500">{t('home.noRecentActivity')}</p>
               </div>
             ) : (
               <div className="flex flex-col">
@@ -455,10 +457,10 @@ export function HomePage() {
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[15px] leading-[19px] tracking-[0.075px] truncate">
                           <span className="font-normal text-[#212121]">
-                            {activity.type === 'offer' ? 'New offer ' :
-                             activity.type === 'listing' ? 'New listing ' :
-                             activity.type === 'undercut' ? 'Price undercut ' :
-                             'Price alert '}
+                            {activity.type === 'offer' ? t('home.activity.newOffer') + ' ' :
+                             activity.type === 'listing' ? t('home.activity.newListing') + ' ' :
+                             activity.type === 'undercut' ? t('home.activity.priceUndercut') + ' ' :
+                             t('home.activity.priceAlert') + ' '}
                           </span>
                           <span className="font-semibold text-[#212121]">{activity.reference}</span>
                         </p>
@@ -477,7 +479,7 @@ export function HomePage() {
 
         {/* Quick Access */}
         <div className="flex-1 flex flex-col gap-8">
-          <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Quick access</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">{t('home.quickAccess.title')}</h2>
           <div className="flex flex-col gap-4 flex-1">
             {/* First Row - 3 items */}
             <div className="flex gap-4 flex-1">
@@ -493,7 +495,7 @@ export function HomePage() {
                       {Icon && <Icon className="w-4 h-4 text-white" />}
                     </div>
                     <p className="text-[15px] font-medium text-[#212121] leading-[19px] tracking-[0.075px]">
-                      {item.title}
+                      {t(item.titleKey)}
                     </p>
                   </Link>
                 );
@@ -517,7 +519,7 @@ export function HomePage() {
                       ) : null}
                     </div>
                     <p className="text-[15px] font-medium text-[#212121] leading-[19px] tracking-[0.075px]">
-                      {item.title}
+                      {t(item.titleKey)}
                     </p>
                   </Link>
                 );
@@ -529,7 +531,7 @@ export function HomePage() {
 
       {/* Watchlist Section */}
       <div className="flex flex-col gap-8">
-        <h2 className="text-2xl font-semibold text-[#212121] leading-[1.1]">Watchlist</h2>
+        <h2 className="text-xl sm:text-2xl font-semibold text-[#212121] leading-[1.1]">{t('home.watchlist.title')}</h2>
         {loadingWatchlist ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -537,8 +539,8 @@ export function HomePage() {
         ) : watchlist.length === 0 ? (
           <div className="border border-black/5 rounded-2xl p-8 flex flex-col items-center justify-center text-center">
             <Heart className="w-12 h-12 text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-[#212121] mb-2">Your watchlist is empty</h3>
-            <p className="text-sm text-[#212121]/50">Start tracking watches to monitor their prices and market trends</p>
+            <h3 className="text-lg font-semibold text-[#212121] mb-2">{t('home.watchlist.empty')}</h3>
+            <p className="text-sm text-[#212121]/50">{t('home.watchlist.emptyDescription')}</p>
           </div>
         ) : (
           <div className="flex gap-8 overflow-x-auto pb-2">
@@ -612,7 +614,7 @@ export function HomePage() {
 
       {/* Market Activity Section */}
       <div className="flex flex-col gap-8">
-        <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Market activity</h2>
+        <h2 className="text-xl sm:text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">{t('home.marketActivity.title')}</h2>
 
         {loadingMarket ? (
           <div className="flex items-center justify-center py-12">
@@ -621,8 +623,8 @@ export function HomePage() {
         ) : marketItems.length === 0 ? (
           <div className="border border-black/5 rounded-2xl p-8 flex flex-col items-center justify-center text-center">
             <TrendingUp className="w-12 h-12 text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-[#212121] mb-2">No market data available</h3>
-            <p className="text-sm text-[#212121]/50">Market listings will appear here once available</p>
+            <h3 className="text-lg font-semibold text-[#212121] mb-2">{t('home.marketActivity.empty')}</h3>
+            <p className="text-sm text-[#212121]/50">{t('home.marketActivity.emptyDescription')}</p>
           </div>
         ) : (
           <div className="border border-black/5 rounded-2xl overflow-hidden">
@@ -631,19 +633,19 @@ export function HomePage() {
               {/* Header */}
               <div className="flex items-center justify-between gap-3 pr-6 mb-4">
                 <div className="w-[200px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Watch</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('home.marketActivity.watch')}</p>
                 </div>
                 <div className="w-[168px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Chart</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('home.marketActivity.chart')}</p>
                 </div>
                 <div className="w-[168px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">% Change</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('home.marketActivity.change')}</p>
                 </div>
                 <div className="w-[168px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Price</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('home.marketActivity.price')}</p>
                 </div>
                 <div className="w-[129px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Actions</p>
+                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('home.marketActivity.actions')}</p>
                 </div>
               </div>
               {/* Rows */}
@@ -688,7 +690,7 @@ export function HomePage() {
                         }}
                         className="px-5 py-3 bg-[#212121] text-white text-base font-semibold leading-[20px] tracking-[0.08px] rounded-full hover:bg-black transition-colors"
                       >
-                        View details
+                        {t('home.marketActivity.viewDetails')}
                       </button>
                     </div>
                   </div>
@@ -735,7 +737,7 @@ export function HomePage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="text-lg font-semibold text-[#212121]">€{item.price.toLocaleString()}</p>
-                    <span className="text-sm font-medium text-[#212121]/50">View details →</span>
+                    <span className="text-sm font-medium text-[#212121]/50">{t('home.marketActivity.viewDetails')} →</span>
                   </div>
                 </div>
               ))}
@@ -746,7 +748,7 @@ export function HomePage() {
 
       {/* Trending News Section */}
       <div className="flex flex-col gap-8">
-        <h2 className="text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">Trending news</h2>
+        <h2 className="text-xl sm:text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">{t('home.trendingNews.title')}</h2>
         {loadingNews ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -754,8 +756,8 @@ export function HomePage() {
         ) : newsItems.length === 0 ? (
           <div className="border border-black/5 rounded-2xl p-8 flex flex-col items-center justify-center text-center">
             <Newspaper className="w-12 h-12 text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-[#212121] mb-2">No news available</h3>
-            <p className="text-sm text-[#212121]/50">Latest watch news will appear here</p>
+            <h3 className="text-lg font-semibold text-[#212121] mb-2">{t('home.trendingNews.empty')}</h3>
+            <p className="text-sm text-[#212121]/50">{t('home.trendingNews.emptyDescription')}</p>
           </div>
         ) : (
           <div className="flex gap-8 overflow-x-auto">

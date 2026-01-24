@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -42,50 +43,50 @@ function ChevronDownIcon({ isOpen }: { isOpen: boolean }) {
 }
 
 interface FAQItem {
-  question: string;
-  answer: string;
+  questionKey: string;
+  answerKey: string;
 }
 
 const faqData: FAQItem[] = [
   {
-    question: 'What is WatchSphere?',
-    answer: 'WatchSphere is a comprehensive platform for watch collectors and dealers. It provides market data, price tracking, social features, and a marketplace for buying and selling luxury watches.',
+    questionKey: 'faq.whatIsWatchSphere',
+    answerKey: 'faq.whatIsWatchSphereAnswer',
   },
   {
-    question: 'How do I add watches to my watchlist?',
-    answer: 'You can add watches to your watchlist by navigating to the Market section, finding a watch you\'re interested in, and tapping the heart icon. You can also set price alerts to be notified when a watch reaches your target price.',
+    questionKey: 'faq.howToAddWatchlist',
+    answerKey: 'faq.howToAddWatchlistAnswer',
   },
   {
-    question: 'How do buy and sell orders work?',
-    answer: 'Buy orders let you post what watches you\'re looking to purchase along with your target price. Sell orders let you list watches you want to sell. Other users can browse these orders and reach out to you through the app\'s messaging feature.',
+    questionKey: 'faq.howBuySellWorks',
+    answerKey: 'faq.howBuySellWorksAnswer',
   },
   {
-    question: 'How do I contact a seller or buyer?',
-    answer: 'When viewing a buy or sell order, you\'ll see options to contact the user via the in-app chat, WhatsApp, or Telegram (depending on what contact methods they\'ve provided in their profile).',
+    questionKey: 'faq.howToContact',
+    answerKey: 'faq.howToContactAnswer',
   },
   {
-    question: 'How is watch pricing data collected?',
-    answer: 'Our pricing data is aggregated from multiple sources including authorized dealers, secondary market platforms, and auction results. We update prices regularly to provide the most accurate market information.',
+    questionKey: 'faq.howPricingWorks',
+    answerKey: 'faq.howPricingWorksAnswer',
   },
   {
-    question: 'What should I do if I have a dispute with another user?',
-    answer: 'If you have a dispute regarding a transaction, you can file a dispute through the Support section of the app. Go to Settings > Support > Disputes to create a new dispute. Our team will review and assist in resolving the issue.',
+    questionKey: 'faq.howToFileDispute',
+    answerKey: 'faq.howToFileDisputeAnswer',
   },
   {
-    question: 'How do I update my profile information?',
-    answer: 'Go to Settings > Profile Settings to update your name, contact information, and profile photo. You can also add your WhatsApp and Telegram information so other users can contact you easily.',
+    questionKey: 'faq.howToUpdateProfile',
+    answerKey: 'faq.howToUpdateProfileAnswer',
   },
   {
-    question: 'Is my data secure?',
-    answer: 'Yes, we take data security seriously. All communications are encrypted, and we never share your personal information with third parties without your consent. You can review our Privacy Policy for more details.',
+    questionKey: 'faq.isDataSecure',
+    answerKey: 'faq.isDataSecureAnswer',
   },
   {
-    question: 'How do I report a bug or issue?',
-    answer: 'You can report issues through Settings > Support > Report an Issue. Please provide as much detail as possible about the problem you encountered, and our team will investigate and work on a fix.',
+    questionKey: 'faq.howToReportBug',
+    answerKey: 'faq.howToReportBugAnswer',
   },
   {
-    question: 'Can I delete my account?',
-    answer: 'Yes, you can deactivate your account through Settings > Account Details > Delete Account. This will deactivate your account and you will no longer be able to log in. Your data will be retained for a period as required by law.',
+    questionKey: 'faq.canDeleteAccount',
+    answerKey: 'faq.canDeleteAccountAnswer',
   },
 ];
 
@@ -96,6 +97,7 @@ interface FAQAccordionProps {
 }
 
 function FAQAccordion({ item, isOpen, onToggle }: FAQAccordionProps) {
+  const { t } = useTranslation();
   return (
     <View style={styles.accordionContainer}>
       <TouchableOpacity
@@ -103,12 +105,12 @@ function FAQAccordion({ item, isOpen, onToggle }: FAQAccordionProps) {
         onPress={onToggle}
         activeOpacity={0.7}
       >
-        <Text style={styles.accordionQuestion}>{item.question}</Text>
+        <Text style={styles.accordionQuestion}>{t(item.questionKey)}</Text>
         <ChevronDownIcon isOpen={isOpen} />
       </TouchableOpacity>
       {isOpen && (
         <View style={styles.accordionContent}>
-          <Text style={styles.accordionAnswer}>{item.answer}</Text>
+          <Text style={styles.accordionAnswer}>{t(item.answerKey)}</Text>
         </View>
       )}
     </View>
@@ -116,6 +118,7 @@ function FAQAccordion({ item, isOpen, onToggle }: FAQAccordionProps) {
 }
 
 export default function FAQScreen() {
+  const { t } = useTranslation();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const toggleAccordion = (index: number) => {
@@ -133,7 +136,7 @@ export default function FAQScreen() {
         >
           <ChevronLeftIcon />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>FAQ</Text>
+        <Text style={styles.headerTitle}>{t('support.faq')}</Text>
         <View style={styles.headerButton} />
       </View>
 
@@ -145,9 +148,9 @@ export default function FAQScreen() {
       >
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Frequently Asked Questions</Text>
+          <Text style={styles.title}>{t('support.frequentlyAskedQuestions')}</Text>
           <Text style={styles.subtitle}>
-            Find answers to common questions about WatchSphere
+            {t('support.faqDescription')}
           </Text>
         </View>
 

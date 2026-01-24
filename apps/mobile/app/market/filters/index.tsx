@@ -6,6 +6,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useFilters, FilterState } from '@/contexts/FilterContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon
 function BackArrow() {
@@ -158,6 +159,7 @@ const BACKEND_KEY_TO_ROUTE: Record<string, string> = {
 };
 
 export default function FiltersScreen() {
+  const { t } = useTranslation();
   const { resetFilters, getTotalFilterCount } = useFilters();
   const { marketFilters, loadMarketFilters, isLoadingMarketFilters } = useConfig();
   const totalCount = getTotalFilterCount();
@@ -242,7 +244,7 @@ export default function FiltersScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <BackArrow />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Filter</Text>
+          <Text style={styles.headerTitle}>{t('filters.filter')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
@@ -259,7 +261,7 @@ export default function FiltersScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <BackArrow />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Filter</Text>
+        <Text style={styles.headerTitle}>{t('filters.filter')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -284,28 +286,28 @@ export default function FiltersScreen() {
         )}
 
         {/* Condition & Delivery Contents */}
-        <FilterSection title="Condition & Delivery Contents" items={filtersBySection.condition} />
+        <FilterSection title={t('filters.conditionDelivery')} items={filtersBySection.condition} />
 
         {/* Case size */}
-        <FilterSection title="Case size" items={filtersBySection.case_size} />
+        <FilterSection title={t('filters.caseSize')} items={filtersBySection.case_size} />
 
         {/* Watch Type */}
-        <FilterSection title="Watch Type" items={filtersBySection.watch_type} />
+        <FilterSection title={t('filters.watchType')} items={filtersBySection.watch_type} />
 
         {/* Movement & Functions */}
-        <FilterSection title="Movement & Functions" items={filtersBySection.caliber} />
+        <FilterSection title={t('filters.movementFunctions')} items={filtersBySection.caliber} />
 
         {/* Dial */}
-        <FilterSection title="Dial" items={filtersBySection.dial} />
+        <FilterSection title={t('filters.dial')} items={filtersBySection.dial} />
 
         {/* Case */}
-        <FilterSection title="Case" items={filtersBySection.case} />
+        <FilterSection title={t('filters.case')} items={filtersBySection.case} />
 
         {/* Strap / bracelet */}
-        <FilterSection title="Strap / bracelet" items={filtersBySection.band} />
+        <FilterSection title={t('filters.strapBracelet')} items={filtersBySection.band} />
 
         {/* Clasp */}
-        <FilterSection title="Clasp" items={filtersBySection.clasp} />
+        <FilterSection title={t('filters.clasp')} items={filtersBySection.clasp} />
       </ScrollView>
 
       {/* Bottom Buttons */}
@@ -315,10 +317,10 @@ export default function FiltersScreen() {
           onPress={handleReset}
           disabled={totalCount === 0}
         >
-          <Text style={[styles.resetButtonText, totalCount === 0 && styles.resetButtonTextDisabled]}>Reset</Text>
+          <Text style={[styles.resetButtonText, totalCount === 0 && styles.resetButtonTextDisabled]}>{t('filters.reset')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
-          <Text style={styles.applyButtonText}>Apply</Text>
+          <Text style={styles.applyButtonText}>{t('filters.apply')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

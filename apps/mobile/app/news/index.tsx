@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { BackArrow, Newspaper } from '@/components/icons';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { useTranslation } from 'react-i18next';
 
 interface NewsArticle {
   id: string;
@@ -18,6 +19,7 @@ interface NewsArticle {
 }
 
 export default function NewsListScreen() {
+  const { t } = useTranslation();
   const { colors, fonts } = useTheme();
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,10 +57,10 @@ export default function NewsListScreen() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 1) return t('common.justNow');
+    if (diffMins < 60) return `${diffMins} ${t('common.minAgo')}`;
+    if (diffHours < 24) return `${diffHours} ${diffHours > 1 ? t('common.hoursAgo') : t('common.hourAgo')}`;
+    return `${diffDays} ${diffDays > 1 ? t('common.daysAgo') : t('common.dayAgo')}`;
   };
 
   const styles = StyleSheet.create({
@@ -186,7 +188,7 @@ export default function NewsListScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <BackArrow size={24} color="#212121" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>News</Text>
+          <Text style={styles.headerTitle}>{t('news.news')}</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#212121" />
@@ -201,7 +203,7 @@ export default function NewsListScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <BackArrow size={24} color="#212121" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>News</Text>
+        <Text style={styles.headerTitle}>{t('news.news')}</Text>
       </View>
 
       <ScrollView
@@ -217,8 +219,8 @@ export default function NewsListScreen() {
             <View style={styles.emptyIconContainer}>
               <Newspaper size={28} color="rgba(33, 33, 33, 0.4)" />
             </View>
-            <Text style={styles.emptyTitle}>No news available</Text>
-            <Text style={styles.emptySubtitle}>Check back later for the latest watch news</Text>
+            <Text style={styles.emptyTitle}>{t('news.noNewsAvailable')}</Text>
+            <Text style={styles.emptySubtitle}>{t('news.checkBackLater')}</Text>
           </View>
         ) : (
           articles.map((article) => (

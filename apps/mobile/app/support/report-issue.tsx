@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -22,18 +23,19 @@ function ChevronLeftIcon() {
 }
 
 export default function ReportIssueScreen() {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a title');
+      Alert.alert(t('common.error'), t('support.pleaseEnterTitle'));
       return;
     }
 
     if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a description');
+      Alert.alert(t('common.error'), t('support.pleaseEnterDescription'));
       return;
     }
 
@@ -45,15 +47,15 @@ export default function ReportIssueScreen() {
       });
 
       Alert.alert(
-        'Issue Reported',
-        'Thank you for reporting this issue. Our team will investigate and work on a fix.',
-        [{ text: 'OK', onPress: () => router.back() }]
+        t('support.issueReported'),
+        t('support.issueReportedDesc'),
+        [{ text: t('common.ok'), onPress: () => router.back() }]
       );
     } catch (error: any) {
       console.error('Error reporting issue:', error);
       Alert.alert(
-        'Error',
-        error.response?.data?.detail || 'Failed to report issue. Please try again.'
+        t('common.error'),
+        error.response?.data?.detail || t('support.failedToReportIssue')
       );
     } finally {
       setSubmitting(false);
@@ -74,7 +76,7 @@ export default function ReportIssueScreen() {
         >
           <ChevronLeftIcon />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Report an Issue</Text>
+        <Text style={styles.headerTitle}>{t('support.reportIssue')}</Text>
         <View style={styles.headerButton} />
       </View>
 
@@ -87,19 +89,19 @@ export default function ReportIssueScreen() {
       >
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Report an Issue</Text>
+          <Text style={styles.title}>{t('support.reportIssueTitle')}</Text>
           <Text style={styles.subtitle}>
-            Found a bug or experiencing a problem? Let us know and we'll work on fixing it.
+            {t('support.reportIssueSubtitle')}
           </Text>
         </View>
 
         {/* Form */}
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Title *</Text>
+            <Text style={styles.inputLabel}>{t('support.title')} *</Text>
             <TextInput
               style={styles.input}
-              placeholder="Brief summary of the issue"
+              placeholder={t('support.titlePlaceholder')}
               placeholderTextColor="#999999"
               value={title}
               onChangeText={setTitle}
@@ -108,10 +110,10 @@ export default function ReportIssueScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Description *</Text>
+            <Text style={styles.inputLabel}>{t('support.description')} *</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
-              placeholder="Please describe the issue in detail. Include steps to reproduce if possible..."
+              placeholder={t('support.issueDescriptionPlaceholder')}
               placeholderTextColor="#999999"
               value={description}
               onChangeText={setDescription}
@@ -135,7 +137,7 @@ export default function ReportIssueScreen() {
           {submitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.submitButtonText}>Submit</Text>
+            <Text style={styles.submitButtonText}>{t('common.submit')}</Text>
           )}
         </TouchableOpacity>
       </View>

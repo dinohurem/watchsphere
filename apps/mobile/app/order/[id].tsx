@@ -8,6 +8,7 @@ import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
+import { useTranslation } from 'react-i18next';
 
 // Country flag component
 function CountryFlag({ countryCode, size = 20 }: { countryCode: string; size?: number }) {
@@ -124,6 +125,7 @@ interface OrderDetail {
 }
 
 export default function OrderDetailScreen() {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuthStore();
   const [order, setOrder] = useState<OrderDetail | null>(null);
@@ -207,9 +209,9 @@ export default function OrderDetailScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Order not found</Text>
+          <Text style={styles.emptyText}>{t('orders.orderNotFound')}</Text>
           <TouchableOpacity onPress={() => router.back()} style={styles.goBackButton}>
-            <Text style={styles.goBackText}>Go back</Text>
+            <Text style={styles.goBackText}>{t('common.goBack')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -255,7 +257,7 @@ export default function OrderDetailScreen() {
           {/* Order Type Badge */}
           <View style={[styles.orderTypeBadge, order.order_type === 'buy' ? styles.buyBadge : styles.sellBadge]}>
             <Text style={[styles.orderTypeText, order.order_type === 'buy' ? styles.buyText : styles.sellText]}>
-              {order.order_type === 'buy' ? 'Buy Order' : 'Sell Order'}
+              {order.order_type === 'buy' ? t('orders.buyOrder') : t('orders.sellOrder')}
             </Text>
           </View>
 
@@ -266,17 +268,17 @@ export default function OrderDetailScreen() {
           {/* Price */}
           <View style={styles.priceRow}>
             <Text style={styles.priceValue}>{formatPrice(order.price, order.currency)}</Text>
-            <Text style={styles.addedTime}>Added {formatDate(order.created_at)}</Text>
+            <Text style={styles.addedTime}>{t('common.added')} {formatDate(order.created_at)}</Text>
           </View>
 
           {/* Quick Info */}
           <View style={styles.quickInfoRow}>
             <View style={styles.quickInfoItem}>
-              <Text style={styles.quickInfoLabel}>Condition</Text>
+              <Text style={styles.quickInfoLabel}>{t('orders.condition')}</Text>
               <Text style={styles.quickInfoValue}>{order.condition}</Text>
             </View>
             <View style={styles.quickInfoItem}>
-              <Text style={styles.quickInfoLabel}>Location</Text>
+              <Text style={styles.quickInfoLabel}>{t('orders.location')}</Text>
               <View style={styles.locationRow}>
                 <CountryFlag countryCode={order.country_code} size={16} />
                 <Text style={styles.quickInfoValue}>{order.country_name || order.country_code}</Text>
@@ -286,22 +288,22 @@ export default function OrderDetailScreen() {
 
           {/* Box & Papers */}
           <View style={styles.boxPapersRow}>
-            <Text style={styles.quickInfoLabel}>Box & Papers</Text>
+            <Text style={styles.quickInfoLabel}>{t('orders.boxPapers')}</Text>
             <Text style={styles.quickInfoValue}>
               {order.has_box && order.has_papers
-                ? 'Original box and papers'
+                ? t('orders.originalBoxAndPapers')
                 : order.has_box
-                ? 'Box only'
+                ? t('orders.boxOnly')
                 : order.has_papers
-                ? 'Papers only'
-                : 'None'}
+                ? t('orders.papersOnly')
+                : t('orders.none')}
             </Text>
           </View>
 
           {/* User Info - show for all orders */}
           <View style={styles.userSection}>
             <Text style={styles.sectionTitle}>
-              {order.order_type === 'sell' ? 'Seller' : 'Buyer'}
+              {order.order_type === 'sell' ? t('orders.seller') : t('orders.buyer')}
             </Text>
             <TouchableOpacity
               style={styles.userRow}
@@ -329,7 +331,7 @@ export default function OrderDetailScreen() {
           {/* Notes */}
           {order.notes && (
             <View style={styles.notesSection}>
-              <Text style={styles.sectionTitle}>Notes</Text>
+              <Text style={styles.sectionTitle}>{t('orders.notes')}</Text>
               <Text style={styles.notesText}>{order.notes}</Text>
             </View>
           )}
@@ -337,41 +339,41 @@ export default function OrderDetailScreen() {
           {/* Specifications */}
           {order.watch_details && (
             <View style={styles.specsSection}>
-              <Text style={styles.sectionTitle}>Specifications</Text>
+              <Text style={styles.sectionTitle}>{t('orders.specifications')}</Text>
               <View style={styles.specsList}>
                 {order.watch_details.year && (
                   <View style={styles.specRow}>
-                    <Text style={styles.specLabel}>Year</Text>
+                    <Text style={styles.specLabel}>{t('orders.year')}</Text>
                     <Text style={styles.specValue}>{order.watch_details.year}</Text>
                   </View>
                 )}
                 {order.watch_details.movement && (
                   <View style={styles.specRow}>
-                    <Text style={styles.specLabel}>Movement</Text>
+                    <Text style={styles.specLabel}>{t('orders.movement')}</Text>
                     <Text style={styles.specValue}>{order.watch_details.movement}</Text>
                   </View>
                 )}
                 {order.watch_details.case_material && (
                   <View style={styles.specRow}>
-                    <Text style={styles.specLabel}>Case material</Text>
+                    <Text style={styles.specLabel}>{t('orders.caseMaterial')}</Text>
                     <Text style={styles.specValue}>{order.watch_details.case_material}</Text>
                   </View>
                 )}
                 {order.watch_details.case_size && (
                   <View style={styles.specRow}>
-                    <Text style={styles.specLabel}>Case size</Text>
+                    <Text style={styles.specLabel}>{t('orders.caseSize')}</Text>
                     <Text style={styles.specValue}>{order.watch_details.case_size}</Text>
                   </View>
                 )}
                 {order.watch_details.bracelet_material && (
                   <View style={styles.specRow}>
-                    <Text style={styles.specLabel}>Bracelet</Text>
+                    <Text style={styles.specLabel}>{t('orders.bracelet')}</Text>
                     <Text style={styles.specValue}>{order.watch_details.bracelet_material}</Text>
                   </View>
                 )}
                 {order.watch_details.water_resistance && (
                   <View style={styles.specRow}>
-                    <Text style={styles.specLabel}>Water resistance</Text>
+                    <Text style={styles.specLabel}>{t('orders.waterResistance')}</Text>
                     <Text style={styles.specValue}>{order.watch_details.water_resistance}</Text>
                   </View>
                 )}
@@ -386,7 +388,7 @@ export default function OrderDetailScreen() {
         <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
           <TouchableOpacity style={styles.contactButton} onPress={handleContactUser}>
             <MessageIcon />
-            <Text style={styles.contactButtonText}>Contact</Text>
+            <Text style={styles.contactButtonText}>{t('common.contact')}</Text>
           </TouchableOpacity>
         </SafeAreaView>
       )}

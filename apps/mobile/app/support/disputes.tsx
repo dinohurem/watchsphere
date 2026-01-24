@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -76,17 +77,20 @@ function getStatusColor(status: string): { bg: string; text: string } {
   }
 }
 
-function formatStatus(status: string): string {
-  switch (status) {
-    case 'open':
-      return 'Open';
-    case 'in_progress':
-      return 'In Progress';
-    case 'closed':
-      return 'Closed';
-    default:
-      return status;
-  }
+function useFormatStatus() {
+  const { t } = useTranslation();
+  return (status: string): string => {
+    switch (status) {
+      case 'open':
+        return t('support.open');
+      case 'in_progress':
+        return t('support.inProgress');
+      case 'closed':
+        return t('support.closed');
+      default:
+        return status;
+    }
+  };
 }
 
 function formatDate(dateString: string): string {
@@ -103,6 +107,8 @@ interface DisputeItemProps {
 }
 
 function DisputeItem({ dispute }: DisputeItemProps) {
+  const { t } = useTranslation();
+  const formatStatus = useFormatStatus();
   const statusColors = getStatusColor(dispute.status);
   const watchName = dispute.watch_brand && dispute.watch_model
     ? `${dispute.watch_brand} ${dispute.watch_model}`
@@ -113,7 +119,7 @@ function DisputeItem({ dispute }: DisputeItemProps) {
       <View style={styles.disputeItemHeader}>
         <View style={styles.disputeItemInfo}>
           <Text style={styles.disputeItemTitle} numberOfLines={1}>{watchName}</Text>
-          <Text style={styles.disputeItemRef} numberOfLines={1}>Ref: {dispute.watch_reference}</Text>
+          <Text style={styles.disputeItemRef} numberOfLines={1}>{t('support.ref')}: {dispute.watch_reference}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
           <Text style={[styles.statusText, { color: statusColors.text }]}>
@@ -130,6 +136,7 @@ function DisputeItem({ dispute }: DisputeItemProps) {
 }
 
 export default function DisputesScreen() {
+  const { t } = useTranslation();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -168,7 +175,7 @@ export default function DisputesScreen() {
         >
           <ChevronLeftIcon />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Disputes</Text>
+        <Text style={styles.headerTitle}>{t('support.disputes')}</Text>
         <TouchableOpacity
           style={styles.headerButton}
           onPress={() => router.push('/support/new-dispute' as any)}
@@ -201,9 +208,9 @@ export default function DisputesScreen() {
           ) : (
             <View style={styles.emptyState}>
               <AlertCircleIcon />
-              <Text style={styles.emptyStateTitle}>No disputes</Text>
+              <Text style={styles.emptyStateTitle}>{t('support.noDisputes')}</Text>
               <Text style={styles.emptyStateText}>
-                You haven't filed any disputes yet. If you have an issue with a transaction, tap the + button to create a new dispute.
+                {t('support.noDisputesDesc')}
               </Text>
             </View>
           )}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
   Check,
@@ -18,6 +19,7 @@ const APP_EMAIL = 'info@watchsphere.io';
 const APP_PHONE = '+1 (555) 123-4567';
 
 export function ContactSection() {
+  const { t } = useTranslation();
   const socialLinks = [
     {
       icon: Github,
@@ -50,24 +52,24 @@ export function ContactSection() {
         >
           <div className="bg-[radial-gradient(68.54%_68.72%_at_55.02%_31.46%,rgba(0,0,0,0.06)_0,rgba(0,0,0,0.02)_50%,rgba(0,0,0,0.01)_80%)] absolute top-0 left-0 h-80 w-36 -translate-y-20 -rotate-45 rounded-full" />
         </div>
-        <div className="flex grow flex-col justify-center px-4 md:px-6 pt-20 pb-8">
-          <h2 className="text-4xl font-bold md:text-5xl text-gray-900">
-            Contact Us
+        <div className="flex grow flex-col justify-center px-4 md:px-6 pt-16 sm:pt-20 pb-6 sm:pb-8">
+          <h2 className="text-3xl sm:text-4xl font-bold md:text-5xl text-gray-900">
+            {t('landing.contact.title')}
           </h2>
-          <p className="text-gray-600 mb-5 text-base">
-            Get in touch with the WatchSphere team.
+          <p className="text-gray-600 mb-4 sm:mb-5 text-sm sm:text-base">
+            {t('landing.contact.description')}
           </p>
         </div>
         <div className="border-t border-gray-200" />
         <div className="grid md:grid-cols-3">
           <Box
             icon={Mail}
-            title="Email"
-            description="We respond to all emails within 24 hours."
+            title={t('landing.contact.email')}
+            description={t('landing.contact.emailDesc')}
           >
             <a
               href={`mailto:${APP_EMAIL}`}
-              className="font-mono text-base font-medium tracking-wide hover:underline"
+              className="font-mono text-sm sm:text-base font-medium tracking-wide hover:underline"
             >
               {APP_EMAIL}
             </a>
@@ -75,10 +77,10 @@ export function ContactSection() {
           </Box>
           <Box
             icon={MapPin}
-            title="Headquarters"
-            description="Visit us in New York City."
+            title={t('landing.contact.headquarters')}
+            description={t('landing.contact.headquartersDesc')}
           >
-            <span className="font-mono text-base font-medium tracking-wide">
+            <span className="font-mono text-sm sm:text-base font-medium tracking-wide">
               123 Watch Street, Suite 100
               <br />
               New York, NY 10001
@@ -86,15 +88,15 @@ export function ContactSection() {
           </Box>
           <Box
             icon={Phone}
-            title="Phone"
-            description="Monday to Friday, 9am-6pm EST."
+            title={t('landing.contact.phone')}
+            description={t('landing.contact.phoneDesc')}
             className="border-b-0 md:border-r-0"
           >
             <div>
               <div className="flex items-center gap-x-2">
                 <a
                   href={`tel:${APP_PHONE}`}
-                  className="block font-mono text-base font-medium tracking-wide hover:underline"
+                  className="block font-mono text-sm sm:text-base font-medium tracking-wide hover:underline"
                 >
                   {APP_PHONE}
                 </a>
@@ -104,7 +106,7 @@ export function ContactSection() {
           </Box>
         </div>
         <div className="border-t border-gray-200" />
-        <div className="relative flex h-full min-h-[320px] items-center justify-center">
+        <div className="relative flex h-full min-h-[280px] sm:min-h-[320px] items-center justify-center">
           <div
             className={cn(
               'z-[-1] absolute inset-0 size-full',
@@ -114,21 +116,21 @@ export function ContactSection() {
             )}
           />
 
-          <div className="relative z-10 space-y-6">
-            <h3 className="text-center text-3xl font-bold md:text-4xl text-gray-900">
-              Find us online
+          <div className="relative z-10 space-y-4 sm:space-y-6 px-4">
+            <h3 className="text-center text-2xl sm:text-3xl font-bold md:text-4xl text-gray-900">
+              {t('landing.contact.findUsOnline')}
             </h3>
-            <div className="flex flex-wrap items-center justify-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
               {socialLinks.map((link) => (
                 <a
                   key={link.label}
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="bg-gray-100/50 hover:bg-gray-200 flex items-center gap-x-2 rounded-full border border-gray-200 px-4 py-2 transition-colors"
+                  className="bg-gray-100/50 hover:bg-gray-200 flex items-center gap-x-2 rounded-full border border-gray-200 px-3 sm:px-4 py-2 transition-colors"
                 >
                   <link.icon className="size-4" />
-                  <span className="font-mono text-sm font-medium tracking-wide">
+                  <span className="font-mono text-xs sm:text-sm font-medium tracking-wide">
                     {link.label}
                   </span>
                 </a>
@@ -161,15 +163,15 @@ function Box({
         className
       )}
     >
-      <div className="bg-gray-50 flex items-center gap-x-3 border-b border-gray-200 p-4">
+      <div className="bg-gray-50 flex items-center gap-x-3 border-b border-gray-200 p-3 sm:p-4">
         <Icon className="text-gray-500 size-5" strokeWidth={1} />
-        <h3 className="text-lg font-medium tracking-wider text-gray-900">
+        <h3 className="text-base sm:text-lg font-medium tracking-wider text-gray-900">
           {title}
         </h3>
       </div>
-      <div className="flex items-center gap-x-2 p-4 py-12">{children}</div>
-      <div className="border-t border-gray-200 p-4">
-        <p className="text-gray-500 text-sm">{description}</p>
+      <div className="flex items-center gap-x-2 p-3 sm:p-4 py-8 sm:py-12">{children}</div>
+      <div className="border-t border-gray-200 p-3 sm:p-4">
+        <p className="text-gray-500 text-xs sm:text-sm">{description}</p>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { useConfig, Filter } from '@/contexts/ConfigContext';
 import { BackArrow, Search, MapPin, Calendar, User, ChevronDown, X, Check } from '@/components/icons';
 import { api } from '@/services/api';
@@ -31,6 +32,7 @@ interface FilterState {
 
 export default function SocialSearchScreen() {
   const { colors, fonts } = useTheme();
+  const { t } = useTranslation();
   const { getFilterConfig, getFilterOptions, loadSocialFilters, isLoadingSocialFilters, socialFilters } = useConfig();
 
   // Screen state: 'filters' or 'results'
@@ -205,11 +207,11 @@ export default function SocialSearchScreen() {
 
   const getOfferTypeBadgeStyle = (type: string) => {
     if (type === 'wts') {
-      return { bg: 'rgba(74, 160, 120, 0.1)', color: '#4AA078', label: 'WTS' };
+      return { bg: 'rgba(74, 160, 120, 0.1)', color: '#4AA078', label: t('socialSearch.wts') };
     } else if (type === 'wtb') {
-      return { bg: 'rgba(66, 133, 244, 0.1)', color: '#4285F4', label: 'WTB' };
+      return { bg: 'rgba(66, 133, 244, 0.1)', color: '#4285F4', label: t('socialSearch.wtb') };
     }
-    return { bg: 'rgba(33, 33, 33, 0.05)', color: 'rgba(33, 33, 33, 0.6)', label: 'Unknown' };
+    return { bg: 'rgba(33, 33, 33, 0.05)', color: 'rgba(33, 33, 33, 0.6)', label: t('socialSearch.unknown') };
   };
 
   const styles = StyleSheet.create({
@@ -619,12 +621,12 @@ export default function SocialSearchScreen() {
             <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
               <BackArrow size={24} color="#212121" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Social Search</Text>
+            <Text style={styles.headerTitle}>{t('socialSearch.title')}</Text>
           </View>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#212121" />
             <Text style={{ marginTop: hp(16), fontFamily: fonts.medium, color: '#212121' }}>
-              Loading filters...
+              {t('socialSearch.loadingFilters')}
             </Text>
           </View>
         </SafeAreaView>
@@ -642,7 +644,7 @@ export default function SocialSearchScreen() {
             <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
               <BackArrow size={24} color="#212121" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Social Search</Text>
+            <Text style={styles.headerTitle}>{t('socialSearch.title')}</Text>
           </View>
 
           <ScrollView
@@ -651,9 +653,9 @@ export default function SocialSearchScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.filterTitle}>Search Filters</Text>
+            <Text style={styles.filterTitle}>{t('socialSearch.searchFilters')}</Text>
             <Text style={styles.filterSubtitle}>
-              Configure your search criteria to find relevant social messages
+              {t('socialSearch.filterSubtitle')}
             </Text>
 
             {filters.map(filter => renderFilterField(filter))}
@@ -662,7 +664,7 @@ export default function SocialSearchScreen() {
           <View style={styles.bottomButtonsContainer}>
             <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmFilters}>
               <Text style={styles.confirmButtonText}>
-                {activeFilterCount > 0 ? `Search (${activeFilterCount} filters)` : 'Search All'}
+                {activeFilterCount > 0 ? t('socialSearch.searchWithFilters', { count: activeFilterCount }) : t('socialSearch.searchAll')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -682,7 +684,7 @@ export default function SocialSearchScreen() {
               />
               <View style={styles.dropdownContent}>
                 <View style={styles.dropdownHeader}>
-                  <Text style={styles.dropdownTitle}>{dropdownFilter?.name || 'Select'}</Text>
+                  <Text style={styles.dropdownTitle}>{dropdownFilter?.name || t('socialSearch.select')}</Text>
                   <TouchableOpacity
                     style={styles.dropdownCloseButton}
                     onPress={() => setShowDropdown(false)}
@@ -720,7 +722,7 @@ export default function SocialSearchScreen() {
                     style={styles.dropdownDoneButton}
                     onPress={() => setShowDropdown(false)}
                   >
-                    <Text style={styles.dropdownDoneButtonText}>Done</Text>
+                    <Text style={styles.dropdownDoneButtonText}>{t('socialSearch.done')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -740,17 +742,17 @@ export default function SocialSearchScreen() {
           <TouchableOpacity style={styles.backButton} onPress={handleBackFromResults}>
             <BackArrow size={24} color="#212121" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Results</Text>
+          <Text style={styles.headerTitle}>{t('socialSearch.results')}</Text>
         </View>
 
         {/* Results Count & Edit Filters */}
         <View style={styles.resultsCount}>
           <Text style={styles.resultsCountText}>
-            {loading ? 'Searching...' : `${total} messages found`}
+            {loading ? t('common.loading') : t('socialSearch.messagesFound', { count: total })}
           </Text>
           <TouchableOpacity style={styles.editFiltersButton} onPress={handleBackFromResults}>
             <Text style={styles.editFiltersText}>
-              Edit Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+              {t('socialSearch.editFilters')} {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
             </Text>
           </TouchableOpacity>
         </View>
@@ -773,9 +775,9 @@ export default function SocialSearchScreen() {
               <View style={styles.emptyIconContainer}>
                 <Search size={28} color="rgba(33, 33, 33, 0.4)" />
               </View>
-              <Text style={styles.emptyTitle}>No messages found</Text>
+              <Text style={styles.emptyTitle}>{t('socialSearch.noMessagesFound')}</Text>
               <Text style={styles.emptySubtitle}>
-                Try adjusting your filters to see more results.
+                {t('socialSearch.noMessagesSubtitle')}
               </Text>
             </View>
           ) : (

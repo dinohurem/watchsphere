@@ -6,6 +6,7 @@ import {
   motion,
 } from 'framer-motion';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface TimelineEntry {
   title: string;
@@ -13,6 +14,7 @@ interface TimelineEntry {
 }
 
 export function Timeline({ data }: { data: TimelineEntry[] }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
@@ -39,10 +41,10 @@ export function Timeline({ data }: { data: TimelineEntry[] }) {
     >
       <div className="max-w-7xl mx-auto py-20 px-4 md:px-8 lg:px-10">
         <h2 className="text-lg md:text-4xl mb-4 text-gray-900 max-w-4xl font-bold">
-          How WatchSphere Works
+          {t('landing.howItWorks.title')}
         </h2>
         <p className="text-gray-600 text-sm md:text-base max-w-sm">
-          From browsing to buying, here's your journey with WatchSphere.
+          {t('landing.howItWorks.description')}
         </p>
       </div>
 
@@ -89,17 +91,18 @@ export function Timeline({ data }: { data: TimelineEntry[] }) {
 }
 
 export function HowItWorksTimeline() {
+  const { t } = useTranslation();
+
   const timelineData = [
     {
-      title: 'Step 1',
+      title: t('landing.howItWorks.step1.label'),
       content: (
         <div>
           <h4 className="text-xl font-semibold text-gray-900 mb-4">
-            Create Your Account
+            {t('landing.howItWorks.step1.title')}
           </h4>
           <p className="text-gray-600 mb-6">
-            Sign up in seconds with your email. Verify your identity to unlock
-            full trading features and connect with verified dealers worldwide.
+            {t('landing.howItWorks.step1.description')}
           </p>
           <div className="bg-gray-100 rounded-xl p-6 flex items-center justify-center">
             <span className="text-4xl">👤</span>
@@ -108,16 +111,14 @@ export function HowItWorksTimeline() {
       ),
     },
     {
-      title: 'Step 2',
+      title: t('landing.howItWorks.step2.label'),
       content: (
         <div>
           <h4 className="text-xl font-semibold text-gray-900 mb-4">
-            Browse the Market
+            {t('landing.howItWorks.step2.title')}
           </h4>
           <p className="text-gray-600 mb-6">
-            Explore thousands of luxury watches from brands like Rolex, Patek
-            Philippe, and Audemars Piguet. Filter by brand, condition, year, and
-            location.
+            {t('landing.howItWorks.step2.description')}
           </p>
           <div className="bg-gray-100 rounded-xl p-6 flex items-center justify-center">
             <span className="text-4xl">🔍</span>
@@ -126,15 +127,14 @@ export function HowItWorksTimeline() {
       ),
     },
     {
-      title: 'Step 3',
+      title: t('landing.howItWorks.step3.label'),
       content: (
         <div>
           <h4 className="text-xl font-semibold text-gray-900 mb-4">
-            Place Your Order
+            {t('landing.howItWorks.step3.title')}
           </h4>
           <p className="text-gray-600 mb-6">
-            Found the perfect watch? Place a buy order at your price or accept
-            an existing ask. Our order book ensures transparent, fair pricing.
+            {t('landing.howItWorks.step3.description')}
           </p>
           <div className="bg-gray-100 rounded-xl p-6 flex items-center justify-center">
             <span className="text-4xl">💰</span>
@@ -143,16 +143,14 @@ export function HowItWorksTimeline() {
       ),
     },
     {
-      title: 'Step 4',
+      title: t('landing.howItWorks.step4.label'),
       content: (
         <div>
           <h4 className="text-xl font-semibold text-gray-900 mb-4">
-            Secure Transaction
+            {t('landing.howItWorks.step4.title')}
           </h4>
           <p className="text-gray-600 mb-6">
-            Complete your purchase through our secure escrow system. We handle
-            authentication, payment, and delivery so you can buy with
-            confidence.
+            {t('landing.howItWorks.step4.description')}
           </p>
           <div className="bg-gray-100 rounded-xl p-6 flex items-center justify-center">
             <span className="text-4xl">✅</span>

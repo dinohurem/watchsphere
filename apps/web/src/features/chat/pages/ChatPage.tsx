@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Image, Send, X, Flag, Users, Reply, MessageSquare, CornerUpRight, MoreVertical, CheckCheck, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Image, Send, X, Flag, Users, Reply, MessageSquare, CornerUpRight, MoreVertical, CheckCheck, Trash2, AlertTriangle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { chatWebSocket, WebSocketMessage } from '@/services/chatWebSocket';
@@ -25,6 +26,7 @@ function UserProfileModal({
   onNavigateToProfile: (userId: string) => void;
   onReport: (user: UserProfile) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-[32px] shadow-[0px_15px_75px_0px_rgba(0,0,0,0.18)] w-full max-w-[420px] overflow-hidden">
@@ -73,7 +75,7 @@ function UserProfileModal({
             className="flex items-center gap-2 px-5 py-3 rounded-full border border-[#D35741] text-[#D35741] hover:bg-[#D35741]/5 transition-colors"
           >
             <Flag className="w-4 h-4" />
-            <span className="text-[15px] font-semibold tracking-[0.075px] leading-[20px]">Report</span>
+            <span className="text-[15px] font-semibold tracking-[0.075px] leading-[20px]">{t('chat.report')}</span>
           </button>
         </div>
       </div>
@@ -138,6 +140,7 @@ interface ChatItem {
 }
 
 export function ChatPage() {
+  const { t } = useTranslation();
   const { recipientId } = useParams<{ recipientId?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -817,21 +820,21 @@ export function ChatPage() {
   ];
 
   return (
-    <div className="mx-24 py-6 bg-white h-[calc(100vh-64px)]">
+    <div className="mx-4 sm:mx-8 md:mx-16 lg:mx-24 py-4 sm:py-6 bg-white h-[calc(100vh-64px)]">
       <div className="h-full overflow-hidden">
         <div className="flex h-full">
-          {/* Left Sidebar - Chat List */}
-          <div className="w-[280px] flex-shrink-0 flex flex-col">
+          {/* Left Sidebar - Chat List (hidden on mobile when chat is selected) */}
+          <div className={`w-full sm:w-[280px] flex-shrink-0 flex flex-col ${selectedChat ? 'hidden sm:flex' : 'flex'}`}>
             {/* Header */}
             <div className="px-4 py-4">
-              <h1 className="text-2xl font-semibold text-[#1d1d1f]">Chat</h1>
+              <h1 className="text-xl sm:text-2xl font-semibold text-[#1d1d1f]">{t('chat.title')}</h1>
             </div>
 
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto">
           {allChats.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-500">
-              No conversations yet
+              {t('chat.noConversations')}
             </div>
           ) : (
             allChats.map((chat) => (
@@ -913,7 +916,7 @@ export function ChatPage() {
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#1d1d1f] hover:bg-gray-50 transition-colors"
                       >
                         <CheckCheck className="w-4 h-4" />
-                        Mark as Read
+                        {t('chat.markAsRead')}
                       </button>
                       <button
                         onClick={(e) => {
@@ -924,7 +927,7 @@ export function ChatPage() {
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#1d1d1f] hover:bg-gray-50 transition-colors"
                       >
                         <Flag className="w-4 h-4" />
-                        Report
+                        {t('chat.report')}
                       </button>
                       <button
                         onClick={(e) => {
@@ -935,7 +938,7 @@ export function ChatPage() {
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
-                        Delete
+                        {t('chat.delete')}
                       </button>
                     </div>
                   )}
@@ -946,31 +949,40 @@ export function ChatPage() {
         </div>
       </div>
 
-          {/* Divider */}
-          <div className="w-px bg-[rgba(0,0,0,0.1)]" />
+          {/* Divider - hidden on mobile */}
+          <div className="hidden sm:block w-px bg-[rgba(0,0,0,0.1)]" />
 
-          {/* Right Side - Chat Area */}
-          <div className="flex-1 flex flex-col">
+          {/* Right Side - Chat Area (shown on mobile when chat is selected) */}
+          <div className={`flex-1 flex flex-col ${selectedChat ? 'flex' : 'hidden sm:flex'}`}>
         {selectedChat ? (
           <>
             {/* Chat Header */}
-            <div className="px-8 pt-8 pb-4 border-b border-[rgba(33,33,33,0.04)]">
+            <div className="px-4 sm:px-8 pt-4 sm:pt-8 pb-4 border-b border-[rgba(33,33,33,0.04)]">
               <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-1">
-                  <h2 className="text-lg font-semibold text-[#1d1d1f]">
-                    {selectedChat.name}
-                  </h2>
+                <div className="flex items-center gap-3">
+                  {/* Back button for mobile */}
+                  <button
+                    onClick={() => setSelectedChat(null)}
+                    className="sm:hidden w-10 h-10 rounded-full bg-[rgba(33,33,33,0.05)] flex items-center justify-center hover:bg-[rgba(33,33,33,0.1)] transition-colors"
+                  >
+                    <ArrowLeft className="w-5 h-5 text-[#1d1d1f]" />
+                  </button>
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-lg font-semibold text-[#1d1d1f]">
+                      {selectedChat.name}
+                    </h2>
                   <p className="text-base text-[#1d1d1f] opacity-50 flex items-center gap-2">
                     {selectedChat.type === 'group'
-                      ? `${groupMembers.length > 0 ? groupMembers.length : (selectedChat.memberCount || 0)} members`
-                      : 'Direct message'}
+                      ? t('chat.members', { count: groupMembers.length > 0 ? groupMembers.length : (selectedChat.memberCount || 0) })
+                      : t('chat.directMessage')}
                     {wsConnected && (
                       <span className="inline-flex items-center gap-1 text-xs text-green-600">
                         <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Live
+                        {t('chat.live')}
                       </span>
                     )}
                   </p>
+                  </div>
                 </div>
                 {/* Group Members Icon - only for group chats */}
                 {selectedChat.type === 'group' && (
@@ -988,7 +1000,7 @@ export function ChatPage() {
             <div className="flex-1 flex flex-col px-8 overflow-hidden">
               {/* Date */}
               <div className="text-center py-4">
-                <span className="text-[13px] text-[#1d1d1f] opacity-50">Today</span>
+                <span className="text-[13px] text-[#1d1d1f] opacity-50">{t('chat.today')}</span>
               </div>
 
               {/* Messages or Empty State */}
@@ -1000,10 +1012,10 @@ export function ChatPage() {
                 <div className="flex-1 flex items-center justify-center">
                   <div className="bg-[rgba(33,33,33,0.04)] rounded-xl p-4 w-[395px] text-center">
                     <p className="text-sm text-[#212121] leading-5 tracking-[0.07px]">
-                      Start the conversation
+                      {t('chat.startConversation')}
                     </p>
                     <p className="text-sm text-[#212121] opacity-50 leading-5 tracking-[0.07px]">
-                      Ask about pricing, availability, or condition.
+                      {t('chat.askAbout')}
                     </p>
                   </div>
                 </div>
@@ -1046,7 +1058,7 @@ export function ChatPage() {
                             <button
                               onClick={() => handleReply(message)}
                               className="w-8 h-8 rounded-full bg-[rgba(33,33,33,0.05)] flex items-center justify-center hover:bg-[rgba(33,33,33,0.1)] transition-colors"
-                              title="Reply"
+                              title={t('chat.reply')}
                             >
                               <Reply className="w-4 h-4 text-[#1d1d1f]" />
                             </button>
@@ -1098,7 +1110,7 @@ export function ChatPage() {
                             <button
                               onClick={() => handleReply(message)}
                               className="w-8 h-8 rounded-full bg-[rgba(33,33,33,0.05)] flex items-center justify-center hover:bg-[rgba(33,33,33,0.1)] transition-colors"
-                              title="Reply"
+                              title={t('chat.reply')}
                             >
                               <Reply className="w-4 h-4 text-[#1d1d1f]" />
                             </button>
@@ -1107,14 +1119,14 @@ export function ChatPage() {
                                 <button
                                   onClick={() => handleReplyPrivately(message)}
                                   className="w-8 h-8 rounded-full bg-[rgba(33,33,33,0.05)] flex items-center justify-center hover:bg-[rgba(33,33,33,0.1)] transition-colors"
-                                  title="Reply Privately"
+                                  title={t('chat.replyPrivately')}
                                 >
                                   <CornerUpRight className="w-4 h-4 text-[#1d1d1f]" />
                                 </button>
                                 <button
                                   onClick={() => navigate(`/app/user/${message.sender_id}`)}
                                   className="w-8 h-8 rounded-full bg-[rgba(33,33,33,0.05)] flex items-center justify-center hover:bg-[rgba(33,33,33,0.1)] transition-colors"
-                                  title="View Profile"
+                                  title={t('chat.viewProfile')}
                                 >
                                   <MessageSquare className="w-4 h-4 text-[#1d1d1f]" />
                                 </button>
@@ -1132,7 +1144,7 @@ export function ChatPage() {
               {/* Typing Indicator */}
               {selectedChat && typingUsers[selectedChat.id]?.length > 0 && (
                 <div className="px-4 py-2 text-[13px] text-[#212121]/60 italic">
-                  {typingUsers[selectedChat.id].join(', ')} {typingUsers[selectedChat.id].length === 1 ? 'is' : 'are'} typing...
+                  {typingUsers[selectedChat.id].join(', ')} {typingUsers[selectedChat.id].length === 1 ? t('chat.isTyping') : t('chat.areTyping')}
                 </div>
               )}
 
@@ -1141,7 +1153,7 @@ export function ChatPage() {
                 <div className="mx-4 mb-2 p-3 bg-[#f5f5f5] rounded-lg border-l-4 border-[#212121] flex justify-between items-start">
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-[#212121] mb-1">
-                      Replying to {replyingTo.senderName}
+                      {t('chat.replyingTo', { name: replyingTo.senderName })}
                     </p>
                     <p className="text-[13px] text-[#212121]/70 truncate">
                       {replyingTo.content}
@@ -1164,7 +1176,7 @@ export function ChatPage() {
                     value={inputText}
                     onChange={handleInputChange}
                     onKeyPress={handleKeyPress}
-                    placeholder="Send message..."
+                    placeholder={t('chat.placeholder')}
                     className="flex-1 bg-transparent text-[15px] text-[#212121] placeholder:text-[#212121]/50 outline-none"
                   />
                 </div>
@@ -1188,8 +1200,8 @@ export function ChatPage() {
               <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <ImagePlaceholder size={48} borderRadius={24} />
               </div>
-              <h2 className="text-xl font-semibold text-[#1d1d1f] mb-2">Select a conversation</h2>
-              <p className="text-[#1d1d1f] opacity-50">Choose a conversation from the list to start chatting</p>
+              <h2 className="text-xl font-semibold text-[#1d1d1f] mb-2">{t('chat.selectConversation')}</h2>
+              <p className="text-[#1d1d1f] opacity-50">{t('chat.selectConversationHint')}</p>
             </div>
           </div>
         )}
@@ -1222,7 +1234,7 @@ export function ChatPage() {
               {/* Header */}
               <div className="flex items-center justify-between px-6 h-[60px] border-b border-[rgba(33,33,33,0.05)]">
                 <h2 className="text-[18px] font-semibold text-[#212121]">
-                  Group Members ({groupMembers.length})
+                  {t('chat.groupMembers')} ({groupMembers.length})
                 </h2>
                 <button
                   onClick={() => setShowGroupMembers(false)}
@@ -1261,7 +1273,7 @@ export function ChatPage() {
                       <div className="flex-1 text-left">
                         <p className="text-[15px] font-medium text-[#212121]">{displayName}</p>
                         {isCurrentUser && (
-                          <p className="text-[13px] text-[#212121]/50">You</p>
+                          <p className="text-[13px] text-[#212121]/50">{t('chat.you')}</p>
                         )}
                       </div>
                     </button>
@@ -1284,12 +1296,12 @@ export function ChatPage() {
 
                 {/* Title */}
                 <h2 className="text-[18px] font-semibold text-[#212121] text-center mb-2">
-                  Delete Conversation
+                  {t('chat.deleteConversation')}
                 </h2>
 
                 {/* Description */}
                 <p className="text-[15px] text-[#212121]/60 text-center mb-6">
-                  Are you sure you want to delete this conversation with <strong>{showDeleteModal.name}</strong>? This action cannot be undone.
+                  {t('chat.deleteConfirmation', { name: showDeleteModal.name })}
                 </p>
 
                 {/* Buttons */}
@@ -1299,14 +1311,14 @@ export function ChatPage() {
                     className="flex-1 px-4 py-3 text-[15px] font-semibold text-[#212121] bg-[rgba(33,33,33,0.05)] rounded-full hover:bg-[rgba(33,33,33,0.1)] transition-colors"
                     disabled={isDeleting}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                   <button
                     onClick={handleDeleteConversation}
                     className="flex-1 px-4 py-3 text-[15px] font-semibold text-white bg-red-600 rounded-full hover:bg-red-700 transition-colors disabled:opacity-50"
                     disabled={isDeleting}
                   >
-                    {isDeleting ? 'Deleting...' : 'Delete'}
+                    {isDeleting ? t('chat.deleting') : t('common.delete')}
                   </button>
                 </div>
               </div>
@@ -1321,7 +1333,7 @@ export function ChatPage() {
               {/* Header */}
               <div className="flex items-center justify-between px-6 h-[60px] border-b border-[rgba(33,33,33,0.05)]">
                 <h2 className="text-[18px] font-semibold text-[#212121]">
-                  Report Conversation
+                  {t('chat.reportConversation')}
                 </h2>
                 <button
                   onClick={() => {
@@ -1338,38 +1350,38 @@ export function ChatPage() {
               {/* Content */}
               <div className="p-6">
                 <p className="text-[15px] text-[#212121]/60 mb-4">
-                  Report <strong>{showReportModal.name}</strong> for inappropriate behavior
+                  {t('chat.reportFor', { name: showReportModal.name })}
                 </p>
 
                 {/* Reason Selection */}
                 <div className="mb-4">
                   <label className="block text-[14px] font-medium text-[#212121] mb-2">
-                    Reason for report *
+                    {t('chat.reasonLabel')}
                   </label>
                   <select
                     value={reportReason}
                     onChange={(e) => setReportReason(e.target.value)}
                     className="w-full px-4 py-3 text-[15px] border border-[rgba(33,33,33,0.1)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#212121]/20"
                   >
-                    <option value="">Select a reason</option>
-                    <option value="spam">Spam or scam</option>
-                    <option value="harassment">Harassment or bullying</option>
-                    <option value="inappropriate">Inappropriate content</option>
-                    <option value="fraud">Fraud or fake listings</option>
-                    <option value="impersonation">Impersonation</option>
-                    <option value="other">Other</option>
+                    <option value="">{t('chat.selectReason')}</option>
+                    <option value="spam">{t('chat.reportReasons.spam')}</option>
+                    <option value="harassment">{t('chat.reportReasons.harassment')}</option>
+                    <option value="inappropriate">{t('chat.reportReasons.inappropriate')}</option>
+                    <option value="fraud">{t('chat.reportReasons.fraud')}</option>
+                    <option value="impersonation">{t('chat.reportReasons.impersonation')}</option>
+                    <option value="other">{t('chat.reportReasons.other')}</option>
                   </select>
                 </div>
 
                 {/* Description */}
                 <div className="mb-6">
                   <label className="block text-[14px] font-medium text-[#212121] mb-2">
-                    Additional details (optional)
+                    {t('chat.additionalDetails')}
                   </label>
                   <textarea
                     value={reportDescription}
                     onChange={(e) => setReportDescription(e.target.value)}
-                    placeholder="Provide more context about your report..."
+                    placeholder={t('chat.provideContext')}
                     rows={4}
                     className="w-full px-4 py-3 text-[15px] border border-[rgba(33,33,33,0.1)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#212121]/20 resize-none"
                   />
@@ -1381,7 +1393,7 @@ export function ChatPage() {
                   disabled={!reportReason || isSubmittingReport}
                   className="w-full px-4 py-3 text-[15px] font-semibold text-white bg-[#212121] rounded-full hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+                  {isSubmittingReport ? t('chat.submitting') : t('chat.submitReport')}
                 </button>
               </div>
             </div>
@@ -1400,12 +1412,12 @@ export function ChatPage() {
 
                 {/* Title */}
                 <h2 className="text-[18px] font-semibold text-[#212121] text-center mb-2">
-                  Report Submitted
+                  {t('chat.reportSubmitted')}
                 </h2>
 
                 {/* Description */}
                 <p className="text-[15px] text-[#212121]/60 text-center mb-6">
-                  Thank you for your report. We will review it shortly and take appropriate action if needed.
+                  {t('chat.reportThanks')}
                 </p>
 
                 {/* Button */}
@@ -1413,7 +1425,7 @@ export function ChatPage() {
                   onClick={() => setShowReportSuccess(false)}
                   className="w-full px-4 py-3 text-[15px] font-semibold text-white bg-[#212121] rounded-full hover:bg-black transition-colors"
                 >
-                  Done
+                  {t('common.done')}
                 </button>
               </div>
             </div>

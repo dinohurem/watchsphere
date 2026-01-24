@@ -19,6 +19,7 @@ import Svg, { Path } from 'react-native-svg';
 import { api } from '@/services/api';
 import * as ImagePicker from 'expo-image-picker';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
+import { useTranslation } from 'react-i18next';
 
 // Arrow up icon for send button (matches Figma)
 function ArrowUpIcon() {
@@ -95,11 +96,12 @@ interface FormattedTextPart {
 }
 
 export default function NewChatScreen() {
+  const { t } = useTranslation();
   const { fonts } = useTheme();
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationTitle, setConversationTitle] = useState('New Chat');
+  const [conversationTitle, setConversationTitle] = useState(t('common.newChat'));
   const [chatId, setChatId] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const chatIdRef = useRef<string | null>(null);
@@ -588,7 +590,7 @@ export default function NewChatScreen() {
             {isLoading && (
               <View style={[styles.messageRow, styles.aiMessageContainer]}>
                 <View style={styles.loadingContainer}>
-                  <Text style={styles.loadingText}>One sec please...</Text>
+                  <Text style={styles.loadingText}>{t('chat.oneSecPlease')}</Text>
                 </View>
               </View>
             )}
@@ -605,7 +607,7 @@ export default function NewChatScreen() {
                   style={styles.textInput}
                   value={inputText}
                   onChangeText={setInputText}
-                  placeholder="Ask anything..."
+                  placeholder={t('chat.askAnything')}
                   placeholderTextColor="rgba(33, 33, 33, 0.5)"
                   multiline={false}
                   returnKeyType="send"

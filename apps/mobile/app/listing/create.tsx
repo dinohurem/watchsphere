@@ -9,6 +9,7 @@ import { BackArrow, ChevronDown, ChevronRight, Plus, X, Trash2, Check } from '@/
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path, Rect } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
+import { useTranslation } from 'react-i18next';
 
 // Step indicator component
 const TOTAL_STEPS = 6;
@@ -41,6 +42,7 @@ const FORM_STEPS: { key: FieldCategory | 'photos' | 'overview'; label: string }[
 ];
 
 export default function CreateListingScreen() {
+  const { t } = useTranslation();
   const { colors, fonts } = useTheme();
   const { getFieldOptions, loadListingFields, isLoadingListingFields, listingFields, error: configError, getFieldsByCategory } = useConfig();
 
@@ -181,7 +183,7 @@ export default function CreateListingScreen() {
         setFormData(orderFormData);
       } catch (error) {
         console.error('Failed to load order details:', error);
-        Alert.alert('Error', 'Failed to load order details. Please try again.');
+        Alert.alert(t('common.error'), t('listing.failedToLoadOrder'));
       } finally {
         setIsLoadingOrder(false);
       }
@@ -219,7 +221,7 @@ export default function CreateListingScreen() {
   const handlePickPhotos = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please grant access to your photo library');
+      Alert.alert(t('listing.permissionNeeded'), t('listing.grantPhotoAccess'));
       return;
     }
 
@@ -271,7 +273,7 @@ export default function CreateListingScreen() {
     const yearStr = getFormValue('year');
     const yearValue = yearStr ? parseInt(yearStr, 10) : null;
     if (!yearValue || isNaN(yearValue)) {
-      Alert.alert('Missing Field', 'Year is required for all orders');
+      Alert.alert(t('listing.missingField'), t('listing.yearRequired'));
       return;
     }
 
@@ -362,8 +364,8 @@ export default function CreateListingScreen() {
 
         console.log('Updating order:', orderId, updateData);
         await api.patch(`/orders/${orderId}`, updateData);
-        Alert.alert('Success', 'Your order has been updated!', [
-          { text: 'OK', onPress: () => router.back() }
+        Alert.alert(t('common.success'), t('listing.orderUpdated'), [
+          { text: t('common.ok'), onPress: () => router.back() }
         ]);
       } else {
         // Create new order - send all fields
@@ -385,13 +387,13 @@ export default function CreateListingScreen() {
         };
 
         await api.post('/orders', orderData);
-        Alert.alert('Success', isNewBuyOrder ? 'Your buy order has been created!' : 'Your listing has been created!', [
-          { text: 'OK', onPress: () => router.back() }
+        Alert.alert(t('common.success'), isNewBuyOrder ? t('listing.buyOrderCreated') : t('listing.listingCreated'), [
+          { text: t('common.ok'), onPress: () => router.back() }
         ]);
       }
     } catch (error: any) {
       console.error('Error saving listing:', error?.response?.data || error);
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to save listing. Please try again.');
+      Alert.alert(t('common.error'), error?.response?.data?.detail || t('listing.failedToSave'));
     } finally {
       setIsSaving(false);
     }
@@ -855,7 +857,7 @@ export default function CreateListingScreen() {
       return (
         <>
           <Text style={styles.sectionTitle}>
-            {photos.length > 0 ? 'Manage your photos' : 'Add your photos'}
+            {photos.length > 0 ? t('listing.managePhotos') : t('listing.addPhotos')}
           </Text>
 
           {photos.length === 0 ? (
@@ -867,24 +869,24 @@ export default function CreateListingScreen() {
               >
                 <ImageUploadIcon size={sp(48)} color="#212121" />
                 <Text style={styles.photoUploadText}>
-                  <Text style={styles.photoUploadTextBold}>Upload</Text> photos of your watch
+                  {t('listing.uploadPhotos')}
                 </Text>
               </TouchableOpacity>
 
               {/* Requirements */}
               <View style={styles.photoRequirements}>
-                <Text style={styles.photoRequirementsTitle}>Your photos must have</Text>
+                <Text style={styles.photoRequirementsTitle}>{t('listing.photoRequirements')}</Text>
                 <View style={styles.photoRequirementItem}>
                   <Text style={styles.photoRequirementBullet}>•</Text>
-                  <Text style={styles.photoRequirementText}>A clear, well-lit view of the watch</Text>
+                  <Text style={styles.photoRequirementText}>{t('listing.photoReq1')}</Text>
                 </View>
                 <View style={styles.photoRequirementItem}>
                   <Text style={styles.photoRequirementBullet}>•</Text>
-                  <Text style={styles.photoRequirementText}>Close-up of the dial, case, and bracelet</Text>
+                  <Text style={styles.photoRequirementText}>{t('listing.photoReq2')}</Text>
                 </View>
                 <View style={styles.photoRequirementItem}>
                   <Text style={styles.photoRequirementBullet}>•</Text>
-                  <Text style={styles.photoRequirementText}>Real condition, filters and editing should be avoided</Text>
+                  <Text style={styles.photoRequirementText}>{t('listing.photoReq3')}</Text>
                 </View>
               </View>
             </>
@@ -922,13 +924,13 @@ export default function CreateListingScreen() {
     if (stepConfig.key === 'overview') {
       return (
         <>
-          <Text style={styles.sectionTitle}>Listing overview</Text>
+          <Text style={styles.sectionTitle}>{t('listing.listingOverview')}</Text>
 
           <TouchableOpacity
             style={styles.overviewItem}
             onPress={() => setCurrentStep(1)}
           >
-            <Text style={styles.overviewItemText}>Basic information</Text>
+            <Text style={styles.overviewItemText}>{t('listing.basicInformation')}</Text>
             <ChevronRight size={sp(20)} color="#C7C7CC" />
           </TouchableOpacity>
 
@@ -936,7 +938,7 @@ export default function CreateListingScreen() {
             style={styles.overviewItem}
             onPress={() => setCurrentStep(2)}
           >
-            <Text style={styles.overviewItemText}>Caliber information</Text>
+            <Text style={styles.overviewItemText}>{t('listing.caliberInformation')}</Text>
             <ChevronRight size={sp(20)} color="#C7C7CC" />
           </TouchableOpacity>
 
@@ -944,7 +946,7 @@ export default function CreateListingScreen() {
             style={styles.overviewItem}
             onPress={() => setCurrentStep(3)}
           >
-            <Text style={styles.overviewItemText}>Case information</Text>
+            <Text style={styles.overviewItemText}>{t('listing.caseInformation')}</Text>
             <ChevronRight size={sp(20)} color="#C7C7CC" />
           </TouchableOpacity>
 
@@ -952,7 +954,7 @@ export default function CreateListingScreen() {
             style={styles.overviewItem}
             onPress={() => setCurrentStep(4)}
           >
-            <Text style={styles.overviewItemText}>Bracelet / Strap information</Text>
+            <Text style={styles.overviewItemText}>{t('listing.braceletStrapInformation')}</Text>
             <ChevronRight size={sp(20)} color="#C7C7CC" />
           </TouchableOpacity>
 
@@ -960,7 +962,7 @@ export default function CreateListingScreen() {
             style={styles.overviewItem}
             onPress={() => setCurrentStep(5)}
           >
-            <Text style={styles.overviewItemText}>Photos</Text>
+            <Text style={styles.overviewItemText}>{t('listing.photos')}</Text>
             <ChevronRight size={sp(20)} color="#C7C7CC" />
           </TouchableOpacity>
         </>
@@ -972,10 +974,10 @@ export default function CreateListingScreen() {
 
   // Get button text based on step and mode
   const getButtonText = () => {
-    if (currentStep === 6) return isEditMode ? 'Update' : 'Save';
-    if (currentStep === 5 && formData.photos.length === 0) return 'Continue';
-    if (currentStep === 5) return isEditMode ? 'Update' : 'Create Listing';
-    return 'Continue';
+    if (currentStep === 6) return isEditMode ? t('common.update') : t('common.save');
+    if (currentStep === 5 && formData.photos.length === 0) return t('common.continue');
+    if (currentStep === 5) return isEditMode ? t('common.update') : t('listing.createNewListing');
+    return t('common.continue');
   };
 
   // Check if continue button should be disabled
@@ -997,12 +999,12 @@ export default function CreateListingScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <BackArrow size={sp(24)} color="#212121" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{isEditMode ? 'Edit Listing' : 'Create new listing'}</Text>
+          <Text style={styles.headerTitle}>{isEditMode ? t('listing.editListing') : t('listing.createNewListing')}</Text>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#212121" />
           <Text style={{ marginTop: hp(16), fontFamily: fonts.medium, color: '#212121' }}>
-            Loading configuration...
+            {t('common.loadingConfiguration')}
           </Text>
         </View>
       </SafeAreaView>
@@ -1017,17 +1019,17 @@ export default function CreateListingScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <BackArrow size={sp(24)} color="#212121" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{isEditMode ? 'Edit Listing' : 'Create new listing'}</Text>
+          <Text style={styles.headerTitle}>{isEditMode ? t('listing.editListing') : t('listing.createNewListing')}</Text>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: wp(24) }}>
           <Text style={{ fontFamily: fonts.medium, color: '#212121', textAlign: 'center' }}>
-            Failed to load configuration. Please try again.
+            {t('listing.failedToLoadConfig')}
           </Text>
           <TouchableOpacity
             onPress={() => loadListingFields()}
             style={{ marginTop: hp(16), paddingVertical: hp(12), paddingHorizontal: wp(24), backgroundColor: '#212121', borderRadius: sp(8) }}
           >
-            <Text style={{ fontFamily: fonts.medium, color: '#FFFFFF' }}>Retry</Text>
+            <Text style={{ fontFamily: fonts.medium, color: '#FFFFFF' }}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -1042,7 +1044,7 @@ export default function CreateListingScreen() {
           <BackArrow size={sp(24)} color="#212121" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {currentStep === 6 ? 'Listing overview' : (isEditMode ? (isBuyOrder ? 'Edit Buy Order' : 'Edit Listing') : (isNewBuyOrder ? 'Create Buy Order' : 'Create new listing'))}
+          {currentStep === 6 ? t('listing.listingOverview') : (isEditMode ? (isBuyOrder ? t('listing.editBuyOrder') : t('listing.editListing')) : (isNewBuyOrder ? t('listing.createBuyOrder') : t('listing.createNewListing')))}
         </Text>
         {/* Placeholder to balance header when not in edit mode */}
         {!isEditMode && <View style={{ width: sp(44) }} />}
@@ -1081,7 +1083,7 @@ export default function CreateListingScreen() {
           disabled={isButtonDisabled() || isSaving}
         >
           <Text style={styles.continueButtonText}>
-            {isSaving ? 'Saving...' : getButtonText()}
+            {isSaving ? t('common.saving') : getButtonText()}
           </Text>
         </TouchableOpacity>
       </View>

@@ -9,6 +9,7 @@ import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 interface ProfileData {
   id: string;
@@ -18,6 +19,7 @@ interface ProfileData {
 }
 
 export default function AccountDetailsScreen() {
+  const { t } = useTranslation();
   const { colors, fonts } = useTheme();
   const { user, logout } = useAuthStore();
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -61,17 +63,17 @@ export default function AccountDetailsScreen() {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('common.error'), t('account.fillAllFields'));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      Alert.alert(t('common.error'), t('account.passwordsDoNotMatch'));
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert(t('common.error'), t('account.passwordMinLength'));
       return;
     }
 
@@ -81,7 +83,7 @@ export default function AccountDetailsScreen() {
         current_password: currentPassword,
         new_password: newPassword,
       });
-      Alert.alert('Success', 'Password changed successfully');
+      Alert.alert(t('common.success'), t('account.passwordChangedSuccess'));
       setShowPasswordModal(false);
       setCurrentPassword('');
       setNewPassword('');
@@ -89,8 +91,8 @@ export default function AccountDetailsScreen() {
     } catch (error: any) {
       console.error('Error changing password:', error);
       Alert.alert(
-        'Error',
-        error.response?.data?.detail || 'Failed to change password. Please check your current password and try again.'
+        t('common.error'),
+        error.response?.data?.detail || t('account.passwordChangeFailed')
       );
     } finally {
       setChangingPassword(false);
@@ -99,15 +101,15 @@ export default function AccountDetailsScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'Are you sure you want to delete your account? This will deactivate your account and you will no longer be able to log in.',
+      t('account.deleteAccount'),
+      t('account.deleteConfirmMessage'),
       [
         {
-          text: 'Cancel',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             setDeletingAccount(true);
@@ -120,8 +122,8 @@ export default function AccountDetailsScreen() {
             } catch (error: any) {
               console.error('Error deleting account:', error);
               Alert.alert(
-                'Error',
-                error.response?.data?.detail || 'Failed to delete account. Please try again.'
+                t('common.error'),
+                error.response?.data?.detail || t('account.deleteAccountFailed')
               );
             } finally {
               setDeletingAccount(false);
@@ -345,7 +347,7 @@ export default function AccountDetailsScreen() {
           >
             <BackArrow size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Account Details</Text>
+          <Text style={styles.headerTitle}>{t('account.accountDetails')}</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.text} />
@@ -364,25 +366,25 @@ export default function AccountDetailsScreen() {
         >
           <BackArrow size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Account Details</Text>
+        <Text style={styles.headerTitle}>{t('account.accountDetails')}</Text>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Title Section */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Account Details</Text>
+          <Text style={styles.title}>{t('account.accountDetails')}</Text>
           <Text style={styles.subtitle}>
-            Manage your account settings and security preferences
+            {t('account.manageSettings')}
           </Text>
         </View>
 
         {/* Account Fields */}
         <View style={styles.fieldsSection}>
           <View style={styles.fieldItem}>
-            <Text style={styles.fieldLabel}>E-mail Address</Text>
+            <Text style={styles.fieldLabel}>{t('account.emailAddress')}</Text>
             <View style={styles.fieldRow}>
               <Text style={profile?.email ? styles.fieldValue : styles.fieldPlaceholder}>
-                {profile?.email || 'No email set'}
+                {profile?.email || t('account.noEmailSet')}
               </Text>
             </View>
           </View>
@@ -391,7 +393,7 @@ export default function AccountDetailsScreen() {
             style={styles.fieldItem}
             onPress={() => setShowPasswordModal(true)}
           >
-            <Text style={styles.fieldLabel}>Change password</Text>
+            <Text style={styles.fieldLabel}>{t('account.changePassword')}</Text>
             <View style={styles.fieldRow}>
               <Text style={styles.fieldPlaceholder}>••••••••</Text>
               <ChevronRight size={20} color={colors.textSecondary} />
@@ -400,12 +402,12 @@ export default function AccountDetailsScreen() {
         </View>
 
         {/* Login with Google/Apple Section */}
-        <Text style={styles.sectionTitle}>Login with Google/Apple</Text>
+        <Text style={styles.sectionTitle}>{t('account.loginWithSocial')}</Text>
 
         <View>
           <TouchableOpacity style={styles.socialItem}>
             <View style={styles.socialIconPlaceholder} />
-            <Text style={styles.socialText}>{profile?.email || 'Not connected'}</Text>
+            <Text style={styles.socialText}>{profile?.email || t('account.notConnected')}</Text>
             <ChevronRight size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -421,11 +423,11 @@ export default function AccountDetailsScreen() {
             {deletingAccount ? (
               <ActivityIndicator size="small" color="#C93927" />
             ) : (
-              <Text style={styles.deleteButtonText}>Delete Account</Text>
+              <Text style={styles.deleteButtonText}>{t('account.deleteAccount')}</Text>
             )}
           </TouchableOpacity>
           <Text style={styles.deleteHint}>
-            This will deactivate your account. You will not be able to log in anymore.
+            {t('account.deleteHint')}
           </Text>
         </View>
       </ScrollView>
@@ -461,11 +463,11 @@ export default function AccountDetailsScreen() {
             }}
           />
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Change Password</Text>
+            <Text style={styles.modalTitle}>{t('account.changePassword')}</Text>
 
             <TextInput
               style={styles.modalInput}
-              placeholder="Current Password"
+              placeholder={t('account.currentPassword')}
               placeholderTextColor={colors.textSecondary}
               value={currentPassword}
               onChangeText={setCurrentPassword}
@@ -475,7 +477,7 @@ export default function AccountDetailsScreen() {
 
             <TextInput
               style={styles.modalInput}
-              placeholder="New Password"
+              placeholder={t('account.newPassword')}
               placeholderTextColor={colors.textSecondary}
               value={newPassword}
               onChangeText={setNewPassword}
@@ -485,7 +487,7 @@ export default function AccountDetailsScreen() {
 
             <TextInput
               style={styles.modalInput}
-              placeholder="Confirm New Password"
+              placeholder={t('account.confirmNewPassword')}
               placeholderTextColor={colors.textSecondary}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -504,7 +506,7 @@ export default function AccountDetailsScreen() {
                 }}
                 disabled={changingPassword}
               >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                <Text style={styles.modalCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -514,7 +516,7 @@ export default function AccountDetailsScreen() {
               >
                 {changingPassword && <ActivityIndicator size="small" color={colors.background} />}
                 <Text style={styles.modalSaveButtonText}>
-                  {changingPassword ? 'Saving...' : 'Save'}
+                  {changingPassword ? t('common.saving') : t('common.save')}
                 </Text>
               </TouchableOpacity>
             </View>
