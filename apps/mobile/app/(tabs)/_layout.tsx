@@ -7,10 +7,12 @@ import { Home, BarChart, WristWatch, MessageCircle, AISparkle } from '@/componen
 import { AIChatModal } from '@/components/AIChatModal';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useChat } from '@/contexts/ChatContext';
+import { useTranslation } from 'react-i18next';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 
 function CustomTabBar() {
   const { fonts } = useTheme();
+  const { t } = useTranslation();
   const pathname = usePathname();
   const [showAIChat, setShowAIChat] = useState(false);
 
@@ -19,10 +21,10 @@ function CustomTabBar() {
   const totalUnreadCount = getTotalUnreadCount();
 
   const tabs = [
-    { name: 'index', title: 'Home', icon: Home, route: '/(tabs)/' },
-    { name: 'market', title: 'Market', icon: BarChart, route: '/(tabs)/market' },
-    { name: 'chat', title: 'Chat', icon: MessageCircle, route: '/(tabs)/chat', hasNotification: totalUnreadCount > 0 },
-    { name: 'dashboard', title: 'Inventory', icon: WristWatch, route: '/(tabs)/dashboard' },
+    { name: 'index', titleKey: 'tabs.home', icon: Home, route: '/(tabs)/' },
+    { name: 'market', titleKey: 'tabs.market', icon: BarChart, route: '/(tabs)/market' },
+    { name: 'chat', titleKey: 'tabs.chat', icon: MessageCircle, route: '/(tabs)/chat', hasNotification: totalUnreadCount > 0 },
+    { name: 'dashboard', titleKey: 'tabs.inventory', icon: WristWatch, route: '/(tabs)/dashboard' },
   ];
 
   const isActive = (route: string, name: string) => {
@@ -66,7 +68,7 @@ function CustomTabBar() {
                     { fontFamily: active ? fonts.semiBold : fonts.medium },
                   ]}
                 >
-                  {tab.title}
+                  {t(tab.titleKey)}
                 </Text>
               </TouchableOpacity>
             );

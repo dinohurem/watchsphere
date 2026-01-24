@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import App from './App'
 import './index.css'
+import './i18n'
 import { initializeStorage } from './lib/storage'
 import { NotificationProvider, NotificationToast } from './contexts/NotificationContext'
 

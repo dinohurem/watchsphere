@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { Settings, Edit2, TrendingUp, TrendingDown, ChevronRight, ChevronDown, Heart, ShoppingBag, Tag, User, Star } from 'lucide-react';
 import { api } from '@/services/api';
@@ -37,6 +38,7 @@ interface ProfileData {
 }
 
 export function ProfilePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
@@ -241,11 +243,11 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{t('profile.title')}</h1>
           <button
             onClick={() => navigate('/app/settings')}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -292,7 +294,7 @@ export function ProfilePage() {
               {profile?.average_rating?.toFixed(1) || '0.0'}
             </span>
             <span className="text-sm text-gray-500">
-              ({profile?.review_count || 0} reviews)
+              ({t('profile.reviews', { count: profile?.review_count || 0 })})
             </span>
             <ChevronRight className="w-4 h-4 text-gray-400" />
           </button>
@@ -305,7 +307,7 @@ export function ProfilePage() {
             className="flex items-center justify-between w-full mb-4"
           >
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold text-gray-900">Buy Orders</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">{t('profile.buyOrders')}</h3>
               <span className="text-sm text-gray-500">({buyOrders.length})</span>
             </div>
             <div className="flex items-center gap-2">
@@ -317,7 +319,7 @@ export function ProfilePage() {
                   }}
                   className="text-sm font-medium text-gray-500 hover:text-gray-700"
                 >
-                  See All
+                  {t('profile.seeAll')}
                 </span>
               )}
               <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${buyOrdersExpanded ? '' : '-rotate-90'}`} />
@@ -344,8 +346,8 @@ export function ProfilePage() {
               <div className="bg-white rounded-2xl border border-gray-100">
                 <EmptyState
                   icon={ShoppingBag}
-                  title="No buy orders yet"
-                  subtitle="Create buy orders to see them here"
+                  title={t('profile.noBuyOrders')}
+                  subtitle={t('profile.createBuyOrders')}
                 />
               </div>
             )
@@ -359,7 +361,7 @@ export function ProfilePage() {
             className="flex items-center justify-between w-full mb-4"
           >
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold text-gray-900">Sell Orders</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">{t('profile.sellOrders')}</h3>
               <span className="text-sm text-gray-500">({sellOrders.length})</span>
             </div>
             <div className="flex items-center gap-2">
@@ -371,7 +373,7 @@ export function ProfilePage() {
                   }}
                   className="text-sm font-medium text-gray-500 hover:text-gray-700"
                 >
-                  See All
+                  {t('profile.seeAll')}
                 </span>
               )}
               <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${sellOrdersExpanded ? '' : '-rotate-90'}`} />
@@ -398,8 +400,8 @@ export function ProfilePage() {
               <div className="bg-white rounded-2xl border border-gray-100">
                 <EmptyState
                   icon={Tag}
-                  title="No sell orders yet"
-                  subtitle="Create sell orders to see them here"
+                  title={t('profile.noSellOrders')}
+                  subtitle={t('profile.createSellOrders')}
                 />
               </div>
             )
@@ -413,7 +415,7 @@ export function ProfilePage() {
             className="flex items-center justify-between w-full mb-4"
           >
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold text-gray-900">Favorites</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">{t('profile.favorites')}</h3>
               <span className="text-sm text-gray-500">({favorites.length})</span>
             </div>
             <div className="flex items-center gap-2">
@@ -425,7 +427,7 @@ export function ProfilePage() {
                   }}
                   className="text-sm font-medium text-gray-500 hover:text-gray-700"
                 >
-                  See All
+                  {t('profile.seeAll')}
                 </span>
               )}
               <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${favoritesExpanded ? '' : '-rotate-90'}`} />
@@ -452,8 +454,8 @@ export function ProfilePage() {
               <div className="bg-white rounded-2xl border border-gray-100">
                 <EmptyState
                   icon={Heart}
-                  title="No favorites yet"
-                  subtitle="Add watches to your watchlist to see them here"
+                  title={t('profile.noFavorites')}
+                  subtitle={t('profile.addToWatchlist')}
                 />
               </div>
             )

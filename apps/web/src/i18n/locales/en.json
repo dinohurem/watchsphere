@@ -1,0 +1,604 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "or": "OR",
+    "search": "Search...",
+    "noResults": "No results found",
+    "viewDetails": "View details",
+    "seeAll": "See All",
+    "copied": "Copied",
+    "copyToClipboard": "Copy to clipboard"
+  },
+  "nav": {
+    "features": "Features",
+    "howItWorks": "How It Works",
+    "markets": "Markets",
+    "contact": "Contact",
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "login": "Login",
+    "logout": "Logout",
+    "getStarted": "Get Started"
+  },
+  "auth": {
+    "login": {
+      "title": "Log in",
+      "emailLabel": "Email address",
+      "emailPlaceholder": "Please enter e-mail address",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "submitButton": "Log In",
+      "loggingIn": "Logging in...",
+      "forgotPassword": "Forgot password?",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign up",
+      "or": "OR",
+      "continueWithApple": "Continue with Apple",
+      "continueWithGoogle": "Continue with Google",
+      "signingIn": "Signing in...",
+      "failed": "Login failed. Please try again.",
+      "pendingApproval": "Your account is pending approval. Please wait for an administrator to approve your account.",
+      "googleFailed": "Google login failed. Please try again.",
+      "appleFailed": "Apple login failed. Please try again."
+    },
+    "register": {
+      "title": "Sign Up",
+      "emailLabel": "Email address",
+      "emailPlaceholder": "Please enter e-mail address",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "submitButton": "Sign Up",
+      "creatingAccount": "Creating account...",
+      "haveAccount": "Already have an account?",
+      "logIn": "Log in now",
+      "failed": "Registration failed. Please try again.",
+      "successTitle": "Account Created!",
+      "successMessage": "Your account has been created successfully. Please wait for an administrator to approve your account before you can log in.",
+      "goToLogin": "Go to Login"
+    },
+    "forgotPassword": {
+      "title": "Forgot password?",
+      "description": "Enter your email address and we'll send you instructions to reset your password.",
+      "emailLabel": "Email address",
+      "emailPlaceholder": "johndoe.watches@gmail.com",
+      "submitButton": "Send verification code",
+      "submitting": "Sending...",
+      "rememberPassword": "Remember your password?",
+      "signIn": "Sign in",
+      "emailRequired": "Please enter your email address",
+      "invalidEmail": "Please enter a valid email address"
+    },
+    "verifyCode": {
+      "title": "Enter verification code",
+      "description": "We've sent a 6-digit code to",
+      "submitButton": "Continue",
+      "submitting": "Verifying...",
+      "resend": "Resend",
+      "resending": "Sending...",
+      "didntReceive": "Didn't receive the code?",
+      "codeRequired": "Please enter the complete verification code"
+    },
+    "resetPassword": {
+      "title": "Create new password",
+      "description": "Your new password must be different from previously used passwords.",
+      "newPasswordLabel": "New password",
+      "newPasswordPlaceholder": "Enter new password",
+      "confirmPasswordLabel": "Confirm password",
+      "confirmPasswordPlaceholder": "Confirm new password",
+      "submitButton": "Reset password",
+      "submitting": "Resetting...",
+      "successTitle": "Password reset",
+      "successMessage": "Your password has been reset successfully. You can now sign in with your new password.",
+      "signIn": "Sign in",
+      "requirements": {
+        "minLength": "At least 8 characters",
+        "uppercase": "One uppercase letter",
+        "lowercase": "One lowercase letter",
+        "number": "One number"
+      },
+      "passwordsMatch": "Passwords match",
+      "passwordsDontMatch": "Passwords do not match",
+      "requirementsError": "Please ensure your password meets all requirements",
+      "matchError": "Passwords do not match"
+    },
+    "onboarding": {
+      "verifyTitle": "Verify your email",
+      "verifyDescription": "Enter the 6 digit code we sent to",
+      "yourEmail": "your email",
+      "didntGetCode": "Didn't get the code?",
+      "resendIn": "Resend in",
+      "resend": "Resend",
+      "resendFailed": "Failed to resend code",
+      "invalidCode": "Invalid verification code",
+      "personalInfoTitle": "Tell us who you are",
+      "personalInfoDescription": "Add your name, last name, and optionally your user name to personalize your experience.",
+      "firstNameLabel": "First Name",
+      "firstNamePlaceholder": "Enter your first name",
+      "lastNameLabel": "Last Name",
+      "lastNamePlaceholder": "Enter your last name",
+      "userNameLabel": "User Name",
+      "userNamePlaceholder": "Enter your user name",
+      "continue": "Continue",
+      "roleTitle": "Which best describes your role in the watch market?",
+      "roleDescription": "Choose the role that best matches your business.",
+      "fillAllFields": "Please fill in all required fields",
+      "selectRole": "Please select your role",
+      "completeFailed": "Failed to complete onboarding",
+      "completing": "Completing...",
+      "complete": "Complete",
+      "roles": {
+        "independentDealer": "Independent Watch Dealer",
+        "authorizedDealer": "Authorized Dealer (AD)"
+      },
+      "quotes": {
+        "quote1": "\"A gentleman's choice of timepiece says as much about him as does his Saville Row suit,\"",
+        "author1": "Ian Fleming",
+        "quote2": "\"You never really own a Patek Philippe. You simply look after it for the next generation\".",
+        "author2": "Patek Philippe",
+        "quote3": "\"Everyone looks at your watch and it represents who you are, your values and your personal style.\"",
+        "author3": "Kobe Bryant"
+      }
+    },
+    "handoff": {
+      "signingIn": "Signing you in...",
+      "pleaseWait": "Please wait while we authenticate your session.",
+      "failed": "Authentication Failed",
+      "invalidLink": "Invalid handoff link. Please try again from the mobile app.",
+      "error": "Failed to authenticate. Please try again from the mobile app.",
+      "goToLogin": "Go to Login",
+      "goToHome": "Go to Home"
+    }
+  },
+  "home": {
+    "latestActivity": "Latest activity",
+    "noRecentActivity": "No recent activity",
+    "quickAccess": {
+      "title": "Quick access",
+      "activityCenter": "Activity Center",
+      "aiAssistant": "Ask AI Assistant",
+      "myInventory": "My Inventory",
+      "myOrders": "My Orders",
+      "socialSearch": "Social Search"
+    },
+    "watchlist": {
+      "title": "Watchlist",
+      "empty": "Your watchlist is empty",
+      "emptyDescription": "Start tracking watches to monitor their prices and market trends"
+    },
+    "marketActivity": {
+      "title": "Market activity",
+      "empty": "No market data available",
+      "emptyDescription": "Market listings will appear here once available",
+      "watch": "Watch",
+      "chart": "Chart",
+      "change": "% Change",
+      "price": "Price",
+      "actions": "Actions",
+      "viewDetails": "View details"
+    },
+    "trendingNews": {
+      "title": "Trending news",
+      "empty": "No news available",
+      "emptyDescription": "Latest watch news will appear here"
+    },
+    "activity": {
+      "newOffer": "New offer",
+      "newListing": "New listing",
+      "priceUndercut": "Price undercut",
+      "priceAlert": "Price alert"
+    },
+    "time": {
+      "justNow": "Just now",
+      "minAgo": "{{count}} min ago",
+      "hourAgo_one": "{{count}} hour ago",
+      "hourAgo_other": "{{count}} hours ago",
+      "dayAgo_one": "{{count}} day ago",
+      "dayAgo_other": "{{count}} days ago"
+    }
+  },
+  "market": {
+    "trendingWatches": "Trending watches",
+    "marketActivity": "Market activity",
+    "categories": {
+      "hot": "Hot",
+      "gainers": "Gainers",
+      "losers": "Losers",
+      "new": "New",
+      "trending": "Trending"
+    },
+    "filters": "Filters",
+    "table": {
+      "watch": "Watch",
+      "chart": "Chart",
+      "change": "% Change",
+      "price": "Price",
+      "actions": "Actions"
+    },
+    "noMatchingFilters": "No watches match your filters",
+    "noWatchesFound": "No watches found",
+    "viewDetails": "View details",
+    "reset": "Reset",
+    "save": "Save",
+    "searchPlaceholder": "Search...",
+    "selectFilter": "Select a filter from the left to view options",
+    "filterCategories": {
+      "conditionDelivery": "Condition & Delivery Contents",
+      "caseSize": "Case size",
+      "watchType": "Watch Type",
+      "movementFunctions": "Movement & Functions",
+      "dial": "Dial",
+      "case": "Case",
+      "strapBracelet": "Strap / bracelet",
+      "clasp": "Clasp"
+    }
+  },
+  "watchDetails": {
+    "marketPrice": "Market Price",
+    "bestBid": "Best Bid",
+    "bestAsk": "Best Ask",
+    "spread": "Spread",
+    "placeBuyOrder": "Place Buy Order",
+    "placeSellOrder": "Place Sell Order",
+    "seeOrderBook": "See Order Book",
+    "buy": "Buy",
+    "sell": "Sell",
+    "makeOffer": "Make an offer",
+    "offerSent": "Offer sent",
+    "market": "Market",
+    "date": "Date",
+    "condition": "Condition",
+    "price": "Price"
+  },
+  "orderDetails": {
+    "buyOrder": "Buy Order",
+    "sellOrder": "Sell Order",
+    "sold": "Sold",
+    "completed": "Completed",
+    "condition": "Condition",
+    "caseSize": "Case size",
+    "boxPapers": "Box/papers",
+    "location": "Location",
+    "basicInfo": "Basic info",
+    "caliber": "Caliber",
+    "case": "Case",
+    "braceletStrap": "Bracelet/strap",
+    "seller": "Seller",
+    "buyer": "Buyer",
+    "edit": "Edit",
+    "markAsSold": "Mark as sold",
+    "markAsCompleted": "Mark as completed",
+    "delete": "Delete",
+    "contact": "Contact",
+    "goToInventory": "Go to Inventory",
+    "backToHomepage": "Back to homepage",
+    "goToProfile": "Go to Profile",
+    "boxPapersOptions": {
+      "both": "Original box and papers",
+      "boxOnly": "Box only",
+      "papersOnly": "Papers only",
+      "none": "None"
+    },
+    "markAsSoldModal": {
+      "title": "Mark as Sold",
+      "message": "Are you sure you want to mark this watch as sold?"
+    },
+    "deleteModal": {
+      "title": "Delete Listing"
+    },
+    "saleCompleted": "Sale completed",
+    "purchaseCompleted": "Purchase completed"
+  },
+  "chat": {
+    "title": "Chat",
+    "groupMembers": "Group Members",
+    "live": "Live",
+    "isTyping": "is typing...",
+    "areTyping": "are typing...",
+    "noConversations": "No conversations yet",
+    "directMessage": "Direct message",
+    "members": "{{count}} members",
+    "startConversation": "Start the conversation",
+    "askAbout": "Ask about pricing, availability, or condition.",
+    "replyingTo": "Replying to {{name}}",
+    "placeholder": "Send message...",
+    "deleteConversation": "Delete Conversation",
+    "reportConversation": "Report Conversation",
+    "markAsRead": "Mark as Read",
+    "report": "Report",
+    "delete": "Delete",
+    "today": "Today",
+    "selectConversation": "Select a conversation",
+    "selectConversationHint": "Choose a conversation from the list to start chatting",
+    "reply": "Reply",
+    "replyPrivately": "Reply Privately",
+    "viewProfile": "View Profile",
+    "you": "You",
+    "deleteConfirmation": "Are you sure you want to delete this conversation with {{name}}? This action cannot be undone.",
+    "deleting": "Deleting...",
+    "reportFor": "Report {{name}} for inappropriate behavior",
+    "reasonLabel": "Reason for report *",
+    "selectReason": "Select a reason",
+    "additionalDetails": "Additional details (optional)",
+    "submitReport": "Submit Report",
+    "submitting": "Submitting...",
+    "reportReasons": {
+      "spam": "Spam or scam",
+      "harassment": "Harassment or bullying",
+      "inappropriate": "Inappropriate content",
+      "fraud": "Fraud or fake listings",
+      "impersonation": "Impersonation",
+      "other": "Other"
+    },
+    "reportSubmitted": "Report Submitted",
+    "reportThanks": "Thank you for your report. We will review it shortly and take appropriate action if needed.",
+    "provideContext": "Provide more context about your report..."
+  },
+  "aiChat": {
+    "title": "AI Assistant",
+    "placeholder": "Ask anything",
+    "loading": "One sec please...",
+    "noConversations": "No conversations yet",
+    "suggestions": {
+      "authentic": "How do I know if a watch is authentic?",
+      "service": "How often should I service my watch?",
+      "popular": "What are the most popular luxury watch brands right now?"
+    }
+  },
+  "profile": {
+    "title": "My Profile",
+    "buyOrders": "Buy Orders",
+    "sellOrders": "Sell Orders",
+    "favorites": "Favorites",
+    "noBuyOrders": "No buy orders yet",
+    "createBuyOrders": "Create buy orders to see them here",
+    "noSellOrders": "No sell orders yet",
+    "createSellOrders": "Create sell orders to see them here",
+    "noFavorites": "No favorites yet",
+    "addToWatchlist": "Add watches to your watchlist to see them here",
+    "reviews": "{{count}} reviews",
+    "seeAll": "See All"
+  },
+  "settings": {
+    "title": "Profile Settings",
+    "accountDetails": "Account Details",
+    "billingSubscription": "Billing & Subscription",
+    "orders": "Orders",
+    "general": "General",
+    "termsPrivacy": "Terms and Privacy",
+    "support": "Support",
+    "pushNotifications": "Push Notifications",
+    "pushNotificationsDesc": "Receive push notifications on your device",
+    "emailNotifications": "Email Notifications",
+    "emailNotificationsDesc": "Receive updates via email",
+    "priceAlerts": "Price Alerts",
+    "priceAlertsDesc": "Get notified when watch prices change",
+    "generalSettings": "General Settings",
+    "managePreferences": "Manage your app preferences",
+    "language": "Language",
+    "appLanguage": "App Language",
+    "appLanguageDesc": "Choose your preferred language",
+    "selectLanguage": "Select Language",
+    "english": "English",
+    "german": "German",
+    "email": "E-mail Address",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "changePassword": "Change password",
+    "upgradeToPremium": "Upgrade to Premium",
+    "subscribeNow": "Subscribe Now",
+    "faq": "FAQ",
+    "faqFull": "Frequently Asked Questions",
+    "faqDescription": "Find answers to common questions about WatchSphere",
+    "helpCenter": "Help Center",
+    "demo": "Demo",
+    "disputes": "Disputes",
+    "fileDispute": "File a Dispute",
+    "reportIssue": "Report an Issue",
+    "getInTouch": "Get in Touch",
+    "contactEmail": "info@watchsphere.io",
+    "deleteAccount": "Delete Account",
+    "newDispute": "New Dispute",
+    "watchReference": "Watch Reference",
+    "brand": "Brand",
+    "model": "Model",
+    "description": "Description"
+  },
+  "landing": {
+    "hero": {
+      "badge": "The Future of Watch Trading is Here",
+      "trustedBy": "Trusted by Watch Enthusiasts",
+      "title": "The Global Marketplace for Luxury Watches",
+      "description": "Connect with verified dealers worldwide. Track prices in real-time. Buy and sell with confidence on the most transparent watch marketplace.",
+      "startTrading": "Start Trading"
+    },
+    "brands": {
+      "rolex": "ROLEX",
+      "patek": "PATEK",
+      "ap": "AP",
+      "omega": "OMEGA",
+      "cartier": "CARTIER",
+      "iwc": "IWC",
+      "panerai": "PANERAI",
+      "tudor": "TUDOR"
+    },
+    "features": {
+      "title": "Everything You Need to Trade Watches",
+      "description": "Powerful features designed for serious collectors and dealers.",
+      "realTimeData": {
+        "title": "Real-Time Market Data",
+        "description": "Track watch prices across global markets with live updates and historical charts."
+      },
+      "globalMarketplace": {
+        "title": "Global Marketplace",
+        "description": "Connect with verified dealers in US, EU, UAE, and Hong Kong markets."
+      },
+      "verifiedDealers": {
+        "title": "Verified Dealers",
+        "description": "Every dealer is vetted and verified for authenticity and reliability."
+      },
+      "trading247": {
+        "title": "24/7 Trading",
+        "description": "Place orders anytime. Our marketplace never sleeps."
+      },
+      "communityDriven": {
+        "title": "Community Driven",
+        "description": "Join thousands of watch enthusiasts sharing insights and opportunities."
+      },
+      "aiPowered": {
+        "title": "AI-Powered Insights",
+        "description": "Get personalized recommendations and market analysis from our AI assistant."
+      },
+      "transparentPricing": {
+        "title": "Transparent Pricing",
+        "description": "See bid/ask spreads and historical prices for informed decisions."
+      },
+      "watchlistAlerts": {
+        "title": "Watchlist Alerts",
+        "description": "Get notified when your favorite watches hit your target price."
+      }
+    },
+    "howItWorks": {
+      "title": "How WatchSphere Works",
+      "description": "From browsing to buying, here's your journey with WatchSphere.",
+      "step1": {
+        "label": "Step 1",
+        "title": "Create Your Account",
+        "description": "Sign up in seconds with your email. Verify your identity to unlock full trading features and connect with verified dealers worldwide."
+      },
+      "step2": {
+        "label": "Step 2",
+        "title": "Browse the Market",
+        "description": "Explore thousands of luxury watches from brands like Rolex, Patek Philippe, and Audemars Piguet. Filter by brand, condition, year, and location."
+      },
+      "step3": {
+        "label": "Step 3",
+        "title": "Place Your Order",
+        "description": "Found the perfect watch? Place a buy order at your price or accept an existing ask. Our order book ensures transparent, fair pricing."
+      },
+      "step4": {
+        "label": "Step 4",
+        "title": "Secure Transaction",
+        "description": "Complete your purchase through our secure escrow system. We handle authentication, payment, and delivery so you can buy with confidence."
+      }
+    },
+    "globalMarkets": {
+      "title": "Global Markets, One Platform",
+      "description": "Trade across major watch markets worldwide. Connect with dealers in the US, Europe, UAE, and Hong Kong.",
+      "activeListings": "active listings",
+      "locations": {
+        "sanFrancisco": "San Francisco",
+        "newYork": "New York",
+        "miami": "Miami",
+        "london": "London",
+        "zurich": "Zurich",
+        "dubai": "Dubai",
+        "beijing": "Beijing",
+        "hongKong": "Hong Kong",
+        "paris": "Paris",
+        "singapore": "Singapore"
+      },
+      "markets": {
+        "us": "United States",
+        "uk": "United Kingdom",
+        "switzerland": "Switzerland",
+        "uae": "UAE",
+        "china": "China",
+        "hongKong": "Hong Kong"
+      }
+    },
+    "testimonials": {
+      "title": "Trusted by Collectors Worldwide",
+      "description": "Join thousands of watch enthusiasts and dealers who trust WatchSphere for their luxury watch transactions.",
+      "items": {
+        "1": {
+          "quote": "WatchSphere has completely transformed how I buy and sell watches. The transparency and global reach are unmatched.",
+          "name": "Marcus Chen",
+          "title": "Watch Collector, Hong Kong"
+        },
+        "2": {
+          "quote": "As a dealer, I've expanded my business internationally thanks to WatchSphere. The platform connects me with serious buyers worldwide.",
+          "name": "Sophie Laurent",
+          "title": "Luxury Watch Dealer, Paris"
+        },
+        "3": {
+          "quote": "The real-time market data helps me make informed decisions. I've never felt more confident buying pre-owned luxury watches.",
+          "name": "James Mitchell",
+          "title": "Investor, New York"
+        },
+        "4": {
+          "quote": "Finally, a platform that understands the watch community. The verification process gives me peace of mind on every transaction.",
+          "name": "Alexandra Weber",
+          "title": "Watch Enthusiast, Zurich"
+        },
+        "5": {
+          "quote": "The order book feature is brilliant. I can see exactly where the market is moving and time my purchases perfectly.",
+          "name": "David Kim",
+          "title": "Private Collector, Singapore"
+        },
+        "6": {
+          "quote": "WatchSphere's AI assistant helped me identify the perfect Rolex for my collection. The technology is impressive.",
+          "name": "Michael Torres",
+          "title": "Watch Collector, Miami"
+        }
+      }
+    },
+    "cta": {
+      "title": "Ready to Start Trading?",
+      "description": "Join the global community of watch collectors and dealers. Create your free account today and discover a new way to buy and sell luxury watches.",
+      "button": "Get Started Free",
+      "noCreditCard": "No credit card required. Free plan includes all basic features.",
+      "stats": {
+        "users": "10K+ Active Users",
+        "volume": "$50M+ Trading Volume",
+        "countries": "50+ Countries"
+      }
+    },
+    "contact": {
+      "title": "Contact Us",
+      "description": "Get in touch with the WatchSphere team.",
+      "email": "Email",
+      "emailDesc": "We respond to all emails within 24 hours.",
+      "headquarters": "Headquarters",
+      "headquartersDesc": "Visit us in New York City.",
+      "address": "123 Watch Street, Suite 100\nNew York, NY 10001",
+      "phone": "Phone",
+      "phoneDesc": "Monday to Friday, 9am-6pm EST.",
+      "phoneNumber": "+1 (555) 123-4567",
+      "emailAddress": "info@watchsphere.io",
+      "findUsOnline": "Find us online"
+    },
+    "footer": {
+      "about": "The global marketplace for luxury watches. Buy and sell with confidence.",
+      "product": "Product",
+      "company": "Company",
+      "legal": "Legal",
+      "aboutUs": "About Us",
+      "careers": "Careers",
+      "privacyPolicy": "Privacy Policy",
+      "termsOfService": "Terms of Service",
+      "cookiePolicy": "Cookie Policy",
+      "copyright": "© {{year}} WatchSphere. All rights reserved.",
+      "contact": "Contact"
+    }
+  },
+  "legal": {
+    "privacyPolicy": "Privacy Policy",
+    "termsAndConditions": "Terms and Conditions"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "networkError": "Network error. Please check your connection.",
+    "unauthorized": "You are not authorized to perform this action.",
+    "notFound": "The requested resource was not found."
+  }
+}

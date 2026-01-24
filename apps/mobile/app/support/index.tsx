@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -134,6 +135,8 @@ function SupportItem({ title, onPress }: SupportItemProps) {
 }
 
 export default function SupportScreen() {
+  const { t } = useTranslation();
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
@@ -151,28 +154,28 @@ export default function SupportScreen() {
       <View style={styles.content}>
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Support</Text>
+          <Text style={styles.title}>{t('support.support')}</Text>
           <Text style={styles.subtitle}>
-            Get help, report issues, or file disputes
+            {t('support.supportSubtitle')}
           </Text>
         </View>
 
         {/* Support Items */}
         <View style={styles.supportList}>
           <SupportItem
-            title="Help Center"
+            title={t('support.helpCenter')}
             onPress={() => router.push('/support/help-center' as any)}
           />
           <SupportItem
-            title="Disputes"
+            title={t('support.disputes')}
             onPress={() => router.push('/support/disputes' as any)}
           />
           <SupportItem
-            title="Report an Issue"
+            title={t('support.reportIssue')}
             onPress={() => router.push('/support/report-issue' as any)}
           />
           <SupportItem
-            title="Contact Us"
+            title={t('support.contactUs')}
             onPress={() => router.push('/contact' as any)}
           />
         </View>

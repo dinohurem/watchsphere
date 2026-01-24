@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
   IconChartLine,
@@ -11,52 +12,47 @@ import {
 } from '@tabler/icons-react';
 
 export function FeaturesSection() {
+  const { t } = useTranslation();
+
   const features = [
     {
-      title: 'Real-Time Market Data',
-      description:
-        'Track watch prices across global markets with live updates and historical charts.',
+      title: t('landing.features.realTimeData.title'),
+      description: t('landing.features.realTimeData.description'),
       icon: <IconChartLine />,
     },
     {
-      title: 'Global Marketplace',
-      description:
-        'Connect with verified dealers in US, EU, UAE, and Hong Kong markets.',
+      title: t('landing.features.globalMarketplace.title'),
+      description: t('landing.features.globalMarketplace.description'),
       icon: <IconWorld />,
     },
     {
-      title: 'Verified Dealers',
-      description:
-        'Every dealer is vetted and verified for authenticity and reliability.',
+      title: t('landing.features.verifiedDealers.title'),
+      description: t('landing.features.verifiedDealers.description'),
       icon: <IconShieldCheck />,
     },
     {
-      title: '24/7 Trading',
-      description: 'Place orders anytime. Our marketplace never sleeps.',
+      title: t('landing.features.trading247.title'),
+      description: t('landing.features.trading247.description'),
       icon: <IconClockHour4 />,
     },
     {
-      title: 'Community Driven',
-      description:
-        'Join thousands of watch enthusiasts sharing insights and opportunities.',
+      title: t('landing.features.communityDriven.title'),
+      description: t('landing.features.communityDriven.description'),
       icon: <IconUsers />,
     },
     {
-      title: 'AI-Powered Insights',
-      description:
-        'Get personalized recommendations and market analysis from our AI assistant.',
+      title: t('landing.features.aiPowered.title'),
+      description: t('landing.features.aiPowered.description'),
       icon: <IconRobot />,
     },
     {
-      title: 'Transparent Pricing',
-      description:
-        'See bid/ask spreads and historical prices for informed decisions.',
+      title: t('landing.features.transparentPricing.title'),
+      description: t('landing.features.transparentPricing.description'),
       icon: <IconCurrencyDollar />,
     },
     {
-      title: 'Watchlist Alerts',
-      description:
-        'Get notified when your favorite watches hit your target price.',
+      title: t('landing.features.watchlistAlerts.title'),
+      description: t('landing.features.watchlistAlerts.description'),
       icon: <IconHeart />,
     },
   ];
@@ -65,11 +61,11 @@ export function FeaturesSection() {
     <section id="features" className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Everything You Need to Trade Watches
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+            {t('landing.features.title')}
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Powerful features designed for serious collectors and dealers.
+          <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto">
+            {t('landing.features.description')}
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 relative z-10">

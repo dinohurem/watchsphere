@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
+import { useTranslation } from 'react-i18next';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -22,6 +23,7 @@ function ChevronLeftIcon() {
 }
 
 export default function NewDisputeScreen() {
+  const { t } = useTranslation();
   const [watchReference, setWatchReference] = useState('');
   const [watchBrand, setWatchBrand] = useState('');
   const [watchModel, setWatchModel] = useState('');
@@ -30,12 +32,12 @@ export default function NewDisputeScreen() {
 
   const handleSubmit = async () => {
     if (!watchReference.trim()) {
-      Alert.alert('Error', 'Please enter a watch reference');
+      Alert.alert(t('common.error'), t('support.pleaseEnterWatchReference'));
       return;
     }
 
     if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a description of the dispute');
+      Alert.alert(t('common.error'), t('support.pleaseEnterDisputeDescription'));
       return;
     }
 
@@ -49,15 +51,15 @@ export default function NewDisputeScreen() {
       });
 
       Alert.alert(
-        'Dispute Submitted',
-        'Your dispute has been submitted successfully. Our team will review it and get back to you.',
-        [{ text: 'OK', onPress: () => router.back() }]
+        t('support.disputeSubmitted'),
+        t('support.disputeSubmittedDesc'),
+        [{ text: t('common.ok'), onPress: () => router.back() }]
       );
     } catch (error: any) {
       console.error('Error submitting dispute:', error);
       Alert.alert(
-        'Error',
-        error.response?.data?.detail || 'Failed to submit dispute. Please try again.'
+        t('common.error'),
+        error.response?.data?.detail || t('support.failedToSubmitDispute')
       );
     } finally {
       setSubmitting(false);
@@ -78,7 +80,7 @@ export default function NewDisputeScreen() {
         >
           <ChevronLeftIcon />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Dispute</Text>
+        <Text style={styles.headerTitle}>{t('support.newDispute')}</Text>
         <View style={styles.headerButton} />
       </View>
 
@@ -91,19 +93,19 @@ export default function NewDisputeScreen() {
       >
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>File a Dispute</Text>
+          <Text style={styles.title}>{t('support.fileDispute')}</Text>
           <Text style={styles.subtitle}>
-            Please provide details about the watch and the issue you're experiencing
+            {t('support.fileDisputeDesc')}
           </Text>
         </View>
 
         {/* Form */}
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Watch Reference *</Text>
+            <Text style={styles.inputLabel}>{t('support.watchReference')} *</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., 126610LN"
+              placeholder={t('support.watchReferencePlaceholder')}
               placeholderTextColor="#999999"
               value={watchReference}
               onChangeText={setWatchReference}
@@ -113,10 +115,10 @@ export default function NewDisputeScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Brand (Optional)</Text>
+            <Text style={styles.inputLabel}>{t('support.brandOptional')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., Rolex"
+              placeholder={t('support.brandPlaceholder')}
               placeholderTextColor="#999999"
               value={watchBrand}
               onChangeText={setWatchBrand}
@@ -126,10 +128,10 @@ export default function NewDisputeScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Model (Optional)</Text>
+            <Text style={styles.inputLabel}>{t('support.modelOptional')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., Submariner"
+              placeholder={t('support.modelPlaceholder')}
               placeholderTextColor="#999999"
               value={watchModel}
               onChangeText={setWatchModel}
@@ -139,10 +141,10 @@ export default function NewDisputeScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Description *</Text>
+            <Text style={styles.inputLabel}>{t('support.description')} *</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
-              placeholder="Please describe the issue in detail..."
+              placeholder={t('support.descriptionPlaceholder')}
               placeholderTextColor="#999999"
               value={description}
               onChangeText={setDescription}
@@ -166,7 +168,7 @@ export default function NewDisputeScreen() {
           {submitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.submitButtonText}>Submit Dispute</Text>
+            <Text style={styles.submitButtonText}>{t('support.submitDispute')}</Text>
           )}
         </TouchableOpacity>
       </View>

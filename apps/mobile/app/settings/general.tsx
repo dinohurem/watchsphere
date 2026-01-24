@@ -1,10 +1,11 @@
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/services/api';
 
 // Back Arrow Icon (Chevron Left)
@@ -74,13 +75,35 @@ function GlobeIcon() {
   );
 }
 
+// Check Icon
+function CheckIcon() {
+  return (
+    <Svg width={sp(20)} height={sp(20)} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M20 6L9 17L4 12"
+        stroke="#212121"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// Available languages
+const languages = [
+  { code: 'en', nameKey: 'settings.english' },
+  { code: 'de', nameKey: 'settings.german' },
+];
+
 export default function GeneralSettingsScreen() {
+  const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
-  const [selectedLanguage, setSelectedLanguage] = useState('English');
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   // Load notification settings from API
   const loadSettings = async () => {
@@ -92,10 +115,21 @@ export default function GeneralSettingsScreen() {
         setPriceAlerts(response.data.notify_price_changes ?? true);
       }
     } catch (error) {
-      console.error('Failed to load notification settings:', error);
+      console.error('Failed to load settings:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Change language using i18n
+  const handleLanguageChange = (langCode: string) => {
+    i18n.changeLanguage(langCode);
+    setShowLanguageModal(false);
+  };
+
+  const getCurrentLanguageName = () => {
+    const lang = languages.find(l => l.code === i18n.language);
+    return lang ? t(lang.nameKey) : t('settings.english');
   };
 
   useFocusEffect(
@@ -169,21 +203,21 @@ export default function GeneralSettingsScreen() {
       <View style={styles.content}>
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>General</Text>
+          <Text style={styles.title}>{t('settings.general')}</Text>
         </View>
 
         {/* Notifications Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <BellIcon />
-            <Text style={styles.sectionTitle}>Notifications</Text>
+            <Text style={styles.sectionTitle}>{t('settings.notifications')}</Text>
           </View>
 
           <View style={styles.settingsGroup}>
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Push Notifications</Text>
-                <Text style={styles.settingDescription}>Receive push notifications on your device</Text>
+                <Text style={styles.settingLabel}>{t('settings.pushNotifications')}</Text>
+                <Text style={styles.settingDescription}>{t('settings.pushNotificationsDesc')}</Text>
               </View>
               <Switch
                 value={pushNotifications}
@@ -198,8 +232,8 @@ export default function GeneralSettingsScreen() {
 
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Email Notifications</Text>
-                <Text style={styles.settingDescription}>Receive updates via email</Text>
+                <Text style={styles.settingLabel}>{t('settings.emailNotifications')}</Text>
+                <Text style={styles.settingDescription}>{t('settings.emailNotificationsDesc')}</Text>
               </View>
               <Switch
                 value={emailNotifications}
@@ -214,8 +248,8 @@ export default function GeneralSettingsScreen() {
 
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Price Alerts</Text>
-                <Text style={styles.settingDescription}>Get notified when watch prices change</Text>
+                <Text style={styles.settingLabel}>{t('settings.priceAlerts')}</Text>
+                <Text style={styles.settingDescription}>{t('settings.priceAlertsDesc')}</Text>
               </View>
               <Switch
                 value={priceAlerts}
@@ -232,26 +266,71 @@ export default function GeneralSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <GlobeIcon />
-            <Text style={styles.sectionTitle}>Language</Text>
+            <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
           </View>
 
           <View style={styles.settingsGroup}>
             <TouchableOpacity
               style={styles.languageRow}
               activeOpacity={0.7}
-              onPress={() => {
-                // TODO: Open language picker modal
-              }}
+              onPress={() => setShowLanguageModal(true)}
             >
-              <Text style={styles.settingLabel}>App Language</Text>
+              <Text style={styles.settingLabel}>{t('settings.appLanguage')}</Text>
               <View style={styles.languageValue}>
-                <Text style={styles.selectedLanguage}>{selectedLanguage}</Text>
+                <Text style={styles.selectedLanguage}>{getCurrentLanguageName()}</Text>
                 <ChevronRightIcon />
               </View>
             </TouchableOpacity>
           </View>
         </View>
       </View>
+
+      {/* Language Selection Modal */}
+      <Modal
+        visible={showLanguageModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLanguageModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowLanguageModal(false)}
+        >
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>{t('settings.selectLanguage')}</Text>
+            <View style={styles.languageOptions}>
+              {languages.map((lang) => (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={[
+                    styles.languageOption,
+                    i18n.language === lang.code && styles.languageOptionSelected,
+                  ]}
+                  onPress={() => handleLanguageChange(lang.code)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.languageOptionText,
+                      i18n.language === lang.code && styles.languageOptionTextSelected,
+                    ]}
+                  >
+                    {t(lang.nameKey)}
+                  </Text>
+                  {i18n.language === lang.code && <CheckIcon />}
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowLanguageModal(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -357,6 +436,64 @@ const styles = StyleSheet.create({
   selectedLanguage: {
     fontFamily: 'HankenGrotesk_500Medium',
     fontSize: fp(15),
+    fontWeight: '500',
+    color: 'rgba(33, 33, 33, 0.6)',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: wp(24),
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: sp(20),
+    padding: sp(24),
+    width: '100%',
+    maxWidth: sp(340),
+  },
+  modalTitle: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(18),
+    fontWeight: '600',
+    color: '#1D1D1F',
+    marginBottom: hp(16),
+    textAlign: 'center',
+  },
+  languageOptions: {
+    gap: hp(8),
+  },
+  languageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: hp(16),
+    paddingHorizontal: wp(16),
+    borderRadius: sp(12),
+    backgroundColor: '#FAFAFA',
+  },
+  languageOptionSelected: {
+    backgroundColor: 'rgba(33, 33, 33, 0.08)',
+  },
+  languageOptionText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(16),
+    fontWeight: '500',
+    color: '#1D1D1F',
+  },
+  languageOptionTextSelected: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontWeight: '600',
+  },
+  modalCancelButton: {
+    marginTop: hp(16),
+    paddingVertical: hp(14),
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(16),
     fontWeight: '500',
     color: 'rgba(33, 33, 33, 0.6)',
   },

@@ -1,7 +1,9 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/services/api';
 import watchsphereLogo from '@/assets/watchsphere-logo-full.svg';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 // Check Icon Component
 function CheckIcon({ color }: { color: string }) {
@@ -63,6 +65,7 @@ function EyeOffIcon() {
 }
 
 export function ResetPasswordPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email || '';
@@ -99,11 +102,11 @@ export function ResetPasswordPage() {
 
     if (!canSubmit) {
       if (!isPasswordValid) {
-        setError('Please ensure your password meets all requirements');
+        setError(t('auth.resetPassword.requirementsError'));
         return;
       }
       if (!passwordsMatch) {
-        setError('Passwords do not match');
+        setError(t('auth.resetPassword.matchError'));
         return;
       }
       return;
@@ -120,7 +123,7 @@ export function ResetPasswordPage() {
 
       setSuccess(true);
     } catch (err: any) {
-      const message = err.response?.data?.detail || 'Failed to reset password. Please try again.';
+      const message = err.response?.data?.detail || t('errors.generic');
       setError(message);
     } finally {
       setLoading(false);
@@ -139,15 +142,16 @@ export function ResetPasswordPage() {
   // Success screen
   if (success) {
     return (
-      <div className="min-h-screen flex bg-white">
-        <div className="flex-1 flex flex-col relative">
-          {/* Logo */}
-          <div className="absolute top-5 left-10">
+      <div className="min-h-screen flex flex-col lg:flex-row bg-white">
+        <div className="flex-1 flex flex-col relative min-h-screen lg:min-h-0">
+          {/* Header with Logo and Language Switcher */}
+          <div className="flex items-center justify-between px-5 sm:px-10 py-5">
             <img src={watchsphereLogo} alt="WatchSphere" className="h-[22px]" />
+            <LanguageSwitcher />
           </div>
 
           {/* Success Content */}
-          <div className="flex-1 flex flex-col items-center justify-center px-8">
+          <div className="flex-1 flex flex-col items-center justify-center px-5 sm:px-8 py-8">
             <div className="w-full max-w-[450px] flex flex-col gap-6 text-center">
               {/* Success Icon */}
               <div className="w-16 h-16 bg-[#4AA078] rounded-full flex items-center justify-center mx-auto">
@@ -162,18 +166,18 @@ export function ResetPasswordPage() {
                 </svg>
               </div>
 
-              <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
-                Password reset
+              <h1 className="text-[28px] sm:text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
+                {t('auth.resetPassword.successTitle')}
               </h1>
-              <p className="text-[17px] text-[rgba(29,29,31,0.6)] leading-[22px] tracking-[-0.43px]">
-                Your password has been reset successfully. You can now sign in with your new password.
+              <p className="text-[15px] sm:text-[17px] text-[rgba(29,29,31,0.6)] leading-[22px] tracking-[-0.43px]">
+                {t('auth.resetPassword.successMessage')}
               </p>
 
               <button
                 onClick={() => navigate('/login')}
                 className="w-full h-[44px] bg-[#1d1d1f] text-white text-[16px] font-semibold rounded-full hover:bg-[#1d1d1f]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1d1d1f] transition-colors tracking-[0.08px] leading-5 mt-4"
               >
-                Sign in
+                {t('auth.resetPassword.signIn')}
               </button>
             </div>
           </div>
@@ -191,16 +195,17 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-white">
       {/* Left Side - Form */}
-      <div className="flex-1 flex flex-col relative">
-        {/* Logo */}
-        <div className="absolute top-5 left-10">
+      <div className="flex-1 flex flex-col relative min-h-screen lg:min-h-0">
+        {/* Header with Logo and Language Switcher */}
+        <div className="flex items-center justify-between px-5 sm:px-10 py-5">
           <img src={watchsphereLogo} alt="WatchSphere" className="h-[22px]" />
+          <LanguageSwitcher />
         </div>
 
         {/* Back Button */}
-        <div className="absolute top-5 left-10 mt-12">
+        <div className="px-5 sm:px-10">
           <button
             onClick={() => navigate('/verify-reset-code', { state: { email } })}
             className="w-11 h-11 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors"
@@ -218,15 +223,15 @@ export function ResetPasswordPage() {
         </div>
 
         {/* Form Container */}
-        <div className="flex-1 flex flex-col items-center justify-center px-8">
-          <div className="w-full max-w-[450px] flex flex-col gap-8">
+        <div className="flex-1 flex flex-col items-center justify-center px-5 sm:px-8 py-8">
+          <div className="w-full max-w-[450px] flex flex-col gap-6 sm:gap-8">
             {/* Header */}
             <div>
-              <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal mb-2">
-                Create new password
+              <h1 className="text-[28px] sm:text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal mb-2">
+                {t('auth.resetPassword.title')}
               </h1>
-              <p className="text-[17px] text-[rgba(29,29,31,0.6)] leading-[22px] tracking-[-0.43px]">
-                Your new password must be different from previously used passwords.
+              <p className="text-[15px] sm:text-[17px] text-[rgba(29,29,31,0.6)] leading-[22px] tracking-[-0.43px]">
+                {t('auth.resetPassword.description')}
               </p>
             </div>
 
@@ -243,7 +248,7 @@ export function ResetPasswordPage() {
                 {/* New Password Field */}
                 <div className="flex flex-col gap-2">
                   <label htmlFor="password" className="text-[15px] font-semibold text-[#1d1d1f] leading-5 tracking-[0.075px]">
-                    New password<span className="text-red-500">*</span>
+                    {t('auth.resetPassword.newPasswordLabel')}<span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -256,7 +261,7 @@ export function ResetPasswordPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full h-[48px] px-4 pr-12 border border-[rgba(29,29,31,0.05)] rounded-full text-[15px] text-[#1d1d1f] placeholder:text-[rgba(29,29,31,0.4)] leading-5 tracking-[0.075px] focus:outline-none focus:border-2 focus:border-[#1d1d1f]"
-                      placeholder="Enter new password"
+                      placeholder={t('auth.resetPassword.newPasswordPlaceholder')}
                     />
                     <button
                       type="button"
@@ -270,16 +275,16 @@ export function ResetPasswordPage() {
 
                 {/* Password Requirements */}
                 <div className="flex flex-col gap-2 py-1">
-                  {renderPasswordRequirement(hasMinLength, 'At least 8 characters')}
-                  {renderPasswordRequirement(hasUppercase, 'One uppercase letter')}
-                  {renderPasswordRequirement(hasLowercase, 'One lowercase letter')}
-                  {renderPasswordRequirement(hasNumber, 'One number')}
+                  {renderPasswordRequirement(hasMinLength, t('auth.resetPassword.requirements.minLength'))}
+                  {renderPasswordRequirement(hasUppercase, t('auth.resetPassword.requirements.uppercase'))}
+                  {renderPasswordRequirement(hasLowercase, t('auth.resetPassword.requirements.lowercase'))}
+                  {renderPasswordRequirement(hasNumber, t('auth.resetPassword.requirements.number'))}
                 </div>
 
                 {/* Confirm Password Field */}
                 <div className="flex flex-col gap-2">
                   <label htmlFor="confirmPassword" className="text-[15px] font-semibold text-[#1d1d1f] leading-5 tracking-[0.075px]">
-                    Confirm password<span className="text-red-500">*</span>
+                    {t('auth.resetPassword.confirmPasswordLabel')}<span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -291,7 +296,7 @@ export function ResetPasswordPage() {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       className="w-full h-[48px] px-4 pr-12 border border-[rgba(29,29,31,0.05)] rounded-full text-[15px] text-[#1d1d1f] placeholder:text-[rgba(29,29,31,0.4)] leading-5 tracking-[0.075px] focus:outline-none focus:border-2 focus:border-[#1d1d1f]"
-                      placeholder="Confirm new password"
+                      placeholder={t('auth.resetPassword.confirmPasswordPlaceholder')}
                     />
                     <button
                       type="button"
@@ -305,7 +310,7 @@ export function ResetPasswordPage() {
                     <div className="flex items-center gap-1.5 mt-1">
                       <CheckIcon color={passwordsMatch ? '#4AA078' : '#FF3B30'} />
                       <span className={`text-[13px] ${passwordsMatch ? 'text-[#4AA078]' : 'text-[#FF3B30]'}`}>
-                        {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
+                        {passwordsMatch ? t('auth.resetPassword.passwordsMatch') : t('auth.resetPassword.passwordsDontMatch')}
                       </span>
                     </div>
                   )}
@@ -318,7 +323,7 @@ export function ResetPasswordPage() {
                 disabled={!canSubmit || loading}
                 className="w-full h-[44px] bg-[#1d1d1f] text-white text-[16px] font-semibold rounded-full hover:bg-[#1d1d1f]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1d1d1f] disabled:bg-[rgba(33,33,33,0.05)] disabled:text-[rgba(29,29,31,0.4)] transition-colors tracking-[0.08px] leading-5"
               >
-                {loading ? 'Resetting...' : 'Reset password'}
+                {loading ? t('auth.resetPassword.submitting') : t('auth.resetPassword.submitButton')}
               </button>
             </form>
           </div>

@@ -9,6 +9,7 @@ import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
 import { LogoIcon } from '@/components/LogoIcon';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
+import { useTranslation } from 'react-i18next';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const HORIZONTAL_PADDING = wp(16);
@@ -197,6 +198,7 @@ interface InventoryWatch {
 }
 
 export default function DashboardScreen() {
+  const { t } = useTranslation();
   // Start with empty array - data will be loaded from API
   const [inventory, setInventory] = useState<InventoryWatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -329,7 +331,7 @@ export default function DashboardScreen() {
         {/* Sold Badge */}
         {isSold(watch.status) && (
           <View style={styles.soldBadge}>
-            <Text style={styles.soldBadgeText}>Sold</Text>
+            <Text style={styles.soldBadgeText}>{t('orders.sold')}</Text>
           </View>
         )}
       </View>
@@ -346,7 +348,7 @@ export default function DashboardScreen() {
           {/* Price Row */}
           <View style={styles.watchPriceRow}>
             <View style={styles.priceContainer}>
-              <Text style={styles.soldOrderLabel}>Sell order:</Text>
+              <Text style={styles.soldOrderLabel}>{t('inventory.sellOrder')}</Text>
               <Text style={styles.soldOrderPrice}>{watch.soldOrder}</Text>
             </View>
             <View style={[
@@ -383,7 +385,7 @@ export default function DashboardScreen() {
                   } as any);
                 }}
               >
-                <Text style={styles.sellNowButtonText}>Sell now {watch.sellNowPrice}</Text>
+                <Text style={styles.sellNowButtonText}>{t('inventory.sellNow')} {watch.sellNowPrice}</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -404,7 +406,7 @@ export default function DashboardScreen() {
                 }}
               >
                 <SmallWatchIcon />
-                <Text style={styles.noBuyOrdersText}>No buy orders</Text>
+                <Text style={styles.noBuyOrdersText}>{t('inventory.noBuyOrders')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -419,9 +421,9 @@ export default function DashboardScreen() {
         <WatchIcon />
       </View>
       <View style={styles.emptyTextContainer}>
-        <Text style={styles.emptyTitle}>Create new listings here</Text>
+        <Text style={styles.emptyTitle}>{t('inventory.createNewListings')}</Text>
         <Text style={styles.emptySubtitle}>
-          Listing currently empty, list your watches and manage them all in one place.
+          {t('inventory.listingEmpty')}
         </Text>
       </View>
       <TouchableOpacity
@@ -429,7 +431,7 @@ export default function DashboardScreen() {
         onPress={handleCreateListing}
         activeOpacity={0.8}
       >
-        <Text style={styles.createListingButtonText}>Create new listing</Text>
+        <Text style={styles.createListingButtonText}>{t('inventory.createNewListing')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -440,11 +442,11 @@ export default function DashboardScreen() {
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statValue}>€{totalValue.toLocaleString()}</Text>
-          <Text style={styles.statLabel}>Total inventory value</Text>
+          <Text style={styles.statLabel}>{t('inventory.totalInventoryValue')}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statValue}>{inventory.length}</Text>
-          <Text style={styles.statLabel}>Listed watches</Text>
+          <Text style={styles.statLabel}>{t('inventory.listedWatches')}</Text>
         </View>
       </View>
 
@@ -453,7 +455,7 @@ export default function DashboardScreen() {
         <SearchIcon />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search inventory"
+          placeholder={t('inventory.searchInventory')}
           placeholderTextColor="rgba(33, 33, 33, 0.5)"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -464,7 +466,7 @@ export default function DashboardScreen() {
       <View style={styles.watchGrid}>
         {filteredInventory.length === 0 ? (
           <View style={styles.noResultsContainer}>
-            <Text style={styles.noResultsText}>No watches match your search</Text>
+            <Text style={styles.noResultsText}>{t('inventory.noWatchesMatch')}</Text>
           </View>
         ) : (
           <View style={styles.watchGridContainer}>
@@ -482,7 +484,7 @@ export default function DashboardScreen() {
         {inventory.length === 0 ? (
           // Empty state header with centered title
           <View style={styles.headerEmpty}>
-            <Text style={styles.headerTitleCentered}>Inventory</Text>
+            <Text style={styles.headerTitleCentered}>{t('inventory.inventory')}</Text>
             <TouchableOpacity
               style={styles.addButton}
               onPress={handleCreateListing}
@@ -494,7 +496,7 @@ export default function DashboardScreen() {
         ) : (
           // Populated state header with left-aligned title
           <View style={styles.headerPopulated}>
-            <Text style={styles.headerTitleLeft}>Inventory</Text>
+            <Text style={styles.headerTitleLeft}>{t('inventory.inventory')}</Text>
             <TouchableOpacity
               style={styles.addButton}
               onPress={handleCreateListing}

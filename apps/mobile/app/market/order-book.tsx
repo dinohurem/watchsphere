@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Svg, { Path } from 'react-native-svg';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
@@ -92,6 +93,7 @@ const MOCK_ORDER_BOOK: OrderBookData = {
 };
 
 export default function OrderBookScreen() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ reference: string; brand?: string; model?: string; watchId?: string }>();
   const [selectedTab, setSelectedTab] = useState<'Buy' | 'Sell'>('Sell');
   const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
@@ -217,7 +219,7 @@ export default function OrderBookScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Order Book</Text>
+        <Text style={styles.headerTitle}>{t('orderBook.title')}</Text>
         <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
           <CloseIcon />
         </TouchableOpacity>
@@ -236,13 +238,13 @@ export default function OrderBookScreen() {
             style={[styles.tab, selectedTab === 'Buy' && styles.tabActive]}
             onPress={() => setSelectedTab('Buy')}
           >
-            <Text style={[styles.tabText, selectedTab === 'Buy' && styles.tabTextActive]}>Buy</Text>
+            <Text style={[styles.tabText, selectedTab === 'Buy' && styles.tabTextActive]}>{t('orderBook.buy')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, selectedTab === 'Sell' && styles.tabActive]}
             onPress={() => setSelectedTab('Sell')}
           >
-            <Text style={[styles.tabText, selectedTab === 'Sell' && styles.tabTextActive]}>Sell</Text>
+            <Text style={[styles.tabText, selectedTab === 'Sell' && styles.tabTextActive]}>{t('orderBook.sell')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -251,10 +253,10 @@ export default function OrderBookScreen() {
       <View style={styles.tableContainer}>
         {/* Table Header */}
         <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderCell, styles.marketCell]}>Market</Text>
-          <Text style={[styles.tableHeaderCell, styles.dateCell]}>Date</Text>
-          <Text style={[styles.tableHeaderCell, styles.conditionCell]}>Condition</Text>
-          <Text style={[styles.tableHeaderCell, styles.priceCell]}>Price</Text>
+          <Text style={[styles.tableHeaderCell, styles.marketCell]}>{t('orderBook.market')}</Text>
+          <Text style={[styles.tableHeaderCell, styles.dateCell]}>{t('orderBook.date')}</Text>
+          <Text style={[styles.tableHeaderCell, styles.conditionCell]}>{t('orderBook.condition')}</Text>
+          <Text style={[styles.tableHeaderCell, styles.priceCell]}>{t('orderBook.price')}</Text>
         </View>
 
         {/* Table Body */}
@@ -266,7 +268,7 @@ export default function OrderBookScreen() {
           contentContainerStyle={styles.tableContent}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No {selectedTab.toLowerCase()} orders available</Text>
+              <Text style={styles.emptyText}>{selectedTab === 'Buy' ? t('orderBook.noBuyOrders') : t('orderBook.noSellOrders')}</Text>
             </View>
           }
         />
@@ -276,21 +278,21 @@ export default function OrderBookScreen() {
       {orderBook && (orderBook.lowest_ask || orderBook.highest_bid) && (
         <View style={styles.summaryFooter}>
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Best Bid</Text>
+            <Text style={styles.summaryLabel}>{t('orderBook.bestBid')}</Text>
             <Text style={styles.summaryValue}>
               {orderBook.highest_bid ? formatPrice(orderBook.highest_bid) : '-'}
             </Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Best Ask</Text>
+            <Text style={styles.summaryLabel}>{t('orderBook.bestAsk')}</Text>
             <Text style={styles.summaryValue}>
               {orderBook.lowest_ask ? formatPrice(orderBook.lowest_ask) : '-'}
             </Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Spread</Text>
+            <Text style={styles.summaryLabel}>{t('orderBook.spread')}</Text>
             <Text style={styles.summaryValue}>
               {orderBook.spread ? formatPrice(orderBook.spread) : '-'}
             </Text>

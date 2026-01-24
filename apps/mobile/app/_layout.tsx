@@ -2,6 +2,9 @@
 // This import has a side-effect that sets up AsyncStorage for Zustand persist
 import '@/lib/storage';
 
+// Initialize i18n for internationalization
+import '@/i18n';
+
 import { useEffect, useState, useCallback } from 'react';
 import { Stack, router } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
