@@ -9,6 +9,7 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.order import Order, OrderType, OrderStatus
 from app.models.whatsapp_import import ExtractedWatchListing
+from app.services.ai_chat import generate_ai_response, identify_watch_from_reference, extract_references_from_text
 
 router = APIRouter()
 
@@ -456,52 +457,33 @@ def detect_watch_reference(text: str) -> Optional[WatchReference]:
     return WatchReference(brand=brand, model=model, reference=reference)
 
 
-def detect_intent(text: str) -> Optional[str]:
-    """Detect if user wants to buy or sell"""
-    text_lower = text.lower()
-
-    buy_keywords = ["buy", "buying", "purchase", "looking for", "want to get", "interested in buying", "where can i find", "looking to buy", "want a", "i need", "available", "in stock", "any available", "is available", "can i get", "can i find", "do you have", "have any", "got any", "i want to buy"]
-    sell_keywords = ["sell", "selling", "list", "want to sell", "looking to sell", "get rid of", "i want to sell"]
-    info_keywords = ["price", "worth", "value", "market", "trend", "how much", "what's the", "tell me about", "info about", "information", "just want information"]
-
-    for keyword in sell_keywords:
-        if keyword in text_lower:
-            return "sell"
-
-    for keyword in buy_keywords:
-        if keyword in text_lower:
-            return "buy"
-
-    for keyword in info_keywords:
-        if keyword in text_lower:
-            return "info"
-
-    return None
-
-
-def detect_affirmative_response(text: str) -> bool:
-    """Detect if user is giving an affirmative response"""
-    text_lower = text.lower().strip()
-    affirmative_keywords = ["yes", "yeah", "yep", "sure", "ok", "okay", "please", "go ahead", "do it", "sounds good", "great", "perfect", "absolutely", "definitely", "of course", "yes please", "yea", "ya", "yup"]
-
-    for keyword in affirmative_keywords:
-        if text_lower == keyword or text_lower.startswith(keyword + " ") or text_lower.startswith(keyword + ",") or text_lower.startswith(keyword + "."):
-            return True
-    return False
-
-
 @router.post("/assistant/query", response_model=AssistantQueryResponse)
 async def query_assistant(
     request: AssistantQueryRequest,
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    """Query the AI assistant with watch-related data context"""
+    """Query the AI assistant using real LLM with watch-related data context"""
 
     message = request.message
-    intent = request.intent or detect_intent(message)
-    watch_ref = detect_watch_reference(message)
 
-    # If no watch detected in current message, check conversation history for context
+    # Build conversation history for LLM
+    conversation_history = []
+    if request.conversation_history:
+        for msg in request.conversation_history:
+            conversation_history.append({
+                "content": msg.content,
+                "is_ai": not msg.is_user
+            })
+
+    # Use the real AI service to generate response
+    ai_response = await generate_ai_response(
+        user_message=message,
+        conversation_history=conversation_history,
+        include_market_context=True
+    )
+
+    # Try to detect watch reference for metadata (still useful for the response object)
+    watch_ref = detect_watch_reference(message)
     if not watch_ref and request.conversation_history:
         for prev_msg in request.conversation_history:
             if prev_msg.is_user:
@@ -509,58 +491,7 @@ async def query_assistant(
                 if watch_ref:
                     break
 
-    # If no intent detected but user gave an affirmative response, check conversation history for context
-    if not intent and detect_affirmative_response(message) and request.conversation_history:
-        # Check if the last AI message asked about buy/sell/info
-        for prev_msg in reversed(request.conversation_history):
-            if not prev_msg.is_user:
-                msg_lower = prev_msg.content.lower()
-                # Check if AI asked about buying or selling
-                if "are you looking to buy or sell" in msg_lower or "would you like to buy" in msg_lower:
-                    # Default to info if just saying yes to the question
-                    intent = "info"
-                    break
-                elif "add this watch to your watchlist" in msg_lower or "add it to your watchlist" in msg_lower:
-                    intent = "info"
-                    break
-            else:
-                # Check if user previously mentioned buy/sell intent
-                user_intent = detect_intent(prev_msg.content)
-                if user_intent:
-                    intent = user_intent
-                    break
-
-    # If no watch detected and no clear intent, ask for clarification
-    if not watch_ref and not intent:
-        return {
-            "detected_intent": None,
-            "detected_watches": [],
-            "market_data": None,
-            "available_sellers": [],
-            "suggested_response": "I'd be happy to help you with watch information. Could you tell me which specific watch model or brand you're interested in? For example, you could ask about a Rolex Submariner, Patek Philippe Nautilus, or any other timepiece.",
-            "requires_clarification": False,
-            "clarification_options": [],
-        }
-
-    # If watch detected but no clear intent, ask if they want to buy or sell
-    if watch_ref and not intent:
-        watch_name = f"{watch_ref.brand}"
-        if watch_ref.model:
-            watch_name += f" {watch_ref.model}"
-        if watch_ref.reference:
-            watch_name += f" ({watch_ref.reference})"
-
-        return {
-            "detected_intent": None,
-            "detected_watches": [watch_ref],
-            "market_data": None,
-            "available_sellers": [],
-            "suggested_response": f"I see you're interested in the **{watch_name}**. Are you looking to buy or sell this watch?",
-            "requires_clarification": True,
-            "clarification_options": ["I want to buy", "I want to sell", "Just want information"],
-        }
-
-    # Gather market data
+    # Gather market data for the response object
     market_data = MarketData()
     available_sellers: List[SellerInfo] = []
 
@@ -571,7 +502,6 @@ async def query_assistant(
 
         # Search active orders in database
         try:
-            # Build MongoDB query for orders
             order_query = {
                 "order_type": OrderType.SELL.value,
                 "status": OrderStatus.ACTIVE.value,
@@ -591,8 +521,7 @@ async def query_assistant(
                     market_data.min_price = min(prices)
                     market_data.max_price = max(prices)
 
-                # Add sellers from orders
-                for order in orders[:5]:  # Top 5 sellers
+                for order in orders[:5]:
                     user = None
                     if order.user_id:
                         try:
@@ -624,8 +553,7 @@ async def query_assistant(
 
             market_data.whatsapp_listings_count = len(wa_listings)
 
-            # Add sellers from WhatsApp
-            for listing in wa_listings[:10]:  # Top 10 WhatsApp contacts
+            for listing in wa_listings[:10]:
                 if listing.seller_name:
                     available_sellers.append(SellerInfo(
                         name=listing.seller_name,
@@ -638,54 +566,13 @@ async def query_assistant(
         except Exception as e:
             print(f"Error searching WhatsApp listings: {e}")
 
-    # Generate response based on intent
-    if intent == "buy":
-        if available_sellers:
-            watch_name = f"{watch_ref.brand if watch_ref else 'the watch'}"
-            if watch_ref and watch_ref.model:
-                watch_name += f" {watch_ref.model}"
-
-            seller_list = []
-            for seller in available_sellers[:5]:
-                price_str = f"€{seller.price:,.0f}" if seller.price else "Price on request"
-                source_label = "📱 WhatsApp" if seller.source == "whatsapp" else "🏪 Market"
-                seller_list.append(f"• **{seller.name}** - {price_str} ({source_label})")
-
-            response = f"Great! I found some sellers for the **{watch_name}**:\n\n" + "\n".join(seller_list)
-
-            if market_data.avg_price:
-                response += f"\n\n**Market Overview:**\n• Average price: €{market_data.avg_price:,.0f}\n• Range: €{market_data.min_price:,.0f} - €{market_data.max_price:,.0f}"
-
-            response += "\n\nWould you like me to help you connect with any of these sellers?"
-        else:
-            response = f"I don't have any active listings for the **{watch_ref.brand if watch_ref else 'watch'}** at the moment, but I can keep you posted if anything comes up. Would you like to add this watch to your watchlist?"
-
-    elif intent == "sell":
-        watch_name = f"{watch_ref.brand if watch_ref else 'your watch'}"
-        if watch_ref and watch_ref.model:
-            watch_name += f" {watch_ref.model}"
-
-        if market_data.avg_price:
-            response = f"Looking to sell your **{watch_name}**? Here's what I know about the current market:\n\n**Current Market:**\n• Average selling price: €{market_data.avg_price:,.0f}\n• Price range: €{market_data.min_price:,.0f} - €{market_data.max_price:,.0f}\n• Active listings: {market_data.active_orders_count}\n\nWould you like to create a sell order? I can help you list it at a competitive price."
-        else:
-            response = f"I can help you list your **{watch_name}** for sale. To create a listing, you'll need to provide:\n\n1. Watch condition\n2. Box & papers availability\n3. Your asking price\n4. Photos\n\nWould you like to start creating a listing?"
-
-    else:  # info intent
-        watch_name = f"{watch_ref.brand if watch_ref else 'the watch'}"
-        if watch_ref and watch_ref.model:
-            watch_name += f" {watch_ref.model}"
-
-        if market_data.avg_price:
-            response = f"Here's what I know about the **{watch_name}**:\n\n**Market Data:**\n• Average price: €{market_data.avg_price:,.0f}\n• Price range: €{market_data.min_price:,.0f} - €{market_data.max_price:,.0f}\n• Active listings: {market_data.active_orders_count}\n• WhatsApp market activity: {market_data.whatsapp_listings_count} recent mentions"
-        else:
-            response = f"I have the **{watch_name}** on record, but I don't have current market data available. Would you like me to search for more information or add it to your watchlist?"
-
+    # Return the AI-generated response along with metadata
     return {
-        "detected_intent": intent,
+        "detected_intent": None,  # LLM handles intent naturally
         "detected_watches": [watch_ref] if watch_ref else [],
         "market_data": market_data if watch_ref else None,
         "available_sellers": available_sellers,
-        "suggested_response": response,
+        "suggested_response": ai_response,
         "requires_clarification": False,
         "clarification_options": [],
     }
