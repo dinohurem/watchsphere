@@ -15,6 +15,7 @@ from app.services.storage import (
     upload_market_image,
     upload_chat_image,
     upload_watchlist_image,
+    upload_group_avatar,
     delete_image_with_thumbnail
 )
 
@@ -174,6 +175,25 @@ async def upload_chat_picture(
 
     try:
         result = await upload_chat_image(content, chat_id)
+        return ImageUploadResponse(**result)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload image: {str(e)}"
+        )
+
+
+@router.post("/group-avatar", response_model=ImageUploadResponse)
+async def upload_group_avatar_picture(
+    file: UploadFile = File(...),
+    group_id: Optional[str] = None,
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Upload a chat group avatar image (admin only)"""
+    content = await validate_image(file)
+
+    try:
+        result = await upload_group_avatar(content, group_id)
         return ImageUploadResponse(**result)
     except Exception as e:
         raise HTTPException(
