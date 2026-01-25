@@ -188,6 +188,17 @@ async def upload_chat_image(image_data: bytes, chat_id: str) -> dict:
     )
 
 
+async def upload_group_avatar(image_data: bytes, group_id: Optional[str] = None) -> dict:
+    """Upload a chat group avatar image"""
+    filename = f"group_{group_id}" if group_id else None
+    return await upload_image(
+        image_data,
+        folder="group-avatars",
+        filename=filename,
+        create_thumb=True
+    )
+
+
 async def delete_image(path: str) -> bool:
     """Delete an image from storage"""
     try:
