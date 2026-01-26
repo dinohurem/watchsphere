@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Bell, Search, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@watchsphere/shared/stores'
 
 export function Header() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
@@ -34,8 +36,8 @@ export function Header() {
 
   const currentHour = new Date().getHours()
   const greeting =
-    currentHour < 12 ? 'Good morning' :
-    currentHour < 18 ? 'Good afternoon' : 'Good evening'
+    currentHour < 12 ? t('header.goodMorning') :
+    currentHour < 18 ? t('header.goodAfternoon') : t('header.goodEvening')
 
   const handleLogout = () => {
     logout()
@@ -83,7 +85,7 @@ export function Header() {
         <button
           onClick={handleLogout}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          title="Logout"
+          title={t('header.logout')}
         >
           <LogOut className="w-5 h-5 text-gray-600" />
         </button>

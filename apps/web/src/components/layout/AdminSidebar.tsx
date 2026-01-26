@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard,
   Users,
@@ -22,73 +23,74 @@ import {
 } from 'lucide-react'
 
 interface NavItem {
-  name: string
+  nameKey: string
   to: string
   icon: React.ComponentType<{ className?: string }>
 }
 
 interface NavSection {
-  title: string
+  titleKey: string
   items: NavItem[]
 }
 
-const adminNavigation: NavSection[] = [
+const adminNavigationConfig: NavSection[] = [
   {
-    title: 'Dashboard',
+    titleKey: 'sidebar.dashboard',
     items: [
-      { name: 'Overview', to: '/admin', icon: LayoutDashboard },
+      { nameKey: 'sidebar.dashboard', to: '/admin', icon: LayoutDashboard },
     ]
   },
   {
-    title: 'User Management',
+    titleKey: 'sidebar.userManagement',
     items: [
-      { name: 'Users', to: '/admin/users', icon: Users },
+      { nameKey: 'sidebar.users', to: '/admin/users', icon: Users },
     ]
   },
   {
-    title: 'Content',
+    titleKey: 'sidebar.content',
     items: [
-      { name: 'Market (Watches)', to: '/admin/watches', icon: Watch },
-      { name: 'News', to: '/admin/news', icon: Newspaper },
-      { name: 'Watchlist Records', to: '/admin/watchlist', icon: Heart },
-      { name: 'Listing Fields', to: '/admin/listing-fields', icon: List },
-      { name: 'Filters', to: '/admin/filters', icon: SlidersHorizontal },
+      { nameKey: 'sidebar.watches', to: '/admin/watches', icon: Watch },
+      { nameKey: 'sidebar.news', to: '/admin/news', icon: Newspaper },
+      { nameKey: 'sidebar.watchlist', to: '/admin/watchlist', icon: Heart },
+      { nameKey: 'sidebar.listingFields', to: '/admin/listing-fields', icon: List },
+      { nameKey: 'sidebar.filters', to: '/admin/filters', icon: SlidersHorizontal },
     ]
   },
   {
-    title: 'Communication',
+    titleKey: 'sidebar.communication',
     items: [
-      { name: 'Chat Groups', to: '/admin/chat-groups', icon: MessageSquare },
-      { name: 'AI Chat Insights', to: '/admin/ai-insights', icon: Bot },
+      { nameKey: 'sidebar.chatGroups', to: '/admin/chat-groups', icon: MessageSquare },
+      { nameKey: 'sidebar.aiInsights', to: '/admin/ai-insights', icon: Bot },
     ]
   },
   {
-    title: 'Data & Analytics',
+    titleKey: 'sidebar.dataAnalytics',
     items: [
-      { name: 'WhatsApp Import', to: '/admin/whatsapp', icon: Upload },
-      { name: 'Activity Log', to: '/admin/activity', icon: Activity },
-      { name: 'Billing', to: '/admin/billing', icon: CreditCard },
+      { nameKey: 'sidebar.whatsappImport', to: '/admin/whatsapp', icon: Upload },
+      { nameKey: 'sidebar.activity', to: '/admin/activity', icon: Activity },
+      { nameKey: 'sidebar.billing', to: '/admin/billing', icon: CreditCard },
     ]
   },
   {
-    title: 'Support',
+    titleKey: 'sidebar.supportSection',
     items: [
-      { name: 'Support', to: '/admin/support', icon: Headphones },
+      { nameKey: 'sidebar.support', to: '/admin/support', icon: Headphones },
     ]
   },
 ]
 
 // Preview links for viewing as user
-const previewLinks = [
-  { name: 'Home', to: '/app', icon: Eye },
-  { name: 'Market', to: '/app/market', icon: Store },
-  { name: 'Chat', to: '/app/chat', icon: MessageCircle },
+const previewLinksConfig = [
+  { nameKey: 'sidebar.home', to: '/app', icon: Eye },
+  { nameKey: 'sidebar.market', to: '/app/market', icon: Store },
+  { nameKey: 'sidebar.chat', to: '/app/chat', icon: MessageCircle },
 ]
 
 export function AdminSidebar() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [expandedSections, setExpandedSections] = useState<string[]>(
-    adminNavigation.map(s => s.title)
+    adminNavigationConfig.map(s => s.titleKey)
   )
   const [showPreviewMenu, setShowPreviewMenu] = useState(false)
 
@@ -112,25 +114,25 @@ export function AdminSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4">
-        {adminNavigation.map((section) => (
-          <div key={section.title} className="mb-2">
+        {adminNavigationConfig.map((section) => (
+          <div key={section.titleKey} className="mb-2">
             <button
-              onClick={() => toggleSection(section.title)}
+              onClick={() => toggleSection(section.titleKey)}
               className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50"
             >
-              {section.title}
+              {t(`admin.${section.titleKey}`)}
               <ChevronDown
                 className={`w-4 h-4 transition-transform ${
-                  expandedSections.includes(section.title) ? '' : '-rotate-90'
+                  expandedSections.includes(section.titleKey) ? '' : '-rotate-90'
                 }`}
               />
             </button>
 
-            {expandedSections.includes(section.title) && (
+            {expandedSections.includes(section.titleKey) && (
               <div className="mt-1 space-y-1 px-2">
                 {section.items.map((item) => (
                   <NavLink
-                    key={item.name}
+                    key={item.nameKey}
                     to={item.to}
                     end={item.to === '/admin'}
                     className={({ isActive }) =>
@@ -142,7 +144,7 @@ export function AdminSidebar() {
                     }
                   >
                     <item.icon className="w-5 h-5 mr-3" />
-                    {item.name}
+                    {t(`admin.${item.nameKey}`)}
                   </NavLink>
                 ))}
               </div>
@@ -160,7 +162,7 @@ export function AdminSidebar() {
           >
             <div className="flex items-center">
               <Eye className="w-5 h-5 mr-3" />
-              View as User
+              {t('admin.sidebar.backToApp')}
             </div>
             <ExternalLink className="w-4 h-4" />
           </button>
@@ -169,11 +171,11 @@ export function AdminSidebar() {
           {showPreviewMenu && (
             <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border overflow-hidden">
               <div className="px-3 py-2 bg-gray-50 border-b">
-                <p className="text-xs font-medium text-gray-500 uppercase">Preview Pages</p>
+                <p className="text-xs font-medium text-gray-500 uppercase">{t('admin.sidebar.previewPages')}</p>
               </div>
-              {previewLinks.map((link) => (
+              {previewLinksConfig.map((link) => (
                 <button
-                  key={link.name}
+                  key={link.nameKey}
                   onClick={() => {
                     setShowPreviewMenu(false)
                     navigate(link.to)
@@ -181,7 +183,7 @@ export function AdminSidebar() {
                   className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                 >
                   <link.icon className="w-4 h-4 mr-3 text-gray-500" />
-                  {link.name}
+                  {t(`admin.${link.nameKey}`)}
                 </button>
               ))}
             </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ChevronLeft, Star, User, MessageSquare, Send } from 'lucide-react'
 import { api } from '@/services/api'
 import { useAuthStore } from '@watchsphere/shared/stores'
@@ -39,6 +40,7 @@ interface UserReviewStats {
 export function UserProfilePage() {
   const { userId } = useParams<{ userId: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const currentUser = useAuthStore((state) => state.user)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -153,10 +155,10 @@ export function UserProfilePage() {
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
           >
             <ChevronLeft className="w-5 h-5" />
-            Back
+            {t('userProfile.back')}
           </button>
           <div className="text-center py-12 text-gray-500">
-            {error || 'User not found'}
+            {error || t('userProfile.userNotFound')}
           </div>
         </div>
       </div>
@@ -174,7 +176,7 @@ export function UserProfilePage() {
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
         >
           <ChevronLeft className="w-5 h-5" />
-          Back
+          {t('userProfile.back')}
         </button>
 
         {/* Profile Card */}
@@ -215,12 +217,12 @@ export function UserProfilePage() {
                   {reviewStats?.average_rating.toFixed(1) || '0.0'}
                 </span>
                 <span className="text-gray-500">
-                  ({reviewStats?.review_count || 0} reviews)
+                  ({t('userProfile.reviews', { count: reviewStats?.review_count || 0 })})
                 </span>
               </div>
 
               <p className="text-sm text-gray-400 mt-2">
-                Member since {new Date(profile.created_at).toLocaleDateString()}
+                {t('userProfile.memberSince', { date: new Date(profile.created_at).toLocaleDateString() })}
               </p>
             </div>
 
@@ -232,14 +234,14 @@ export function UserProfilePage() {
                   className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
                 >
                   <MessageSquare className="w-4 h-4" />
-                  Message
+                  {t('userProfile.message')}
                 </button>
                 <button
                   onClick={() => setShowReviewForm(true)}
                   className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <Star className="w-4 h-4" />
-                  {existingReview ? 'Edit Review' : 'Write Review'}
+                  {existingReview ? t('userProfile.editReview') : t('userProfile.writeReview')}
                 </button>
               </div>
             )}
@@ -252,10 +254,10 @@ export function UserProfilePage() {
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
               <div className="p-6 border-b">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {existingReview ? 'Edit Your Review' : 'Write a Review'}
+                  {existingReview ? t('userProfile.editYourReview') : t('userProfile.writeAReview')}
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  for {profile.name}
+                  {t('userProfile.forUser', { name: profile.name })}
                 </p>
               </div>
 
@@ -263,7 +265,7 @@ export function UserProfilePage() {
                 {/* Rating */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Rating *
+                    {t('userProfile.ratingRequired')}
                   </label>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((star) => (
@@ -288,14 +290,14 @@ export function UserProfilePage() {
                 {/* Comment */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Comment (optional)
+                    {t('userProfile.commentOptional')}
                   </label>
                   <textarea
                     value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
                     rows={4}
-                    placeholder="Share your experience..."
+                    placeholder={t('userProfile.commentPlaceholder')}
                   />
                 </div>
 
@@ -306,7 +308,7 @@ export function UserProfilePage() {
                     onClick={() => setShowReviewForm(false)}
                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="submit"
@@ -314,7 +316,7 @@ export function UserProfilePage() {
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
                   >
                     <Send className="w-4 h-4" />
-                    {submittingReview ? 'Submitting...' : existingReview ? 'Update Review' : 'Submit Review'}
+                    {submittingReview ? t('userProfile.submitting') : existingReview ? t('userProfile.updateReview') : t('userProfile.submitReview')}
                   </button>
                 </div>
               </form>
@@ -325,19 +327,19 @@ export function UserProfilePage() {
         {/* Reviews Section */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Reviews ({reviewStats?.review_count || 0})
+            {t('userProfile.reviews', { count: reviewStats?.review_count || 0 })}
           </h2>
 
           {reviewStats?.reviews.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <Star className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No reviews yet</p>
+              <p>{t('userProfile.noReviews')}</p>
               {!isOwnProfile && (
                 <button
                   onClick={() => setShowReviewForm(true)}
                   className="mt-4 text-gray-900 font-medium hover:underline"
                 >
-                  Be the first to review
+                  {t('userProfile.beFirstToReview')}
                 </button>
               )}
             </div>
