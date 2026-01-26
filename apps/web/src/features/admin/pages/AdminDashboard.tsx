@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Users, Watch, Activity } from 'lucide-react'
 import { api } from '@/services/api'
 
@@ -46,6 +47,7 @@ function StatCard({
 }
 
 export function AdminDashboard() {
+  const { t } = useTranslation()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -75,28 +77,28 @@ export function AdminDashboard() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Overview of your WatchSphere platform</p>
+        <h1 className="text-2xl font-bold text-gray-900">{t('admin.dashboard.title')}</h1>
+        <p className="text-gray-600">{t('admin.dashboard.subtitle')}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
-          title="Total Users"
+          title={t('admin.dashboard.totalUsers')}
           value={stats?.total_users || 0}
           icon={Users}
         />
         <StatCard
-          title="Dealers"
+          title={t('admin.dashboard.dealers')}
           value={stats?.total_dealers || 0}
           icon={Watch}
         />
         <StatCard
-          title="Collectors"
+          title={t('admin.dashboard.collectors')}
           value={stats?.total_collectors || 0}
           icon={Users}
         />
         <StatCard
-          title="Pending Approval"
+          title={t('admin.dashboard.pendingApproval')}
           value={stats?.pending_approval || 0}
           icon={Activity}
           variant="warning"
@@ -107,42 +109,42 @@ export function AdminDashboard() {
         {/* Recent Activity */}
         <div className="bg-white rounded-lg border shadow-sm">
           <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t('admin.dashboard.recentActivity')}</h2>
           </div>
           <div className="p-4">
-            <p className="text-gray-500 text-sm">Activity log will be displayed here</p>
+            <p className="text-gray-500 text-sm">{t('admin.dashboard.activityPlaceholder')}</p>
           </div>
         </div>
 
         {/* Quick Actions */}
         <div className="bg-white rounded-lg border shadow-sm">
           <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t('admin.dashboard.quickActions')}</h2>
           </div>
           <div className="p-4 space-y-2">
             <Link
               to="/admin/users/pending"
               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
             >
-              View pending approvals ({stats?.pending_approval || 0})
+              {t('admin.dashboard.viewPendingApprovals')} ({stats?.pending_approval || 0})
             </Link>
             <Link
               to="/admin/news"
               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
             >
-              Create news article
+              {t('admin.dashboard.createNewsArticle')}
             </Link>
             <Link
               to="/admin/whatsapp"
               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
             >
-              Import WhatsApp chat
+              {t('admin.dashboard.importWhatsApp')}
             </Link>
             <Link
               to="/admin/users"
               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
             >
-              Manage all users
+              {t('admin.dashboard.manageAllUsers')}
             </Link>
           </div>
         </div>

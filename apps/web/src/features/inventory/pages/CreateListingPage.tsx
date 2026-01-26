@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, X, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useConfig, type ListingField, type FieldCategory, CATEGORY_STEPS } from '@/hooks/useConfig';
@@ -179,6 +180,8 @@ function DiscardModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
+
   if (!isOpen) return null;
 
   return (
@@ -187,7 +190,7 @@ function DiscardModal({
       <div className="relative bg-white rounded-2xl w-[400px] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <span className="text-[15px] text-[#1d1d1f]">Discard changes</span>
+          <span className="text-[15px] text-[#1d1d1f]">{t('listing.discardModal.title')}</span>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-[#f5f5f5] flex items-center justify-center hover:bg-gray-200 transition-colors"
@@ -199,10 +202,10 @@ function DiscardModal({
         {/* Content */}
         <div className="p-8 text-center">
           <h2 className="text-2xl font-semibold text-[#1d1d1f] mb-2">
-            Are you sure you want to cancel?
+            {t('listing.discardModal.message')}
           </h2>
           <p className="text-[15px] text-[#1d1d1f]/50">
-            Any unsaved changes will be lost.
+            {t('listing.discardModal.description')}
           </p>
         </div>
 
@@ -212,13 +215,13 @@ function DiscardModal({
             onClick={onConfirm}
             className="w-full h-11 bg-[#1d1d1f] text-white font-semibold rounded-full hover:bg-black transition-colors"
           >
-            Yes, cancel
+            {t('listing.discardModal.yesCancel')}
           </button>
           <button
             onClick={onClose}
             className="w-full h-11 text-[#1d1d1f] font-semibold"
           >
-            Continue editing
+            {t('listing.discardModal.continueEditing')}
           </button>
         </div>
       </div>
@@ -230,7 +233,19 @@ export function CreateListingPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { orderId } = useParams<{ orderId: string }>();
+  const { t } = useTranslation();
   const { getFieldOptions, getFieldsByCategory, listingFields, isLoading: isLoadingConfig } = useConfig();
+
+  const getStepLabel = (key: string) => {
+    const labels: Record<string, string> = {
+      basic: t('listing.steps.basics'),
+      caliber: t('listing.steps.caliberInfo'),
+      case: t('listing.steps.caseInfo'),
+      bracelet: t('listing.steps.braceletStrapInfo'),
+      photos: t('listing.steps.photos'),
+    };
+    return labels[key] || key;
+  };
 
   // Get navigation state for pre-populated data
   const navState = location.state as NavigationState | null;
@@ -392,7 +407,7 @@ export function CreateListingPage() {
     const yearStr = (formData.year as string) || '';
     const yearValue = yearStr ? parseInt(yearStr, 10) : null;
     if (!yearValue || isNaN(yearValue)) {
-      alert('Year is required for all orders');
+      alert(t('listing.yearRequired'));
       return;
     }
 
@@ -608,7 +623,7 @@ export function CreateListingPage() {
               {/* Header - aligned with steps */}
               <div className="pt-8 pb-6">
                 <h1 className="text-2xl font-semibold text-[#1d1d1f]/80">
-                  {isEditMode ? 'Edit listing' : `Create new ${formData.order_type === 'buy' ? 'buy order' : 'listing'}`}
+                  {isEditMode ? t('listing.editListing') : formData.order_type === 'buy' ? t('listing.createNewBuyOrder') : t('listing.createNewListing')}
                 </h1>
               </div>
               <div className="flex flex-col">
@@ -623,7 +638,7 @@ export function CreateListingPage() {
                     }`}
                   >
                     <span className="text-[15px] font-semibold text-[#1d1d1f] truncate">
-                      {step.label}
+                      {getStepLabel(step.key)}
                     </span>
                   </button>
                 ))}
@@ -638,7 +653,7 @@ export function CreateListingPage() {
                   {getCurrentStepFields().map((field) => renderField(field))}
                   {getCurrentStepFields().length === 0 && (
                     <p className="text-[15px] text-[#1d1d1f]/50">
-                      No fields configured for this section.
+                      {t('listing.noFieldsConfigured')}
                     </p>
                   )}
                 </div>
@@ -653,7 +668,7 @@ export function CreateListingPage() {
                       <label className="flex flex-col items-center justify-center border border-dashed border-[rgba(29,29,31,0.1)] rounded-2xl py-16 cursor-pointer hover:bg-gray-50 transition-colors">
                         <ImageIcon className="w-12 h-12 text-[#1d1d1f] mb-4" />
                         <p className="text-[15px] text-[#1d1d1f]">
-                          Drag & drop or click to <span className="underline">upload photos</span>
+                          {t('listing.photos.dragAndDrop')}
                         </p>
                         <input
                           type="file"
@@ -667,20 +682,20 @@ export function CreateListingPage() {
                       {/* Requirements */}
                       <div className="mt-6">
                         <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-3">
-                          Your photos must have
+                          {t('listing.photos.requirements')}
                         </h3>
                         <ul className="space-y-2 text-[15px] text-[#1d1d1f]">
                           <li className="flex items-start gap-2">
                             <span>•</span>
-                            <span>A clear, well-lit view of the watch</span>
+                            <span>{t('listing.photos.req1')}</span>
                           </li>
                           <li className="flex items-start gap-2">
                             <span>•</span>
-                            <span>Close-up of the dial, case, and bracelet</span>
+                            <span>{t('listing.photos.req2')}</span>
                           </li>
                           <li className="flex items-start gap-2">
                             <span>•</span>
-                            <span>Real condition, filters and editing should be avoided</span>
+                            <span>{t('listing.photos.req3')}</span>
                           </li>
                         </ul>
                       </div>
@@ -711,7 +726,7 @@ export function CreateListingPage() {
                         <label className="aspect-square rounded-xl border border-dashed border-[rgba(29,29,31,0.1)] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
                           <ImageIcon className="w-8 h-8 text-[#1d1d1f]/50 mb-2" />
                           <p className="text-[13px] text-[#1d1d1f]/50 text-center px-4">
-                            Drag & drop or click to <span className="underline">upload photos</span> additional photos
+                            {t('listing.photos.dragAndDropAdditional')}
                           </p>
                           <input
                             type="file"
@@ -739,7 +754,7 @@ export function CreateListingPage() {
               onClick={handleCancel}
               className="text-[16px] font-semibold text-black tracking-[0.08px]"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
 
             {/* Progress Bar */}
@@ -763,11 +778,11 @@ export function CreateListingPage() {
                 ? '...'
                 : currentStep === FORM_STEPS.length - 1
                   ? isEditMode
-                    ? 'Update Listing'
+                    ? t('listing.updateListing')
                     : formData.order_type === 'buy'
-                      ? 'Create Buy Order'
-                      : 'Create Listing'
-                  : 'Next'}
+                      ? t('listing.createBuyOrder')
+                      : t('listing.createListing')
+                  : t('common.next')}
             </button>
           </div>
         </div>

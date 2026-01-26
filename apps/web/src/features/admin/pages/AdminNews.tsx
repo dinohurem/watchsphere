@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Plus, Search, Edit2, Trash2, Eye, Send } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
@@ -52,6 +53,7 @@ const emptyForm: NewsFormData = {
 }
 
 export function AdminNews() {
+  const { t } = useTranslation()
   const [articles, setArticles] = useState<NewsArticle[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -101,7 +103,7 @@ export function AdminNews() {
   }
 
   const handleDelete = async (articleId: string) => {
-    if (!confirm('Are you sure you want to delete this article?')) return
+    if (!confirm(t('admin.news.deleteConfirm'))) return
     try {
       await api.delete(`/news/admin/${articleId}`)
       fetchArticles()
@@ -178,15 +180,15 @@ export function AdminNews() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">News</h1>
-          <p className="text-gray-600">Manage news articles ({articles.length} total)</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('admin.news.title')}</h1>
+          <p className="text-gray-600">{t('admin.news.subtitle')} ({articles.length} total)</p>
         </div>
         <button
           onClick={handleCreate}
           className="flex items-center px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4 mr-2" />
-          Create Article
+          {t('admin.news.createArticle')}
         </button>
       </div>
 
@@ -197,7 +199,7 @@ export function AdminNews() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search articles..."
+              placeholder={t('admin.news.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-4 py-2 border rounded-lg text-sm w-full"
@@ -208,9 +210,9 @@ export function AdminNews() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-4 py-2 border rounded-lg text-sm"
           >
-            <option value="all">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
+            <option value="all">{t('admin.support.allStatuses')}</option>
+            <option value="draft">{t('admin.news.draft')}</option>
+            <option value="published">{t('admin.news.published')}</option>
             <option value="archived">Archived</option>
           </select>
         </div>
@@ -287,7 +289,7 @@ export function AdminNews() {
                         onClick={() => handleEdit(article)}
                         icon={<Edit2 className="w-4 h-4" />}
                       >
-                        Edit
+                        {t('admin.news.edit')}
                       </ActionMenuItem>
                       {article.status === 'draft' && (
                         <ActionMenuItem
@@ -295,7 +297,7 @@ export function AdminNews() {
                           variant="success"
                           icon={<Send className="w-4 h-4" />}
                         >
-                          Publish
+                          {t('admin.news.published')}
                         </ActionMenuItem>
                       )}
                       <ActionMenuItem
@@ -303,7 +305,7 @@ export function AdminNews() {
                         variant="danger"
                         icon={<Trash2 className="w-4 h-4" />}
                       >
-                        Delete
+                        {t('admin.news.delete')}
                       </ActionMenuItem>
                     </ActionMenu>
                   </td>
@@ -315,7 +317,7 @@ export function AdminNews() {
 
         {filteredArticles.length === 0 && (
           <div className="p-8 text-center text-gray-500">
-            No articles found matching your criteria
+            {t('admin.news.noArticlesFound')}
           </div>
         )}
       </div>
@@ -326,36 +328,36 @@ export function AdminNews() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b">
               <h2 className="text-xl font-semibold text-gray-900">
-                {editingArticle ? 'Edit Article' : 'Create New Article'}
+                {editingArticle ? t('admin.news.articleModal.titleEdit') : t('admin.news.articleModal.titleCreate')}
               </h2>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.news.articleModal.titleLabel')} *</label>
                 <input
                   type="text"
                   required
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="Article title"
+                  placeholder={t('admin.news.articleModal.titlePlaceholder')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Excerpt</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.news.articleModal.summaryLabel')}</label>
                 <input
                   type="text"
                   value={formData.excerpt}
                   onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="Short summary for previews"
+                  placeholder={t('admin.news.articleModal.summaryPlaceholder')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cover Image URL</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.news.articleModal.imageLabel')}</label>
                 <input
                   type="url"
                   value={formData.cover_image}
@@ -366,28 +368,28 @@ export function AdminNews() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.news.articleModal.contentLabel')} *</label>
                 <textarea
                   required
                   rows={12}
                   value={formData.content}
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
-                  placeholder="Write your article content here... (HTML supported)"
+                  placeholder={t('admin.news.articleModal.contentPlaceholder')}
                 />
                 <p className="text-xs text-gray-500 mt-1">You can use HTML tags for formatting</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.news.articleModal.statusLabel')}</label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                   >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
+                    <option value="draft">{t('admin.news.draft')}</option>
+                    <option value="published">{t('admin.news.published')}</option>
                     <option value="archived">Archived</option>
                   </select>
                 </div>
@@ -444,14 +446,14 @@ export function AdminNews() {
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
                 >
-                  Cancel
+                  {t('admin.news.articleModal.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : (editingArticle ? 'Update Article' : 'Create Article')}
+                  {saving ? t('admin.news.articleModal.saving') : (editingArticle ? t('admin.news.articleModal.update') : t('admin.news.articleModal.create'))}
                 </button>
               </div>
             </form>

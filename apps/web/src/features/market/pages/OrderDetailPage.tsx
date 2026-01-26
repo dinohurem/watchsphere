@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Star,
@@ -112,9 +113,20 @@ interface OrderDetail {
 export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { user } = useAuthStore();
   const { getFieldsByCategory } = useConfig();
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const getCategoryTitle = (key: string) => {
+    const titles: Record<string, string> = {
+      basic: t('orderDetails.basicInfo'),
+      caliber: t('orderDetails.caliber'),
+      case: t('orderDetails.case'),
+      bracelet: t('orderDetails.braceletStrap'),
+    };
+    return titles[key] || key;
+  };
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,31 +187,31 @@ export function OrderDetailPage() {
     // Add special fields that aren't in listing fields config
     if (category === 'basic') {
       // Add core order fields
-      if (order?.brand) specsWithValues.unshift({ label: 'Brand', value: order.brand });
-      if (order?.model) specsWithValues.splice(1, 0, { label: 'Model', value: order.model });
-      if (order?.reference) specsWithValues.splice(2, 0, { label: 'Reference', value: order.reference });
+      if (order?.brand) specsWithValues.unshift({ label: t('settings.brand'), value: order.brand });
+      if (order?.model) specsWithValues.splice(1, 0, { label: t('settings.model'), value: order.model });
+      if (order?.reference) specsWithValues.splice(2, 0, { label: t('orderDetails.reference'), value: order.reference });
 
       // Add box & papers
       const boxPapers = order?.has_box && order?.has_papers
-        ? 'Original box and papers'
+        ? t('orderDetails.boxPapersOptions.both')
         : order?.has_box
-        ? 'Box only'
+        ? t('orderDetails.boxPapersOptions.boxOnly')
         : order?.has_papers
-        ? 'Papers only'
+        ? t('orderDetails.boxPapersOptions.papersOnly')
         : undefined;
-      if (boxPapers) specsWithValues.push({ label: 'Box & Papers', value: boxPapers });
+      if (boxPapers) specsWithValues.push({ label: t('orderDetails.boxPapers'), value: boxPapers });
 
       // Add location
       if (order?.country_name || order?.country_code) {
         specsWithValues.push({
-          label: 'Location',
+          label: t('orderDetails.location'),
           value: `${getFlagEmoji(order.country_code)} ${order.country_name || order.country_code}`
         });
       }
 
       // Add price
       if (order?.price) {
-        specsWithValues.push({ label: 'Price', value: `€${order.price.toLocaleString()}` });
+        specsWithValues.push({ label: t('watchDetails.price'), value: `€${order.price.toLocaleString()}` });
       }
     }
 
@@ -302,9 +314,9 @@ export function OrderDetailPage() {
     return (
       <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
         <div className="max-w-7xl mx-auto py-8 text-center">
-          <p className="text-gray-500">Order not found</p>
+          <p className="text-gray-500">{t('orderDetails.orderNotFound')}</p>
           <button onClick={() => navigate(-1)} className="mt-4 text-primary hover:underline">
-            Go back
+            {t('orderDetails.goBack')}
           </button>
         </div>
       </div>
@@ -330,10 +342,10 @@ export function OrderDetailPage() {
           {/* Text content */}
           <div className="flex flex-col gap-4 items-center text-center max-w-[514px] mb-10">
             <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
-              Sale completed
+              {t('orderDetails.saleCompletedTitle')}
             </h1>
             <p className="text-[18px] font-normal text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-[22px]">
-              Your watch has been marked as sold. Thank you for keeping your inventory up to date.
+              {t('orderDetails.saleCompletedDesc')}
             </p>
           </div>
 
@@ -343,13 +355,13 @@ export function OrderDetailPage() {
               onClick={() => navigate('/app/inventory')}
               className="flex-1 h-[48px] bg-[#212121] text-white text-[15px] font-semibold tracking-[0.075px] leading-[20px] rounded-full hover:bg-black transition-colors"
             >
-              Go to Inventory
+              {t('orderDetails.goToInventory')}
             </button>
             <button
               onClick={() => navigate('/app')}
               className="flex-1 h-[44px] text-[#1d1d1f] text-[15px] font-semibold tracking-[0.075px] leading-[20px] hover:opacity-70 transition-opacity flex items-center justify-center"
             >
-              Back to homepage
+              {t('orderDetails.backToHomepage')}
             </button>
           </div>
         </div>
@@ -376,10 +388,10 @@ export function OrderDetailPage() {
           {/* Text content */}
           <div className="flex flex-col gap-4 items-center text-center max-w-[514px] mb-10">
             <h1 className="text-[32px] font-bold text-[#1d1d1f] tracking-[0.4px] leading-normal">
-              Purchase completed
+              {t('orderDetails.purchaseCompletedTitle')}
             </h1>
             <p className="text-[18px] font-normal text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-[22px]">
-              Your buy order has been marked as completed. It has been removed from the order book.
+              {t('orderDetails.purchaseCompletedDesc')}
             </p>
           </div>
 
@@ -389,13 +401,13 @@ export function OrderDetailPage() {
               onClick={() => navigate('/app/profile')}
               className="flex-1 h-[48px] bg-[#212121] text-white text-[15px] font-semibold tracking-[0.075px] leading-[20px] rounded-full hover:bg-black transition-colors"
             >
-              Go to Profile
+              {t('orderDetails.goToProfile')}
             </button>
             <button
               onClick={() => navigate('/app')}
               className="flex-1 h-[44px] text-[#1d1d1f] text-[15px] font-semibold tracking-[0.075px] leading-[20px] hover:opacity-70 transition-opacity flex items-center justify-center"
             >
-              Back to homepage
+              {t('orderDetails.backToHomepage')}
             </button>
           </div>
         </div>
@@ -427,19 +439,19 @@ export function OrderDetailPage() {
                   ? 'bg-[rgba(74,160,120,0.1)] text-[#4AA078]'
                   : 'bg-[rgba(0,136,255,0.1)] text-[#0088FF]'
               }`}>
-                {order.order_type === 'buy' ? 'Buy Order' : 'Sell Order'}
+                {order.order_type === 'buy' ? t('orderDetails.buyOrder') : t('orderDetails.sellOrder')}
               </span>
               {/* Status Label for Sold/Completed orders
                   - Sell orders show "Sold" when status is sold or completed
                   - Buy orders show "Completed" when status is completed or sold (defensive) */}
               {order.order_type === 'sell' && (order.status === 'sold' || order.status === 'completed') && (
                 <span className="inline-block px-3 py-1 rounded-lg text-[13px] font-semibold bg-[rgba(201,57,39,0.1)] text-[#c93927]">
-                  Sold
+                  {t('orderDetails.sold')}
                 </span>
               )}
               {order.order_type === 'buy' && (order.status === 'completed' || order.status === 'sold') && (
                 <span className="inline-block px-3 py-1 rounded-lg text-[13px] font-semibold bg-[rgba(128,128,128,0.1)] text-[#666666]">
-                  Completed
+                  {t('orderDetails.completed')}
                 </span>
               )}
             </div>
@@ -473,7 +485,7 @@ export function OrderDetailPage() {
                     className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
                   >
                     <EditIcon className="w-5 h-5 text-[#1d1d1f]" />
-                    Edit
+                    {t('orderDetails.edit')}
                   </button>
                   {/* Show Mark as Sold only for sell orders, Mark as Completed only for buy orders */}
                   {order.order_type === 'sell' && order.status === 'active' && (
@@ -485,7 +497,7 @@ export function OrderDetailPage() {
                       className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
                     >
                       <CheckboxIcon className="w-5 h-5 text-[#1d1d1f]" />
-                      Mark as sold
+                      {t('orderDetails.markAsSold')}
                     </button>
                   )}
                   {order.order_type === 'buy' && order.status === 'active' && (
@@ -497,7 +509,7 @@ export function OrderDetailPage() {
                       className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#1d1d1f] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
                     >
                       <CheckboxIcon className="w-5 h-5 text-[#1d1d1f]" />
-                      Mark as completed
+                      {t('orderDetails.markAsCompleted')}
                     </button>
                   )}
                   <button
@@ -508,7 +520,7 @@ export function OrderDetailPage() {
                     className="w-full px-4 py-3 text-left text-[15px] font-medium text-[#c93927] hover:bg-[rgba(0,0,0,0.02)] flex items-center gap-3"
                   >
                     <TrashIcon className="w-5 h-5 text-[#c93927]" />
-                    Delete
+                    {t('orderDetails.delete')}
                   </button>
                 </div>
               )}
@@ -567,30 +579,30 @@ export function OrderDetailPage() {
           <div className="space-y-0">
             {/* Condition Row */}
             <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
-              <span className="text-[15px] text-[#1d1d1f] opacity-50">Condition</span>
+              <span className="text-[15px] text-[#1d1d1f] opacity-50">{t('orderDetails.condition')}</span>
               <span className="text-[15px] text-[#1d1d1f] font-semibold">{order.condition}</span>
             </div>
             {/* Case Size Row */}
             <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
-              <span className="text-[15px] text-[#1d1d1f] opacity-50">Case size</span>
+              <span className="text-[15px] text-[#1d1d1f] opacity-50">{t('orderDetails.caseSize')}</span>
               <span className="text-[15px] text-[#1d1d1f] font-semibold">{order.watch_details?.case_size || '—'}</span>
             </div>
             {/* Box/Papers Row */}
             <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
-              <span className="text-[15px] text-[#1d1d1f] opacity-50">Box/papers</span>
+              <span className="text-[15px] text-[#1d1d1f] opacity-50">{t('orderDetails.boxPapers')}</span>
               <span className="text-[15px] text-[#1d1d1f] font-semibold">
                 {order.has_box && order.has_papers
-                  ? 'Box and papers'
+                  ? t('orderDetails.boxPapersOptions.both')
                   : order.has_box
-                  ? 'Box only'
+                  ? t('orderDetails.boxPapersOptions.boxOnly')
                   : order.has_papers
-                  ? 'Papers only'
-                  : 'None'}
+                  ? t('orderDetails.boxPapersOptions.papersOnly')
+                  : t('orderDetails.boxPapersOptions.none')}
               </span>
             </div>
             {/* Location Row */}
             <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
-              <span className="text-[15px] text-[#1d1d1f] opacity-50">Location</span>
+              <span className="text-[15px] text-[#1d1d1f] opacity-50">{t('orderDetails.location')}</span>
               <span className="text-[15px] text-[#1d1d1f] font-semibold flex items-center gap-1">
                 {getFlagEmoji(order.country_code)} {order.country_name || order.country_code}
               </span>
@@ -604,14 +616,14 @@ export function OrderDetailPage() {
               className="w-full h-[48px] bg-[#212121] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-full hover:bg-black transition-colors flex items-center justify-center gap-2 mt-4"
             >
               <MessageCircle className="w-5 h-5" />
-              Contact
+              {t('orderDetails.contact')}
             </button>
           )}
         </div>
 
         {/* Right Column - Specifications - Dynamic rendering by category */}
         <div className="flex-1 space-y-8">
-          {CATEGORY_CONFIG.map(({ key, title }) => {
+          {CATEGORY_CONFIG.map(({ key }) => {
             const specs = renderCategorySpecs(key);
 
             // For basic category, always show (it has required fields)
@@ -620,7 +632,7 @@ export function OrderDetailPage() {
 
             return (
               <div key={key}>
-                <h2 className="text-[18px] font-semibold text-[#1d1d1f] mb-4">{title}</h2>
+                <h2 className="text-[18px] font-semibold text-[#1d1d1f] mb-4">{getCategoryTitle(key)}</h2>
                 <div className="space-y-0">
                   {specs.map((spec, idx) => (
                     <SpecRow key={`${key}-${idx}`} label={spec.label} value={spec.value} />
@@ -630,7 +642,7 @@ export function OrderDetailPage() {
                   {key === 'basic' && (
                     <div className="flex items-start py-[8px] border-b border-[rgba(0,0,0,0.1)]">
                       <span className="w-[168px] shrink-0 text-[15px] text-[#1d1d1f] opacity-50">
-                        {order.order_type === 'sell' ? 'Seller' : 'Buyer'}
+                        {order.order_type === 'sell' ? t('orderDetails.seller') : t('orderDetails.buyer')}
                       </span>
                       <button
                         onClick={() => navigate(`/app/user/${order.user_id}`)}
@@ -659,9 +671,9 @@ export function OrderDetailPage() {
           {/* Notes */}
           {order.notes && (
             <div>
-              <h2 className="text-[18px] font-semibold text-[#1d1d1f] mb-4">Other</h2>
+              <h2 className="text-[18px] font-semibold text-[#1d1d1f] mb-4">{t('orderDetails.other')}</h2>
               <div className="space-y-0">
-                <SpecRow label="More details" value={order.notes} />
+                <SpecRow label={t('orderDetails.moreDetails')} value={order.notes} />
               </div>
             </div>
           )}
@@ -673,7 +685,7 @@ export function OrderDetailPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Mark as Sold</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{t('orderDetails.markAsSoldModal.title')}</h2>
               <button
                 onClick={() => setShowMarkSoldModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -682,21 +694,21 @@ export function OrderDetailPage() {
               </button>
             </div>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to mark this watch as sold? This action will remove it from your active listings.
+              {t('orderDetails.markAsSoldConfirm')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowMarkSoldModal(false)}
                 className="flex-1 py-3 border border-gray-200 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleMarkAsSold}
                 disabled={markingAsSold}
                 className="flex-1 py-3 bg-gray-900 text-white font-medium rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
-                {markingAsSold ? 'Marking...' : 'Mark as Sold'}
+                {markingAsSold ? t('orderDetails.marking') : t('orderDetails.markAsSoldModal.title')}
               </button>
             </div>
           </div>
@@ -708,7 +720,7 @@ export function OrderDetailPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Delete Listing</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{t('orderDetails.deleteModal.title')}</h2>
               <button
                 onClick={() => setShowDeleteModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -717,21 +729,21 @@ export function OrderDetailPage() {
               </button>
             </div>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to delete this listing? This action cannot be undone.
+              {t('orderDetails.deleteConfirm')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1 py-3 border border-gray-200 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
                 className="flex-1 py-3 bg-red-600 text-white font-medium rounded-full hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {deleting ? 'Deleting...' : 'Delete'}
+                {deleting ? t('orderDetails.deleting') : t('orderDetails.delete')}
               </button>
             </div>
           </div>
@@ -743,7 +755,7 @@ export function OrderDetailPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Mark as Completed</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{t('orderDetails.markAsCompleted')}</h2>
               <button
                 onClick={() => setShowMarkCompletedModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -752,21 +764,21 @@ export function OrderDetailPage() {
               </button>
             </div>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to mark this buy order as completed? This action will remove it from the order book.
+              {t('orderDetails.markAsCompletedConfirm')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowMarkCompletedModal(false)}
                 className="flex-1 py-3 border border-gray-200 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleMarkAsCompleted}
                 disabled={markingAsCompleted}
                 className="flex-1 py-3 bg-gray-900 text-white font-medium rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
-                {markingAsCompleted ? 'Marking...' : 'Mark as Completed'}
+                {markingAsCompleted ? t('orderDetails.marking') : t('orderDetails.markAsCompleted')}
               </button>
             </div>
           </div>

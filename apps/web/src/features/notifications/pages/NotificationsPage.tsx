@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Tag, Check, X, Bell } from 'lucide-react';
 import { api } from '@/services/api';
 
@@ -57,6 +58,7 @@ interface NotificationResponse {
 
 export function NotificationsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -68,10 +70,10 @@ export function NotificationsPage() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 1) return t('notifications.time.justNow');
+    if (diffMins < 60) return t('notifications.time.minAgo', { count: diffMins });
+    if (diffHours < 24) return t('notifications.time.hourAgo', { count: diffHours });
+    return t('notifications.time.dayAgo', { count: diffDays });
   };
 
   const loadNotifications = useCallback(async () => {
@@ -232,11 +234,11 @@ export function NotificationsPage() {
 
     const displayTitle =
       item.type === 'new_offer'
-        ? 'New offer'
+        ? t('notifications.newOffer')
         : item.type === 'price_alert_up'
-        ? 'Price changed for'
+        ? t('notifications.priceChangedFor')
         : item.type === 'price_alert_down'
-        ? 'Price changed for'
+        ? t('notifications.priceChangedFor')
         : item.title;
 
     const priceDisplay = item.price
@@ -290,7 +292,7 @@ export function NotificationsPage() {
     return (
       <div className="p-4 lg:p-6 bg-white min-h-screen">
         <div className="max-w-[600px] mx-auto">
-          <h1 className="text-2xl font-semibold text-[#1d1d1f]/80 mb-8">Notifications</h1>
+          <h1 className="text-2xl font-semibold text-[#1d1d1f]/80 mb-8">{t('notifications.title')}</h1>
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
           </div>
@@ -303,13 +305,13 @@ export function NotificationsPage() {
     <div className="p-4 lg:p-6 bg-white min-h-screen">
       <div className="max-w-[600px] mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-semibold text-[#1d1d1f]/80">Notifications</h1>
+          <h1 className="text-2xl font-semibold text-[#1d1d1f]/80">{t('notifications.title')}</h1>
           {newNotifications.length > 0 && (
             <button
               onClick={handleMarkAllAsRead}
               className="text-sm font-medium text-[#0088FF] hover:underline"
             >
-              Mark all as read
+              {t('notifications.markAllAsRead')}
             </button>
           )}
         </div>
@@ -317,9 +319,9 @@ export function NotificationsPage() {
         {notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Bell className="w-12 h-12 text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-[#212121] mb-2">No notifications yet</h3>
+            <h3 className="text-lg font-semibold text-[#212121] mb-2">{t('notifications.noNotificationsTitle')}</h3>
             <p className="text-sm text-[#212121]/50">
-              You'll see notifications here when there's activity on your listings
+              {t('notifications.noNotificationsDesc')}
             </p>
           </div>
         ) : (
@@ -328,7 +330,7 @@ export function NotificationsPage() {
             {newNotifications.length > 0 && (
               <div>
                 <h2 className="text-[15px] font-medium text-[#626262] tracking-[0.075px] mb-3 px-4">
-                  NEW
+                  {t('notifications.new')}
                 </h2>
                 <div className="border border-black/5 rounded-2xl">
                   {newNotifications.map((item, index) =>
@@ -342,7 +344,7 @@ export function NotificationsPage() {
             {earlierNotifications.length > 0 && (
               <div>
                 <h2 className="text-[15px] font-medium text-[#626262] tracking-[0.075px] mb-3 px-4">
-                  EARLIER
+                  {t('notifications.earlier')}
                 </h2>
                 <div className="border border-black/5 rounded-2xl">
                   {earlierNotifications.map((item, index) =>

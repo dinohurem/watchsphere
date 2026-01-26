@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Plus, Search, Edit2, Trash2, Users, UserPlus, UserMinus, Shield } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
@@ -47,6 +48,7 @@ const emptyForm: GroupFormData = {
 }
 
 export function AdminChatGroups() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [groups, setGroups] = useState<ChatGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -115,7 +117,7 @@ export function AdminChatGroups() {
   }
 
   const handleDelete = async (groupId: string) => {
-    if (!confirm('Are you sure you want to delete this group? All messages will be lost.')) return
+    if (!confirm(t('admin.chatGroups.deleteConfirm'))) return
     try {
       await api.delete(`/chat-groups/admin/groups/${groupId}`)
       fetchGroups()
@@ -145,7 +147,7 @@ export function AdminChatGroups() {
 
   const handleRemoveMember = async (userId: string) => {
     if (!selectedGroup) return
-    if (!confirm('Are you sure you want to remove this member?')) return
+    if (!confirm(t('admin.chatGroups.removeMemberConfirm'))) return
     try {
       await api.delete(`/chat-groups/admin/groups/${selectedGroup.id}/members/${userId}`)
       const updated = await fetchGroupDetails(selectedGroup.id)
@@ -218,15 +220,15 @@ export function AdminChatGroups() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Chat Groups</h1>
-          <p className="text-gray-600">Manage chat groups ({groups.length} total)</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('admin.chatGroups.title')}</h1>
+          <p className="text-gray-600">{t('admin.chatGroups.subtitle')} ({t('admin.chatGroups.total', { count: groups.length })})</p>
         </div>
         <button
           onClick={handleCreate}
           className="flex items-center px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4 mr-2" />
-          Create Group
+          {t('admin.chatGroups.createGroup')}
         </button>
       </div>
 
@@ -237,7 +239,7 @@ export function AdminChatGroups() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search groups..."
+              placeholder={t('admin.chatGroups.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-4 py-2 border rounded-lg text-sm w-full"
@@ -260,7 +262,7 @@ export function AdminChatGroups() {
                   </div>
                   <div className="ml-3">
                     <h3 className="font-medium text-gray-900">{group.name}</h3>
-                    <p className="text-sm text-gray-500">{group.member_count} members</p>
+                    <p className="text-sm text-gray-500">{group.member_count} {t('admin.chatGroups.members')}</p>
                   </div>
                 </div>
                 <ActionMenu
@@ -272,20 +274,20 @@ export function AdminChatGroups() {
                     onClick={() => handleViewMembers(group)}
                     icon={<Users className="w-4 h-4" />}
                   >
-                    View Members
+                    {t('admin.chatGroups.viewMembers')}
                   </ActionMenuItem>
                   <ActionMenuItem
                     onClick={() => handleEdit(group)}
                     icon={<Edit2 className="w-4 h-4" />}
                   >
-                    Edit
+                    {t('admin.chatGroups.edit')}
                   </ActionMenuItem>
                   <ActionMenuItem
                     onClick={() => handleDelete(group.id)}
                     variant="danger"
                     icon={<Trash2 className="w-4 h-4" />}
                   >
-                    Delete
+                    {t('admin.chatGroups.delete')}
                   </ActionMenuItem>
                 </ActionMenu>
               </div>
@@ -294,10 +296,10 @@ export function AdminChatGroups() {
               )}
               <div className="mt-3 flex items-center justify-between">
                 <span className={`text-xs px-2 py-1 rounded-full ${group.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                  {group.is_active ? 'Active' : 'Inactive'}
+                  {group.is_active ? t('admin.chatGroups.active') : t('admin.chatGroups.inactive')}
                 </span>
                 <span className="text-xs text-gray-400">
-                  Created {new Date(group.created_at).toLocaleDateString()}
+                  {t('admin.chatGroups.created')} {new Date(group.created_at).toLocaleDateString()}
                 </span>
               </div>
             </div>
@@ -306,7 +308,7 @@ export function AdminChatGroups() {
 
         {filteredGroups.length === 0 && (
           <div className="p-8 text-center text-gray-500">
-            No groups found matching your criteria
+            {t('admin.chatGroups.noGroupsFound')}
           </div>
         )}
       </div>
@@ -317,31 +319,31 @@ export function AdminChatGroups() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="p-6 border-b">
               <h2 className="text-xl font-semibold text-gray-900">
-                {editingGroup ? 'Edit Group' : 'Create New Group'}
+                {editingGroup ? t('admin.chatGroups.createModal.titleEdit') : t('admin.chatGroups.createModal.titleCreate')}
               </h2>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Group Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.chatGroups.createModal.groupNameLabel')} *</label>
                 <input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="e.g., Watch Enthusiasts"
+                  placeholder={t('admin.chatGroups.createModal.groupNamePlaceholder')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.chatGroups.createModal.descriptionLabel')}</label>
                 <textarea
                   rows={3}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="What is this group about?"
+                  placeholder={t('admin.chatGroups.createModal.descriptionPlaceholder')}
                 />
               </div>
 
@@ -349,7 +351,7 @@ export function AdminChatGroups() {
                 value={formData.avatar || undefined}
                 onChange={(url) => setFormData({ ...formData, avatar: url || '' })}
                 uploadEndpoint="/upload/group-avatar"
-                label="Group Avatar"
+                label={t('admin.chatGroups.createModal.avatarLabel')}
               />
 
               <div className="flex justify-end gap-3 pt-4 border-t">
@@ -358,14 +360,14 @@ export function AdminChatGroups() {
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
                 >
-                  Cancel
+                  {t('admin.chatGroups.createModal.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : (editingGroup ? 'Update' : 'Create')}
+                  {saving ? t('admin.chatGroups.createModal.saving') : (editingGroup ? t('admin.chatGroups.createModal.update') : t('admin.chatGroups.createModal.create'))}
                 </button>
               </div>
             </form>
@@ -379,7 +381,7 @@ export function AdminChatGroups() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] overflow-hidden">
             <div className="p-6 border-b flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Group Members</h2>
+                <h2 className="text-xl font-semibold text-gray-900">{t('admin.chatGroups.membersModal.title')}</h2>
                 <p className="text-sm text-gray-500">{selectedGroup.name}</p>
               </div>
               <button
@@ -390,7 +392,7 @@ export function AdminChatGroups() {
                 className="flex items-center px-3 py-1.5 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary/5"
               >
                 <UserPlus className="w-4 h-4 mr-1" />
-                Add
+                {t('admin.chatGroups.membersModal.add')}
               </button>
             </div>
 
@@ -429,7 +431,7 @@ export function AdminChatGroups() {
 
               {(!selectedGroup.members || selectedGroup.members.filter(m => m.is_active).length === 0) && (
                 <div className="p-8 text-center text-gray-500">
-                  No members in this group
+                  {t('admin.chatGroups.membersModal.noMembers')}
                 </div>
               )}
             </div>
@@ -439,7 +441,7 @@ export function AdminChatGroups() {
                 onClick={() => setShowMembersModal(false)}
                 className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
-                Close
+                {t('admin.chatGroups.membersModal.close')}
               </button>
             </div>
           </div>
@@ -451,8 +453,8 @@ export function AdminChatGroups() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] overflow-hidden">
             <div className="p-6 border-b">
-              <h2 className="text-xl font-semibold text-gray-900">Add Members</h2>
-              <p className="text-sm text-gray-500">Select users to add to {selectedGroup.name}</p>
+              <h2 className="text-xl font-semibold text-gray-900">{t('admin.chatGroups.addMemberModal.title')}</h2>
+              <p className="text-sm text-gray-500">{t('admin.chatGroups.addMemberModal.subtitle', { name: selectedGroup.name })}</p>
             </div>
 
             <div className="overflow-y-auto max-h-[50vh]">
@@ -489,7 +491,7 @@ export function AdminChatGroups() {
 
               {availableUsers.length === 0 && (
                 <div className="p-8 text-center text-gray-500">
-                  No more users available to add
+                  {t('admin.chatGroups.addMemberModal.noUsersAvailable')}
                 </div>
               )}
             </div>
@@ -502,14 +504,14 @@ export function AdminChatGroups() {
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
               >
-                Cancel
+                {t('admin.chatGroups.addMemberModal.cancel')}
               </button>
               <button
                 onClick={handleAddMembers}
                 disabled={selectedUserIds.length === 0}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
               >
-                Add {selectedUserIds.length > 0 ? `(${selectedUserIds.length})` : ''} Members
+                {t('admin.chatGroups.addMemberModal.addMembers')} {selectedUserIds.length > 0 ? `(${selectedUserIds.length})` : ''}
               </button>
             </div>
           </div>

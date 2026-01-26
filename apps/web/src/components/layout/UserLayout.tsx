@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   Home,
   Store,
@@ -37,14 +38,15 @@ function BellIcon({ className }: { className?: string }) {
   )
 }
 
-const navigation = [
-  { name: 'Home', to: '/app', icon: Home },
-  { name: 'Market', to: '/app/market', icon: Store },
-  { name: 'AI Assistant', to: '/app/ai-assistant', icon: Sparkles },
-]
-
 export function UserLayout() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
+
+  const navigation = [
+    { name: t('nav.home'), to: '/app', icon: Home },
+    { name: t('nav.market'), to: '/app/market', icon: Store },
+    { name: t('nav.aiAssistant'), to: '/app/ai-assistant', icon: Sparkles },
+  ]
   const user = useAuthStore((state) => state.user)
   const isAdmin = useAuthStore((state) => state.isAdmin)
   const logout = useAuthStore((state) => state.logout)
@@ -166,7 +168,7 @@ export function UserLayout() {
               <div className="flex items-center gap-2">
                 <Shield className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  Admin Preview Mode — You're viewing the app as users see it
+                  {t('nav.adminPreviewBanner')}
                 </span>
               </div>
               <button
@@ -174,7 +176,7 @@ export function UserLayout() {
                 className="flex items-center gap-1.5 px-3 py-1 text-sm font-medium bg-white/20 hover:bg-white/30 rounded-md transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
-                Back to Admin
+                {t('nav.backToAdmin')}
               </button>
             </div>
           </div>
@@ -231,7 +233,7 @@ export function UserLayout() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={handleSearchFocus}
-                placeholder="Search watches..."
+                placeholder={t('nav.searchWatches')}
                 className="w-full bg-transparent text-[15px] text-gray-900 placeholder-gray-900/50 outline-none"
               />
             </div>
@@ -295,7 +297,7 @@ export function UserLayout() {
 
                   {/* Personal Section */}
                   <div className="flex flex-col gap-4 mb-6">
-                    <p className="text-xs font-bold text-gray-900 opacity-50 tracking-wide">PERSONAL</p>
+                    <p className="text-xs font-bold text-gray-900 opacity-50 tracking-wide">{t('nav.personal')}</p>
                     <div className="flex flex-col">
                       <NavLink
                         to="/app/inventory"
@@ -303,7 +305,7 @@ export function UserLayout() {
                         className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-gray-50 transition-colors"
                       >
                         <Watch className="w-4 h-4 text-gray-900" />
-                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">Inventory</span>
+                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">{t('nav.inventory')}</span>
                       </NavLink>
                       <NavLink
                         to="/app/social-search"
@@ -311,14 +313,14 @@ export function UserLayout() {
                         className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-gray-50 transition-colors"
                       >
                         <Search className="w-4 h-4 text-gray-900" />
-                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">Social Search</span>
+                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">{t('nav.socialSearch')}</span>
                       </NavLink>
                     </div>
                   </div>
 
                   {/* Account Settings Section */}
                   <div className="flex flex-col gap-4">
-                    <p className="text-xs font-bold text-gray-900 opacity-50 tracking-wide">ACCOUNT SETTINGS</p>
+                    <p className="text-xs font-bold text-gray-900 opacity-50 tracking-wide">{t('nav.accountSettings')}</p>
                     <div className="flex flex-col">
                       <NavLink
                         to="/app/profile"
@@ -326,7 +328,7 @@ export function UserLayout() {
                         className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-gray-50 transition-colors"
                       >
                         <User className="w-4 h-4 text-gray-900" />
-                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">Profile</span>
+                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">{t('nav.profile')}</span>
                       </NavLink>
                       {isAdmin && (
                         <NavLink
@@ -335,7 +337,7 @@ export function UserLayout() {
                           className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-purple-50 transition-colors"
                         >
                           <Shield className="w-4 h-4 text-purple-700" />
-                          <span className="text-base font-medium text-purple-700 tracking-[0.08px]">Admin Panel</span>
+                          <span className="text-base font-medium text-purple-700 tracking-[0.08px]">{t('nav.adminPanel')}</span>
                         </NavLink>
                       )}
                       <button
@@ -346,7 +348,7 @@ export function UserLayout() {
                         className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-gray-50 transition-colors w-full text-left"
                       >
                         <LogOut className="w-4 h-4 text-gray-900" />
-                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">Log Out</span>
+                        <span className="text-base font-medium text-gray-900 tracking-[0.08px]">{t('nav.logout')}</span>
                       </button>
                     </div>
                   </div>
@@ -383,7 +385,7 @@ export function UserLayout() {
                       setMobileMenuOpen(false)
                       navigate('/app/search')
                     }}
-                    placeholder="Search watches..."
+                    placeholder={t('nav.searchWatches')}
                     className="w-full bg-transparent text-sm text-gray-900 placeholder-gray-900/50 outline-none"
                   />
                 </div>
@@ -412,7 +414,7 @@ export function UserLayout() {
                 className="flex items-center px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
               >
                 <Search className="w-5 h-5 mr-3" />
-                Social Search
+                {t('nav.socialSearch')}
               </NavLink>
               <NavLink
                 to="/app/profile"
@@ -420,7 +422,7 @@ export function UserLayout() {
                 className="flex items-center px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
               >
                 <User className="w-5 h-5 mr-3" />
-                Profile
+                {t('nav.profile')}
               </NavLink>
               {isAdmin && (
                 <NavLink
@@ -429,7 +431,7 @@ export function UserLayout() {
                   className="flex items-center px-4 py-3 text-sm font-medium text-purple-700 hover:bg-purple-50 rounded-lg"
                 >
                   <Shield className="w-5 h-5 mr-3" />
-                  Admin Panel
+                  {t('nav.adminPanel')}
                 </NavLink>
               )}
               <button
@@ -437,7 +439,7 @@ export function UserLayout() {
                 className="flex items-center w-full px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
               >
                 <LogOut className="w-5 h-5 mr-3" />
-                Log Out
+                {t('nav.logout')}
               </button>
             </div>
           </div>

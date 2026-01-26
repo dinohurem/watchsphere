@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Search, Check, X, Trash2, UserPlus, Mail, Star, Eye, Edit2, Plus } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
@@ -104,9 +105,9 @@ function AuthProviderBadge({ provider }: { provider?: 'email' | 'google' | 'appl
   )
 }
 
-function RatingDisplay({ rating, count }: { rating: number; count: number }) {
+function RatingDisplay({ rating, count, noReviewsText }: { rating: number; count: number; noReviewsText: string }) {
   if (count === 0) {
-    return <span className="text-xs text-gray-400">No reviews</span>
+    return <span className="text-xs text-gray-400">{noReviewsText}</span>
   }
   return (
     <div className="flex items-center gap-1">
@@ -118,6 +119,7 @@ function RatingDisplay({ rating, count }: { rating: number; count: number }) {
 }
 
 export function AdminUsers() {
+  const { t } = useTranslation()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -179,7 +181,7 @@ export function AdminUsers() {
   }
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return
+    if (!confirm(t('admin.common.confirmDelete'))) return
     try {
       await api.delete(`/admin/users/${userId}`)
       fetchUsers()
@@ -281,7 +283,7 @@ export function AdminUsers() {
   }
 
   const handleDeleteReview = async (reviewId: string) => {
-    if (!confirm('Are you sure you want to delete this review?')) return
+    if (!confirm(t('admin.common.confirmDelete'))) return
 
     setDeletingReviewId(reviewId)
     try {
@@ -344,15 +346,15 @@ export function AdminUsers() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-          <p className="text-gray-600">Manage all registered users ({users.length} total)</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('admin.users.title')}</h1>
+          <p className="text-gray-600">{t('admin.users.subtitle')} ({t('admin.users.total', { count: users.length })})</p>
         </div>
         <button
           onClick={() => setShowInviteModal(true)}
           className="flex items-center px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
         >
           <UserPlus className="w-4 h-4 mr-2" />
-          Invite User
+          {t('admin.users.inviteUser')}
         </button>
       </div>
 
@@ -363,7 +365,7 @@ export function AdminUsers() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search users..."
+              placeholder={t('admin.users.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-4 py-2 border rounded-lg text-sm w-full"
@@ -374,9 +376,9 @@ export function AdminUsers() {
             onChange={(e) => setRoleFilter(e.target.value)}
             className="px-4 py-2 border rounded-lg text-sm"
           >
-            <option value="all">All Roles</option>
-            <option value="dealer">Dealers</option>
-            <option value="collector">Collectors</option>
+            <option value="all">{t('admin.users.allRoles')}</option>
+            <option value="dealer">{t('admin.dashboard.dealers')}</option>
+            <option value="collector">{t('admin.dashboard.collectors')}</option>
             <option value="admin">Admins</option>
           </select>
         </div>
@@ -386,12 +388,12 @@ export function AdminUsers() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rating</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('admin.users.user')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('admin.users.role')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('admin.users.status')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('admin.users.rating')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('admin.users.joined')}</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('admin.users.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -424,7 +426,7 @@ export function AdminUsers() {
                       onClick={() => handleViewReviews(user.id)}
                       className="hover:bg-gray-100 rounded px-2 py-1 transition-colors"
                     >
-                      <RatingDisplay rating={user.average_rating || 0} count={user.review_count || 0} />
+                      <RatingDisplay rating={user.average_rating || 0} count={user.review_count || 0} noReviewsText={t('admin.users.noReviews')} />
                     </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -442,7 +444,7 @@ export function AdminUsers() {
                           variant="success"
                           icon={<Check className="w-4 h-4" />}
                         >
-                          Approve
+                          {t('admin.users.approve')}
                         </ActionMenuItem>
                       )}
                       {!user.approved && user.role !== 'admin' && (
@@ -450,7 +452,7 @@ export function AdminUsers() {
                           onClick={() => handleReject(user.id)}
                           icon={<X className="w-4 h-4" />}
                         >
-                          Reject
+                          {t('admin.users.reject')}
                         </ActionMenuItem>
                       )}
                       {user.role === 'admin' && (
@@ -459,17 +461,17 @@ export function AdminUsers() {
                           icon={<Mail className="w-4 h-4" />}
                           disabled={reinviting === user.id}
                         >
-                          {reinviting === user.id ? 'Sending...' : 'Re-invite'}
+                          {reinviting === user.id ? t('admin.users.sending') : t('admin.users.reinvite')}
                         </ActionMenuItem>
                       )}
                       <ActionMenuItem
                         onClick={() => handleViewReviews(user.id)}
                         icon={<Eye className="w-4 h-4" />}
                       >
-                        View Reviews
+                        {t('admin.users.viewReviews')}
                       </ActionMenuItem>
                       <ActionMenuItem onClick={() => handleToggleActive(user.id, user.is_active)}>
-                        {user.is_active ? 'Deactivate' : 'Activate'}
+                        {user.is_active ? t('admin.users.deactivate') : t('admin.users.activate')}
                       </ActionMenuItem>
                       {user.role !== 'admin' && (
                         <ActionMenuItem
@@ -477,7 +479,7 @@ export function AdminUsers() {
                           variant="danger"
                           icon={<Trash2 className="w-4 h-4" />}
                         >
-                          Delete
+                          {t('admin.users.delete')}
                         </ActionMenuItem>
                       )}
                     </ActionMenu>
@@ -490,7 +492,7 @@ export function AdminUsers() {
 
         {filteredUsers.length === 0 && (
           <div className="p-8 text-center text-gray-500">
-            No users found matching your criteria
+            {t('admin.users.noUsersFound')}
           </div>
         )}
       </div>
@@ -500,9 +502,9 @@ export function AdminUsers() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="p-6 border-b">
-              <h2 className="text-xl font-semibold text-gray-900">Invite User</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{t('admin.users.inviteModal.title')}</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Send an invitation email with temporary login credentials
+                {t('admin.users.inviteModal.subtitle')}
               </p>
             </div>
 
@@ -519,26 +521,26 @@ export function AdminUsers() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.users.inviteModal.nameLabel')} *</label>
                 <input
                   type="text"
                   required
                   value={inviteFormData.name}
                   onChange={(e) => setInviteFormData({ ...inviteFormData, name: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="John Doe"
+                  placeholder={t('admin.users.inviteModal.namePlaceholder')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.users.inviteModal.emailLabel')} *</label>
                 <input
                   type="email"
                   required
                   value={inviteFormData.email}
                   onChange={(e) => setInviteFormData({ ...inviteFormData, email: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="admin@example.com"
+                  placeholder={t('admin.users.inviteModal.emailPlaceholder')}
                 />
               </div>
 
@@ -553,14 +555,14 @@ export function AdminUsers() {
                   }}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
                 >
-                  Cancel
+                  {t('admin.users.inviteModal.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={inviting || !inviteFormData.email || !inviteFormData.name}
                   className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {inviting ? 'Sending...' : 'Send Invitation'}
+                  {inviting ? t('admin.users.sending') : t('admin.users.inviteModal.sendInvitation')}
                 </button>
               </div>
             </form>
@@ -575,13 +577,13 @@ export function AdminUsers() {
             <div className="p-6 border-b flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Reviews for {selectedUserReviews?.user_name || 'User'}
+                  {t('admin.users.reviewsModal.title', { name: selectedUserReviews?.user_name || 'User' })}
                 </h2>
                 {selectedUserReviews && (
                   <div className="flex items-center gap-2 mt-1">
                     <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
                     <span className="font-semibold">{selectedUserReviews.average_rating.toFixed(1)}</span>
-                    <span className="text-gray-500">({selectedUserReviews.review_count} reviews)</span>
+                    <span className="text-gray-500">({selectedUserReviews.review_count} {t('admin.users.reviewsModal.reviews')})</span>
                   </div>
                 )}
               </div>
@@ -591,7 +593,7 @@ export function AdminUsers() {
                   className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90"
                 >
                   <Plus className="w-4 h-4" />
-                  Add Review
+                  {t('admin.users.reviewsModal.addReview')}
                 </button>
                 <button
                   onClick={() => {
@@ -614,7 +616,7 @@ export function AdminUsers() {
               ) : selectedUserReviews?.reviews.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <Star className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>No reviews yet</p>
+                  <p>{t('admin.users.reviewsModal.noReviews')}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -664,14 +666,14 @@ export function AdminUsers() {
                               className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
                               disabled={savingReview}
                             >
-                              Cancel
+                              {t('admin.users.reviewsModal.cancel')}
                             </button>
                             <button
                               onClick={handleSaveReview}
                               disabled={savingReview}
                               className="px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
                             >
-                              {savingReview ? 'Saving...' : 'Save'}
+                              {savingReview ? t('admin.users.reviewsModal.saving') : t('admin.users.reviewsModal.save')}
                             </button>
                           </div>
                         </div>
@@ -708,7 +710,7 @@ export function AdminUsers() {
                               <button
                                 onClick={() => handleEditReview(review)}
                                 className="p-1.5 text-gray-500 hover:text-primary hover:bg-gray-100 rounded"
-                                title="Edit review"
+                                title={t('admin.users.reviewsModal.editReview')}
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
@@ -716,7 +718,7 @@ export function AdminUsers() {
                                 onClick={() => handleDeleteReview(review.id)}
                                 disabled={deletingReviewId === review.id}
                                 className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                                title="Delete review"
+                                title={t('admin.users.reviewsModal.deleteReview')}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -741,21 +743,21 @@ export function AdminUsers() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="p-6 border-b">
-              <h2 className="text-xl font-semibold text-gray-900">Add Review</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{t('admin.users.addReviewModal.title')}</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Add a review for {selectedUserReviews.user_name}
+                {t('admin.users.addReviewModal.subtitle', { name: selectedUserReviews.user_name })}
               </p>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reviewer *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.users.addReviewModal.reviewerLabel')} *</label>
                 <select
                   value={addReviewReviewerId}
                   onChange={(e) => setAddReviewReviewerId(e.target.value)}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                 >
-                  <option value="">Select a reviewer</option>
+                  <option value="">{t('admin.users.addReviewModal.selectReviewer')}</option>
                   {users
                     .filter(u => u.id !== selectedUserReviews.user_id)
                     .map(user => (
@@ -767,7 +769,7 @@ export function AdminUsers() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Rating *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.users.addReviewModal.ratingLabel')} *</label>
                 <div className="flex items-center gap-1">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -789,11 +791,11 @@ export function AdminUsers() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Comment</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.users.addReviewModal.commentLabel')}</label>
                 <textarea
                   value={addReviewComment}
                   onChange={(e) => setAddReviewComment(e.target.value)}
-                  placeholder="Optional review comment..."
+                  placeholder={t('admin.users.addReviewModal.commentPlaceholder')}
                   className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
                   rows={4}
                 />
@@ -810,14 +812,14 @@ export function AdminUsers() {
                   }}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
                 >
-                  Cancel
+                  {t('admin.users.addReviewModal.cancel')}
                 </button>
                 <button
                   onClick={handleAddReview}
                   disabled={addingReview || !addReviewReviewerId}
                   className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {addingReview ? 'Adding...' : 'Add Review'}
+                  {addingReview ? t('admin.users.addReviewModal.adding') : t('admin.users.addReviewModal.addReview')}
                 </button>
               </div>
             </div>

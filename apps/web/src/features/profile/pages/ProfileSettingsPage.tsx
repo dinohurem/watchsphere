@@ -6,49 +6,8 @@ import { User, CreditCard, Settings, ChevronRight, ChevronDown, LogOut, Crown, C
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
-// FAQ Data
-const faqData = [
-  {
-    question: 'What is WatchSphere?',
-    answer: 'WatchSphere is a comprehensive platform for watch collectors and dealers. It provides market data, price tracking, social features, and a marketplace for buying and selling luxury watches.',
-  },
-  {
-    question: 'How do I add watches to my watchlist?',
-    answer: "You can add watches to your watchlist by navigating to the Market section, finding a watch you're interested in, and clicking the heart icon. You can also set price alerts to be notified when a watch reaches your target price.",
-  },
-  {
-    question: 'How do buy and sell orders work?',
-    answer: "Buy orders let you post what watches you're looking to purchase along with your target price. Sell orders let you list watches you want to sell. Other users can browse these orders and reach out to you through the app's messaging feature.",
-  },
-  {
-    question: 'How do I contact a seller or buyer?',
-    answer: "When viewing a buy or sell order, you'll see options to contact the user via the in-app chat, WhatsApp, or Telegram (depending on what contact methods they've provided in their profile).",
-  },
-  {
-    question: 'How is watch pricing data collected?',
-    answer: 'Our pricing data is aggregated from multiple sources including authorized dealers, secondary market platforms, and auction results. We update prices regularly to provide the most accurate market information.',
-  },
-  {
-    question: 'What should I do if I have a dispute with another user?',
-    answer: 'If you have a dispute regarding a transaction, you can file a dispute through the Support section of the app. Go to Profile > Support > Disputes to create a new dispute. Our team will review and assist in resolving the issue.',
-  },
-  {
-    question: 'How do I update my profile information?',
-    answer: 'Go to Profile > Profile Settings to update your name, contact information, and profile photo. You can also add your WhatsApp and Telegram information so other users can contact you easily.',
-  },
-  {
-    question: 'Is my data secure?',
-    answer: 'Yes, we take data security seriously. All communications are encrypted, and we never share your personal information with third parties without your consent. You can review our Privacy Policy for more details.',
-  },
-  {
-    question: 'How do I report a bug or issue?',
-    answer: 'You can report issues through Profile > Support > Report an Issue. Please provide as much detail as possible about the problem you encountered, and our team will investigate and work on a fix.',
-  },
-  {
-    question: 'Can I delete my account?',
-    answer: 'Yes, you can deactivate your account through Profile > Account Details > Delete Account. This will deactivate your account and you will no longer be able to log in. Your data will be retained for a period as required by law.',
-  },
-];
+// FAQ Data keys (questions and answers are fetched via i18n)
+const FAQ_COUNT = 10;
 
 interface Dispute {
   id: string;
@@ -289,6 +248,7 @@ function GeneralSettings() {
 }
 
 export function ProfileSettingsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
@@ -477,7 +437,7 @@ export function ProfileSettingsPage() {
         title: issueTitle.trim(),
         description: issueDescription.trim(),
       });
-      alert('Issue Reported. Thank you for reporting this issue. Our team will investigate and work on a fix.');
+      alert(t('settings.issueReported'));
       setIssueTitle('');
       setIssueDescription('');
       setSupportView('main');
@@ -499,7 +459,7 @@ export function ProfileSettingsPage() {
         watch_model: disputeModel.trim() || null,
         description: disputeDescription.trim(),
       });
-      alert('Dispute Submitted. Your dispute has been submitted successfully. Our team will review it and get back to you.');
+      alert(t('settings.disputeSubmitted'));
       setDisputeWatchRef('');
       setDisputeBrand('');
       setDisputeModel('');
@@ -529,11 +489,11 @@ export function ProfileSettingsPage() {
   const formatStatus = (status: string) => {
     switch (status) {
       case 'open':
-        return 'Open';
+        return t('settings.statusOpen');
       case 'in_progress':
-        return 'In Progress';
+        return t('settings.statusInProgress');
       case 'closed':
-        return 'Closed';
+        return t('settings.statusClosed');
       default:
         return status;
     }
@@ -562,7 +522,7 @@ export function ProfileSettingsPage() {
           profile_image_url: response.data.url,
           profile_image_thumbnail_url: response.data.thumbnail_url || response.data.url,
         });
-        alert('Profile photo updated successfully!');
+        alert(t('settings.photoUpdated'));
       }
     } catch (error: any) {
       alert(error.response?.data?.detail || 'Failed to upload photo. Please try again.');
@@ -591,15 +551,15 @@ export function ProfileSettingsPage() {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      alert('Please fill in all fields');
+      alert(t('settings.fillAllFields'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      alert('New passwords do not match');
+      alert(t('settings.passwordsNoMatch'));
       return;
     }
     if (newPassword.length < 6) {
-      alert('Password must be at least 6 characters');
+      alert(t('settings.passwordMinLength'));
       return;
     }
 
@@ -609,7 +569,7 @@ export function ProfileSettingsPage() {
         current_password: currentPassword,
         new_password: newPassword,
       });
-      alert('Password changed successfully!');
+      alert(t('settings.passwordChanged'));
       setShowPasswordModal(false);
       setCurrentPassword('');
       setNewPassword('');
@@ -622,7 +582,7 @@ export function ProfileSettingsPage() {
   };
 
   const handleDeleteAccount = async () => {
-    if (!window.confirm('Are you sure you want to delete your account? This will deactivate your account and you will no longer be able to log in.')) {
+    if (!window.confirm(t('settings.deleteAccountConfirmMessage'))) {
       return;
     }
 
@@ -687,13 +647,13 @@ export function ProfileSettingsPage() {
   }, [location.key]);
 
   const menuItems = [
-    { id: 'profile' as const, label: 'Profile Settings', icon: User },
-    { id: 'account' as const, label: 'Account Details', icon: Settings },
-    { id: 'billing' as const, label: 'Billing', icon: CreditCard },
-    { id: 'orders' as const, label: 'Orders', icon: ShoppingBag },
-    { id: 'general' as const, label: 'General', icon: Sliders },
-    { id: 'terms' as const, label: 'Terms and Privacy', icon: FileText },
-    { id: 'support' as const, label: 'Support', icon: HelpCircle },
+    { id: 'profile' as const, label: t('settings.profileSettings'), icon: User },
+    { id: 'account' as const, label: t('settings.accountDetails'), icon: Settings },
+    { id: 'billing' as const, label: t('settings.billingSubscription'), icon: CreditCard },
+    { id: 'orders' as const, label: t('settings.orders'), icon: ShoppingBag },
+    { id: 'general' as const, label: t('settings.general'), icon: Sliders },
+    { id: 'terms' as const, label: t('settings.termsPrivacy'), icon: FileText },
+    { id: 'support' as const, label: t('settings.support'), icon: HelpCircle },
   ];
 
   const renderContent = () => {
@@ -724,12 +684,12 @@ export function ProfileSettingsPage() {
             {/* Status Label - top right corner */}
             {isSold && (
               <span className="absolute top-2 right-2 z-10 px-2 py-1 rounded-lg text-[11px] font-semibold bg-[rgba(201,57,39,0.1)] text-[#c93927]">
-                Sold
+                {t('orderDetails.sold')}
               </span>
             )}
             {isCompleted && (
               <span className="absolute top-2 right-2 z-10 px-2 py-1 rounded-lg text-[11px] font-semibold bg-[rgba(128,128,128,0.1)] text-[#666666]">
-                Completed
+                {t('orderDetails.completed')}
               </span>
             )}
             <div className="h-36 bg-gradient-to-b from-white to-gray-50 flex items-center justify-center p-4">
@@ -758,8 +718,8 @@ export function ProfileSettingsPage() {
 
       return (
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Orders</h2>
-          <p className="text-gray-500 mb-6">View and manage your buy and sell orders</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.orders')}</h2>
+          <p className="text-gray-500 mb-6">{t('settings.ordersDescription')}</p>
 
           {loadingOrders ? (
             <div className="flex items-center justify-center py-12">
@@ -775,7 +735,7 @@ export function ProfileSettingsPage() {
                 >
                   <span className="flex items-center gap-2">
                     <ShoppingBag className="w-5 h-5" />
-                    Buy Orders ({buyOrders.length})
+                    {t('settings.buyOrdersCount', { count: buyOrders.length })}
                   </span>
                   <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${buyOrdersExpanded ? '' : '-rotate-90'}`} />
                 </button>
@@ -790,8 +750,8 @@ export function ProfileSettingsPage() {
                         <div className="w-14 h-14 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-3">
                           <ShoppingBag className="w-7 h-7 text-gray-400" />
                         </div>
-                        <h4 className="font-semibold text-gray-900 mb-1">No buy orders yet</h4>
-                        <p className="text-gray-500 text-sm">Create buy orders to see them here</p>
+                        <h4 className="font-semibold text-gray-900 mb-1">{t('settings.noBuyOrdersYet')}</h4>
+                        <p className="text-gray-500 text-sm">{t('settings.noBuyOrdersYet')}</p>
                       </div>
                     )}
                   </>
@@ -806,7 +766,7 @@ export function ProfileSettingsPage() {
                 >
                   <span className="flex items-center gap-2">
                     <Tag className="w-5 h-5" />
-                    Sell Orders ({sellOrders.length})
+                    {t('settings.sellOrdersCount', { count: sellOrders.length })}
                   </span>
                   <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${sellOrdersExpanded ? '' : '-rotate-90'}`} />
                 </button>
@@ -821,8 +781,8 @@ export function ProfileSettingsPage() {
                         <div className="w-14 h-14 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-3">
                           <Tag className="w-7 h-7 text-gray-400" />
                         </div>
-                        <h4 className="font-semibold text-gray-900 mb-1">No sell orders yet</h4>
-                        <p className="text-gray-500 text-sm">Create sell orders to see them here</p>
+                        <h4 className="font-semibold text-gray-900 mb-1">{t('settings.noSellOrdersYet')}</h4>
+                        <p className="text-gray-500 text-sm">{t('settings.noSellOrdersYet')}</p>
                       </div>
                     )}
                   </>
@@ -843,8 +803,8 @@ export function ProfileSettingsPage() {
     if (activeSection === 'terms') {
       return (
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Terms and Privacy</h2>
-          <p className="text-gray-500 mb-6">Review our policies and terms</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.termsPrivacy')}</h2>
+          <p className="text-gray-500 mb-6">{t('settings.termsPrivacy')}</p>
 
           <div className="space-y-4">
             <button
@@ -856,8 +816,8 @@ export function ProfileSettingsPage() {
                   <FileText className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-gray-900">Terms of Service</h3>
-                  <p className="text-sm text-gray-500">Read our terms and conditions</p>
+                  <h3 className="font-medium text-gray-900">{t('settings.termsOfService')}</h3>
+                  <p className="text-sm text-gray-500">{t('settings.termsOfService')}</p>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -872,8 +832,8 @@ export function ProfileSettingsPage() {
                   <FileText className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-gray-900">Privacy Policy</h3>
-                  <p className="text-sm text-gray-500">Learn how we protect your data</p>
+                  <h3 className="font-medium text-gray-900">{t('settings.privacyPolicy')}</h3>
+                  <p className="text-sm text-gray-500">{t('settings.privacyPolicy')}</p>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -893,24 +853,24 @@ export function ProfileSettingsPage() {
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <span>{t('common.back')}</span>
             </button>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Frequently Asked Questions</h2>
-            <p className="text-gray-500 mb-6">Find answers to common questions about WatchSphere</p>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.faq')}</h2>
+            <p className="text-gray-500 mb-6">{t('settings.faq')}</p>
 
             <div className="space-y-4">
-              {faqData.map((faq, index) => (
+              {Array.from({ length: FAQ_COUNT }, (_, index) => (
                 <div key={index} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                   <button
                     onClick={() => setOpenFaqIndex(openFaqIndex === index ? null : index)}
                     className="w-full flex items-center justify-between p-6 text-left"
                   >
-                    <span className="font-medium text-gray-900 pr-4">{faq.question}</span>
+                    <span className="font-medium text-gray-900 pr-4">{t(`settings.faqItems.q${index + 1}`)}</span>
                     <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${openFaqIndex === index ? 'rotate-180' : ''}`} />
                   </button>
                   {openFaqIndex === index && (
                     <div className="px-6 pb-6">
-                      <p className="text-gray-600 text-sm leading-relaxed">{faq.answer}</p>
+                      <p className="text-gray-600 text-sm leading-relaxed">{t(`settings.faqItems.a${index + 1}`)}</p>
                     </div>
                   )}
                 </div>
@@ -929,10 +889,10 @@ export function ProfileSettingsPage() {
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <span>{t('common.back')}</span>
             </button>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Help Center</h2>
-            <p className="text-gray-500 mb-6">Find answers to common questions or take a guided tour</p>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.helpCenter')}</h2>
+            <p className="text-gray-500 mb-6">{t('settings.helpCenter')}</p>
 
             <div className="space-y-4">
               <button
@@ -944,8 +904,8 @@ export function ProfileSettingsPage() {
                     <BookOpen className="w-5 h-5 text-gray-600" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-gray-900">FAQ</h3>
-                    <p className="text-sm text-gray-500">Frequently asked questions and answers</p>
+                    <h3 className="font-medium text-gray-900">{t('settings.faq')}</h3>
+                    <p className="text-sm text-gray-500">{t('settings.faq')}</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -960,8 +920,8 @@ export function ProfileSettingsPage() {
                     <PlayCircle className="w-5 h-5 text-gray-600" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-gray-900">Demo</h3>
-                    <p className="text-sm text-gray-500">Take a guided tour of the app</p>
+                    <h3 className="font-medium text-gray-900">{t('settings.helpCenter')}</h3>
+                    <p className="text-sm text-gray-500">{t('settings.helpCenter')}</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -981,18 +941,18 @@ export function ProfileSettingsPage() {
                 className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
               >
                 <ArrowLeft className="w-5 h-5" />
-                <span>Back</span>
+                <span>{t('common.back')}</span>
               </button>
               <button
                 onClick={() => setSupportView('new-dispute')}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                <span>New Dispute</span>
+                <span>{t('settings.newDispute')}</span>
               </button>
             </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Disputes</h2>
-            <p className="text-gray-500 mb-6">View and manage your transaction disputes</p>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.disputes')}</h2>
+            <p className="text-gray-500 mb-6">{t('settings.disputes')}</p>
 
             {loadingDisputes ? (
               <div className="flex items-center justify-center py-12">
@@ -1026,9 +986,9 @@ export function ProfileSettingsPage() {
             ) : (
               <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
                 <AlertTriangle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <h3 className="font-semibold text-gray-900 mb-2">No disputes</h3>
+                <h3 className="font-semibold text-gray-900 mb-2">{t('settings.disputes')}</h3>
                 <p className="text-sm text-gray-500 max-w-sm mx-auto">
-                  You haven't filed any disputes yet. If you have an issue with a transaction, click the + button to create a new dispute.
+                  {t('settings.disputes')}
                 </p>
               </div>
             )}
@@ -1047,14 +1007,14 @@ export function ProfileSettingsPage() {
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <span>{t('common.back')}</span>
             </button>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">File a Dispute</h2>
-            <p className="text-gray-500 mb-6">Please provide details about the watch and the issue you're experiencing</p>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.fileDispute')}</h2>
+            <p className="text-gray-500 mb-6">{t('settings.fileDispute')}</p>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Watch Reference *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">{t('settings.watchReference')} *</label>
                 <input
                   type="text"
                   placeholder="e.g., 126610LN"
@@ -1066,7 +1026,7 @@ export function ProfileSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Brand (Optional)</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">{t('settings.brand')}</label>
                 <input
                   type="text"
                   placeholder="e.g., Rolex"
@@ -1078,7 +1038,7 @@ export function ProfileSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Model (Optional)</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">{t('settings.model')}</label>
                 <input
                   type="text"
                   placeholder="e.g., Submariner"
@@ -1090,7 +1050,7 @@ export function ProfileSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Description *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">{t('settings.description')} *</label>
                 <textarea
                   placeholder="Please describe the issue in detail..."
                   value={disputeDescription}
@@ -1110,7 +1070,7 @@ export function ProfileSettingsPage() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {submittingDispute ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Submit Dispute'}
+                {submittingDispute ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : t('settings.submitDispute')}
               </button>
             </div>
           </div>
@@ -1128,14 +1088,14 @@ export function ProfileSettingsPage() {
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <span>{t('common.back')}</span>
             </button>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Report an Issue</h2>
-            <p className="text-gray-500 mb-6">Found a bug or experiencing a problem? Let us know and we'll work on fixing it.</p>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.reportIssue')}</h2>
+            <p className="text-gray-500 mb-6">{t('settings.reportIssue')}</p>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Title *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">{t('settings.reportSubject')} *</label>
                 <input
                   type="text"
                   placeholder="Brief summary of the issue"
@@ -1147,7 +1107,7 @@ export function ProfileSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Description *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">{t('settings.description')} *</label>
                 <textarea
                   placeholder="Please describe the issue in detail. Include steps to reproduce if possible..."
                   value={issueDescription}
@@ -1167,7 +1127,7 @@ export function ProfileSettingsPage() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {submittingIssue ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Submit'}
+                {submittingIssue ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : t('settings.submitReport')}
               </button>
             </div>
           </div>
@@ -1183,10 +1143,10 @@ export function ProfileSettingsPage() {
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
+              <span>{t('common.back')}</span>
             </button>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Get in Touch</h2>
-            <p className="text-gray-500 mb-6">Have questions about WatchSphere? We're here to help. Reach out to us through any of the channels below.</p>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.getInTouch')}</h2>
+            <p className="text-gray-500 mb-6">{t('settings.getInTouch')}</p>
 
             <div className="space-y-4">
               <a
@@ -1198,7 +1158,7 @@ export function ProfileSettingsPage() {
                     <Mail className="w-5 h-5 text-gray-600" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-gray-900">Email Us</h3>
+                    <h3 className="font-medium text-gray-900">{t('settings.emailUs')}</h3>
                     <p className="text-sm text-gray-500">info@watchsphere.io</p>
                   </div>
                 </div>
@@ -1212,8 +1172,8 @@ export function ProfileSettingsPage() {
       // Main Support View
       return (
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Support</h2>
-          <p className="text-gray-500 mb-6">Get help, report issues, or file disputes</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.support')}</h2>
+          <p className="text-gray-500 mb-6">{t('settings.support')}</p>
 
           <div className="space-y-4">
             <button
@@ -1225,8 +1185,8 @@ export function ProfileSettingsPage() {
                   <BookOpen className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-gray-900">Help Center</h3>
-                  <p className="text-sm text-gray-500">FAQ and guided tours</p>
+                  <h3 className="font-medium text-gray-900">{t('settings.helpCenter')}</h3>
+                  <p className="text-sm text-gray-500">{t('settings.helpCenter')}</p>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -1244,8 +1204,8 @@ export function ProfileSettingsPage() {
                   <AlertTriangle className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-gray-900">Disputes</h3>
-                  <p className="text-sm text-gray-500">View and manage transaction disputes</p>
+                  <h3 className="font-medium text-gray-900">{t('settings.disputes')}</h3>
+                  <p className="text-sm text-gray-500">{t('settings.disputes')}</p>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -1260,8 +1220,8 @@ export function ProfileSettingsPage() {
                   <Bug className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-gray-900">Report an Issue</h3>
-                  <p className="text-sm text-gray-500">Report bugs or problems</p>
+                  <h3 className="font-medium text-gray-900">{t('settings.reportIssue')}</h3>
+                  <p className="text-sm text-gray-500">{t('settings.reportIssue')}</p>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -1276,8 +1236,8 @@ export function ProfileSettingsPage() {
                   <Mail className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-gray-900">Contact</h3>
-                  <p className="text-sm text-gray-500">Get in touch with us</p>
+                  <h3 className="font-medium text-gray-900">{t('settings.contactLabel')}</h3>
+                  <p className="text-sm text-gray-500">{t('settings.getInTouch')}</p>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -1290,39 +1250,39 @@ export function ProfileSettingsPage() {
     if (activeSection === 'account') {
       return (
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Account Details</h2>
-          <p className="text-gray-500 mb-6">Manage your account settings and security preferences</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.accountDetails')}</h2>
+          <p className="text-gray-500 mb-6">{t('settings.accountDetails')}</p>
 
           {/* Account Fields */}
           <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-100 mb-6">
             {/* Email (Read-only) */}
             <div className="p-6">
-              <label className="block text-sm text-gray-500 mb-2">E-mail Address</label>
-              <p className="text-gray-900">{profile?.email || 'No email set'}</p>
+              <label className="block text-sm text-gray-500 mb-2">{t('settings.email')}</label>
+              <p className="text-gray-900">{profile?.email || t('settings.noEmailSet')}</p>
             </div>
 
             {/* Change Password */}
             <div className="p-6">
-              <label className="block text-sm text-gray-500 mb-2">Change password</label>
+              <label className="block text-sm text-gray-500 mb-2">{t('settings.changePassword')}</label>
               {showPasswordModal ? (
                 <div className="space-y-4">
                   <input
                     type="password"
-                    placeholder="Current Password"
+                    placeholder={t('settings.currentPassword')}
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   />
                   <input
                     type="password"
-                    placeholder="New Password"
+                    placeholder={t('settings.newPassword')}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   />
                   <input
                     type="password"
-                    placeholder="Confirm New Password"
+                    placeholder={t('settings.confirmNewPassword')}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
@@ -1337,7 +1297,7 @@ export function ProfileSettingsPage() {
                       }}
                       className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg font-medium hover:bg-gray-50"
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                     <button
                       onClick={handleChangePassword}
@@ -1345,7 +1305,7 @@ export function ProfileSettingsPage() {
                       className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {changingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
-                      Save
+                      {t('common.save')}
                     </button>
                   </div>
                 </div>
@@ -1363,7 +1323,7 @@ export function ProfileSettingsPage() {
 
           {/* Delete Account Section */}
           <div className="mt-8">
-            <h3 className="font-semibold text-gray-900 mb-4">Danger Zone</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">{t('settings.dangerZone')}</h3>
             <div className="bg-white rounded-2xl border border-red-100 p-6">
               <button
                 onClick={handleDeleteAccount}
@@ -1375,10 +1335,10 @@ export function ProfileSettingsPage() {
                 ) : (
                   <Trash2 className="w-4 h-4" />
                 )}
-                Delete Account
+                {t('settings.deleteAccount')}
               </button>
               <p className="text-sm text-gray-500 text-center mt-3">
-                This will deactivate your account. You will not be able to log in anymore.
+                {t('settings.deleteAccountDesc')}
               </p>
             </div>
           </div>
@@ -1393,8 +1353,8 @@ export function ProfileSettingsPage() {
 
       return (
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Billing & Subscription</h2>
-          <p className="text-gray-500 mb-6">Manage your subscription plan and billing information</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.billingSubscription')}</h2>
+          <p className="text-gray-500 mb-6">{t('settings.billingSubscription')}</p>
 
           {/* Current Plan */}
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -1408,7 +1368,7 @@ export function ProfileSettingsPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">
-                      {hasPaidSubscription ? `${planName} Subscription` : subscription?.is_trial ? 'Free Trial' : 'Free Plan'}
+                      {hasPaidSubscription ? `${planName} Subscription` : subscription?.is_trial ? t('settings.freeTrial') : t('settings.freePlan')}
                     </h3>
                     <p className="text-sm text-gray-500">
                       {subscription?.has_subscription
@@ -1417,7 +1377,7 @@ export function ProfileSettingsPage() {
                           : hasPaidSubscription
                             ? `Expires: ${formatDate(subscription.expires_at)}`
                             : `${subscription.subscription_days_remaining} days remaining`
-                        : 'No active subscription'}
+                        : t('settings.noActiveSubscription')}
                     </p>
                   </div>
                 </div>
@@ -1427,7 +1387,7 @@ export function ProfileSettingsPage() {
                       ? hasPaidSubscription ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
                       : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {subscription.status === 'active' ? 'Active' : subscription.status}
+                    {subscription.status === 'active' ? t('settings.active') : subscription.status}
                   </span>
                 )}
               </div>
@@ -1437,20 +1397,20 @@ export function ProfileSettingsPage() {
               <div className="p-6 space-y-4">
                 {hasPaidSubscription && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Plan</span>
+                    <span className="text-gray-500">{t('settings.plan')}</span>
                     <span className="font-medium text-purple-600">
                       {planName}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Monthly Price</span>
+                  <span className="text-gray-500">{t('settings.monthlyPrice')}</span>
                   <span className="font-medium text-gray-900">
-                    {subscription.is_trial ? 'Free (Trial)' : `${subscription.price_monthly?.toFixed(2)} ${subscription.currency}`}
+                    {subscription.is_trial ? t('settings.freeTrialPrice') : `${subscription.price_monthly?.toFixed(2)} ${subscription.currency}`}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">{subscription.is_trial ? 'Trial Ends' : 'Active Until'}</span>
+                  <span className="text-gray-500">{subscription.is_trial ? t('settings.trialEnds') : t('settings.activeUntil')}</span>
                   <span className="font-medium text-gray-900">
                     {formatDate(subscription.expires_at)}
                   </span>
@@ -1466,7 +1426,7 @@ export function ProfileSettingsPage() {
                       {subscribing ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : null}
-                      Upgrade to Premium
+                      {t('settings.upgradeToPremium')}
                     </button>
                   </div>
                 )}
@@ -1474,14 +1434,13 @@ export function ProfileSettingsPage() {
             ) : (
               <div className="p-6">
                 <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 mb-4">
-                  <h4 className="font-semibold text-gray-900 mb-2">Upgrade to Premium</h4>
+                  <h4 className="font-semibold text-gray-900 mb-2">{t('settings.upgradeToPremium')}</h4>
                   <p className="text-sm text-gray-600 mb-4">
-                    Get unlimited access to all features including advanced market analytics,
-                    priority support, and exclusive deals.
+                    {t('settings.upgradeToPremium')}
                   </p>
                   <ul className="space-y-2 mb-4">
-                    {['Unlimited watch tracking', 'Advanced price alerts', 'Market insights & analytics', 'Priority customer support'].map((feature) => (
-                      <li key={feature} className="flex items-center gap-2 text-sm text-gray-700">
+                    {[t('settings.premiumFeatures.f1'), t('settings.premiumFeatures.f2'), t('settings.premiumFeatures.f3'), t('settings.premiumFeatures.f4')].map((feature, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm text-gray-700">
                         <Check className="w-4 h-4 text-green-600" />
                         {feature}
                       </li>
@@ -1501,10 +1460,10 @@ export function ProfileSettingsPage() {
                   {subscribing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
+                      {t('settings.processing')}
                     </>
                   ) : (
-                    'Subscribe Now'
+                    t('settings.subscribeNow')
                   )}
                 </button>
               </div>
@@ -1517,8 +1476,8 @@ export function ProfileSettingsPage() {
     // Default profile settings
     return (
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Profile Settings</h2>
-        <p className="text-gray-500 mb-6">Manage your personal information and contact preferences</p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.profileSettings')}</h2>
+        <p className="text-gray-500 mb-6">{t('settings.profileSettings')}</p>
 
         {/* Profile Photo */}
         <div className="flex items-center gap-6 mb-8">
@@ -1548,7 +1507,7 @@ export function ProfileSettingsPage() {
               disabled={uploadingPhoto}
               className="px-6 py-2.5 border border-gray-200 rounded-lg text-gray-900 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
-              {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
+              {uploadingPhoto ? t('settings.uploading') : t('settings.uploadPhoto')}
             </button>
           </div>
         </div>
@@ -1557,7 +1516,7 @@ export function ProfileSettingsPage() {
         <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-100">
           {/* Name */}
           <div className="p-6">
-            <label className="block text-sm text-gray-500 mb-2">Name</label>
+            <label className="block text-sm text-gray-500 mb-2">{t('settings.name')}</label>
             {editingField === 'name' ? (
               <div className="flex items-center gap-3">
                 <input
@@ -1572,13 +1531,13 @@ export function ProfileSettingsPage() {
                   disabled={savingProfile}
                   className="px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
                 >
-                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : t('common.save')}
                 </button>
                 <button
                   onClick={() => { setEditingField(null); setEditValue(''); }}
                   className="px-4 py-2.5 border border-gray-200 rounded-lg font-medium hover:bg-gray-50"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             ) : (
@@ -1596,7 +1555,7 @@ export function ProfileSettingsPage() {
 
           {/* Contact Information (Phone) */}
           <div className="p-6">
-            <label className="block text-sm text-gray-500 mb-2">Contact information</label>
+            <label className="block text-sm text-gray-500 mb-2">{t('settings.contactInfo')}</label>
             {editingField === 'phone' ? (
               <div className="flex items-center gap-3">
                 <input
@@ -1612,13 +1571,13 @@ export function ProfileSettingsPage() {
                   disabled={savingProfile}
                   className="px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
                 >
-                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : t('common.save')}
                 </button>
                 <button
                   onClick={() => { setEditingField(null); setEditValue(''); }}
                   className="px-4 py-2.5 border border-gray-200 rounded-lg font-medium hover:bg-gray-50"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             ) : (
@@ -1636,14 +1595,14 @@ export function ProfileSettingsPage() {
 
           {/* WhatsApp Info */}
           <div className="p-6">
-            <label className="block text-sm text-gray-500 mb-2">WhatsApp Info</label>
+            <label className="block text-sm text-gray-500 mb-2">{t('settings.whatsappInfo')}</label>
             {editingField === 'whatsapp_phone' ? (
               <div className="flex items-center gap-3">
                 <input
                   type="tel"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  placeholder="+1 234 567 8900"
+                  placeholder={t('settings.whatsappPlaceholder')}
                   className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   autoFocus
                 />
@@ -1652,13 +1611,13 @@ export function ProfileSettingsPage() {
                   disabled={savingProfile}
                   className="px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
                 >
-                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : t('common.save')}
                 </button>
                 <button
                   onClick={() => { setEditingField(null); setEditValue(''); }}
                   className="px-4 py-2.5 border border-gray-200 rounded-lg font-medium hover:bg-gray-50"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             ) : (
@@ -1667,7 +1626,7 @@ export function ProfileSettingsPage() {
                 className="w-full flex items-center justify-between text-left"
               >
                 <span className={profile?.whatsapp_phone ? 'text-gray-900' : 'text-gray-400'}>
-                  {profile?.whatsapp_phone || 'Enter WhatsApp phone number'}
+                  {profile?.whatsapp_phone || t('settings.whatsappPlaceholder')}
                 </span>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </button>
@@ -1676,14 +1635,14 @@ export function ProfileSettingsPage() {
 
           {/* Telegram Info */}
           <div className="p-6">
-            <label className="block text-sm text-gray-500 mb-2">Telegram Info</label>
+            <label className="block text-sm text-gray-500 mb-2">{t('settings.telegramInfo')}</label>
             {editingField === 'telegram_username' ? (
               <div className="flex items-center gap-3">
                 <input
                   type="text"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  placeholder="@username"
+                  placeholder={t('settings.telegramPlaceholder')}
                   className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   autoFocus
                 />
@@ -1692,13 +1651,13 @@ export function ProfileSettingsPage() {
                   disabled={savingProfile}
                   className="px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
                 >
-                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : t('common.save')}
                 </button>
                 <button
                   onClick={() => { setEditingField(null); setEditValue(''); }}
                   className="px-4 py-2.5 border border-gray-200 rounded-lg font-medium hover:bg-gray-50"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             ) : (
@@ -1707,7 +1666,7 @@ export function ProfileSettingsPage() {
                 className="w-full flex items-center justify-between text-left"
               >
                 <span className={profile?.telegram_username ? 'text-gray-900' : 'text-gray-400'}>
-                  {profile?.telegram_username || 'Enter @username'}
+                  {profile?.telegram_username || t('settings.telegramPlaceholder')}
                 </span>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </button>
@@ -1769,7 +1728,7 @@ export function ProfileSettingsPage() {
                   className="w-full flex items-center gap-3 px-4 py-3 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
                   <LogOut className="w-5 h-5" />
-                  <span className="font-medium">Log out</span>
+                  <span className="font-medium">{t('settings.logOut')}</span>
                 </button>
               </div>
             </div>
