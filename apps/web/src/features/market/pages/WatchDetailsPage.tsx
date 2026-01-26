@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ChevronLeft,
   ListFilter,
@@ -115,6 +116,7 @@ export function WatchDetailsPage() {
   const { watchId } = useParams<{ watchId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   // Get filters from navigation state (when returning from filters page)
@@ -397,7 +399,7 @@ export function WatchDetailsPage() {
       }, 1500); // Show confirmation for 1.5 seconds before navigating
     } catch (error: any) {
       console.error('Failed to create order:', error);
-      setOrderError(error.response?.data?.detail || 'Failed to create order. Please try again.');
+      setOrderError(error.response?.data?.detail || t('watchDetails.failedToCreateOrder'));
     } finally {
       setSavingOrder(false);
     }
@@ -460,9 +462,9 @@ export function WatchDetailsPage() {
     return (
       <div className="p-4 lg:p-6 bg-white min-h-screen">
         <div className="max-w-[1000px] mx-auto py-8 text-center">
-          <p className="text-[#1d1d1f]/50">Watch not found</p>
+          <p className="text-[#1d1d1f]/50">{t('watchDetails.watchNotFound')}</p>
           <button onClick={() => navigate(-1)} className="mt-4 text-[#1d1d1f] hover:underline">
-            Go back
+            {t('watchDetails.goBack')}
           </button>
         </div>
       </div>
@@ -560,7 +562,7 @@ export function WatchDetailsPage() {
             <div className="px-4 pb-4 pt-2">
               <div className="flex items-end justify-between">
                 <div>
-                  <p className="text-[12px] text-[#1d1d1f]/50 leading-[1.3]">Market Price</p>
+                  <p className="text-[12px] text-[#1d1d1f]/50 leading-[1.3]">{t('watchDetails.marketPrice')}</p>
                   <p className="text-[15px] font-semibold text-[#1d1d1f] leading-[1.3]">
                     €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
                   </p>
@@ -589,13 +591,13 @@ export function WatchDetailsPage() {
               onClick={() => handlePlaceOrder('buy')}
               className="flex-1 h-[48px] bg-[#54b368] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-bl-[64px] rounded-tl-[64px] rounded-br-[3px] rounded-tr-[3px] hover:bg-[#4aa35d] transition-colors"
             >
-              Place Buy Order
+              {t('watchDetails.placeBuyOrder')}
             </button>
             <button
               onClick={() => handlePlaceOrder('sell')}
               className="flex-1 h-[48px] bg-[#d35741] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-bl-[3px] rounded-tl-[3px] rounded-br-[64px] rounded-tr-[64px] hover:bg-[#c04a36] transition-colors"
             >
-              Place Sell Order
+              {t('watchDetails.placeSellOrder')}
             </button>
           </div>
         </div>
@@ -608,19 +610,19 @@ export function WatchDetailsPage() {
               <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
                 {watchDetails.priceData.bestBid.toLocaleString()}€
               </p>
-              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">Best Bid</p>
+              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">{t('watchDetails.bestBid')}</p>
             </div>
             <div className="flex-1 p-5 text-center border-r border-black/5">
               <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
                 {watchDetails.priceData.bestAsk.toLocaleString()}€
               </p>
-              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">Best Ask</p>
+              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">{t('watchDetails.bestAsk')}</p>
             </div>
             <div className="flex-1 p-5 text-center">
               <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
                 {watchDetails.priceData.spread.toLocaleString()}€
               </p>
-              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">Spread</p>
+              <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">{t('watchDetails.spread')}</p>
             </div>
           </div>
 
@@ -802,12 +804,12 @@ export function WatchDetailsPage() {
           {/* Order Book */}
           <div>
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-[24px] font-semibold text-[#1d1d1f] leading-[1.1] tracking-[-0.24px]">Order Book</h2>
+              <h2 className="text-[24px] font-semibold text-[#1d1d1f] leading-[1.1] tracking-[-0.24px]">{t('watchDetails.orderBook')}</h2>
               <button
                 onClick={() => setShowFullOrderBook(true)}
                 className="text-[16px] font-semibold text-[#212121] tracking-[0.08px] leading-[20px] hover:opacity-70 flex items-center gap-[12px] transition-colors"
               >
-                See Order Book
+                {t('watchDetails.seeOrderBook')}
                 <span className="text-[18px]">→</span>
               </button>
             </div>
@@ -822,7 +824,7 @@ export function WatchDetailsPage() {
                     : 'text-black font-medium'
                 }`}
               >
-                Buy
+                {t('watchDetails.buy')}
               </button>
               <button
                 onClick={() => setOrderBookTab('sell')}
@@ -832,7 +834,7 @@ export function WatchDetailsPage() {
                     : 'text-black font-medium'
                 }`}
               >
-                Sell
+                {t('watchDetails.sell')}
               </button>
             </div>
 
@@ -840,17 +842,17 @@ export function WatchDetailsPage() {
             <div className="overflow-hidden">
               {/* Table Header */}
               <div className="flex items-center h-[44px] border-b border-[rgba(0,0,0,0.05)]">
-                <span className="flex-1 pl-[12px] pr-[8px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Market</span>
-                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Date</span>
-                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Condition</span>
-                <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">Price</span>
+                <span className="flex-1 pl-[12px] pr-[8px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.market')}</span>
+                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.date')}</span>
+                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.condition')}</span>
+                <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{t('watchDetails.price')}</span>
               </div>
 
               {/* Table Rows */}
               <div className="max-h-[400px] overflow-y-auto">
                 {filteredOrderBook.length === 0 ? (
                   <div className="text-center py-8 text-[#212121]/50 text-[15px]">
-                    No {orderBookTab} orders available
+                    {t('watchDetails.noOrdersAvailable', { type: orderBookTab })}
                   </div>
                 ) : (
                   filteredOrderBook.map((entry, index) => (
@@ -886,7 +888,7 @@ export function WatchDetailsPage() {
             {/* Header */}
             <div className="flex items-center justify-between px-6 h-[60px] border-b border-[rgba(33,33,33,0.05)]">
               <p className="text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">
-                Make an offer
+                {t('watchDetails.makeAnOffer')}
               </p>
               <button
                 onClick={() => setShowOrderModal(false)}
@@ -930,7 +932,7 @@ export function WatchDetailsPage() {
               {/* Your Offer Input */}
               <div className="flex flex-col gap-[6px]">
                 <label className="text-[15px] font-semibold text-[#1d1d1f] tracking-[0.075px] leading-[20px]">
-                  Your offer
+                  {t('watchDetails.yourOffer')}
                 </label>
                 <div className="flex items-center gap-2 px-4 py-[14px] border border-[rgba(29,29,31,0.1)] rounded-2xl bg-white">
                   <span className="text-[15px] font-medium text-[#1d1d1f]/50 tracking-[0.075px] leading-[20px]">€</span>
@@ -960,7 +962,7 @@ export function WatchDetailsPage() {
                 disabled={savingOrder || orderFormData.price <= 0}
                 className="w-full h-[44px] bg-[#212121] text-white text-[16px] font-semibold tracking-[0.08px] leading-[20px] rounded-full hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {savingOrder ? 'Submitting...' : 'Make an offer'}
+                {savingOrder ? t('watchDetails.submitting') : t('watchDetails.makeAnOffer')}
               </button>
             </form>
           </div>
@@ -973,7 +975,7 @@ export function WatchDetailsPage() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             {/* Modal Header */}
             <div className="p-6 border-b flex items-center justify-between shrink-0">
-              <h2 className="text-[20px] font-semibold text-[#1d1d1f]">Order Book</h2>
+              <h2 className="text-[20px] font-semibold text-[#1d1d1f]">{t('watchDetails.orderBook')}</h2>
               <button
                 onClick={() => setShowFullOrderBook(false)}
                 className="p-2 hover:bg-[rgba(29,29,31,0.02)] rounded-full transition-colors"
@@ -1014,7 +1016,7 @@ export function WatchDetailsPage() {
                       : 'text-black font-medium'
                   }`}
                 >
-                  Buy
+                  {t('watchDetails.buy')}
                 </button>
                 <button
                   onClick={() => setOrderBookTab('sell')}
@@ -1024,7 +1026,7 @@ export function WatchDetailsPage() {
                       : 'text-black font-medium'
                   }`}
                 >
-                  Sell
+                  {t('watchDetails.sell')}
                 </button>
               </div>
             </div>
@@ -1033,17 +1035,17 @@ export function WatchDetailsPage() {
             <div className="flex-1 overflow-hidden px-6 py-4">
               {/* Table Header */}
               <div className="flex items-center h-[44px] border-b border-[rgba(0,0,0,0.05)]">
-                <span className="flex-1 pl-[12px] pr-[8px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Market</span>
-                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Date</span>
-                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Condition</span>
-                <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">Price</span>
+                <span className="flex-1 pl-[12px] pr-[8px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.market')}</span>
+                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.date')}</span>
+                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.condition')}</span>
+                <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{t('watchDetails.price')}</span>
               </div>
 
               {/* Table Rows */}
               <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 280px)' }}>
                 {filteredOrderBook.length === 0 ? (
                   <div className="text-center py-12 text-[#212121]/50 text-[15px]">
-                    No {orderBookTab} orders available
+                    {t('watchDetails.noOrdersAvailable', { type: orderBookTab })}
                   </div>
                 ) : (
                   filteredOrderBook.map((entry, index) => (
@@ -1082,7 +1084,7 @@ export function WatchDetailsPage() {
             {/* Header */}
             <div className="flex items-center justify-between px-6 h-[60px] border-b border-[rgba(33,33,33,0.05)]">
               <p className="text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">
-                Make an offer
+                {t('watchDetails.makeAnOffer')}
               </p>
               <button
                 onClick={() => setShowConfirmationModal(false)}
@@ -1126,7 +1128,7 @@ export function WatchDetailsPage() {
 
               {/* Offer Sent Text */}
               <p className="text-[15px] font-medium text-[#212121]/60 tracking-[0.075px] leading-[20px]">
-                Offer sent
+                {t('watchDetails.offerSent')}
               </p>
 
               {/* Price */}

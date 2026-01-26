@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/services/api';
 import { useSocialFilters } from '@/hooks/useConfig';
 import { SlidersHorizontal, X, MessageSquare, MapPin, Calendar, User } from 'lucide-react';
@@ -27,8 +28,9 @@ interface Country {
 
 // Social message card component
 function SocialMessageCard({ message }: { message: SocialMessage }) {
+  const { t } = useTranslation();
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return 'Unknown date';
+    if (!dateStr) return t('socialSearch.unknownDate');
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', {
       month: 'short',
@@ -55,7 +57,7 @@ function SocialMessageCard({ message }: { message: SocialMessage }) {
     }
     return (
       <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
-        Unknown
+        {t('socialSearch.unknown')}
       </span>
     );
   };
@@ -124,25 +126,24 @@ function SocialMessageCard({ message }: { message: SocialMessage }) {
 }
 
 // Empty state component
-function EmptyState({ hasFilters }: { hasFilters: boolean }) {
+function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4">
       <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
         <MessageSquare className="w-10 h-10 text-gray-400" />
       </div>
       <h3 className="text-lg font-semibold text-gray-900 mb-2">
-        {hasFilters ? 'No messages match your filters' : 'No messages found'}
+        {title}
       </h3>
       <p className="text-gray-500 text-center max-w-md">
-        {hasFilters
-          ? 'Try adjusting your filters to see more results.'
-          : 'Social messages from imported WhatsApp groups will appear here.'}
+        {description}
       </p>
     </div>
   );
 }
 
 export function SocialSearchPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<SocialMessage[]>([]);
@@ -241,9 +242,9 @@ export function SocialSearchPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Social Search</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('socialSearch.title')}</h1>
           <p className="text-gray-500">
-            Search through imported WhatsApp messages from watch trading groups
+            {t('socialSearch.subtitle')}
           </p>
         </div>
 
@@ -260,7 +261,7 @@ export function SocialSearchPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                All
+                {t('socialSearch.all')}
               </button>
               <button
                 onClick={() => handleOfferTypeChange('wts')}
@@ -270,7 +271,7 @@ export function SocialSearchPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                WTS Offers
+                {t('socialSearch.wtsOffers')}
               </button>
               <button
                 onClick={() => handleOfferTypeChange('wtb')}
@@ -280,7 +281,7 @@ export function SocialSearchPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                WTB Offers
+                {t('socialSearch.wtbOffers')}
               </button>
             </div>
 
@@ -295,7 +296,7 @@ export function SocialSearchPage() {
             >
               <SlidersHorizontal className="w-4 h-4" />
               <span className="text-sm font-medium">
-                Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+                {t('socialSearch.filters')} {activeFilterCount > 0 && `(${activeFilterCount})`}
               </span>
             </button>
           </div>
@@ -303,7 +304,7 @@ export function SocialSearchPage() {
           {/* Active filters display */}
           {(reference || countryCode) && (
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-              <span className="text-sm text-gray-500">Active filters:</span>
+              <span className="text-sm text-gray-500">{t('socialSearch.activeFilters')}</span>
               {reference && (
                 <span className="px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-700 flex items-center gap-1">
                   Ref: {reference}
@@ -334,7 +335,7 @@ export function SocialSearchPage() {
         {!loading && messages.length > 0 && (
           <div className="mb-4">
             <p className="text-sm text-gray-500">
-              Showing {messages.length} of {total} messages
+              {t('socialSearch.showing', { count: messages.length, total })}
             </p>
           </div>
         )}
@@ -366,7 +367,10 @@ export function SocialSearchPage() {
               </div>
             ))
           ) : messages.length === 0 ? (
-            <EmptyState hasFilters={activeFilterCount > 0} />
+            <EmptyState
+              title={activeFilterCount > 0 ? t('socialSearch.noMatchFilters') : t('socialSearch.noMessagesFound')}
+              description={activeFilterCount > 0 ? t('socialSearch.noMatchFiltersDesc') : t('socialSearch.noMessagesDesc')}
+            />
           ) : (
             messages.map((message) => (
               <SocialMessageCard key={message.id} message={message} />

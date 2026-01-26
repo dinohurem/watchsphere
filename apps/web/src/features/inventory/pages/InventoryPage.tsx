@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 
@@ -63,6 +64,7 @@ function SmallWatchIcon() {
 export function InventoryPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -101,16 +103,16 @@ export function InventoryPage() {
           </svg>
         </div>
 
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">Add new watch to your inventory</h2>
+        <h2 className="text-2xl font-semibold text-gray-900 mb-2">{t('inventory.addNewWatch')}</h2>
         <p className="text-gray-500 text-center mb-8 max-w-sm">
-          Sell your watches and manage them all in one place.
+          {t('inventory.addNewWatchDesc')}
         </p>
 
         <button
           onClick={() => navigate('/app/inventory/create')}
           className="px-6 py-3 bg-gray-900 text-white font-medium rounded-full hover:bg-gray-800 transition-colors"
         >
-          Create new listing
+          {t('inventory.createNewListing')}
         </button>
       </div>
     );
@@ -121,19 +123,19 @@ export function InventoryPage() {
       <div className="max-w-7xl mx-auto">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link to="/app" className="hover:text-gray-900">Home</Link>
+        <Link to="/app" className="hover:text-gray-900">{t('inventory.home')}</Link>
         <span>/</span>
-        <span className="text-gray-900">Inventory</span>
+        <span className="text-gray-900">{t('inventory.title')}</span>
       </div>
 
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-medium text-gray-900">Inventory</h1>
+        <h1 className="text-2xl font-medium text-gray-900">{t('inventory.title')}</h1>
         <button
           onClick={() => navigate('/app/inventory/create')}
           className="px-5 py-2.5 bg-gray-900 text-white font-medium rounded-full hover:bg-gray-800 transition-colors"
         >
-          Create new listing
+          {t('inventory.createNewListing')}
         </button>
       </div>
 
@@ -165,7 +167,7 @@ export function InventoryPage() {
                 {/* Sold Badge */}
                 {item.status === 'sold' && (
                   <div className="absolute top-3 left-3 bg-[#4AA078] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    Sold
+                    {t('inventory.sold')}
                   </div>
                 )}
               </div>
@@ -199,7 +201,7 @@ export function InventoryPage() {
                       }}
                       className="w-full py-2 px-3 bg-gray-900 text-white text-xs font-semibold rounded-full hover:bg-gray-800 transition-colors"
                     >
-                      Sell now {item.best_bid.toLocaleString()}€
+                      {t('inventory.sellNow', { price: item.best_bid.toLocaleString() })}
                     </button>
                   ) : (
                     <button
@@ -210,7 +212,7 @@ export function InventoryPage() {
                       className="w-full py-2 px-3 bg-gray-100 text-gray-500 text-xs font-semibold rounded-full hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5"
                     >
                       <SmallWatchIcon />
-                      No buy orders
+                      {t('inventory.noBuyOrders')}
                     </button>
                   )
                 )}

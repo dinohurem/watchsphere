@@ -1,8 +1,10 @@
 import { Bell, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@watchsphere/shared/stores'
 
 export function AdminHeader() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
@@ -16,9 +18,9 @@ export function AdminHeader() {
     <header className="bg-white border-b h-16 flex items-center justify-between px-6">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">
-          Admin Panel
+          {t('admin.header.title')}
         </h2>
-        <p className="text-sm text-gray-500">Manage your WatchSphere platform</p>
+        <p className="text-sm text-gray-500">{t('admin.header.subtitle')}</p>
       </div>
 
       <div className="flex items-center gap-4">
@@ -44,7 +46,7 @@ export function AdminHeader() {
         <button
           onClick={handleLogout}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          title="Logout"
+          title={t('header.logout')}
         >
           <LogOut className="w-5 h-5 text-gray-600" />
         </button>
