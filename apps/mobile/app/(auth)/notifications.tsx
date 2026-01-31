@@ -8,9 +8,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { api } from '@/services/api';
 
 // Back Arrow Icon
 function BackArrow() {
@@ -67,6 +69,27 @@ export default function NotificationsPermissionScreen() {
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
+      }
+
+      // If permission granted, register push token with backend
+      if (finalStatus === 'granted') {
+        try {
+          const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+          if (projectId) {
+            const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+            const token = tokenData.data;
+
+            // Store token locally
+            await AsyncStorage.setItem('expo_push_token', token);
+
+            // Send to backend
+            await api.post('/profile/fcm-token', { token });
+            console.log('Push token registered:', token);
+          }
+        } catch (tokenError) {
+          console.log('Failed to register push token:', tokenError);
+          // Continue anyway - this is non-critical
+        }
       }
 
       // Mark that we've shown the notification prompt

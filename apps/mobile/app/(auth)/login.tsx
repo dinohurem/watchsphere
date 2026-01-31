@@ -17,6 +17,7 @@ import { api } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 // Back Arrow Icon (matches Figma design)
 function BackArrow() {
@@ -33,10 +34,20 @@ function BackArrow() {
   );
 }
 
+// Apple Logo Icon
+function AppleLogo() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="#FFFFFF">
+      <Path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+    </Svg>
+  );
+}
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   // Focus states for inputs
   const [emailFocused, setEmailFocused] = useState(false);
@@ -46,6 +57,59 @@ export default function LoginScreen() {
 
   const handleBack = () => {
     router.back();
+  };
+
+  const handleAppleSignIn = async () => {
+    try {
+      setAppleLoading(true);
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      // Get user name (only provided on first sign-in)
+      let userName: string | undefined;
+      if (credential.fullName?.givenName || credential.fullName?.familyName) {
+        userName = [credential.fullName.givenName, credential.fullName.familyName]
+          .filter(Boolean)
+          .join(' ');
+      }
+
+      // Send to backend
+      const response = await api.post('/auth/apple', {
+        id_token: credential.identityToken,
+        user_name: userName,
+      });
+
+      const { user, access_token, refresh_token } = response.data;
+
+      // Store tokens
+      await AsyncStorage.setItem('auth_token', access_token);
+      await AsyncStorage.setItem('refresh_token', refresh_token);
+
+      login(user, access_token);
+
+      // Check if notification prompt has been shown before
+      const notificationPromptShown = await AsyncStorage.getItem('notification_prompt_shown');
+      if (!notificationPromptShown) {
+        router.replace('/(auth)/notifications');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        // User cancelled, do nothing
+        return;
+      }
+
+      const errorMessage = error.response?.data?.detail || 'Apple Sign In failed. Please try again.';
+      Alert.alert('Sign In Failed', errorMessage);
+    } finally {
+      setAppleLoading(false);
+    }
   };
 
   const handleLogin = async () => {
@@ -190,6 +254,29 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
+          {/* Divider */}
+          {Platform.OS === 'ios' && (
+            <>
+              <View style={styles.dividerContainer}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Apple Sign In Button */}
+              <TouchableOpacity
+                style={[styles.appleButton, appleLoading && styles.buttonDisabled]}
+                onPress={handleAppleSignIn}
+                disabled={appleLoading}
+              >
+                <AppleLogo />
+                <Text style={styles.appleButtonText}>
+                  {appleLoading ? 'Signing in...' : 'Continue with Apple'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
@@ -322,6 +409,38 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     backgroundColor: 'rgba(33, 33, 33, 0.05)',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: hp(16),
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(29, 29, 31, 0.1)',
+  },
+  dividerText: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: fp(14),
+    color: 'rgba(29, 29, 31, 0.5)',
+    marginHorizontal: wp(12),
+  },
+  appleButton: {
+    backgroundColor: '#000000',
+    borderRadius: sp(999),
+    height: hp(48),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: wp(8),
+  },
+  appleButtonText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(16),
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.08,
   },
   footer: {
     flexDirection: 'row',

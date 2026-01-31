@@ -293,6 +293,10 @@ async def message_send(sid, data, callback=None):
         )
 
         # Broadcast unread count update to other participants
+        # Also send push notifications to offline users
+        from app.services.notifications import notify_new_message, notify_group_message
+        is_group = conversation.type == 'group'
+
         for participant_id in conversation.participant_ids:
             if participant_id != user_id:
                 # Get updated unread count for this participant
@@ -304,6 +308,34 @@ async def message_send(sid, data, callback=None):
                 await broadcast_service.broadcast_unread_update(
                     participant_id, conversation_id, unread_count
                 )
+
+                # Send push notification if user is NOT online via Socket.IO
+                # (they'll see the in-app notification if online)
+                if not manager.is_user_online(participant_id):
+                    try:
+                        # Get recipient user for push tokens
+                        recipient = await User.get(PydanticObjectId(participant_id))
+                        if recipient and recipient.notifications_enabled and recipient.notify_messages and recipient.fcm_tokens:
+                            for token in recipient.fcm_tokens:
+                                if is_group:
+                                    await notify_group_message(
+                                        token=token,
+                                        group_name=conversation.name or 'Group',
+                                        sender_name=sender_name,
+                                        message_preview=content,
+                                        group_id=conversation_id,
+                                    )
+                                else:
+                                    await notify_new_message(
+                                        token=token,
+                                        sender_name=sender_name,
+                                        message_preview=content,
+                                        chat_id=conversation_id,
+                                        sender_avatar=sender_avatar,
+                                    )
+                            logger.info(f"Push notification sent to offline user {participant_id}")
+                    except Exception as push_error:
+                        logger.error(f"Failed to send push notification to {participant_id}: {push_error}")
 
         # Send callback acknowledgement
         if callback:

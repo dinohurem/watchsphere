@@ -16,14 +16,26 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.watchsphere.app"
+      "bundleIdentifier": "com.watchsphere.watchsphere",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "WatchSphere needs access to your photo library to share images in messages and set your profile picture.",
+        "NSPhotoLibraryAddUsageDescription": "WatchSphere needs permission to save images to your photo library."
+      },
+      "entitlements": {
+        "aps-environment": "production"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1A1A1A"
       },
-      "package": "com.watchsphere.app"
+      "package": "com.watchsphere.app",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -42,7 +54,14 @@
           "androidCollapsedTitle": "New message"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "WatchSphere needs access to your photos to share images in chat and set your profile picture."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -51,6 +70,14 @@
       "color": "#000000",
       "androidMode": "default",
       "androidCollapsedTitle": "{{unread_count}} new messages"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "e3caf63c-2b75-4d8d-a6ff-789e0b7f8865"
+      }
     }
   }
 }
