@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "383636988798",
+    "project_id": "watchsphere-1b903",
+    "storage_bucket": "watchsphere-1b903.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:383636988798:android:45150fbf3b0174e493892f",
+        "android_client_info": {
+          "package_name": "com.watchsphere.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhhlx7heJPDRH9SNVRUOZpJwmAKHFwjAk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
