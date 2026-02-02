@@ -15,18 +15,21 @@
       "**/*"
     ],
     "ios": {
+      "buildNumber": "1",
       "supportsTablet": true,
       "bundleIdentifier": "com.watchsphere.watchsphere",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "WatchSphere needs access to your photo library to share images in messages and set your profile picture.",
-        "NSPhotoLibraryAddUsageDescription": "WatchSphere needs permission to save images to your photo library."
+        "NSPhotoLibraryAddUsageDescription": "WatchSphere needs permission to save images to your photo library.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "entitlements": {
         "aps-environment": "production"
       }
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1A1A1A"
