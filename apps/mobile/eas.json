@@ -29,8 +29,8 @@
         "image": "latest"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.watchsphere.io/api/v1",
-        "EXPO_PUBLIC_WS_BASE_URL": "wss://api.watchsphere.io/ws",
+        "EXPO_PUBLIC_API_BASE_URL": "https://watchsphere-api.vercel.app/api/v1",
+        "EXPO_PUBLIC_WS_BASE_URL": "wss://watchsphere-api.vercel.app/ws",
         "EXPO_PUBLIC_WEB_URL": "https://watchsphere.io"
       }
     }
