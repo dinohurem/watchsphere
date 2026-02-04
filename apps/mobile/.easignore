@@ -1,0 +1,6 @@
+# Ignore monorepo root files that confuse EAS
+../package.json
+../../package.json
+../../package-lock.json
+../../yarn.lock
+../../pnpm-lock.yaml
