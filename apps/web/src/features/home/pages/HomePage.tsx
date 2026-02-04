@@ -119,7 +119,7 @@ function TriangleDown({ className }: { className?: string }) {
 
 interface ActivityItem {
   id: string;
-  type: 'offer' | 'alert';
+  type: 'offer' | 'alert' | 'listing' | 'undercut';
   reference: string;
   price: number;
   time: string;
