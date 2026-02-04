@@ -83,21 +83,6 @@ interface OrderFormData {
   notes: string;
 }
 
-const COUNTRIES = [
-  { code: 'US', name: 'United States' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'FR', name: 'France' },
-  { code: 'IT', name: 'Italy' },
-  { code: 'ES', name: 'Spain' },
-  { code: 'CH', name: 'Switzerland' },
-  { code: 'AE', name: 'United Arab Emirates' },
-  { code: 'JP', name: 'Japan' },
-  { code: 'HK', name: 'Hong Kong' },
-  { code: 'SG', name: 'Singapore' },
-  { code: 'AU', name: 'Australia' },
-];
-
 const emptyOrderForm: OrderFormData = {
   order_type: 'buy',
   price: 0,

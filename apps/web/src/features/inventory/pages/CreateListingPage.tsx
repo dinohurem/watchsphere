@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, X, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
-import { useConfig, type ListingField, type FieldCategory, CATEGORY_STEPS } from '@/hooks/useConfig';
+import { useConfig, type ListingField, type FieldCategory } from '@/hooks/useConfig';
 
 // Navigation state type for pre-populated data
 interface NavigationState {
@@ -34,16 +34,6 @@ const FORM_STEPS: { key: FieldCategory | 'photos'; label: string }[] = [
   { key: 'bracelet', label: 'Bracelet / Strap information' },
   { key: 'photos', label: 'Photos' },
 ];
-
-// Map field keys to form data keys (camelCase conversion)
-const fieldKeyToFormKey = (key: string): string => {
-  return key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-};
-
-// Map form data keys back to API keys (snake_case conversion)
-const formKeyToApiKey = (key: string): string => {
-  return key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-};
 
 // Dropdown Select component
 function SelectField({
