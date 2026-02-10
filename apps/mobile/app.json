@@ -15,7 +15,7 @@
       "**/*"
     ],
     "ios": {
-      "buildNumber": "1",
+      "buildNumber": "2",
       "supportsTablet": true,
       "bundleIdentifier": "com.watchsphere.watchsphere",
       "usesAppleSignIn": true,
@@ -29,16 +29,17 @@
       }
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1A1A1A"
       },
       "package": "com.watchsphere.app",
       "googleServicesFile": "./google-services.json",
-      "permissions": [
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "permissions": []
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -48,6 +49,15 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35
+          }
+        }
+      ],
       [
         "expo-notifications",
         {
@@ -62,7 +72,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "WatchSphere needs access to your photos to share images in chat and set your profile picture."
+          "photosPermission": "WatchSphere needs access to your photos to share images in chat and set your profile picture.",
+          "cameraPermission": false
         }
       ]
     ],
