@@ -57,11 +57,11 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('username', email);
-      formData.append('password', password);
+      const params = new URLSearchParams();
+      params.append('username', email);
+      params.append('password', password);
 
-      const response = await api.post('/auth/login', formData, {
+      const response = await api.post('/auth/login', params.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },

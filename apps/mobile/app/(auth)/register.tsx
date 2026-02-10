@@ -187,11 +187,11 @@ export default function RegisterScreen() {
 
       // After verification, login the user
       // The register endpoint already returned tokens, so we need to login with them
-      const loginFormData = new FormData();
-      loginFormData.append('username', email);
-      loginFormData.append('password', password);
+      const loginParams = new URLSearchParams();
+      loginParams.append('username', email);
+      loginParams.append('password', password);
 
-      const loginResponse = await api.post('/auth/login', loginFormData, {
+      const loginResponse = await api.post('/auth/login', loginParams.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
