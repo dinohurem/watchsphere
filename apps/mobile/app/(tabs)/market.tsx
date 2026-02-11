@@ -1,11 +1,13 @@
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useFilters } from '@/contexts/FilterContext';
+import { registerGuideMeasurement, useGuide } from '@/contexts/GuideContext';
+import { GUIDE_MOCK_MARKET_WATCHES, GUIDE_MOCK_TRENDING_WATCHES } from '@/data/guideMockData';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
@@ -86,6 +88,9 @@ export default function MarketScreen() {
   const { colors, fonts } = useTheme();
   const { t } = useTranslation();
   const { filters, getTotalFilterCount, hasActiveFilters } = useFilters();
+  const { isGuideActive } = useGuide();
+  const filtersButtonRef = useRef<View>(null);
+  const firstWatchRowRef = useRef<View>(null);
   const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
   const totalFilterCount = getTotalFilterCount();
   const [selectedCategory, setSelectedCategory] = useState('Hot');
@@ -181,6 +186,7 @@ export default function MarketScreen() {
   );
 
   const loadProfile = async () => {
+    if (isGuideActive) return;
     try {
       const response = await api.get('/profile/me');
       if (response.data?.profile_image_url) {
@@ -192,6 +198,14 @@ export default function MarketScreen() {
   };
 
   const loadMarketData = async () => {
+    if (isGuideActive) {
+      setAllWatches(GUIDE_MOCK_MARKET_WATCHES);
+      setWatches(GUIDE_MOCK_MARKET_WATCHES);
+      setTrendingWatches(GUIDE_MOCK_TRENDING_WATCHES);
+      setFeaturedWatches([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       // Try to fetch from aggregated API (proper pricing logic)
@@ -828,9 +842,17 @@ export default function MarketScreen() {
         <View style={styles.watchesHeader}>
           <Text style={styles.watchesTitle}>{t('market.watches')}</Text>
           <TouchableOpacity
+            ref={filtersButtonRef}
             style={styles.filtersButton}
             onPress={() => router.push('/market/filters' as any)}
             activeOpacity={0.7}
+            onLayout={() => {
+              filtersButtonRef.current?.measureInWindow((x, y, width, height) => {
+                if (width > 0 && height > 0) {
+                  registerGuideMeasurement('filters', { x, y, width, height, borderRadius: 20 });
+                }
+              });
+            }}
           >
             <Filter size={26} color="#212121" />
             <Text style={styles.filtersButtonText}>{t('market.filters')}</Text>
@@ -880,9 +902,17 @@ export default function MarketScreen() {
               return (
                 <TouchableOpacity
                   key={`${watch.id}-list-${index}`}
+                  ref={index === 0 ? firstWatchRowRef : undefined}
                   style={styles.watchItem}
                   onPress={() => handleWatchPress(watch)}
                   activeOpacity={0.7}
+                  onLayout={index === 0 ? () => {
+                    firstWatchRowRef.current?.measureInWindow((x, y, width, height) => {
+                      if (width > 0 && height > 0) {
+                        registerGuideMeasurement('watch-details', { x, y, width, height, borderRadius: 8 });
+                      }
+                    });
+                  } : undefined}
                 >
                   <View style={styles.watchInfo}>
                     <Text style={styles.watchName} numberOfLines={1}>{watch.brand} {watch.model}</Text>

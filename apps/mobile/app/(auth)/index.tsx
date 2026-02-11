@@ -106,17 +106,8 @@ export default function WelcomeScreen() {
   const handleOAuthSuccess = async (user: any, access_token: string, refresh_token: string, isNewUser: boolean) => {
     await AsyncStorage.setItem('auth_token', access_token);
     await AsyncStorage.setItem('refresh_token', refresh_token);
+    // Just call login — RootLayoutNav will handle navigation
     login(user, access_token);
-
-    // Check if notification prompt has been shown before
-    const notificationPromptShown = await AsyncStorage.getItem('notification_prompt_shown');
-    if (!notificationPromptShown) {
-      router.replace('/(auth)/notifications');
-    } else if (isNewUser) {
-      router.replace('/(auth)/onboarding');
-    } else {
-      router.replace('/(tabs)');
-    }
   };
 
   // Handle Google authentication with access token

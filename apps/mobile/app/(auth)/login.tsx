@@ -73,16 +73,8 @@ export default function LoginScreen() {
       await AsyncStorage.setItem('auth_token', access_token);
       await AsyncStorage.setItem('refresh_token', refresh_token);
 
+      // Just call login — RootLayoutNav will handle navigation
       login(user, access_token);
-
-      // Check if notification prompt has been shown before
-      const notificationPromptShown = await AsyncStorage.getItem('notification_prompt_shown');
-      if (!notificationPromptShown) {
-        // Show notification screen if user hasn't seen it
-        router.replace('/(auth)/notifications');
-      } else {
-        router.replace('/(tabs)');
-      }
     } catch (error: any) {
       const errorMessage = error.response?.data?.detail || 'Please try again';
 

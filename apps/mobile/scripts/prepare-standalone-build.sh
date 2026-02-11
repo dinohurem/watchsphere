@@ -62,11 +62,11 @@ if (pkg.dependencies && pkg.dependencies['@watchsphere/shared']) {
 // Remove workspaces if present
 delete pkg.workspaces;
 
-// Ensure exact versions for critical packages
-pkg.dependencies['react-native'] = '0.73.6';
-pkg.dependencies['react-native-svg'] = '14.1.0';
-pkg.dependencies['@shopify/flash-list'] = '1.6.3';
-pkg.dependencies['expo-image-picker'] = '~14.7.1';
+// Ensure exact versions for critical packages (SDK 52 compatible)
+pkg.dependencies['react-native'] = '0.76.5';
+pkg.dependencies['react-native-svg'] = '15.8.0';
+pkg.dependencies['@shopify/flash-list'] = '1.7.1';
+pkg.dependencies['expo-image-picker'] = '~16.0.4';
 
 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
 console.log('Updated package.json');
@@ -134,15 +134,33 @@ const releaseConfig = \`
 
 content = content.substring(0, insertPoint) + releaseConfig + content.substring(insertPoint);
 
-// Replace signingConfig signingConfigs.debug in release buildType with signingConfigs.release
+// Replace signingConfig in release buildType: change debug to release
+// Match the release block in buildTypes and replace signingConfigs.debug with signingConfigs.release
 content = content.replace(
-    /release \\{[\\s\\S]*?signingConfig signingConfigs\\.debug/,
-    (match) => match.replace('signingConfigs.debug', 'signingConfigs.release')
+    /(buildTypes\\s*\\{[\\s\\S]*?release\\s*\\{[\\s\\S]*?signingConfig\\s+signingConfigs\\.)debug/,
+    '\$1release'
 );
 
 fs.writeFileSync('$GRADLE_FILE', content);
 console.log('Updated build.gradle with release signing config');
 "
+
+# Copy keystore if it exists (check multiple locations)
+KEYSTORE_SOURCE="$MONOREPO_ROOT/watchsphere-release.keystore"
+KEYSTORE_SOURCE_ALT="$MOBILE_DIR/android/app/watchsphere-release.keystore"
+
+if [ -f "$KEYSTORE_SOURCE" ]; then
+    echo "Copying release keystore from monorepo root..."
+    cp "$KEYSTORE_SOURCE" "$BUILD_DIR/android/app/"
+    echo "Keystore copied successfully!"
+elif [ -f "$KEYSTORE_SOURCE_ALT" ]; then
+    echo "Copying release keystore from mobile app..."
+    cp "$KEYSTORE_SOURCE_ALT" "$BUILD_DIR/android/app/"
+    echo "Keystore copied successfully!"
+else
+    echo "WARNING: Keystore not found at $KEYSTORE_SOURCE or $KEYSTORE_SOURCE_ALT"
+    echo "You will need to create or copy one manually."
+fi
 
 echo ""
 echo "=== Standalone build prepared successfully! ==="

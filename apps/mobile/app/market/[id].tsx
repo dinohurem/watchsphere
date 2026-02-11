@@ -9,6 +9,8 @@ import { useAuthStore } from '@watchsphere/shared/stores';
 import { useFilters, OrderBookFilterState } from '@/contexts/FilterContext';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
+import { useGuide } from '@/contexts/GuideContext';
+import { GUIDE_MOCK_WATCH_DETAILS, GUIDE_MOCK_BUY_ORDERS, GUIDE_MOCK_SELL_ORDERS } from '@/data/guideMockData';
 
 // Country flag component using flag CDN
 function CountryFlag({ countryCode, size = 14 }: { countryCode: string; size?: number }) {
@@ -439,6 +441,7 @@ export default function WatchDetailsScreen() {
   // Decode the ID to handle references with special characters (e.g., 5711/1A-010)
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   const { isAuthenticated, user } = useAuthStore();
+  const { isGuideActive } = useGuide();
   const { getOrderBookFilterCount, hasActiveOrderBookFilters } = useFilters();
   const [watch, setWatch] = useState<WatchDetails>(DEFAULT_WATCH);
   const [loading, setLoading] = useState(true);
@@ -546,6 +549,7 @@ export default function WatchDetailsScreen() {
   }, [id, reference, isAuthenticated]);
 
   const checkWatchlistStatus = async () => {
+    if (isGuideActive) return;
     if (!isAuthenticated) return;
 
     // If navigated from default watchlist (not user's watchlist), don't show as saved
@@ -600,6 +604,7 @@ export default function WatchDetailsScreen() {
   };
 
   const loadWatchDetails = async () => {
+    if (isGuideActive) { setWatch(GUIDE_MOCK_WATCH_DETAILS); setLoading(false); return; }
     try {
       // Use reference if available (required for aggregated endpoint)
       // The 'id' param might be a DefaultWatchlistItem ObjectId which won't work
@@ -680,6 +685,7 @@ export default function WatchDetailsScreen() {
   };
 
   const loadOrderBook = async () => {
+    if (isGuideActive) { setBuyOrders(GUIDE_MOCK_BUY_ORDERS); setSellOrders(GUIDE_MOCK_SELL_ORDERS); return; }
     try {
       const watchReference = reference || id;
       // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)

@@ -2,13 +2,15 @@ import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Platform, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
 import { User } from '@/components/icons';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
+import { useGuide } from '@/contexts/GuideContext';
+import { GUIDE_MOCK_WATCHLIST, GUIDE_MOCK_ACTIVITY, GUIDE_MOCK_NEWS } from '@/data/guideMockData';
 import {
   Magnifier,
   UserCircleFilled,
@@ -73,6 +75,7 @@ interface NewsItem {
 export default function HomeScreen() {
   const { colors, fonts } = useTheme();
   const { t } = useTranslation();
+  const { isGuideActive } = useGuide();
 
   // State for API data
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
@@ -124,6 +127,7 @@ export default function HomeScreen() {
   ];
 
   const loadProfile = async () => {
+    if (isGuideActive) return;
     try {
       const response = await api.get('/profile/me');
       if (response.data?.profile_image_url) {
@@ -149,6 +153,7 @@ export default function HomeScreen() {
   };
 
   const loadWatchlist = async () => {
+    if (isGuideActive) { setWatchlistItems(GUIDE_MOCK_WATCHLIST); setLoadingWatchlist(false); return; }
     try {
       const response = await api.get('/profile/watchlist');
       if (response.data && response.data.length > 0) {
@@ -195,6 +200,7 @@ export default function HomeScreen() {
   };
 
   const loadActivity = async () => {
+    if (isGuideActive) { setActivityItems(GUIDE_MOCK_ACTIVITY); setLoadingActivity(false); return; }
     try {
       // Use notifications endpoint for latest activity (same as web)
       const response = await api.get('/notifications?limit=3');
@@ -251,6 +257,7 @@ export default function HomeScreen() {
   };
 
   const loadNews = async () => {
+    if (isGuideActive) { setNewsItems(GUIDE_MOCK_NEWS); setLoadingNews(false); return; }
     try {
       const response = await api.get('/news?limit=3');
       if (response.data && response.data.length > 0) {
@@ -274,7 +281,7 @@ export default function HomeScreen() {
 
   const loadAllData = useCallback(async () => {
     await Promise.all([loadWatchlist(), loadActivity(), loadNews(), loadProfile()]);
-  }, []);
+  }, [isGuideActive]);
 
   // Load data on initial mount
   useEffect(() => {

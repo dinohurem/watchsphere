@@ -9,6 +9,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useChat } from '@/contexts/ChatContext';
 import { useTranslation } from 'react-i18next';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { GlassWrapper } from '@/components/LiquidGlassWrapper';
 
 function CustomTabBar() {
   const { fonts } = useTheme();
@@ -38,7 +39,12 @@ function CustomTabBar() {
     <>
       <View style={styles.tabBarContainer}>
         {/* Main tabs pill container */}
-        <View style={styles.tabsPillContainer}>
+        <GlassWrapper
+          style={styles.tabsPillContainer}
+          fallbackStyle={styles.tabsPillFallback}
+          intensity={50}
+          tint="light"
+        >
           {tabs.map((tab) => {
             const active = isActive(tab.route, tab.name);
             const IconComponent = tab.icon;
@@ -73,7 +79,7 @@ function CustomTabBar() {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </GlassWrapper>
 
         {/* AI Sparkle Button */}
         <TouchableOpacity
@@ -81,9 +87,14 @@ function CustomTabBar() {
           onPress={() => setShowAIChat(true)}
           activeOpacity={0.9}
         >
-          <View style={styles.aiButton}>
+          <GlassWrapper
+            style={styles.aiButton}
+            fallbackStyle={styles.aiButtonFallback}
+            intensity={50}
+            tint="light"
+          >
             <AISparkle size={26} color="#9747FF" />
-          </View>
+          </GlassWrapper>
         </TouchableOpacity>
       </View>
 
@@ -133,12 +144,15 @@ const styles = StyleSheet.create({
   tabsPillContainer: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: 'rgba(247, 247, 247, 0.97)',
     borderRadius: sp(296),
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
+    overflow: 'hidden',
     paddingVertical: 0,
     paddingHorizontal: 0,
+  },
+  tabsPillFallback: {
+    backgroundColor: 'rgba(247, 247, 247, 0.97)',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
   },
   tabItem: {
     flex: 1,
@@ -186,10 +200,12 @@ const styles = StyleSheet.create({
     width: sp(54),
     height: sp(54),
     borderRadius: sp(296),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aiButtonFallback: {
     backgroundColor: 'rgba(247, 247, 247, 0.97)',
     borderWidth: 1,
     borderColor: '#EFEFEF',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

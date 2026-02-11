@@ -204,8 +204,8 @@ export default function RegisterScreen() {
         await AsyncStorage.setItem('auth_token', access_token);
         await AsyncStorage.setItem('refresh_token', refresh_token);
 
+        // Just call login — RootLayoutNav will handle navigation
         login(user, access_token);
-        router.replace('/(auth)/onboarding');
       } else {
         Alert.alert('Error', 'Verification failed. Please try again.');
       }

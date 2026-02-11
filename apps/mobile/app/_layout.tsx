@@ -5,7 +5,7 @@ import '@/lib/storage';
 // Initialize i18n for internationalization
 import '@/i18n';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Stack, router } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
@@ -114,6 +114,9 @@ function RootLayoutNav() {
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [hasAttemptedRestore, setHasAttemptedRestore] = useState(false);
   const [hasCheckedFirstLogin, setHasCheckedFirstLogin] = useState(false);
+  const hasNavigatedRef = useRef(false);
+  const isFreshLoginRef = useRef(false);
+  const sessionRestoreHandledRef = useRef(false);
 
   // Try to restore session from stored tokens on app startup
   useEffect(() => {
@@ -123,7 +126,10 @@ function RootLayoutNav() {
       setHasAttemptedRestore(true);
 
       // If already authenticated from zustand persist, we're done
+      // This is a session restore, NOT a fresh login
       if (isAuthenticated) {
+        sessionRestoreHandledRef.current = true;
+        isFreshLoginRef.current = false;
         setIsRestoringSession(false);
         return;
       }
@@ -141,7 +147,9 @@ function RootLayoutNav() {
             const response = await api.get('/auth/me');
             if (response.data) {
               console.log('Session restore: /auth/me successful');
-              // Restore the session
+              // Restore the session — NOT a fresh login
+              sessionRestoreHandledRef.current = true;
+              isFreshLoginRef.current = false;
               login(response.data, token);
               setIsRestoringSession(false);
               return;
@@ -161,6 +169,9 @@ function RootLayoutNav() {
                 await AsyncStorage.setItem('refresh_token', newRefreshToken);
 
                 console.log('Session restore: refresh successful');
+                // Restored via token refresh — NOT a fresh login
+                sessionRestoreHandledRef.current = true;
+                isFreshLoginRef.current = false;
                 login(user, access_token);
                 setIsRestoringSession(false);
                 return;
@@ -187,32 +198,54 @@ function RootLayoutNav() {
     }
   }, [hasHydrated, hasAttemptedRestore, isAuthenticated, login]);
 
+  // Detect fresh login: if isAuthenticated transitions to true AFTER session restore is complete
+  // and the restore path didn't explicitly handle it, it means the user just logged in fresh
+  const prevAuthRef = useRef(isAuthenticated);
+  useEffect(() => {
+    if (!sessionRestoreHandledRef.current && !isRestoringSession && !prevAuthRef.current && isAuthenticated) {
+      isFreshLoginRef.current = true;
+    }
+    prevAuthRef.current = isAuthenticated;
+  }, [isAuthenticated, isRestoringSession]);
+
   useEffect(() => {
     // Wait for hydration and session restore before checking auth state
     if (!hasHydrated || isRestoringSession) return;
 
     // Redirect based on authentication state
     if (isAuthenticated) {
-      // User is authenticated, go to main tabs
-      router.replace('/(tabs)');
+      // Check if notification prompt needs to be shown (only on fresh login, never on session restore)
+      const navigateAfterAuth = async () => {
+        // Prevent duplicate navigation (ref avoids stale closure issues)
+        if (hasNavigatedRef.current) return;
+        hasNavigatedRef.current = true;
 
-      // Check if this is the first login and show guide
-      if (!hasCheckedFirstLogin) {
-        setHasCheckedFirstLogin(true);
-        checkFirstLogin().then((isFirstLogin) => {
-          if (isFirstLogin) {
-            // Delay guide start to allow navigation to complete
-            setTimeout(() => {
-              startGuide();
-            }, 1000);
+        const notificationPromptShown = await AsyncStorage.getItem('notification_prompt_shown');
+        if (isFreshLoginRef.current && !notificationPromptShown) {
+          router.replace('/(auth)/notifications');
+        } else {
+          router.replace('/(tabs)');
+
+          // Only check guide when going to tabs (not notifications screen)
+          if (!hasCheckedFirstLogin) {
+            setHasCheckedFirstLogin(true);
+            checkFirstLogin().then((isFirstLogin) => {
+              if (isFirstLogin) {
+                setTimeout(() => {
+                  startGuide();
+                }, 1000);
+              }
+            });
           }
-        });
-      }
+        }
+      };
+      navigateAfterAuth();
     } else {
-      // Not authenticated, go to auth screen
+      // Not authenticated — reset so navigation fires again on next login
+      hasNavigatedRef.current = false;
       router.replace('/(auth)');
     }
-  }, [isAuthenticated, hasHydrated, isRestoringSession, hasCheckedFirstLogin, checkFirstLogin, startGuide]);
+  }, [isAuthenticated, hasHydrated, isRestoringSession]);
 
   // Show nothing while hydrating or restoring session
   if (!hasHydrated || isRestoringSession) {
