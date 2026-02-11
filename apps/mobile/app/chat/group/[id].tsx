@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';

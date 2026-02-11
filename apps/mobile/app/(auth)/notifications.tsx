@@ -63,12 +63,24 @@ export default function NotificationsPermissionScreen() {
   const requestNotificationPermissions = async () => {
     setLoading(true);
     try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
+      // Wrap permission requests in a timeout to avoid hanging in Expo Go / Simulator
+      const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T | null> =>
+        Promise.race([
+          promise,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+        ]);
 
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
+      let finalStatus: string | null = null;
+
+      const permResult = await withTimeout(Notifications.getPermissionsAsync(), 5000);
+      if (permResult) {
+        finalStatus = permResult.status;
+        if (finalStatus !== 'granted') {
+          const reqResult = await withTimeout(Notifications.requestPermissionsAsync(), 10000);
+          if (reqResult) {
+            finalStatus = reqResult.status;
+          }
+        }
       }
 
       // If permission granted, register push token with backend
@@ -76,19 +88,19 @@ export default function NotificationsPermissionScreen() {
         try {
           const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
           if (projectId) {
-            const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-            const token = tokenData.data;
-
-            // Store token locally
-            await AsyncStorage.setItem('expo_push_token', token);
-
-            // Send to backend
-            await api.post('/profile/fcm-token', { token });
-            console.log('Push token registered:', token);
+            const tokenData = await withTimeout(
+              Notifications.getExpoPushTokenAsync({ projectId }),
+              5000
+            );
+            if (tokenData) {
+              const token = tokenData.data;
+              await AsyncStorage.setItem('expo_push_token', token);
+              await api.post('/profile/fcm-token', { token }).catch(() => {});
+              console.log('Push token registered:', token);
+            }
           }
         } catch (tokenError) {
           console.log('Failed to register push token:', tokenError);
-          // Continue anyway - this is non-critical
         }
       }
 
@@ -99,6 +111,7 @@ export default function NotificationsPermissionScreen() {
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Error requesting notification permissions:', error);
+      await AsyncStorage.setItem('notification_prompt_shown', 'true');
       router.replace('/(tabs)');
     } finally {
       setLoading(false);

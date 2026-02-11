@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { LinearGradient } from 'expo-linear-gradient';

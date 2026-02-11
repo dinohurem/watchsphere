@@ -301,3 +301,28 @@ DEALER:
 COLLECTOR:
   Email: collector@watchsphere.com
   Password: Collector123!
+
+
+from mobile folder:
+  eas build --platform android --profile production --local
+  eas build --platform ios --profile production --local
+
+
+Running builds:
+
+1. 
+cd /Users/dinohurem/Documents/dev/watchsphere/apps/mobile
+./scripts/prepare-standalone-build.sh
+
+2. 
+Then copy the watchsphere-release.keystore to folder.
+cp /Users/dinohurem/Documents/dev/watchsphere/apps/mobile/android/app/watchsphere-release.keystore ~/watchsphere-standalone-build/android/app/
+
+
+3.
+then this:
+cd ~/watchsphere-standalone-build/android
+./gradlew bundleRelease
+
+
+ NODE_ENV=production npx expo start --ios

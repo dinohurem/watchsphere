@@ -26,7 +26,8 @@
       },
       "entitlements": {
         "aps-environment": "production"
-      }
+      },
+      "appleTeamId": "7QQ957QVBN"
     },
     "android": {
       "versionCode": 3,
@@ -39,7 +40,9 @@
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
-      "permissions": []
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",

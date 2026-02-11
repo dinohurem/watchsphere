@@ -105,11 +105,22 @@ class ChatService {
       this.emit('connection', { status: 'disconnected' });
     });
 
-    this.socket.on('connect_error', (error) => {
+    this.socket.on('connect_error', (error: any) => {
       console.log('=== ChatService: CONNECTION ERROR ===');
       console.log('ChatService: Error:', error.message);
+
+      // Stop retrying on 404 — server does not support Socket.IO (e.g. Vercel serverless)
+      const httpStatus = error?.description ?? error?.context?.status;
+      if (httpStatus === 404) {
+        console.log('ChatService: Socket.IO endpoint not found (404). Stopping reconnection.');
+        if (this.socket) {
+          this.socket.io.reconnection(false);
+          this.socket.disconnect();
+        }
+        return;
+      }
+
       console.log('ChatService: Error details:', JSON.stringify(error, null, 2));
-      // Log additional context for debugging
       console.log('ChatService: Socket state - connected:', this.socket?.connected, 'disconnected:', this.socket?.disconnected);
     });
 

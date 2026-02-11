@@ -28,9 +28,28 @@ interface GuideStep {
   getHighlightArea: () => HighlightArea;
 }
 
+// ── Measurement registry ──────────────────────────────────────
+// Screens call `registerGuideMeasurement(stepId, layout)` via onLayout
+// so the highlight positions come from the actual rendered elements.
+const measurements = new Map<string, HighlightArea>();
+
+export function registerGuideMeasurement(stepId: string, area: HighlightArea) {
+  measurements.set(stepId, area);
+}
+
+export function clearGuideMeasurements() {
+  measurements.clear();
+}
+
+/** Return the measured area if available, otherwise the fallback. */
+function measured(stepId: string, fallback: HighlightArea): HighlightArea {
+  return measurements.get(stepId) ?? fallback;
+}
+
+// ── Fallback (hardcoded) highlight positions ──────────────────
+
 // Step 1: Profile icon (top right on home)
-// Header has SafeAreaView edges=['top'], then paddingTop: hp(12)
-const profileHighlight = (): HighlightArea => ({
+const profileHighlight = (): HighlightArea => measured('profile', {
   x: SCREEN_WIDTH - wp(16) - sp(44),
   y: STATUS_BAR_HEIGHT + hp(24),
   width: sp(44),
@@ -39,9 +58,7 @@ const profileHighlight = (): HighlightArea => ({
 });
 
 // Step 2: Search input (on home page)
-// Header layout: logo (33px) + gap (16px) + search (flex) + gap (16px) + profile (44px)
-// Search starts after: padding (16) + logo (33) + gap (16) = 65
-const searchHighlight = (): HighlightArea => ({
+const searchHighlight = (): HighlightArea => measured('search', {
   x: wp(16) + sp(33) + wp(16),
   y: STATUS_BAR_HEIGHT + hp(24),
   width: SCREEN_WIDTH - wp(16) - sp(33) - wp(16) - wp(16) - sp(44) - wp(16),
@@ -49,15 +66,15 @@ const searchHighlight = (): HighlightArea => ({
   borderRadius: sp(22),
 });
 
-// Step 3: Market tab in bottom navigation (second tab of 4 in the pill)
-// Tab bar: paddingHorizontal 25px, pill container flex: 1, 4 equal tabs
-// Market is the second tab (index 1)
+// Step 3: Market tab in bottom navigation
 const marketTabHighlight = (): HighlightArea => {
+  const stored = measurements.get('market');
+  if (stored) return stored;
   const tabBarPadding = wp(25);
-  const aiButtonWidth = sp(54) + wp(16); // AI button + gap
+  const aiButtonWidth = sp(54) + wp(16);
   const pillWidth = SCREEN_WIDTH - tabBarPadding * 2 - aiButtonWidth;
   const tabWidth = pillWidth / 4;
-  const marketTabX = tabBarPadding + tabWidth; // Start of second tab
+  const marketTabX = tabBarPadding + tabWidth;
   return {
     x: marketTabX,
     y: SCREEN_HEIGHT - hp(85),
@@ -67,45 +84,41 @@ const marketTabHighlight = (): HighlightArea => {
   };
 };
 
-// Step 4: Filters button on market page (in the "Watches" section header, right side)
-// Position: after trendingSection (paddingTop: 16 + content + paddingBottom: 32) + watchesHeader
-// watchesHeader is at paddingHorizontal: 16, filtersButton has paddingHorizontal: 12, paddingVertical: 8
-const filtersHighlight = (): HighlightArea => ({
-  x: SCREEN_WIDTH - wp(16) - wp(120), // Approximate width of filters button
-  y: STATUS_BAR_HEIGHT + hp(260), // After header + trending section
+// Step 4: Filters button on market page
+const filtersHighlight = (): HighlightArea => measured('filters', {
+  x: SCREEN_WIDTH - wp(16) - wp(120),
+  y: STATUS_BAR_HEIGHT + hp(260),
   width: wp(120),
   height: hp(40),
   borderRadius: sp(20),
 });
 
-// Step 5: First watch row on market page (in the watch list after categories)
-// Position: after header + trending + watchesHeader + categoryTabs
-const watchRowHighlight = (): HighlightArea => ({
+// Step 5: First watch row on market page
+const watchRowHighlight = (): HighlightArea => measured('watch-details', {
   x: wp(16),
-  y: STATUS_BAR_HEIGHT + hp(400), // After all the sections above the watch list
+  y: STATUS_BAR_HEIGHT + hp(400),
   width: SCREEN_WIDTH - wp(32),
   height: hp(50),
   borderRadius: wp(8),
 });
 
-// Step 6: Order book icon on watch details (first action button)
-// actionButtons: paddingHorizontal: 8, space-around with 4 buttons, each actionButton width: 96
-// Order Book is the first button
+// Step 6: Order book icon on watch details
 const orderBookHighlight = (): HighlightArea => {
+  const stored = measurements.get('order-book');
+  if (stored) return stored;
   const buttonWidth = wp(70);
-  const spacing = (SCREEN_WIDTH - wp(16) - buttonWidth * 4) / 5; // space-around
+  const spacing = (SCREEN_WIDTH - wp(16) - buttonWidth * 4) / 5;
   return {
     x: spacing,
-    y: STATUS_BAR_HEIGHT + hp(490), // Below hero image (~525px) and price section
+    y: STATUS_BAR_HEIGHT + hp(490),
     width: buttonWidth,
     height: hp(60),
     borderRadius: sp(12),
   };
 };
 
-// Step 7: AI chat button on watch details (bottom right, next to order buttons)
-// aiButtonOuter: width: 42, positioned at right side of bottomBar
-const aiChatHighlight = (): HighlightArea => ({
+// Step 7: AI chat button on watch details
+const aiChatHighlight = (): HighlightArea => measured('ai-assistant', {
   x: SCREEN_WIDTH - wp(16) - sp(42),
   y: SCREEN_HEIGHT - hp(70),
   width: sp(42),
@@ -113,9 +126,8 @@ const aiChatHighlight = (): HighlightArea => ({
   borderRadius: sp(21),
 });
 
-// Step 8: Buy/Sell buttons on watch details (bottom bar, left side)
-// orderButtons container: flex: 1, marginRight: 12, contains buy and sell buttons
-const orderButtonsHighlight = (): HighlightArea => ({
+// Step 8: Buy/Sell buttons on watch details
+const orderButtonsHighlight = (): HighlightArea => measured('place-orders', {
   x: wp(16),
   y: SCREEN_HEIGHT - hp(78),
   width: SCREEN_WIDTH - wp(16) - wp(12) - sp(42) - wp(16),
@@ -312,12 +324,25 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
 function GuideOverlay() {
   const { t } = useTranslation();
   const context = useContext(GuideContext);
+  // Force re-render after step navigation so measurements are available
+  const [, forceUpdate] = useState(0);
+  const prevStep = useRef(-1);
+
+  const currentStep = context?.currentStep ?? -1;
+  useEffect(() => {
+    if (currentStep !== prevStep.current) {
+      prevStep.current = currentStep;
+      // Wait for the target screen to mount & measure before reading positions
+      const timer = setTimeout(() => forceUpdate(n => n + 1), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [currentStep]);
 
   if (!context || !context.isGuideActive || !context.currentGuideStep) {
     return null;
   }
 
-  const { currentGuideStep, currentStep, totalSteps, nextStep, previousStep, goToStep, endGuide } = context;
+  const { currentGuideStep, totalSteps, nextStep, previousStep, goToStep, endGuide } = context;
   const isLastStep = currentStep === totalSteps - 1;
   const isFirstStep = currentStep === 0;
 
