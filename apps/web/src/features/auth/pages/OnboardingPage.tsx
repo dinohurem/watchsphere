@@ -209,8 +209,9 @@ export function OnboardingPage() {
                   {t('auth.onboarding.verifyTitle')}
                 </h1>
                 <p className="text-[16px] sm:text-[18px] text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-6">
-                  {t('auth.onboarding.verifyDescription')}{' '}
-                  <span className="font-medium text-[#1d1d1f] break-all">{user?.email || t('auth.onboarding.yourEmail')}</span>
+                  {t('auth.onboarding.verifyDescription')}
+                  <br />
+                  <span className="font-medium text-[#1d1d1f]">{user?.email || t('auth.onboarding.yourEmail')}</span>
                 </p>
               </div>
 
@@ -424,7 +425,7 @@ export function OnboardingPage() {
       </div>
 
       {/* Left Side - Form */}
-      <div className="flex-1 flex flex-col relative">
+      <div className="flex-1 lg:w-1/2 lg:flex-none flex flex-col relative min-h-screen lg:min-h-0">
         {/* Back Button - Desktop positioned at left */}
         <div className="hidden lg:block absolute top-[18px] left-[141px]">
           <button
@@ -446,7 +447,7 @@ export function OnboardingPage() {
       </div>
 
       {/* Right Side - Image with Quote */}
-      <div className="hidden lg:block flex-1 py-[90px] pr-10">
+      <div className="hidden lg:block lg:w-1/2 py-[90px] pr-10">
         <div
           className="w-full h-full rounded-3xl bg-cover bg-center relative overflow-hidden"
           style={{ backgroundImage: `url(${getBackgroundImage()})` }}
