@@ -438,17 +438,17 @@ export function OnboardingPage() {
         </div>
 
         {/* Form Container */}
-        <div className="flex-1 flex flex-col px-5 sm:px-8 py-8 lg:pt-[176px] lg:pb-[90px] lg:pl-[calc(50%-351px)] lg:pr-8">
-          <div className="w-full max-w-[448px] mx-auto lg:mx-0 flex-1 flex flex-col justify-between gap-8">
+        <div className="flex-1 flex flex-col items-center justify-center px-5 sm:px-8 py-8 lg:pt-[176px] lg:pb-[90px]">
+          <div className="w-full max-w-[448px] flex-1 flex flex-col justify-between gap-8">
             {renderStepContent()}
           </div>
         </div>
       </div>
 
       {/* Right Side - Image with Quote */}
-      <div className="hidden lg:block w-[641px] py-[90px] pr-10">
+      <div className="hidden lg:block flex-1 py-[90px] pr-10">
         <div
-          className="w-full h-[770px] rounded-3xl bg-cover bg-center relative overflow-hidden"
+          className="w-full h-full rounded-3xl bg-cover bg-center relative overflow-hidden"
           style={{ backgroundImage: `url(${getBackgroundImage()})` }}
         >
           {/* Gradient overlay */}

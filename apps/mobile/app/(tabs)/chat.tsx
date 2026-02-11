@@ -371,7 +371,7 @@ export default function ChatScreen() {
             }
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <MessageSquare size={48} color={colors.border} />
+                <MessageSquare size={48} color={colors.textTertiary} />
                 <Text style={styles.emptyText}>{t('chat.noConversations')}</Text>
                 <Text style={styles.emptySubtext}>
                   {t('chat.startChatting')}
@@ -392,7 +392,7 @@ export default function ChatScreen() {
             }
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <Users size={48} color={colors.border} />
+                <Users size={48} color={colors.textTertiary} />
                 <Text style={styles.emptyText}>{t('chat.noGroups')}</Text>
                 <Text style={styles.emptySubtext}>
                   {t('chat.groupsAppearHere')}
@@ -634,7 +634,8 @@ export default function ChatScreen() {
     emptySubtext: {
       fontSize: fp(16),
       fontFamily: fonts.regular,
-      color: colors.textSecondary,
+      color: colors.text,
+      opacity: 0.6,
       textAlign: 'center',
     },
   });

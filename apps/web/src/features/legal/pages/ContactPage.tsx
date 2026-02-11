@@ -1,7 +1,16 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, MapPin, Clock } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Clock, Copy, Check } from 'lucide-react';
 
 export function ContactPage() {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyEmail = () => {
+    navigator.clipboard.writeText('info@watchsphere.io');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -26,16 +35,33 @@ export function ContactPage() {
 
         {/* Contact Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-          <a
-            href="mailto:info@watchsphere.io"
-            className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-shadow group"
+          <div
+            className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-shadow group cursor-pointer"
+            onClick={handleCopyEmail}
           >
-            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-gray-200 transition-colors">
-              <Mail className="w-6 h-6 text-gray-700" />
+            <div className="flex items-start justify-between">
+              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-gray-200 transition-colors">
+                <Mail className="w-6 h-6 text-gray-700" />
+              </div>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleCopyEmail(); }}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Copy email address"
+              >
+                {copied ? (
+                  <Check className="w-5 h-5 text-green-600" />
+                ) : (
+                  <Copy className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                )}
+              </button>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Email Us</h3>
-            <p className="text-gray-600">info@watchsphere.io</p>
-          </a>
+            <p className="text-gray-600">
+              info@watchsphere.io
+              {copied && <span className="ml-2 text-sm text-green-600">Copied!</span>}
+            </p>
+          </div>
 
           <a
             href="tel:+41441234567"

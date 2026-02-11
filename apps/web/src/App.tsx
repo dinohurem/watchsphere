@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { UserLayout } from './components/layout/UserLayout'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { LoginPage } from './features/auth/pages/LoginPage'
@@ -135,7 +135,9 @@ function App() {
       <Route path="/verify-reset-code" element={<VerifyResetCodePage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/privacy" element={<Navigate to="/privacy-policy" replace />} />
       <Route path="/terms-conditions" element={<TermsConditionsPage />} />
+      <Route path="/terms" element={<Navigate to="/terms-conditions" replace />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/payment-callback" element={<PaymentCallbackPage />} />
       <Route path="/auth/handoff" element={<AuthHandoffPage />} />
