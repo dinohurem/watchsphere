@@ -3,6 +3,7 @@ import { Bell, Search, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@watchsphere/shared/stores'
+import { API_CONFIG } from '@/config/api'
 
 export function Header() {
   const { t } = useTranslation()
@@ -18,7 +19,7 @@ export function Header() {
         const token = localStorage.getItem('auth_token')
         if (!token) return
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/notifications?limit=1`, {
+        const response = await fetch(`${API_CONFIG.baseURL}/notifications?limit=1`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

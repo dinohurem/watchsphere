@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore, useChatStore } from '@watchsphere/shared/stores'
 import { chatWebSocket } from '@/services/chatWebSocket'
+import { API_CONFIG } from '@/config/api'
 
 // Custom Chat Icon matching Figma design
 function ChatIcon({ className }: { className?: string }) {
@@ -67,7 +68,7 @@ export function UserLayout() {
         const token = localStorage.getItem('auth_token')
         if (!token) return
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/profile/me`, {
+        const response = await fetch(`${API_CONFIG.baseURL}/profile/me`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -99,7 +100,7 @@ export function UserLayout() {
         const token = localStorage.getItem('auth_token')
         if (!token) return
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/notifications?limit=1`, {
+        const response = await fetch(`${API_CONFIG.baseURL}/notifications?limit=1`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
