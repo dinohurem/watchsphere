@@ -269,20 +269,27 @@ async def admin_import_whatsapp(
         # Extract group name from filename or first system message
         group_name = file.filename.replace('.zip', '').replace('_', ' ')
 
-        # Save messages
-        for msg in messages:
-            message = WhatsAppMessage(
-                import_id=str(import_record.id),
+        # Bulk insert messages in batches for performance
+        BATCH_SIZE = 500
+        import_id_str = str(import_record.id)
+
+        message_docs = [
+            WhatsAppMessage(
+                import_id=import_id_str,
                 timestamp=msg["timestamp"],
                 sender=msg["sender"],
                 content=msg["content"],
             )
-            await message.insert()
+            for msg in messages
+        ]
+        for i in range(0, len(message_docs), BATCH_SIZE):
+            batch = message_docs[i:i + BATCH_SIZE]
+            await WhatsAppMessage.insert_many(batch)
 
-        # Save extracted listings
-        for watch in extracted_watches:
-            listing = ExtractedWatchListing(
-                import_id=str(import_record.id),
+        # Bulk insert extracted listings in batches
+        listing_docs = [
+            ExtractedWatchListing(
+                import_id=import_id_str,
                 brand=watch.get("brand"),
                 reference=watch.get("reference"),
                 price=watch.get("price"),
@@ -295,7 +302,11 @@ async def admin_import_whatsapp(
                 country_name=watch.get("country_name"),
                 message_timestamp=watch.get("message_timestamp"),
             )
-            await listing.insert()
+            for watch in extracted_watches
+        ]
+        for i in range(0, len(listing_docs), BATCH_SIZE):
+            batch = listing_docs[i:i + BATCH_SIZE]
+            await ExtractedWatchListing.insert_many(batch)
 
         # Update import record
         import_record.group_name = group_name

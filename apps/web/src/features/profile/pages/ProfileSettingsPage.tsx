@@ -296,6 +296,23 @@ export function ProfileSettingsPage() {
   // Account deletion state
   const [deletingAccount, setDeletingAccount] = useState(false);
 
+  // Notification modal state
+  const [notificationModal, setNotificationModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error';
+  }>({ show: false, title: '', message: '', type: 'success' });
+
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotificationModal({
+      show: true,
+      title: type === 'success' ? 'Success' : 'Error',
+      message,
+      type,
+    });
+  };
+
   // Orders state
   const [buyOrders, setBuyOrders] = useState<Order[]>([]);
   const [sellOrders, setSellOrders] = useState<Order[]>([]);
@@ -395,7 +412,7 @@ export function ProfileSettingsPage() {
       }
     } catch (error: any) {
       console.error('Subscription error:', error);
-      alert(error.response?.data?.detail || 'Failed to initiate subscription');
+      showNotification(error.response?.data?.detail || 'Failed to initiate subscription', 'error');
     } finally {
       setSubscribing(false);
     }
@@ -437,12 +454,12 @@ export function ProfileSettingsPage() {
         title: issueTitle.trim(),
         description: issueDescription.trim(),
       });
-      alert(t('settings.issueReported'));
+      showNotification(t('settings.issueReported'));
       setIssueTitle('');
       setIssueDescription('');
       setSupportView('main');
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to report issue. Please try again.');
+      showNotification(error.response?.data?.detail || 'Failed to report issue. Please try again.', 'error');
     } finally {
       setSubmittingIssue(false);
     }
@@ -459,7 +476,7 @@ export function ProfileSettingsPage() {
         watch_model: disputeModel.trim() || null,
         description: disputeDescription.trim(),
       });
-      alert(t('settings.disputeSubmitted'));
+      showNotification(t('settings.disputeSubmitted'));
       setDisputeWatchRef('');
       setDisputeBrand('');
       setDisputeModel('');
@@ -467,7 +484,7 @@ export function ProfileSettingsPage() {
       setSupportView('disputes');
       loadDisputes();
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to submit dispute. Please try again.');
+      showNotification(error.response?.data?.detail || 'Failed to submit dispute. Please try again.', 'error');
     } finally {
       setSubmittingDispute(false);
     }
@@ -522,10 +539,10 @@ export function ProfileSettingsPage() {
           profile_image_url: response.data.url,
           profile_image_thumbnail_url: response.data.thumbnail_url || response.data.url,
         });
-        alert(t('settings.photoUpdated'));
+        showNotification(t('settings.photoUpdated'));
       }
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to upload photo. Please try again.');
+      showNotification(error.response?.data?.detail || 'Failed to upload photo. Please try again.', 'error');
     } finally {
       setUploadingPhoto(false);
     }
@@ -543,7 +560,7 @@ export function ProfileSettingsPage() {
       setEditingField(null);
       setEditValue('');
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to update profile. Please try again.');
+      showNotification(error.response?.data?.detail || 'Failed to update profile. Please try again.', 'error');
     } finally {
       setSavingProfile(false);
     }
@@ -551,15 +568,15 @@ export function ProfileSettingsPage() {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      alert(t('settings.fillAllFields'));
+      showNotification(t('settings.fillAllFields'), 'error');
       return;
     }
     if (newPassword !== confirmPassword) {
-      alert(t('settings.passwordsNoMatch'));
+      showNotification(t('settings.passwordsNoMatch'), 'error');
       return;
     }
     if (newPassword.length < 6) {
-      alert(t('settings.passwordMinLength'));
+      showNotification(t('settings.passwordMinLength'), 'error');
       return;
     }
 
@@ -569,13 +586,13 @@ export function ProfileSettingsPage() {
         current_password: currentPassword,
         new_password: newPassword,
       });
-      alert(t('settings.passwordChanged'));
+      showNotification(t('settings.passwordChanged'));
       setShowPasswordModal(false);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to change password. Please check your current password.');
+      showNotification(error.response?.data?.detail || 'Failed to change password. Please check your current password.', 'error');
     } finally {
       setChangingPassword(false);
     }
@@ -592,7 +609,7 @@ export function ProfileSettingsPage() {
       logout();
       navigate('/login');
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to delete account. Please try again.');
+      showNotification(error.response?.data?.detail || 'Failed to delete account. Please try again.', 'error');
     } finally {
       setDeletingAccount(false);
     }
@@ -634,6 +651,7 @@ export function ProfileSettingsPage() {
       console.error('Failed to load orders:', error);
       setBuyOrders([]);
       setSellOrders([]);
+      setOrdersLoaded(true);
     } finally {
       setLoadingOrders(false);
     }
@@ -667,7 +685,7 @@ export function ProfileSettingsPage() {
 
     if (activeSection === 'orders') {
       // Load orders when this section is selected
-      if (buyOrders.length === 0 && sellOrders.length === 0 && !loadingOrders) {
+      if (!ordersLoaded && !loadingOrders) {
         loadOrders();
       }
 
@@ -1740,6 +1758,31 @@ export function ProfileSettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Notification Modal */}
+      {notificationModal.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 text-center">
+            <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-4 ${
+              notificationModal.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+            }`}>
+              {notificationModal.type === 'success' ? (
+                <Check className="w-6 h-6 text-green-600" />
+              ) : (
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              )}
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{notificationModal.title}</h3>
+            <p className="text-gray-600 mb-6">{notificationModal.message}</p>
+            <button
+              onClick={() => setNotificationModal(prev => ({ ...prev, show: false }))}
+              className="w-full py-3 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors"
+            >
+              {t('common.done')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
