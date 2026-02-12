@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert, ActivityIndicator, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -800,6 +800,8 @@ export default function CreateListingScreen() {
                 placeholder={placeholder}
                 placeholderTextColor="rgba(29, 29, 31, 0.5)"
                 keyboardType="numeric"
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
               />
             </View>
           </View>
@@ -818,6 +820,8 @@ export default function CreateListingScreen() {
               placeholderTextColor="rgba(29, 29, 31, 0.5)"
               keyboardType="numeric"
               maxLength={field.key === 'year' ? 4 : undefined}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
             />
           </View>
         </View>
@@ -835,6 +839,8 @@ export default function CreateListingScreen() {
             onChangeText={(text) => updateField(field.key, text)}
             placeholder={placeholder}
             placeholderTextColor="rgba(29, 29, 31, 0.5)"
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
           />
         </View>
       </View>
@@ -1067,12 +1073,13 @@ export default function CreateListingScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={Keyboard.dismiss}
       >
         {renderStepContent()}
       </ScrollView>
 
       {/* Bottom Section - Progress Indicator and Button */}
-      <View style={styles.bottomButtonsContainer}>
+      <View style={styles.bottomButtonsContainer} onTouchStart={Keyboard.dismiss}>
         {/* Progress Indicator */}
         <View style={styles.progressContainer}>
           {Array.from({ length: TOTAL_STEPS }).map((_, index) => (

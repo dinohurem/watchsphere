@@ -288,6 +288,25 @@ async def approve_user(
     }
 
 
+@router.post("/users/approve-all")
+async def approve_all_users(
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Approve all pending user accounts (Admin only)"""
+    pending_users = await User.find(
+        User.approved == False, User.role != UserRole.ADMIN
+    ).to_list()
+
+    count = 0
+    for user in pending_users:
+        user.approved = True
+        user.updated_at = datetime.utcnow()
+        await user.save()
+        count += 1
+
+    return {"message": f"Approved {count} users"}
+
+
 @router.post("/users/{user_id}/reject")
 async def reject_user(
     user_id: str,
