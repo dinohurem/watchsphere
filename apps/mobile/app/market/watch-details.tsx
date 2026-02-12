@@ -381,7 +381,7 @@ export default function WatchDetailsScreen() {
         const response = await api.get('/profile/watchlist');
         if (response.data && Array.isArray(response.data)) {
           const isInList = response.data.some((item: any) =>
-            item.reference === reference || item.watch_id === params.orderId
+            item.reference === reference
           );
           setIsFavorite(isInList);
         }
@@ -390,7 +390,7 @@ export default function WatchDetailsScreen() {
       }
     };
     checkWatchlistStatus();
-  }, [isAuthenticated, reference, params.orderId]);
+  }, [isAuthenticated, reference]);
 
   const toggleWatchlist = async () => {
     if (!isAuthenticated) {
@@ -398,12 +398,15 @@ export default function WatchDetailsScreen() {
       return;
     }
 
+    const wasFavorite = isFavorite;
+    // Optimistic update — toggle immediately for responsive UI
+    setIsFavorite(!wasFavorite);
     setWatchlistLoading(true);
     try {
-      if (isFavorite) {
-        // Remove from watchlist
-        await api.delete(`/profile/watchlist/${reference}`);
-        setIsFavorite(false);
+      if (wasFavorite) {
+        // Remove from watchlist - encode to handle special characters in reference
+        const encodedRef = encodeURIComponent(reference);
+        await api.delete(`/profile/watchlist/${encodedRef}`);
       } else {
         // Add to watchlist
         await api.post('/profile/watchlist', {
@@ -411,9 +414,10 @@ export default function WatchDetailsScreen() {
           model: model,
           reference: reference,
         });
-        setIsFavorite(true);
       }
     } catch (error) {
+      // Revert on failure
+      setIsFavorite(wasFavorite);
       console.error('Failed to update watchlist:', error);
     } finally {
       setWatchlistLoading(false);
@@ -795,7 +799,7 @@ export default function WatchDetailsScreen() {
                 onPress={toggleWatchlist}
                 disabled={watchlistLoading}
               >
-                <StarIcon filled={isFavorite} />
+                <StarIcon key={isFavorite ? 'filled' : 'empty'} filled={isFavorite} />
               </TouchableOpacity>
             )}
           </View>

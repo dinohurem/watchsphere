@@ -221,13 +221,12 @@ export default function OrderBookScreen() {
       >
         <View style={[styles.tableCell, styles.marketCellContainer]}>
           <CountryFlag countryCode={item.country_code} size={16} />
-          <Text style={styles.marketCodeText}>{item.country_code}</Text>
+          <Text style={styles.marketCodeText}>{item.country_code?.toUpperCase()}</Text>
         </View>
         <Text style={[styles.tableCell, styles.tableCellText, styles.dateCellData]}>{formatOrderDate(item.date)}</Text>
         <Text style={[styles.tableCell, styles.tableCellText, styles.conditionCell]}>{item.condition}</Text>
         <Text style={[styles.tableCell, styles.tableCellTextBold, styles.priceCell]}>{formatPrice(item.price)}</Text>
-        {selectedTab === 'Sell' && (
-          <TouchableOpacity
+        <TouchableOpacity
             style={[styles.tableCell, styles.chatCell]}
             onPress={(e) => {
               e.stopPropagation();
@@ -238,7 +237,6 @@ export default function OrderBookScreen() {
           >
             <WhatsAppIcon size={20} />
           </TouchableOpacity>
-        )}
       </TouchableOpacity>
     );
   };
@@ -298,9 +296,7 @@ export default function OrderBookScreen() {
           <Text style={[styles.tableHeaderCell, styles.dateCell]}>{t('orderBook.date')}</Text>
           <Text style={[styles.tableHeaderCell, styles.conditionCell]}>{t('orderBook.condition')}</Text>
           <Text style={[styles.tableHeaderCell, styles.priceCell]}>{t('orderBook.price')}</Text>
-          {selectedTab === 'Sell' && (
-            <Text style={[styles.tableHeaderCell, styles.chatCell]}>Chat</Text>
-          )}
+          <Text style={[styles.tableHeaderCell, styles.chatCell]}>Chat</Text>
         </View>
 
         {/* Table Body */}
@@ -475,7 +471,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(8),
   },
   marketCellContainer: {
-    width: wp(70),
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -487,18 +483,16 @@ const styles = StyleSheet.create({
     color: '#1D1D1F',
   },
   marketCell: {
-    width: wp(70),
+    flex: 1,
     textAlign: 'center',
   },
   dateCell: {
-    width: wp(70),
-    textAlign: 'left',
-    marginLeft: wp(20),
+    flex: 1,
+    textAlign: 'center',
   },
   dateCellData: {
-    width: wp(70),
-    textAlign: 'left',
-    marginLeft: wp(20),
+    flex: 1,
+    textAlign: 'center',
   },
   conditionCell: {
     flex: 1,
@@ -506,11 +500,10 @@ const styles = StyleSheet.create({
   },
   priceCell: {
     flex: 1,
-    textAlign: 'right',
-    paddingRight: wp(8),
+    textAlign: 'center',
   },
   chatCell: {
-    width: wp(44),
+    flex: 0.7,
     alignItems: 'center',
     justifyContent: 'center',
   },

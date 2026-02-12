@@ -27,7 +27,7 @@ export function WatchlistPage() {
 
   const handleRemove = async (watchId: string) => {
     try {
-      await api.delete(`/watchlist/${watchId}`);
+      await api.delete(`/profile/watchlist/${watchId}`);
       setWatchlist(watchlist.filter(w => w.id !== watchId));
     } catch (error) {
       console.error('Failed to remove from watchlist:', error);
