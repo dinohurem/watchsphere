@@ -807,11 +807,11 @@ export default function WatchDetailsScreen() {
           {/* Quick Info Rows - single column list */}
           <View style={styles.quickInfoList}>
             <View style={styles.quickInfoRow}>
-              <Text style={styles.quickInfoLabel}>Condition:</Text>
+              <Text style={styles.quickInfoLabel}>Condition</Text>
               <Text style={styles.quickInfoValue}>{condition}</Text>
             </View>
             <View style={styles.quickInfoRow}>
-              <Text style={styles.quickInfoLabel}>Case size:</Text>
+              <Text style={styles.quickInfoLabel}>Case size</Text>
               <Text style={styles.quickInfoValue}>{caseSize || '—'}</Text>
             </View>
             <View style={styles.quickInfoRow}>
@@ -1301,18 +1301,17 @@ const styles = StyleSheet.create({
   },
   priceColumn: {
     flex: 1,
-    gap: hp(4),
+    gap: hp(1),
   },
   priceValue: {
     fontFamily: 'HankenGrotesk_700Bold',
     fontSize: fp(24),
     color: '#0F0D2D',
     letterSpacing: 0.12,
-    lineHeight: fp(32),
   },
   addedTime: {
-    fontFamily: 'HankenGrotesk_500Medium',
-    fontSize: fp(15),
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: fp(13),
     color: '#212121',
     opacity: 0.5,
     letterSpacing: 0.075,
@@ -1335,7 +1334,7 @@ const styles = StyleSheet.create({
     paddingVertical: hp(8),
   },
   quickInfoLabel: {
-    fontFamily: 'HankenGrotesk_500Medium',
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(15),
     color: '#212121',
     opacity: 0.5,
@@ -1415,7 +1414,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   specLabel: {
-    fontFamily: 'HankenGrotesk_500Medium',
+    fontFamily: 'HankenGrotesk_400Regular',
     fontSize: fp(15),
     color: '#212121',
     opacity: 0.5,
