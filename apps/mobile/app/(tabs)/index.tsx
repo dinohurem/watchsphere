@@ -1,7 +1,7 @@
 import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -283,12 +283,7 @@ export default function HomeScreen() {
     await Promise.all([loadWatchlist(), loadActivity(), loadNews(), loadProfile()]);
   }, [isGuideActive]);
 
-  // Load data on initial mount
-  useEffect(() => {
-    loadAllData();
-  }, [loadAllData]);
-
-  // Refresh data when screen comes into focus
+  // Refresh data when screen comes into focus (also fires on initial mount)
   useFocusEffect(
     useCallback(() => {
       loadAllData();

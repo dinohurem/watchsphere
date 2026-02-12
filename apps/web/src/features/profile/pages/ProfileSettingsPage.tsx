@@ -712,7 +712,7 @@ export function ProfileSettingsPage() {
             )}
             <div className="h-36 bg-gradient-to-b from-white to-gray-50 flex items-center justify-center p-4">
               {order.image ? (
-                <img src={order.image} alt={order.brand} className="h-full object-contain" />
+                <img src={order.image} alt={order.brand} className="h-full object-contain" loading="lazy" />
               ) : (
                 <ImagePlaceholder width={144} height={144} iconSize={48} borderRadius={0} className="bg-transparent" />
               )}

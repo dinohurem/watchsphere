@@ -633,7 +633,7 @@ export function AdminWatchlist() {
                         <div className="flex items-center">
                           <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
                             {item.image_url ? (
-                              <img src={item.image_url} alt={item.model} className="w-full h-full object-cover" />
+                              <img src={item.image_url} alt={item.model} className="w-full h-full object-cover" loading="lazy" />
                             ) : (
                               <span className="text-gray-400 text-xs">No img</span>
                             )}

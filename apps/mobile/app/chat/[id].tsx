@@ -31,7 +31,7 @@ function ChatIcon({ size = 24, color = "#212121" }: { size?: number; color?: str
 }
 
 // WhatsApp Icon
-function WhatsAppIcon({ size = 24, color = "#25D366" }: { size?: number; color?: string }) {
+function WhatsAppIcon({ size = 24, color = "#1D1D1F" }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path

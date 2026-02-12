@@ -303,10 +303,14 @@ async def list_watches(
 async def list_brands() -> Any:
     """Get list of all watch brands with active listings"""
 
-    # Get distinct brands from active watches
-    watches = await Watch.find(Watch.status == WatchStatus.ACTIVE).to_list()
-    brands = list(set(watch.brand for watch in watches))
-    brands.sort()
+    # Get distinct brands from active watches using aggregation
+    pipeline = [
+        {"$match": {"status": WatchStatus.ACTIVE.value}},
+        {"$group": {"_id": "$brand"}},
+        {"$sort": {"_id": 1}},
+    ]
+    brand_docs = await Watch.aggregate(pipeline).to_list()
+    brands = [doc["_id"] for doc in brand_docs if doc["_id"]]
 
     return brands
 
@@ -504,30 +508,33 @@ async def get_aggregated_market_data(
         # Get unique references (only non-empty ones)
         references = list(set(w.reference for w in watches if w.reference))
 
-        # Get lowest sell order prices for each reference
+        # Batch-fetch lowest sell order prices and order counts using aggregation
         lowest_prices_by_ref = {}
         order_counts_by_ref = {}
 
-        for ref in references:
+        if references:
+            # Get lowest sell price per reference in one query
+            sell_price_pipeline = [
+                {"$match": {"reference": {"$in": references}, "order_type": OrderType.SELL.value, "status": OrderStatus.ACTIVE.value}},
+                {"$group": {"_id": "$reference", "min_price": {"$min": "$price"}}},
+            ]
             try:
-                # Get lowest active sell order price
-                sell_orders = await Order.find(
-                    Order.reference == ref,
-                    Order.order_type == OrderType.SELL,
-                    Order.status == OrderStatus.ACTIVE,
-                ).sort([("price", 1)]).limit(1).to_list()
-
-                if sell_orders:
-                    lowest_prices_by_ref[ref] = sell_orders[0].price
-
-                # Get total order count
-                order_count = await Order.find(
-                    Order.reference == ref,
-                    Order.status == OrderStatus.ACTIVE,
-                ).count()
-                order_counts_by_ref[ref] = order_count
+                sell_price_raw = await Order.aggregate(sell_price_pipeline).to_list()
+                for item in sell_price_raw:
+                    lowest_prices_by_ref[item["_id"]] = item["min_price"]
             except Exception:
-                # If order lookup fails, just continue without order data
+                pass
+
+            # Get total active order count per reference in one query
+            count_pipeline = [
+                {"$match": {"reference": {"$in": references}, "status": OrderStatus.ACTIVE.value}},
+                {"$group": {"_id": "$reference", "count": {"$sum": 1}}},
+            ]
+            try:
+                count_raw = await Order.aggregate(count_pipeline).to_list()
+                for item in count_raw:
+                    order_counts_by_ref[item["_id"]] = item["count"]
+            except Exception:
                 pass
 
         # Build response with proper pricing
@@ -657,68 +664,9 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
     )
 
 
-@router.get("/{watch_id:path}", response_model=WatchResponse)
-async def get_watch(watch_id: str) -> Any:
-    """Get watch by ID or reference (public - only active watches)
-
-    Note: Using :path parameter type to handle references containing slashes (e.g., 5711/1A-010)
-    """
-
-    watch = None
-
-    # First try to find by reference (e.g., "5167R-001")
-    watch = await Watch.find_one(Watch.reference == watch_id, Watch.status == WatchStatus.ACTIVE)
-
-    # If not found by reference, try by MongoDB ID
-    if not watch:
-        try:
-            watch = await Watch.get(PydanticObjectId(watch_id))
-        except Exception:
-            # Invalid ObjectId format, that's fine
-            pass
-
-    if not watch:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Watch not found"
-        )
-
-    # Only show active watches publicly
-    if watch.status != WatchStatus.ACTIVE:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Watch not found"
-        )
-
-    # Increment view count
-    watch.views += 1
-    await watch.save()
-
-    return {
-        "id": str(watch.id),
-        "brand": watch.brand,
-        "model": watch.model,
-        "reference": watch.reference,
-        "price": watch.price,
-        "currency": watch.currency,
-        "condition": watch.condition,
-        "year": watch.year,
-        "serial_number": watch.serial_number,
-        "description": watch.description,
-        "images": watch.images,
-        "cover_image": watch.cover_image,
-        "status": watch.status,
-        "featured": watch.featured,
-        "dealer_id": watch.dealer_id,
-        "dealer_name": watch.dealer_name,
-        "views": watch.views,
-        "created_at": watch.created_at,
-        "updated_at": watch.updated_at,
-        "published_at": watch.published_at,
-    }
-
-
 # ============== ADMIN ENDPOINTS ==============
+# NOTE: Admin routes MUST be defined before the catch-all /{watch_id:path} route below,
+# otherwise FastAPI's path matching will treat "admin/all" as a watch_id.
 
 @router.get("/admin/all", response_model=List[WatchResponse])
 async def admin_list_all_watches(
@@ -1013,17 +961,36 @@ async def admin_watch_stats(
 ) -> Any:
     """Get watch statistics (Admin only)"""
 
-    all_watches = await Watch.find_all().to_list()
+    # Use aggregation instead of loading all watches into memory
+    status_pipeline = [
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+    ]
+    status_counts = await Watch.aggregate(status_pipeline).to_list()
+    status_map = {item["_id"]: item["count"] for item in status_counts}
+
+    # Aggregation for total views and brand count
+    summary_pipeline = [
+        {"$group": {
+            "_id": None,
+            "total_views": {"$sum": "$views"},
+            "brands": {"$addToSet": "$brand"},
+            "featured_count": {"$sum": {"$cond": ["$featured", 1, 0]}},
+        }},
+    ]
+    summary_raw = await Watch.aggregate(summary_pipeline).to_list()
+    summary = summary_raw[0] if summary_raw else {"total_views": 0, "brands": [], "featured_count": 0}
+
+    total = sum(status_map.values())
 
     stats = {
-        "total_watches": len(all_watches),
-        "active_watches": len([w for w in all_watches if w.status == WatchStatus.ACTIVE]),
-        "draft_watches": len([w for w in all_watches if w.status == WatchStatus.DRAFT]),
-        "sold_watches": len([w for w in all_watches if w.status == WatchStatus.SOLD]),
-        "reserved_watches": len([w for w in all_watches if w.status == WatchStatus.RESERVED]),
-        "featured_watches": len([w for w in all_watches if w.featured]),
-        "total_views": sum(w.views for w in all_watches),
-        "brands_count": len(set(w.brand for w in all_watches)),
+        "total_watches": total,
+        "active_watches": status_map.get(WatchStatus.ACTIVE.value, status_map.get(WatchStatus.ACTIVE, 0)),
+        "draft_watches": status_map.get(WatchStatus.DRAFT.value, status_map.get(WatchStatus.DRAFT, 0)),
+        "sold_watches": status_map.get(WatchStatus.SOLD.value, status_map.get(WatchStatus.SOLD, 0)),
+        "reserved_watches": status_map.get(WatchStatus.RESERVED.value, status_map.get(WatchStatus.RESERVED, 0)),
+        "featured_watches": summary["featured_count"],
+        "total_views": summary["total_views"],
+        "brands_count": len(summary["brands"]),
     }
 
     return stats
@@ -1079,4 +1046,67 @@ async def admin_increment_order_count(
         "message": "Order count incremented",
         "id": str(watch.id),
         "order_count": watch.order_count
+    }
+
+
+# ============== CATCH-ALL (must be LAST) ==============
+
+@router.get("/{watch_id:path}", response_model=WatchResponse)
+async def get_watch(watch_id: str) -> Any:
+    """Get watch by ID or reference (public - only active watches)
+
+    Note: Using :path parameter type to handle references containing slashes (e.g., 5711/1A-010)
+    This route MUST be last in the file, as it matches everything.
+    """
+
+    watch = None
+
+    # First try to find by reference (e.g., "5167R-001")
+    watch = await Watch.find_one(Watch.reference == watch_id, Watch.status == WatchStatus.ACTIVE)
+
+    # If not found by reference, try by MongoDB ID
+    if not watch:
+        try:
+            watch = await Watch.get(PydanticObjectId(watch_id))
+        except Exception:
+            # Invalid ObjectId format, that's fine
+            pass
+
+    if not watch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watch not found"
+        )
+
+    # Only show active watches publicly
+    if watch.status != WatchStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watch not found"
+        )
+
+    # Increment view count atomically
+    await watch.update({"$inc": {"views": 1}})
+
+    return {
+        "id": str(watch.id),
+        "brand": watch.brand,
+        "model": watch.model,
+        "reference": watch.reference,
+        "price": watch.price,
+        "currency": watch.currency,
+        "condition": watch.condition,
+        "year": watch.year,
+        "serial_number": watch.serial_number,
+        "description": watch.description,
+        "images": watch.images,
+        "cover_image": watch.cover_image,
+        "status": watch.status,
+        "featured": watch.featured,
+        "dealer_id": watch.dealer_id,
+        "dealer_name": watch.dealer_name,
+        "views": watch.views,
+        "created_at": watch.created_at,
+        "updated_at": watch.updated_at,
+        "published_at": watch.published_at,
     }

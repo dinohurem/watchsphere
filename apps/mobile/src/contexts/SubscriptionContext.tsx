@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 
@@ -121,21 +121,32 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     await loadSubscription();
   }, [isAuthenticated, loadSubscription]);
 
+  const value = useMemo(() => ({
+    subscription,
+    loading,
+    error,
+    hasActiveSubscription,
+    isExpired,
+    isTrial,
+    daysRemaining,
+    canAccessFeature,
+    refresh: loadSubscription,
+    verifyAndRefresh,
+  }), [
+    subscription,
+    loading,
+    error,
+    hasActiveSubscription,
+    isExpired,
+    isTrial,
+    daysRemaining,
+    canAccessFeature,
+    loadSubscription,
+    verifyAndRefresh,
+  ]);
+
   return (
-    <SubscriptionContext.Provider
-      value={{
-        subscription,
-        loading,
-        error,
-        hasActiveSubscription,
-        isExpired,
-        isTrial,
-        daysRemaining,
-        canAccessFeature,
-        refresh: loadSubscription,
-        verifyAndRefresh,
-      }}
-    >
+    <SubscriptionContext.Provider value={value}>
       {children}
     </SubscriptionContext.Provider>
   );

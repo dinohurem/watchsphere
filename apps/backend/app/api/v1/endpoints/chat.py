@@ -258,36 +258,53 @@ async def list_ai_conversations(
         {"participant_ids": str(current_user.id)},
     ).sort([("updated_at", -1)]).skip(skip).limit(limit).to_list()
 
+    if not conversations:
+        return []
+
+    conv_ids = [str(conv.id) for conv in conversations]
+
+    # Batch-fetch last messages using aggregation
+    last_messages_pipeline = [
+        {"$match": {"conversation_id": {"$in": conv_ids}}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {"_id": "$conversation_id", "doc": {"$first": "$$ROOT"}}},
+    ]
+    last_msgs_raw = await Message.aggregate(last_messages_pipeline).to_list()
+    last_msgs_map = {}
+    for item in last_msgs_raw:
+        doc = item["doc"]
+        last_msgs_map[doc["conversation_id"]] = doc
+
+    # Batch-fetch unread counts using aggregation
+    unread_pipeline = [
+        {"$match": {"conversation_id": {"$in": conv_ids}, "sender_id": "ai_assistant", "read": False}},
+        {"$group": {"_id": "$conversation_id", "count": {"$sum": 1}}},
+    ]
+    unread_raw = await Message.aggregate(unread_pipeline).to_list()
+    unread_map = {item["_id"]: item["count"] for item in unread_raw}
+
     result = []
     for conv in conversations:
-        # Get last message
-        last_msg = await Message.find(
-            Message.conversation_id == str(conv.id)
-        ).sort([("created_at", -1)]).first_or_none()
-
-        # Get unread count
-        unread_count = await Message.find(
-            Message.conversation_id == str(conv.id),
-            Message.sender_id == "ai_assistant",
-            Message.read == False,
-        ).count()
+        conv_id_str = str(conv.id)
+        last_msg_doc = last_msgs_map.get(conv_id_str)
+        unread_count = unread_map.get(conv_id_str, 0)
 
         last_message = None
-        if last_msg:
+        if last_msg_doc:
             last_message = {
-                "id": str(last_msg.id),
-                "conversation_id": str(conv.id),
-                "sender_id": last_msg.sender_id,
-                "sender_name": "WatchSphere AI" if last_msg.sender_id == "ai_assistant" else current_user.name,
-                "content": last_msg.content,
-                "type": last_msg.type,
-                "is_ai": last_msg.sender_id == "ai_assistant",
-                "read": last_msg.read,
-                "created_at": last_msg.created_at,
+                "id": str(last_msg_doc["_id"]),
+                "conversation_id": conv_id_str,
+                "sender_id": last_msg_doc["sender_id"],
+                "sender_name": "WatchSphere AI" if last_msg_doc["sender_id"] == "ai_assistant" else current_user.name,
+                "content": last_msg_doc["content"],
+                "type": last_msg_doc["type"],
+                "is_ai": last_msg_doc["sender_id"] == "ai_assistant",
+                "read": last_msg_doc["read"],
+                "created_at": last_msg_doc["created_at"],
             }
 
         result.append({
-            "id": str(conv.id),
+            "id": conv_id_str,
             "type": conv.type,
             "name": conv.name,
             "participant_ids": conv.participant_ids,
@@ -328,11 +345,12 @@ async def get_ai_conversation_messages(
         Message.conversation_id == conversation_id
     ).sort([("created_at", 1)]).skip(skip).limit(limit).to_list()
 
-    # Mark AI messages as read
-    for msg in messages:
-        if msg.sender_id == "ai_assistant" and not msg.read:
-            msg.read = True
-            await msg.save()
+    # Mark AI messages as read (bulk update)
+    await Message.find(
+        Message.conversation_id == conversation_id,
+        Message.sender_id == "ai_assistant",
+        Message.read == False,
+    ).update({"$set": {"read": True}})
 
     return [
         {
@@ -484,60 +502,114 @@ async def list_conversations(
         Conversation.is_active == True,
     ).sort([("updated_at", -1)]).skip(skip).limit(limit).to_list()
 
+    if not conversations:
+        return []
+
+    conv_ids = [str(conv.id) for conv in conversations]
+
+    # Build visible_after map for this user
+    visible_after_map = {}
+    for conv in conversations:
+        if conv.visible_after and user_id in conv.visible_after:
+            visible_after_map[str(conv.id)] = datetime.fromisoformat(conv.visible_after[user_id])
+
+    # Separate conversations with and without visible_after for efficient querying
+    conv_ids_no_filter = [cid for cid in conv_ids if cid not in visible_after_map]
+    conv_ids_with_filter = [cid for cid in conv_ids if cid in visible_after_map]
+
+    # Batch-fetch last messages for conversations WITHOUT visible_after
+    last_msgs_map = {}
+    if conv_ids_no_filter:
+        last_msgs_pipeline = [
+            {"$match": {"conversation_id": {"$in": conv_ids_no_filter}}},
+            {"$sort": {"created_at": -1}},
+            {"$group": {"_id": "$conversation_id", "doc": {"$first": "$$ROOT"}}},
+        ]
+        last_msgs_raw = await Message.aggregate(last_msgs_pipeline).to_list()
+        for item in last_msgs_raw:
+            doc = item["doc"]
+            last_msgs_map[doc["conversation_id"]] = doc
+
+    # For conversations WITH visible_after, we still need per-conversation queries
+    # because each has a different cutoff time
+    for cid in conv_ids_with_filter:
+        va = visible_after_map[cid]
+        last_msg = await Message.find(
+            Message.conversation_id == cid,
+            Message.created_at > va,
+        ).sort([("created_at", -1)]).first_or_none()
+        if last_msg:
+            last_msgs_map[cid] = {
+                "_id": last_msg.id,
+                "conversation_id": cid,
+                "content": last_msg.content,
+                "created_at": last_msg.created_at,
+            }
+
+    # Batch-fetch unread counts for conversations WITHOUT visible_after
+    unread_map = {}
+    if conv_ids_no_filter:
+        unread_pipeline = [
+            {"$match": {"conversation_id": {"$in": conv_ids_no_filter}, "sender_id": {"$ne": user_id}, "read": False}},
+            {"$group": {"_id": "$conversation_id", "count": {"$sum": 1}}},
+        ]
+        unread_raw = await Message.aggregate(unread_pipeline).to_list()
+        for item in unread_raw:
+            unread_map[item["_id"]] = item["count"]
+
+    # For conversations WITH visible_after, per-conversation unread count
+    for cid in conv_ids_with_filter:
+        va = visible_after_map[cid]
+        count = await Message.find(
+            Message.conversation_id == cid,
+            Message.sender_id != user_id,
+            Message.read == False,
+            Message.created_at > va,
+        ).count()
+        unread_map[cid] = count
+
+    # Batch-fetch all other participants' user profiles
+    other_participant_ids = []
+    conv_to_other = {}
+    for conv in conversations:
+        other_pid = next((pid for pid in conv.participant_ids if pid != user_id), None)
+        conv_to_other[str(conv.id)] = other_pid
+        if other_pid:
+            other_participant_ids.append(other_pid)
+
+    # Deduplicate and batch fetch
+    unique_other_ids = list(set(other_participant_ids))
+    users_map = {}
+    if unique_other_ids:
+        other_users = await User.find(
+            {"_id": {"$in": [PydanticObjectId(uid) for uid in unique_other_ids]}}
+        ).to_list()
+        for u in other_users:
+            users_map[str(u.id)] = u
+
     result = []
     for conv in conversations:
-        # Check if user has a visible_after timestamp (re-opened after delete)
-        visible_after = None
-        if conv.visible_after and user_id in conv.visible_after:
-            visible_after = datetime.fromisoformat(conv.visible_after[user_id])
+        conv_id_str = str(conv.id)
+        other_pid = conv_to_other.get(conv_id_str)
+        other_user = users_map.get(other_pid) if other_pid else None
 
-        # Get last message (considering visible_after)
-        if visible_after:
-            last_msg = await Message.find(
-                Message.conversation_id == str(conv.id),
-                Message.created_at > visible_after,
-            ).sort([("created_at", -1)]).first_or_none()
-        else:
-            last_msg = await Message.find(
-                Message.conversation_id == str(conv.id)
-            ).sort([("created_at", -1)]).first_or_none()
-
-        # Get unread count (considering visible_after)
-        if visible_after:
-            unread_count = await Message.find(
-                Message.conversation_id == str(conv.id),
-                Message.sender_id != user_id,
-                Message.read == False,
-                Message.created_at > visible_after,
-            ).count()
-        else:
-            unread_count = await Message.find(
-                Message.conversation_id == str(conv.id),
-                Message.sender_id != user_id,
-                Message.read == False,
-            ).count()
-
-        # Get the other participant's name
-        other_participant_id = next(
-            (pid for pid in conv.participant_ids if pid != user_id),
-            None
-        )
         conversation_name = conv.name or "Unknown"
         other_avatar = None
-        if other_participant_id:
-            other_user = await User.get(PydanticObjectId(other_participant_id))
-            if other_user:
-                conversation_name = other_user.name
-                other_avatar = other_user.profile_image_url
+        if other_user:
+            conversation_name = other_user.name
+            other_avatar = other_user.profile_image_url
+
+        last_msg_doc = last_msgs_map.get(conv_id_str)
+        unread_count = unread_map.get(conv_id_str, 0)
 
         result.append({
-            "id": str(conv.id),
+            "id": conv_id_str,
             "name": conversation_name,
-            "lastMessage": last_msg.content if last_msg else None,
-            "timestamp": last_msg.created_at.strftime("%H:%M") if last_msg else None,
+            "lastMessage": last_msg_doc["content"] if last_msg_doc else None,
+            "timestamp": last_msg_doc["created_at"].strftime("%H:%M") if last_msg_doc else None,
             "unread": unread_count,
             "avatar": other_avatar,
-            "participant_id": other_participant_id,
+            "participant_id": other_pid,
         })
 
     return result
@@ -718,22 +790,29 @@ async def get_conversation_messages(
         logger.info(f"get_conversation_messages: first msg id={messages[0].id}, content={messages[0].content[:30] if messages[0].content else 'N/A'}")
         logger.info(f"get_conversation_messages: last msg id={messages[-1].id}, content={messages[-1].content[:30] if messages[-1].content else 'N/A'}")
 
-    # Mark messages as read
+    # Mark messages as read (bulk update instead of per-message save)
+    await Message.find(
+        Message.conversation_id == conversation_id,
+        Message.sender_id != user_id,
+        Message.read == False,
+    ).update({"$set": {"read": True}})
+    # Update in-memory objects to reflect the bulk update
     for msg in messages:
         if msg.sender_id != user_id and not msg.read:
             msg.read = True
-            await msg.save()
 
-    # Get participant names
-    participant_names = {}
-    for pid in conversation.participant_ids:
-        if pid == user_id:
-            participant_names[pid] = current_user.name
-        else:
-            other_user = await User.get(PydanticObjectId(pid))
-            if other_user:
-                participant_names[pid] = other_user.name
-            else:
+    # Batch-fetch participant names
+    other_pids = [pid for pid in conversation.participant_ids if pid != user_id]
+    participant_names = {user_id: current_user.name}
+    if other_pids:
+        other_users = await User.find(
+            {"_id": {"$in": [PydanticObjectId(pid) for pid in other_pids]}}
+        ).to_list()
+        for u in other_users:
+            participant_names[str(u.id)] = u.name
+        # Fill in any missing participants
+        for pid in other_pids:
+            if pid not in participant_names:
                 participant_names[pid] = "Unknown"
 
     return [
@@ -915,35 +994,54 @@ async def list_user_groups(
         Conversation.is_active == True,
     ).sort([("updated_at", -1)]).skip(skip).limit(limit).to_list()
 
+    if not groups:
+        return []
+
+    group_ids = [str(g.id) for g in groups]
+    user_id_str = str(current_user.id)
+
+    # Batch-fetch last messages using aggregation
+    last_msgs_pipeline = [
+        {"$match": {"conversation_id": {"$in": group_ids}}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {"_id": "$conversation_id", "doc": {"$first": "$$ROOT"}}},
+    ]
+    last_msgs_raw = await Message.aggregate(last_msgs_pipeline).to_list()
+    last_msgs_map = {}
+    for item in last_msgs_raw:
+        doc = item["doc"]
+        last_msgs_map[doc["conversation_id"]] = doc
+
+    # Batch-fetch unread counts using aggregation
+    unread_pipeline = [
+        {"$match": {"conversation_id": {"$in": group_ids}, "sender_id": {"$ne": user_id_str}, "read": False}},
+        {"$group": {"_id": "$conversation_id", "count": {"$sum": 1}}},
+    ]
+    unread_raw = await Message.aggregate(unread_pipeline).to_list()
+    unread_map = {item["_id"]: item["count"] for item in unread_raw}
+
+    # Batch-fetch member counts using aggregation
+    member_count_pipeline = [
+        {"$match": {"conversation_id": {"$in": group_ids}, "is_active": True}},
+        {"$group": {"_id": "$conversation_id", "count": {"$sum": 1}}},
+    ]
+    member_count_raw = await ConversationMember.aggregate(member_count_pipeline).to_list()
+    member_count_map = {item["_id"]: item["count"] for item in member_count_raw}
+
     result = []
     for group in groups:
-        # Get last message
-        last_msg = await Message.find(
-            Message.conversation_id == str(group.id)
-        ).sort([("created_at", -1)]).first_or_none()
-
-        # Get unread count
-        unread_count = await Message.find(
-            Message.conversation_id == str(group.id),
-            Message.sender_id != str(current_user.id),
-            Message.read == False,
-        ).count()
-
-        # Get member count
-        member_count = await ConversationMember.find(
-            ConversationMember.conversation_id == str(group.id),
-            ConversationMember.is_active == True,
-        ).count()
+        gid = str(group.id)
+        last_msg_doc = last_msgs_map.get(gid)
 
         result.append({
-            "id": str(group.id),
+            "id": gid,
             "name": group.name or "Unnamed Group",
             "description": group.description,
             "avatar": group.avatar,
-            "lastMessage": last_msg.content if last_msg else None,
-            "timestamp": last_msg.created_at.strftime("%H:%M") if last_msg else None,
-            "unread": unread_count,
-            "memberCount": member_count,
+            "lastMessage": last_msg_doc["content"] if last_msg_doc else None,
+            "timestamp": last_msg_doc["created_at"].strftime("%H:%M") if last_msg_doc else None,
+            "unread": unread_map.get(gid, 0),
+            "memberCount": member_count_map.get(gid, 0),
         })
 
     return result
@@ -1075,10 +1173,14 @@ async def get_group_details(
         ConversationMember.is_active == True,
     ).to_list()
 
-    # Fetch user profiles to get profile_image_url
+    # Batch-fetch user profiles for all members
+    member_user_ids = [PydanticObjectId(m.user_id) for m in members]
+    member_users = await User.find({"_id": {"$in": member_user_ids}}).to_list()
+    users_by_id = {str(u.id): u for u in member_users}
+
     member_list = []
     for m in members:
-        user = await User.get(PydanticObjectId(m.user_id))
+        user = users_by_id.get(m.user_id)
         member_list.append({
             "id": m.user_id,
             "name": m.user_name,
@@ -1202,11 +1304,16 @@ async def get_group_messages(
         Message.conversation_id == group_id
     ).sort([("created_at", 1)]).skip(skip).limit(limit).to_list()
 
-    # Mark messages as read
+    # Mark messages as read (bulk update instead of per-message save)
+    await Message.find(
+        Message.conversation_id == group_id,
+        Message.sender_id != str(current_user.id),
+        Message.read == False,
+    ).update({"$set": {"read": True}})
+    # Update in-memory objects to reflect the bulk update
     for msg in messages:
         if msg.sender_id != str(current_user.id) and not msg.read:
             msg.read = True
-            await msg.save()
 
     # Get member names for sender lookup
     members = await ConversationMember.find(

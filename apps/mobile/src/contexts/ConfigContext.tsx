@@ -120,7 +120,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await api.get('/listing-fields');
+      const response = await api.get('/listing-fields', { timeout: 15000 });
       const fields = response.data || [];
       setListingFields(fields);
     } catch (err: any) {

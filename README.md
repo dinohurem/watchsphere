@@ -324,5 +324,5 @@ then this:
 cd ~/watchsphere-standalone-build/android
 ./gradlew bundleRelease
 
-
- NODE_ENV=production npx expo start --ios
+npx expo start --ios  
+NODE_ENV=production npx expo start --ios

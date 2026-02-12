@@ -45,11 +45,23 @@ export default function CreateListingScreen() {
   const { t } = useTranslation();
   const { colors, fonts } = useTheme();
   const { getFieldOptions, loadListingFields, isLoadingListingFields, listingFields, error: configError, getFieldsByCategory } = useConfig();
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const isConfigReady = listingFields.length > 0;
 
   // Load listing fields when component mounts
   useEffect(() => {
     loadListingFields();
   }, [loadListingFields]);
+
+  // Timeout to prevent infinite loading if config never loads
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!isConfigReady) {
+        setLoadingTimedOut(true);
+      }
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [isConfigReady]);
 
   const params = useLocalSearchParams<{
     watchId?: string;
@@ -989,8 +1001,7 @@ export default function CreateListingScreen() {
 
   // Show loading state while listing fields are loading or order details are loading
   // This prevents rendering the form before we know which fields are enabled
-  const isConfigReady = listingFields.length > 0;
-  const showLoading = isLoadingListingFields || isLoadingOrder || (!isConfigReady && !configError);
+  const showLoading = !loadingTimedOut && (isLoadingListingFields || isLoadingOrder || (!isConfigReady && !configError));
 
   if (showLoading) {
     return (
@@ -1011,8 +1022,8 @@ export default function CreateListingScreen() {
     );
   }
 
-  // Show error state if config failed to load
-  if (configError && !isConfigReady) {
+  // Show error state if config failed to load or loading timed out
+  if ((configError || loadingTimedOut) && !isConfigReady) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
@@ -1026,7 +1037,7 @@ export default function CreateListingScreen() {
             {t('listing.failedToLoadConfig')}
           </Text>
           <TouchableOpacity
-            onPress={() => loadListingFields()}
+            onPress={() => { setLoadingTimedOut(false); loadListingFields(); }}
             style={{ marginTop: hp(16), paddingVertical: hp(12), paddingHorizontal: wp(24), backgroundColor: '#212121', borderRadius: sp(8) }}
           >
             <Text style={{ fontFamily: fonts.medium, color: '#FFFFFF' }}>{t('common.retry')}</Text>

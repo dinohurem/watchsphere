@@ -509,7 +509,7 @@ export function AdminWatches() {
                     <div className="flex items-center">
                       <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
                         {watch.cover_image ? (
-                          <img src={watch.cover_image} alt={watch.model} className="w-full h-full object-cover" />
+                          <img src={watch.cover_image} alt={watch.model} className="w-full h-full object-cover" loading="lazy" />
                         ) : (
                           <span className="text-gray-400 text-xs">No img</span>
                         )}

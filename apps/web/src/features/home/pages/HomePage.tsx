@@ -567,6 +567,7 @@ export function HomePage() {
                       src={watch.image}
                       alt={`${watch.brand} ${watch.reference}`}
                       className="max-h-full max-w-full object-contain"
+                      loading="lazy"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.style.display = 'none';
@@ -710,7 +711,7 @@ export function HomePage() {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-[#f5f5f7] flex items-center justify-center overflow-hidden shrink-0">
                         {item.image ? (
-                          <img src={item.image} alt={item.brand} className="w-full h-full object-contain" />
+                          <img src={item.image} alt={item.brand} className="w-full h-full object-contain" loading="lazy" />
                         ) : (
                           <ImagePlaceholder size={24} />
                         )}
@@ -774,6 +775,7 @@ export function HomePage() {
                       src={news.image}
                       alt={news.title}
                       className="w-full h-full object-cover"
+                      loading="lazy"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.style.display = 'none';

@@ -2,6 +2,7 @@
 Firebase Storage service for optimized image uploads
 """
 
+import asyncio
 import io
 import uuid
 from typing import Optional, Tuple
@@ -92,9 +93,9 @@ async def upload_image(
 
     result = {}
 
-    # Optimize main image
+    # Optimize main image (run CPU-bound PIL in thread to avoid blocking event loop)
     if optimize:
-        optimized_data = optimize_image(image_data)
+        optimized_data = await asyncio.to_thread(optimize_image, image_data)
         extension = "webp"
         content_type = "image/webp"
     else:
@@ -112,9 +113,9 @@ async def upload_image(
     result['url'] = blob.public_url
     result['path'] = main_path
 
-    # Create and upload thumbnail
+    # Create and upload thumbnail (run CPU-bound PIL in thread)
     if create_thumb:
-        thumb_data = create_thumbnail(image_data)
+        thumb_data = await asyncio.to_thread(create_thumbnail, image_data)
         thumb_path = f"{folder}/thumbnails/{filename}.webp"
         thumb_blob = bucket.blob(thumb_path)
         thumb_blob.upload_from_string(thumb_data, content_type="image/webp")

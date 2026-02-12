@@ -255,7 +255,7 @@ export function AdminChatGroups() {
                 <div className="flex items-center">
                   <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
                     {group.avatar ? (
-                      <img src={group.avatar} alt={group.name} className="w-full h-full rounded-full object-cover" />
+                      <img src={group.avatar} alt={group.name} className="w-full h-full rounded-full object-cover" loading="lazy" />
                     ) : (
                       <Users className="w-6 h-6 text-primary" />
                     )}

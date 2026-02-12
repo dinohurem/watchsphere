@@ -47,17 +47,17 @@ async def get_dashboard_stats(
 ) -> Any:
     """Get dashboard statistics (Admin only)"""
 
-    # Get all users
-    all_users = await User.find_all().to_list()
-
+    # Use count queries instead of loading all users into memory
     stats = {
-        "total_users": len(all_users),
-        "total_dealers": len([u for u in all_users if u.role == UserRole.DEALER]),
-        "total_collectors": len([u for u in all_users if u.role == UserRole.COLLECTOR]),
-        "total_admins": len([u for u in all_users if u.role == UserRole.ADMIN]),
-        "verified_users": len([u for u in all_users if u.verified]),
-        "active_users": len([u for u in all_users if u.is_active]),
-        "pending_approval": len([u for u in all_users if not u.approved and u.role != UserRole.ADMIN]),
+        "total_users": await User.find().count(),
+        "total_dealers": await User.find(User.role == UserRole.DEALER).count(),
+        "total_collectors": await User.find(User.role == UserRole.COLLECTOR).count(),
+        "total_admins": await User.find(User.role == UserRole.ADMIN).count(),
+        "verified_users": await User.find(User.verified == True).count(),
+        "active_users": await User.find(User.is_active == True).count(),
+        "pending_approval": await User.find(
+            User.approved == False, User.role != UserRole.ADMIN
+        ).count(),
     }
 
     return stats
