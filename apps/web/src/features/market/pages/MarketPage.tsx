@@ -293,7 +293,14 @@ export function MarketPage() {
 
   const handleAddToWatchlist = async (watchId: string) => {
     try {
-      await api.post('/watchlist', { watchId });
+      const watch = watches.find((w) => w.id === watchId);
+      if (!watch) return;
+      await api.post('/profile/watchlist', {
+        watch_id: watchId,
+        reference: watch.reference,
+        brand: watch.brand,
+        model: watch.model,
+      });
     } catch (error) {
       console.error('Failed to add to watchlist:', error);
     }

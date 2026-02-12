@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -124,6 +124,22 @@ function FilterIcon() {
       <Path d="M1.8335 4.58325H20.1668" stroke="#1D1D1F" strokeWidth={1.83333} strokeMiterlimit={10} strokeLinecap="square" />
       {/* Bottom bar (shortest) */}
       <Path d="M9.16699 17.4167H12.8337" stroke="#1D1D1F" strokeWidth={1.83333} strokeMiterlimit={10} strokeLinecap="square" />
+    </Svg>
+  );
+}
+
+// WhatsApp Icon
+function WhatsAppIcon({ size = 18 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"
+        fill="#1D1D1F"
+      />
+      <Path
+        d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.963 7.963 0 01-4.113-1.14l-.287-.172-2.978.78.795-2.898-.188-.299A7.963 7.963 0 014 12c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z"
+        fill="#1D1D1F"
+      />
     </Svg>
   );
 }
@@ -428,6 +444,7 @@ interface OrderBookItem {
   has_papers?: boolean;
   user_id?: string;
   user_name?: string;
+  whatsapp_phone?: string;
 }
 
 export default function WatchDetailsScreen() {
@@ -507,6 +524,17 @@ export default function WatchDetailsScreen() {
     return filterOrders(sellOrders, orderBookFilters);
   }, [sellOrders, orderBookFilters, filterOrders]);
 
+  const handleWhatsAppChat = useCallback((order: OrderBookItem) => {
+    if (!order.whatsapp_phone) return;
+    const watchName = `${watch?.brand || ''} ${watch?.model || ''}`.trim();
+    const watchRef = watch?.reference || '';
+    const message = `Hi, is ${watchName} ${watchRef} available?\nEUR ${order.price.toLocaleString('de-DE')} - thank you very much!`;
+    const url = `https://wa.me/${order.whatsapp_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open WhatsApp. Make sure it is installed.');
+    });
+  }, [watch]);
+
   // Slice price history based on selected time period
   const getDataPointsForPeriod = useCallback((period: string): number => {
     // Assuming price history has data points representing daily values
@@ -579,24 +607,31 @@ export default function WatchDetailsScreen() {
       return;
     }
 
+    // Use the same reference for both add and remove — prefer URL param
+    // since that's what checkWatchlistStatus uses to match
+    const ref = reference || watch.reference || id || '';
+    const encodedRef = encodeURIComponent(ref);
+
+    const wasInWatchlist = isInWatchlist;
+    // Optimistic update — toggle immediately for responsive UI
+    setIsInWatchlist(!wasInWatchlist);
     setWatchlistLoading(true);
     try {
-      if (isInWatchlist) {
-        // Remove from watchlist - encode to handle special characters
-        const encodedRef = encodeURIComponent(watch.reference || id || '');
+      if (wasInWatchlist) {
+        // Remove from watchlist
         await api.delete(`/profile/watchlist/${encodedRef}`);
-        setIsInWatchlist(false);
       } else {
         // Add to watchlist
         await api.post('/profile/watchlist', {
-          brand: watch.brand,
-          model: watch.model,
-          reference: watch.reference,
+          brand: watch.brand || brand,
+          model: watch.model || model,
+          reference: ref,
           watch_id: id,
         });
-        setIsInWatchlist(true);
       }
     } catch (error) {
+      // Revert on failure
+      setIsInWatchlist(wasInWatchlist);
       console.error('Failed to update watchlist:', error);
     } finally {
       setWatchlistLoading(false);
@@ -951,7 +986,7 @@ export default function WatchDetailsScreen() {
             disabled={watchlistLoading}
           >
             <View style={[styles.actionIconContainer, isInWatchlist && styles.actionIconContainerActive]}>
-              <StarIcon filled={isInWatchlist} />
+              <StarIcon key={isInWatchlist ? 'filled' : 'empty'} filled={isInWatchlist} />
             </View>
             <Text style={styles.actionLabel}>{isInWatchlist ? 'Saved' : 'Watchlist'}</Text>
           </TouchableOpacity>
@@ -1111,10 +1146,11 @@ export default function WatchDetailsScreen() {
           <View style={styles.orderBookTable}>
             {/* Header */}
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderCell, { width: wp(80), textAlign: 'center' }]}>Market</Text>
-              <Text style={[styles.tableHeaderCell, { width: wp(70), marginLeft: wp(8) }]}>Date</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Market</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
               <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Condition</Text>
-              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'right' }]}>Price</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Price</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 0.7, textAlign: 'center' }]}>Chat</Text>
             </View>
 
             {/* Rows - use dynamic data from API with filters applied */}
@@ -1150,15 +1186,23 @@ export default function WatchDetailsScreen() {
                   })}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.tableCell, { width: wp(80), flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: wp(4) }]}>
+                  <View style={[styles.tableCell, { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: wp(4) }]}>
                     <CountryFlag countryCode={order.country_code} size={14} />
                     <Text style={[styles.tableCellText, { fontSize: fp(13) }]}>{order.country_code?.toUpperCase()}</Text>
                   </View>
-                  <Text style={[styles.tableCell, styles.tableCellText, { width: wp(70), marginLeft: wp(8) }]}>{order.date}</Text>
+                  <Text style={[styles.tableCell, styles.tableCellText, { flex: 1, textAlign: 'center' }]}>{order.date}</Text>
                   <Text style={[styles.tableCell, styles.tableCellText, { flex: 1, textAlign: 'center' }]}>{order.condition}</Text>
-                  <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'right' }]}>
+                  <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'center' }]}>
                     {formatPriceEurBefore(order.price)}
                   </Text>
+                  <TouchableOpacity
+                    style={{ flex: 0.7, alignItems: 'center', justifyContent: 'center' }}
+                    onPress={() => handleWhatsAppChat(order)}
+                    disabled={!order.whatsapp_phone}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <WhatsAppIcon size={18} />
+                  </TouchableOpacity>
                 </TouchableOpacity>
               ))
             )}
@@ -1432,7 +1476,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     paddingHorizontal: wp(8),
-    paddingVertical: hp(16),
+    paddingTop: hp(24),
+    paddingBottom: hp(0),
   },
   actionButton: {
     alignItems: 'center',
@@ -1609,12 +1654,12 @@ const styles = StyleSheet.create({
   },
   tableHeaderCell: {
     fontFamily: 'HankenGrotesk_600SemiBold',
-    fontSize: fp(15),
+    fontSize: fp(13),
     color: '#212121',
     paddingVertical: hp(8),
-    paddingHorizontal: wp(12),
+    paddingHorizontal: wp(8),
     letterSpacing: 0.075,
-    lineHeight: fp(20),
+    lineHeight: fp(18),
   },
   tableRow: {
     flexDirection: 'row',
@@ -1625,7 +1670,7 @@ const styles = StyleSheet.create({
   },
   tableCell: {
     paddingVertical: hp(8),
-    paddingHorizontal: wp(12),
+    paddingHorizontal: wp(8),
   },
   tableCellText: {
     fontFamily: 'HankenGrotesk_500Medium',

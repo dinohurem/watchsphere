@@ -254,6 +254,7 @@ export function WatchDetailsPage() {
               condition: o.condition || 'Unworn',
               price: o.price,
               order_type: 'buy' as const,
+              whatsapp_phone: o.whatsapp_phone,
             };
           });
 
@@ -841,13 +842,11 @@ export function WatchDetailsPage() {
             <div className="overflow-hidden">
               {/* Table Header */}
               <div className="flex items-center h-[44px] border-b border-[rgba(0,0,0,0.05)]">
-                <span className="flex-1 pl-[12px] pr-[8px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.market')}</span>
-                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.date')}</span>
-                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.condition')}</span>
-                <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{t('watchDetails.price')}</span>
-                {orderBookTab === 'sell' && (
-                  <span className="w-[52px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-center">Chat</span>
-                )}
+                <span className="w-[22%] pl-[12px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.market')}</span>
+                <span className="w-[18%] px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.date')}</span>
+                <span className="w-[22%] px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.condition')}</span>
+                <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{t('watchDetails.price')}</span>
+                <span className="w-[48px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-center">Chat</span>
               </div>
 
               {/* Table Rows */}
@@ -865,18 +864,17 @@ export function WatchDetailsPage() {
                         index % 2 === 0 ? 'bg-[#fbfbfb]' : 'bg-white'
                       } hover:bg-[#e8f4fd]`}
                     >
-                      <span className="flex-1 pl-[12px] pr-0 py-[8px] flex items-center gap-[8px]">
+                      <span className="w-[22%] pl-[12px] pr-[4px] py-[8px] flex items-center gap-[8px]">
                         <span className="text-[14px]">{entry.flag}</span>
                         <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.market.toUpperCase()}</span>
                       </span>
-                      <span className="flex-1 p-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.date}</span>
-                      <span className="flex-1 p-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
-                      <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
+                      <span className="w-[18%] px-[4px] py-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.date}</span>
+                      <span className="w-[22%] px-[4px] py-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
+                      <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
                         €{entry.price.toLocaleString()}
                       </span>
-                      {orderBookTab === 'sell' && (
-                        <button
-                          className="w-[52px] flex items-center justify-center hover:opacity-70 transition-opacity"
+                      <button
+                          className="w-[48px] flex items-center justify-center hover:opacity-70 transition-opacity"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleWhatsAppChat(entry);
@@ -888,7 +886,6 @@ export function WatchDetailsPage() {
                             <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.963 7.963 0 01-4.113-1.14l-.287-.172-2.978.78.795-2.898-.188-.299A7.963 7.963 0 014 12c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z" fill="#1D1D1F"/>
                           </svg>
                         </button>
-                      )}
                     </div>
                   ))
                 )}
@@ -1052,13 +1049,11 @@ export function WatchDetailsPage() {
             <div className="flex-1 overflow-hidden px-6 py-4">
               {/* Table Header */}
               <div className="flex items-center h-[44px] border-b border-[rgba(0,0,0,0.05)]">
-                <span className="flex-1 pl-[12px] pr-[8px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.market')}</span>
-                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.date')}</span>
-                <span className="flex-1 p-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.condition')}</span>
-                <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{t('watchDetails.price')}</span>
-                {orderBookTab === 'sell' && (
-                  <span className="w-[52px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-center">Chat</span>
-                )}
+                <span className="w-[22%] pl-[12px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.market')}</span>
+                <span className="w-[18%] px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.date')}</span>
+                <span className="w-[22%] px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.condition')}</span>
+                <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{t('watchDetails.price')}</span>
+                <span className="w-[48px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-center">Chat</span>
               </div>
 
               {/* Table Rows */}
@@ -1079,18 +1074,17 @@ export function WatchDetailsPage() {
                         index % 2 === 0 ? 'bg-[#fbfbfb]' : 'bg-white'
                       } hover:bg-[#e8f4fd]`}
                     >
-                      <span className="flex-1 pl-[12px] pr-0 py-[8px] flex items-center gap-[8px]">
+                      <span className="w-[22%] pl-[12px] pr-[4px] py-[8px] flex items-center gap-[8px]">
                         <span className="text-[14px]">{entry.flag}</span>
                         <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.market.toUpperCase()}</span>
                       </span>
-                      <span className="flex-1 p-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.date}</span>
-                      <span className="flex-1 p-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
-                      <span className="flex-1 pl-[8px] pr-[12px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
+                      <span className="w-[18%] px-[4px] py-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.date}</span>
+                      <span className="w-[22%] px-[4px] py-[8px] text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
+                      <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
                         €{entry.price.toLocaleString()}
                       </span>
-                      {orderBookTab === 'sell' && (
-                        <button
-                          className="w-[52px] flex items-center justify-center hover:opacity-70 transition-opacity"
+                      <button
+                          className="w-[48px] flex items-center justify-center hover:opacity-70 transition-opacity"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleWhatsAppChat(entry);
@@ -1102,7 +1096,6 @@ export function WatchDetailsPage() {
                             <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.963 7.963 0 01-4.113-1.14l-.287-.172-2.978.78.795-2.898-.188-.299A7.963 7.963 0 014 12c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z" fill="#1D1D1F"/>
                           </svg>
                         </button>
-                      )}
                     </div>
                   ))
                 )}

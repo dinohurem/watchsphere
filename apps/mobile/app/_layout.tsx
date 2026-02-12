@@ -273,7 +273,7 @@ function RootLayoutNav() {
           }}
         />
       </Stack>
-      {__DEV__ && (
+      {__DEV__ && !process.env.EXPO_PUBLIC_API_BASE_URL?.includes('railway.app') && (
         <View style={[devBannerStyles.banner, { top: insets.top }]} pointerEvents="none">
           <Text style={devBannerStyles.text}>DEV</Text>
         </View>

@@ -142,7 +142,7 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
       borderBottomColor: colors.border,
     },
     headerCell: {
-      fontSize: 14,
+      fontSize: 15,
       fontFamily: fonts.semiBold,
       color: colors.text,
     },
@@ -228,35 +228,32 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
 
         {/* Table Header */}
         <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, { flex: 1.5 }]}>Market</Text>
-          <Text style={[styles.headerCell, { flex: 0.8 }]}>Date</Text>
-          <Text style={[styles.headerCell, { flex: 1.5 }]}>Condition</Text>
-          <Text style={[styles.headerCell, { flex: 1, textAlign: 'right' }]}>Price</Text>
-          {activeTab === 'sell' && (
-            <Text style={[styles.headerCell, { width: 44, textAlign: 'center' }]}>Chat</Text>
-          )}
+          <Text style={[styles.headerCell, { flex: 1, textAlign: 'center' }]}>Market</Text>
+          <Text style={[styles.headerCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
+          <Text style={[styles.headerCell, { flex: 1, textAlign: 'center' }]}>Condition</Text>
+          <Text style={[styles.headerCell, { flex: 1, textAlign: 'center' }]}>Price</Text>
+          <Text style={[styles.headerCell, { flex: 0.7, textAlign: 'center' }]}>Chat</Text>
         </View>
 
         {/* Table Content */}
         <ScrollView style={styles.tableContent}>
           {orders.map((order, index) => {
-            const { emoji, abbr } = countryData[order.country];
+            const { emoji, abbr } = countryData[order.country] || { emoji: '🏳️', abbr: order.country?.toUpperCase() || '??' };
             return (
               <TouchableOpacity
                 key={index}
                 style={[styles.tableRow, index % 2 === 1 && styles.tableRowEven]}
                 onPress={() => handleOrderPress(index)}
               >
-                <View style={[styles.marketCell, { flex: 1.5 }]}>
+                <View style={[styles.marketCell, { flex: 1, justifyContent: 'center' }]}>
                   <Text style={styles.flagEmoji}>{emoji}</Text>
                   <Text style={styles.marketName}>{abbr}</Text>
                 </View>
-                <Text style={[styles.cell, { flex: 0.8 }]}>{order.date}</Text>
-                <Text style={[styles.cell, { flex: 1.5 }]}>{order.condition}</Text>
-                <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{order.price}</Text>
-                {activeTab === 'sell' && (
-                  <TouchableOpacity
-                    style={{ width: 44, alignItems: 'center', justifyContent: 'center' }}
+                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.date}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.condition}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.price}</Text>
+                <TouchableOpacity
+                    style={{ flex: 0.7, alignItems: 'center', justifyContent: 'center' }}
                     onPress={(e) => {
                       e.stopPropagation();
                       handleWhatsAppChat(order);
@@ -266,7 +263,6 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
                   >
                     <WhatsAppIcon size={20} />
                   </TouchableOpacity>
-                )}
               </TouchableOpacity>
             );
           })}
