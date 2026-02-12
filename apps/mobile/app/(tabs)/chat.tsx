@@ -135,12 +135,7 @@ export default function ChatScreen() {
     }
   }, [contextGroups]);
 
-  // Load data based on active tab
-  useEffect(() => {
-    loadTabData();
-  }, [activeTab]);
-
-  // Refresh data when screen comes into focus
+  // Refresh data when screen comes into focus (also fires on initial mount)
   // Also load both conversations and groups to keep the badge accurate
   useFocusEffect(
     useCallback(() => {
@@ -417,7 +412,7 @@ export default function ChatScreen() {
                 style={styles.newAiChatButton}
                 onPress={() => router.push('/chat/ai/new')}
               >
-                <Plus size={18} color="#212121" />
+                <Plus size={20} color="#212121" />
                 <Text style={styles.newAiChatButtonText}>{t('common.newChat')}</Text>
               </TouchableOpacity>
             }
@@ -634,8 +629,7 @@ export default function ChatScreen() {
     emptySubtext: {
       fontSize: fp(16),
       fontFamily: fonts.regular,
-      color: colors.text,
-      opacity: 0.6,
+      color: '#666666',
       textAlign: 'center',
     },
   });

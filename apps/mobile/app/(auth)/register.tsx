@@ -293,7 +293,7 @@ export default function RegisterScreen() {
             Password<Text style={styles.requiredAsterisk}>*</Text>
           </Text>
           <TextInput
-            style={[styles.input, passwordFocused && styles.inputFocused]}
+            style={[styles.input, passwordFocused && styles.inputFocused, !passwordFocused && password.length > 0 && !isPasswordValid && styles.inputError]}
             placeholder="********"
             placeholderTextColor="rgba(29, 29, 31, 0.4)"
             value={password}
@@ -313,7 +313,7 @@ export default function RegisterScreen() {
             Repeat Password<Text style={styles.requiredAsterisk}>*</Text>
           </Text>
           <TextInput
-            style={[styles.input, repeatPasswordFocused && styles.inputFocused]}
+            style={[styles.input, repeatPasswordFocused && styles.inputFocused, !repeatPasswordFocused && repeatPassword.length > 0 && !passwordsMatch && styles.inputError]}
             placeholder="Please repeat your password"
             placeholderTextColor="rgba(29, 29, 31, 0.4)"
             value={repeatPassword}
@@ -369,6 +369,16 @@ export default function RegisterScreen() {
               passwordValidation.hasSpecial && styles.requirementMet
             ]}>
               Includes <Text style={styles.requirementBold}>one special character</Text>
+            </Text>
+          </View>
+
+          <View style={styles.requirementRow}>
+            <CheckIcon checked={passwordsMatch} />
+            <Text style={[
+              styles.requirementText,
+              passwordsMatch && styles.requirementMet
+            ]}>
+              <Text style={styles.requirementBold}>Passwords</Text> match
             </Text>
           </View>
         </View>
@@ -574,6 +584,10 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderWidth: 2,
     borderColor: '#1D1D1F',
+  },
+  inputError: {
+    borderColor: '#FF3B30',
+    borderWidth: 1.5,
   },
   requirementsContainer: {
     marginTop: hp(16),

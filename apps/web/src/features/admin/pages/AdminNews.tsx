@@ -237,7 +237,7 @@ export function AdminNews() {
                     <div className="flex items-center">
                       <div className="w-16 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
                         {article.cover_image ? (
-                          <img src={article.cover_image} alt={article.title} className="w-full h-full object-cover" />
+                          <img src={article.cover_image} alt={article.title} className="w-full h-full object-cover" loading="lazy" />
                         ) : (
                           <span className="text-gray-400 text-xs">No img</span>
                         )}

@@ -195,6 +195,8 @@ const styles = StyleSheet.create({
   aiButtonContainer: {
     width: sp(54),
     height: sp(54),
+    borderRadius: sp(27),
+    overflow: 'hidden',
   },
   aiButton: {
     width: sp(54),

@@ -124,10 +124,12 @@ class ChatService {
       console.log('ChatService: Socket state - connected:', this.socket?.connected, 'disconnected:', this.socket?.disconnected);
     });
 
-    // Catch ALL events for debugging
-    this.socket.onAny((eventName, ...args) => {
-      console.log(`ChatService: Received event '${eventName}':`, JSON.stringify(args).substring(0, 200));
-    });
+    // Catch ALL events for debugging (dev only)
+    if (__DEV__) {
+      this.socket.onAny((eventName, ...args) => {
+        console.log(`ChatService: Received event '${eventName}':`, JSON.stringify(args).substring(0, 200));
+      });
+    }
 
     this.socket.on('reconnect_attempt', (attempt) => {
       this.reconnectAttempts = attempt;

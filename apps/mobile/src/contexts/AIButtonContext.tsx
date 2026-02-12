@@ -1,4 +1,4 @@
-import { createContext, useState, ReactNode } from 'react';
+import { createContext, useState, useMemo, ReactNode } from 'react';
 
 interface AIButtonContextType {
   showAIButton: boolean;
@@ -17,8 +17,10 @@ interface AIButtonProviderProps {
 export function AIButtonProvider({ children }: AIButtonProviderProps) {
   const [showAIButton, setShowAIButton] = useState(true);
 
+  const value = useMemo(() => ({ showAIButton, setShowAIButton }), [showAIButton]);
+
   return (
-    <AIButtonContext.Provider value={{ showAIButton, setShowAIButton }}>
+    <AIButtonContext.Provider value={value}>
       {children}
     </AIButtonContext.Provider>
   );

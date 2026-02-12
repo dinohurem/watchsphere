@@ -6,6 +6,7 @@ import '@/lib/storage';
 import '@/i18n';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
@@ -29,6 +30,7 @@ import {
   HankenGrotesk_700Bold,
 } from '@expo-google-fonts/hanken-grotesk';
 import * as SplashScreen from 'expo-splash-screen';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '@/services/api';
 
@@ -111,6 +113,7 @@ function RootLayoutNav() {
   const login = useAuthStore((state) => state.login);
   const { colorScheme } = useTheme();
   const { checkFirstLogin, startGuide } = useGuide();
+  const insets = useSafeAreaInsets();
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [hasAttemptedRestore, setHasAttemptedRestore] = useState(false);
   const [hasCheckedFirstLogin, setHasCheckedFirstLogin] = useState(false);
@@ -270,6 +273,11 @@ function RootLayoutNav() {
           }}
         />
       </Stack>
+      {__DEV__ && (
+        <View style={[devBannerStyles.banner, { top: insets.top }]} pointerEvents="none">
+          <Text style={devBannerStyles.text}>DEV</Text>
+        </View>
+      )}
     </>
   );
 }
@@ -332,3 +340,22 @@ export default function RootLayout() {
     </QueryClientProvider>
   );
 }
+
+const devBannerStyles = StyleSheet.create({
+  banner: {
+    position: 'absolute',
+    right: 8,
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    zIndex: 9999,
+    opacity: 0.85,
+  },
+  text: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+});

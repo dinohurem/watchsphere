@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Image, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -34,6 +34,22 @@ function CloseIcon() {
   );
 }
 
+// WhatsApp chat icon
+function WhatsAppIcon({ size = 18 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"
+        fill="#1D1D1F"
+      />
+      <Path
+        d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.963 7.963 0 01-4.113-1.14l-.287-.172-2.978.78.795-2.898-.188-.299A7.963 7.963 0 014 12c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z"
+        fill="#1D1D1F"
+      />
+    </Svg>
+  );
+}
+
 // Grabber bar for sheet appearance
 function GrabberBar() {
   return (
@@ -55,6 +71,7 @@ interface OrderBookEntry {
   has_papers: boolean;
   user_id: string;
   user_name?: string;
+  whatsapp_phone?: string;
 }
 
 interface OrderBookData {
@@ -81,10 +98,10 @@ const MOCK_ORDER_BOOK: OrderBookData = {
     { id: '5', date: '11.18.25', condition: 'Used', price: 89500, currency: 'EUR', country_code: 'AE', country_name: 'UAE', has_box: true, has_papers: true, user_id: '5', user_name: 'Ahmed K.' },
   ],
   sell_orders: [
-    { id: '6', date: '12.01.25', condition: 'Unworn', price: 104500, currency: 'EUR', country_code: 'US', country_name: 'United States', has_box: true, has_papers: true, user_id: '6', user_name: 'Mike S.' },
-    { id: '7', date: '11.28.25', condition: 'Unworn', price: 103500, currency: 'EUR', country_code: 'IT', country_name: 'Italy', has_box: true, has_papers: true, user_id: '7', user_name: 'Luigi P.' },
+    { id: '6', date: '12.01.25', condition: 'Unworn', price: 104500, currency: 'EUR', country_code: 'US', country_name: 'United States', has_box: true, has_papers: true, user_id: '6', user_name: 'Mike S.', whatsapp_phone: '+1234567890' },
+    { id: '7', date: '11.28.25', condition: 'Unworn', price: 103500, currency: 'EUR', country_code: 'IT', country_name: 'Italy', has_box: true, has_papers: true, user_id: '7', user_name: 'Luigi P.', whatsapp_phone: '+3901234567' },
     { id: '8', date: '11.25.25', condition: 'Used', price: 98200, currency: 'EUR', country_code: 'AE', country_name: 'UAE', has_box: true, has_papers: false, user_id: '8', user_name: 'Saeed A.' },
-    { id: '9', date: '11.22.25', condition: 'Unworn', price: 106000, currency: 'EUR', country_code: 'GB', country_name: 'United Kingdom', has_box: true, has_papers: true, user_id: '9', user_name: 'James W.' },
+    { id: '9', date: '11.22.25', condition: 'Unworn', price: 106000, currency: 'EUR', country_code: 'GB', country_name: 'United Kingdom', has_box: true, has_papers: true, user_id: '9', user_name: 'James W.', whatsapp_phone: '+4407123456' },
     { id: '10', date: '11.18.25', condition: 'Used', price: 99800, currency: 'EUR', country_code: 'CH', country_name: 'Switzerland', has_box: false, has_papers: true, user_id: '10', user_name: 'Felix B.' },
   ],
   lowest_ask: 104500,
@@ -183,6 +200,17 @@ export default function OrderBookScreen() {
   const orders = selectedTab === 'Buy' ? orderBook?.buy_orders : orderBook?.sell_orders;
   const currentOrderType = selectedTab === 'Buy' ? 'buy' : 'sell';
 
+  const handleWhatsAppChat = (order: OrderBookEntry) => {
+    if (!order.whatsapp_phone) return;
+    const watchName = `${orderBook?.brand || ''} ${orderBook?.model || ''}`.trim();
+    const watchCode = orderBook?.reference || '';
+    const message = `Hi, is ${watchName} ${watchCode} available?\n${order.currency} ${order.price.toLocaleString('de-DE')} - thank you very much!`;
+    const url = `https://wa.me/${order.whatsapp_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open WhatsApp. Make sure it is installed.');
+    });
+  };
+
   const renderOrderRow = ({ item, index }: { item: OrderBookEntry; index: number }) => {
     const isAlt = index % 2 === 0;
     return (
@@ -198,6 +226,19 @@ export default function OrderBookScreen() {
         <Text style={[styles.tableCell, styles.tableCellText, styles.dateCellData]}>{formatOrderDate(item.date)}</Text>
         <Text style={[styles.tableCell, styles.tableCellText, styles.conditionCell]}>{item.condition}</Text>
         <Text style={[styles.tableCell, styles.tableCellTextBold, styles.priceCell]}>{formatPrice(item.price)}</Text>
+        {selectedTab === 'Sell' && (
+          <TouchableOpacity
+            style={[styles.tableCell, styles.chatCell]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleWhatsAppChat(item);
+            }}
+            disabled={!item.whatsapp_phone}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <WhatsAppIcon size={20} />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
     );
   };
@@ -257,6 +298,9 @@ export default function OrderBookScreen() {
           <Text style={[styles.tableHeaderCell, styles.dateCell]}>{t('orderBook.date')}</Text>
           <Text style={[styles.tableHeaderCell, styles.conditionCell]}>{t('orderBook.condition')}</Text>
           <Text style={[styles.tableHeaderCell, styles.priceCell]}>{t('orderBook.price')}</Text>
+          {selectedTab === 'Sell' && (
+            <Text style={[styles.tableHeaderCell, styles.chatCell]}>Chat</Text>
+          )}
         </View>
 
         {/* Table Body */}
@@ -464,6 +508,11 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
     paddingRight: wp(8),
+  },
+  chatCell: {
+    width: wp(44),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tableCellText: {
     fontFamily: 'HankenGrotesk_500Medium',

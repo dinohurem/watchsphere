@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { chatService, Conversation, Message, TypingIndicator } from '@/services/chatService';
 import { useAuthStore } from '@watchsphere/shared/stores';
 
@@ -548,7 +548,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return conversationUnread + groupUnread;
   }, [conversations, groups]);
 
-  const value: ChatContextType = {
+  const value: ChatContextType = useMemo(() => ({
     conversations,
     groups,
     messages,
@@ -569,7 +569,28 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     getConversation,
     getMessages,
     getTotalUnreadCount,
-  };
+  }), [
+    conversations,
+    groups,
+    messages,
+    loadingConversations,
+    loadingMessages,
+    connectionStatus,
+    activeConversationId,
+    loadConversations,
+    loadMessages,
+    sendMessage,
+    markAsRead,
+    startTyping,
+    stopTyping,
+    deleteMessage,
+    setActiveConversation,
+    updateConversationsFromApi,
+    updateGroupsFromApi,
+    getConversation,
+    getMessages,
+    getTotalUnreadCount,
+  ]);
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }

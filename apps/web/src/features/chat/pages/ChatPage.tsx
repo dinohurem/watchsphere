@@ -1041,7 +1041,7 @@ export function ChatPage() {
                                 className="w-8 h-8 rounded-full bg-[#e5e5e5] flex items-center justify-center overflow-hidden hover:opacity-80 transition-opacity"
                               >
                                 {senderMember?.avatar ? (
-                                  <img src={senderMember.avatar} alt={message.sender_name} className="w-full h-full object-cover" />
+                                  <img src={senderMember.avatar} alt={message.sender_name} className="w-full h-full object-cover" loading="lazy" />
                                 ) : (
                                   <span className="text-[11px] font-semibold text-[#1d1d1f]">
                                     {getInitials(message.sender_name)}
@@ -1263,7 +1263,7 @@ export function ChatPage() {
                     >
                       <div className="w-10 h-10 rounded-full bg-[#e5e5e5] flex items-center justify-center overflow-hidden">
                         {displayAvatar ? (
-                          <img src={displayAvatar} alt={displayName} className="w-full h-full object-cover" />
+                          <img src={displayAvatar} alt={displayName} className="w-full h-full object-cover" loading="lazy" />
                         ) : (
                           <span className="text-[13px] font-semibold text-[#1d1d1f]">
                             {getInitials(displayName)}

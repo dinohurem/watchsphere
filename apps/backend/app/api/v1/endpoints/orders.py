@@ -94,6 +94,7 @@ class OrderBookEntry(BaseModel):
     has_papers: bool
     user_id: str
     user_name: Optional[str] = None
+    whatsapp_phone: Optional[str] = None
 
 
 class OrderBookResponse(BaseModel):
@@ -268,18 +269,21 @@ async def get_order_book(
     all_orders = buy_orders + sell_orders
     user_ids_needing_names = [o.user_id for o in all_orders if not o.user_name]
 
-    # Fetch user names in batch
+    # Fetch user names and whatsapp phones in batch
     user_names_map = {}
+    user_whatsapp_map = {}
     if user_ids_needing_names:
         users = await User.find(
             {"_id": {"$in": [PydanticObjectId(uid) for uid in user_ids_needing_names]}}
         ).to_list()
         user_names_map = {str(u.id): u.name for u in users}
+        user_whatsapp_map = {str(u.id): u.whatsapp_phone for u in users if u.whatsapp_phone}
 
     # Format orders for response
     def format_order(order: Order) -> OrderBookEntry:
         # Use order.user_name if available, otherwise lookup from user_names_map
         user_name = order.user_name or user_names_map.get(order.user_id)
+        whatsapp_phone = user_whatsapp_map.get(order.user_id)
         return OrderBookEntry(
             id=str(order.id),
             date=order.created_at.strftime("%m.%d.%y"),
@@ -292,6 +296,7 @@ async def get_order_book(
             has_papers=order.has_papers,
             user_id=order.user_id,
             user_name=user_name,
+            whatsapp_phone=whatsapp_phone,
         )
 
     formatted_buy = [format_order(o) for o in buy_orders]
@@ -745,11 +750,10 @@ async def create_order(
 
     await order.insert()
 
-    # Update order count on related watch models
-    watches = await Watch.find(Watch.reference == order_data.reference).to_list()
-    for watch in watches:
-        watch.order_count += 1
-        await watch.save()
+    # Update order count on related watch models atomically
+    await Watch.find(Watch.reference == order_data.reference).update_many(
+        {"$inc": {"order_count": 1}}
+    )
 
     # Log activity
     platform = x_platform or "web"
@@ -851,18 +855,20 @@ async def get_my_orders(
         if order.order_type == OrderType.SELL and order.reference
     )
 
-    # Fetch highest buy order price for each reference
+    # Batch-fetch highest buy order price for each reference using aggregation
     best_bids: dict[str, float] = {}
-    for reference in sell_order_references:
-        # Find highest priced active buy order for this reference
-        highest_buy = await Order.find(
-            Order.reference == reference,
-            Order.order_type == OrderType.BUY,
-            Order.status == OrderStatus.ACTIVE
-        ).sort([("price", -1)]).limit(1).to_list()
-
-        if highest_buy:
-            best_bids[reference] = highest_buy[0].price
+    if sell_order_references:
+        best_bid_pipeline = [
+            {"$match": {
+                "reference": {"$in": list(sell_order_references)},
+                "order_type": OrderType.BUY.value,
+                "status": OrderStatus.ACTIVE.value,
+            }},
+            {"$group": {"_id": "$reference", "max_price": {"$max": "$price"}}},
+        ]
+        best_bid_raw = await Order.aggregate(best_bid_pipeline).to_list()
+        for item in best_bid_raw:
+            best_bids[item["_id"]] = item["max_price"]
 
     # Build response with best_bid and price_change
     result = []
@@ -924,6 +930,7 @@ class OrderDetailResponse(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    whatsapp_phone: Optional[str] = None
     watch_details: Optional[WatchDetailsResponse] = None
     price_change: Optional[float] = None
 
@@ -946,6 +953,7 @@ async def get_order(
     user_rating = 0.0
     user_review_count = 0
     user_name = order.user_name  # Try from order first
+    whatsapp_phone = None
 
     try:
         user = await User.get(PydanticObjectId(order.user_id))
@@ -953,6 +961,7 @@ async def get_order(
             user_profile_image = user.profile_image_url
             user_rating = user.average_rating
             user_review_count = user.review_count
+            whatsapp_phone = user.whatsapp_phone if hasattr(user, 'whatsapp_phone') else None
             # If user_name not stored in order, get from user profile
             if not user_name:
                 user_name = user.name
@@ -1020,6 +1029,7 @@ async def get_order(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        whatsapp_phone=whatsapp_phone,
         created_at=order.created_at,
         updated_at=order.updated_at,
         watch_details=watch_details,
@@ -1389,16 +1399,31 @@ async def admin_order_stats(
 ) -> Any:
     """Get order statistics (Admin only)"""
 
-    all_orders = await Order.find_all().to_list()
+    # Use aggregation instead of loading all orders into memory
+    stats_pipeline = [
+        {"$facet": {
+            "by_status": [{"$group": {"_id": "$status", "count": {"$sum": 1}}}],
+            "by_type": [{"$group": {"_id": "$order_type", "count": {"$sum": 1}}}],
+            "unique_refs": [{"$group": {"_id": "$reference"}}, {"$count": "count"}],
+            "total": [{"$count": "count"}],
+        }}
+    ]
+    result = await Order.aggregate(stats_pipeline).to_list()
+    facets = result[0] if result else {"by_status": [], "by_type": [], "unique_refs": [], "total": []}
+
+    status_map = {item["_id"]: item["count"] for item in facets["by_status"]}
+    type_map = {item["_id"]: item["count"] for item in facets["by_type"]}
+    total = facets["total"][0]["count"] if facets["total"] else 0
+    unique_refs = facets["unique_refs"][0]["count"] if facets["unique_refs"] else 0
 
     stats = {
-        "total_orders": len(all_orders),
-        "active_orders": len([o for o in all_orders if o.status == OrderStatus.ACTIVE]),
-        "completed_orders": len([o for o in all_orders if o.status == OrderStatus.COMPLETED]),
-        "cancelled_orders": len([o for o in all_orders if o.status == OrderStatus.CANCELLED]),
-        "buy_orders": len([o for o in all_orders if o.order_type == OrderType.BUY]),
-        "sell_orders": len([o for o in all_orders if o.order_type == OrderType.SELL]),
-        "unique_references": len(set(o.reference for o in all_orders)),
+        "total_orders": total,
+        "active_orders": status_map.get(OrderStatus.ACTIVE.value, status_map.get(OrderStatus.ACTIVE, 0)),
+        "completed_orders": status_map.get(OrderStatus.COMPLETED.value, status_map.get(OrderStatus.COMPLETED, 0)),
+        "cancelled_orders": status_map.get(OrderStatus.CANCELLED.value, status_map.get(OrderStatus.CANCELLED, 0)),
+        "buy_orders": type_map.get(OrderType.BUY.value, type_map.get(OrderType.BUY, 0)),
+        "sell_orders": type_map.get(OrderType.SELL.value, type_map.get(OrderType.SELL, 0)),
+        "unique_references": unique_refs,
     }
 
     return stats
@@ -1512,11 +1537,10 @@ async def admin_create_order(
 
     await order.insert()
 
-    # Update order count on related watch models
-    watches = await Watch.find(Watch.reference == order_data.reference).to_list()
-    for watch in watches:
-        watch.order_count += 1
-        await watch.save()
+    # Update order count on related watch models atomically
+    await Watch.find(Watch.reference == order_data.reference).update_many(
+        {"$inc": {"order_count": 1}}
+    )
 
     return OrderResponse(
         id=str(order.id),

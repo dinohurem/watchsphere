@@ -125,7 +125,7 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
       {/* Watch Image */}
       <div className="h-[150px] bg-gradient-to-b from-white to-[#f4f4f4] flex items-center justify-center rounded-t-xl">
         {watch.image_url ? (
-          <img src={watch.image_url} alt={watch.model} className="max-h-full max-w-full object-contain" />
+          <img src={watch.image_url} alt={watch.model} className="max-h-full max-w-full object-contain" loading="lazy" />
         ) : (
           <ImagePlaceholder width={120} height={120} borderRadius={0} />
         )}
@@ -531,7 +531,7 @@ export function MarketPage() {
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-[#f5f5f7] flex items-center justify-center overflow-hidden shrink-0">
                             {watch.image_url ? (
-                              <img src={watch.image_url} alt={watch.brand} className="w-full h-full object-contain" />
+                              <img src={watch.image_url} alt={watch.brand} className="w-full h-full object-contain" loading="lazy" />
                             ) : (
                               <ImagePlaceholder size={24} />
                             )}

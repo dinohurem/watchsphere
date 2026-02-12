@@ -204,7 +204,7 @@ export default function AskAIScreen() {
             <Text style={styles.headerTitle}>Ask AI</Text>
           </View>
           <TouchableOpacity style={styles.addButton} onPress={handleNewChat}>
-            <Plus size={18} color="#212121" />
+            <Plus size={20} color="#212121" />
           </TouchableOpacity>
         </View>
 

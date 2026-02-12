@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 
 // Filter types
 export interface FilterState {
@@ -221,27 +221,42 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     return getOrderBookFilterCount() > 0;
   }, [getOrderBookFilterCount]);
 
+  const value = useMemo(() => ({
+    // Market filters
+    filters,
+    setFilter,
+    toggleFilterItem,
+    resetFilters,
+    resetFilterCategory,
+    getFilterCount,
+    getTotalFilterCount,
+    hasActiveFilters,
+    // Order book filters
+    orderBookFilters,
+    setOrderBookFilter,
+    toggleOrderBookFilterItem,
+    resetOrderBookFilters,
+    getOrderBookFilterCount,
+    hasActiveOrderBookFilters,
+  }), [
+    filters,
+    setFilter,
+    toggleFilterItem,
+    resetFilters,
+    resetFilterCategory,
+    getFilterCount,
+    getTotalFilterCount,
+    hasActiveFilters,
+    orderBookFilters,
+    setOrderBookFilter,
+    toggleOrderBookFilterItem,
+    resetOrderBookFilters,
+    getOrderBookFilterCount,
+    hasActiveOrderBookFilters,
+  ]);
+
   return (
-    <FilterContext.Provider
-      value={{
-        // Market filters
-        filters,
-        setFilter,
-        toggleFilterItem,
-        resetFilters,
-        resetFilterCategory,
-        getFilterCount,
-        getTotalFilterCount,
-        hasActiveFilters,
-        // Order book filters
-        orderBookFilters,
-        setOrderBookFilter,
-        toggleOrderBookFilterItem,
-        resetOrderBookFilters,
-        getOrderBookFilterCount,
-        hasActiveOrderBookFilters,
-      }}
-    >
+    <FilterContext.Provider value={value}>
       {children}
     </FilterContext.Provider>
   );

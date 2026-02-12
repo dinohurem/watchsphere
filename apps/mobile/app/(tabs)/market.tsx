@@ -172,12 +172,7 @@ export default function MarketScreen() {
     });
   };
 
-  useEffect(() => {
-    loadMarketData();
-    loadProfile();
-  }, [selectedCategory]);
-
-  // Refresh data when screen comes into focus
+  // Refresh data when screen comes into focus (also fires on initial mount)
   useFocusEffect(
     useCallback(() => {
       loadMarketData();
