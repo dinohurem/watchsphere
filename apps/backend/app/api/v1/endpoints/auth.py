@@ -107,14 +107,14 @@ async def register(user_in: UserCreate) -> Any:
             detail="A user with this email already exists",
         )
 
-    # Create new user (unverified)
+    # Create new user (unverified but approved)
     user = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
         name=user_in.name,
         role=user_in.role,
         verified=False,
-        approved=False,
+        approved=True,
         auth_provider=AuthProvider.EMAIL,
     )
     await user.insert()
@@ -596,7 +596,7 @@ async def google_auth(request: GoogleAuthRequest) -> Any:
             auth_provider=AuthProvider.GOOGLE,
             oauth_provider_id=google_user_id,
             verified=email_verified,
-            approved=email_verified,  # Auto-approve if Google verified the email
+            approved=True,
             is_active=True,
         )
         await new_user.insert()
@@ -725,7 +725,7 @@ async def apple_auth(request: AppleAuthRequest) -> Any:
             auth_provider=AuthProvider.APPLE,
             oauth_provider_id=apple_user_id,
             verified=email_verified,
-            approved=email_verified,  # Auto-approve if Apple verified the email
+            approved=True,
             is_active=True,
         )
         await new_user.insert()

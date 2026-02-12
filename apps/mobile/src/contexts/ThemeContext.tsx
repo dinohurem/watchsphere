@@ -167,7 +167,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const colors = colorScheme === 'dark' ? darkColors : lightColors;
+  // Always use light colors — no dark mode support
+  const colors = lightColors;
 
   const value = useMemo(() => ({ theme, colorScheme, colors, fonts, setTheme }), [theme, colorScheme, colors, fonts]);
 
