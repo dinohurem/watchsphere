@@ -47,7 +47,7 @@ class ChatService {
   private listeners: Map<string, Function[]> = new Map();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private typingTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private typingTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   connect(token: string) {
     // If already connected, don't reconnect

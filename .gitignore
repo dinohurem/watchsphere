@@ -227,3 +227,4 @@ package-lock.json
 
 # MCP Configuration (contains sensitive tokens)
 .mcp.json
+.worktrees/

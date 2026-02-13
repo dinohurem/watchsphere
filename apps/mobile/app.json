@@ -56,8 +56,8 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
           }
         }
       ],
@@ -78,15 +78,11 @@
           "photosPermission": "WatchSphere needs access to your photos to share images in chat and set your profile picture.",
           "cameraPermission": false
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
-      "typedRoutes": true
-    },
-    "notification": {
-      "color": "#000000",
-      "androidMode": "default",
-      "androidCollapsedTitle": "{{unread_count}} new messages"
+      "typedRoutes": false
     },
     "extra": {
       "router": {

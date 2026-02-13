@@ -324,5 +324,30 @@ then this:
 cd ~/watchsphere-standalone-build/android
 ./gradlew bundleRelease
 
-npx expo start --ios  
-NODE_ENV=production npx expo start --ios
+npx expo run:ios
+ NODE_ENV=production npx expo run:ios --no-build-cache 
+
+  NODE_ENV=production npx expo run:ios
+
+
+
+
+#### MOBILE APP
+
+  Development (uses .env.development / .env)                                                                                                         
+                                                                                                                                                     
+  npx expo run:ios                                                                                                                                   
+  This builds the native binary, starts Metro, installs on the simulator, and opens the app.                                                         
+                                                                                                                                                     
+  Production env vars
+
+  NODE_ENV=production npx expo run:ios  --no-build-cache 
+  Expo loads .env.production when NODE_ENV=production is set. This will use your Railway production API URLs.
+
+  Other useful variants
+
+  # Clear Metro cache (if you changed babel/metro config)
+  npx expo start --clear
+
+  # Just start Metro (if native binary is already built/installed)
+  npx expo start

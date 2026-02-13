@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useChat } from '@/contexts/ChatContext';
@@ -156,7 +156,7 @@ export default function ChatDetailScreen() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const flashListRef = useRef<FlashList<Message>>(null);
+  const flashListRef = useRef<FlashListRef<Message>>(null);
   const currentUserId = useRef<string>('');
 
   // Check if this is a new/demo conversation
@@ -920,9 +920,7 @@ export default function ChatDetailScreen() {
               data={messages}
               renderItem={renderMessage}
               keyExtractor={(item) => item.id}
-              estimatedItemSize={80}
               contentContainerStyle={{ paddingVertical: 8 }}
-              inverted={false}
               showsVerticalScrollIndicator={false}
               onLoad={() => {
                 // Scroll to bottom smoothly after content loads
