@@ -203,6 +203,7 @@ function App() {
           <Route path="profile" element={<ProfileSettingsPage />} />
           <Route path="profile/settings" element={<ProfileSettingsPage />} />
           <Route path="profile/billing" element={<ProfileSettingsPage />} />
+          <Route path="profile/orders" element={<ProfileSettingsPage />} />
           <Route path="user/:userId" element={<UserProfilePage />} />
           <Route path="news/:newsId" element={<NewsDetailsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />

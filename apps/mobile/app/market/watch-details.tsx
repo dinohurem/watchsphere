@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal, Alert, Platform, ActivityIndicator, FlatList, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -312,66 +312,71 @@ export default function WatchDetailsScreen() {
   console.log('WatchDetails params:', JSON.stringify(params, null, 2));
 
   const isFromOrderBook = params.fromOrderBook === 'true';
-  const price = params.price ? parseFloat(params.price) : 104500;
-  const condition = params.condition || 'Unworn';
-  const countryCode = params.country_code || 'US';
-  const countryName = params.country_name || 'United States';
-  const hasBox = params.has_box === 'true';
-  const hasPapers = params.has_papers === 'true';
-  const brand = params.brand || 'Audemars Piguet';
-  const model = params.model || 'Royal Oak';
-  const reference = params.reference || '26240OR Blue';
   const userName = params.user_name || 'N/A';
   const orderUserId = params.user_id;
   const orderType = params.order_type;
+
+  // Core order fields stored as state so they can be refreshed from API after edits
+  const [price, setPrice] = useState(params.price ? parseFloat(params.price) : 0);
+  const [condition, setCondition] = useState(params.condition || 'Unworn');
+  const [countryCode, setCountryCode] = useState(params.country_code || 'US');
+  const [countryName, setCountryName] = useState(params.country_name || '');
+  const [hasBox, setHasBox] = useState(params.has_box === 'true');
+  const [hasPapers, setHasPapers] = useState(params.has_papers === 'true');
+  const [brand, setBrand] = useState(params.brand || '');
+  const [model, setModel] = useState(params.model || '');
+  const [reference, setReference] = useState(params.reference || '');
 
   // Check if this is the current user's order (either buy or sell)
   // Use fetchedUserId (from API) as fallback since params.user_id may not always be passed
   const effectiveOrderUserId = orderUserId || fetchedUserId;
   const isOwnOrder = effectiveOrderUserId === user?.id;
 
-  // Fetch order details to get user rating info, name, and watch details
-  useEffect(() => {
-    const fetchOrderDetails = async () => {
-      if (params.orderId) {
-        try {
-          const response = await api.get(`/orders/${params.orderId}`);
-          if (response.data) {
-            setUserProfileImage(response.data.user_profile_image || null);
-            setUserRating(response.data.user_rating || 0);
-            setUserReviewCount(response.data.user_review_count || 0);
-            // Use user_name from API response if available
-            if (response.data.user_name) {
-              setDisplayUserName(response.data.user_name);
-            }
-            // Store user_id from API response for profile navigation
-            if (response.data.user_id) {
-              setFetchedUserId(response.data.user_id);
-            }
-            // Store created_at for "Added X ago" display
-            if (response.data.created_at) {
-              setCreatedAt(response.data.created_at);
-            }
-            // Store order status for labels
-            if (response.data.status) {
-              setOrderStatus(response.data.status);
-            }
-            // Get watch_details from API response
-            if (response.data.watch_details) {
-              setWatchDetails(response.data.watch_details);
-              // Also set case_size if available
-              if (response.data.watch_details.case_size) {
-                setCaseSize(response.data.watch_details.case_size);
-              }
-            }
+  // Fetch order details from API
+  const fetchOrderDetails = useCallback(async () => {
+    if (!params.orderId) return;
+    try {
+      const response = await api.get(`/orders/${params.orderId}`);
+      if (response.data) {
+        const data = response.data;
+        setUserProfileImage(data.user_profile_image || null);
+        setUserRating(data.user_rating || 0);
+        setUserReviewCount(data.user_review_count || 0);
+        if (data.user_name) setDisplayUserName(data.user_name);
+        if (data.user_id) setFetchedUserId(data.user_id);
+        if (data.created_at) setCreatedAt(data.created_at);
+        if (data.status) setOrderStatus(data.status);
+
+        // Update core order fields from API (keeps display in sync after edits)
+        if (data.brand) setBrand(data.brand);
+        if (data.model) setModel(data.model);
+        if (data.reference) setReference(data.reference);
+        if (data.price != null) setPrice(data.price);
+        if (data.condition) setCondition(data.condition);
+        if (data.country_code) setCountryCode(data.country_code);
+        if (data.country_name) setCountryName(data.country_name);
+        setHasBox(!!data.has_box);
+        setHasPapers(!!data.has_papers);
+
+        // Get watch_details from API response
+        if (data.watch_details) {
+          setWatchDetails(data.watch_details);
+          if (data.watch_details.case_size) {
+            setCaseSize(data.watch_details.case_size);
           }
-        } catch (error) {
-          console.error('Failed to fetch order details:', error);
         }
       }
-    };
-    fetchOrderDetails();
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+    }
   }, [params.orderId]);
+
+  // Fetch on mount and re-fetch when screen regains focus (e.g. returning from edit)
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrderDetails();
+    }, [fetchOrderDetails])
+  );
 
   // Check watchlist status on mount
   useEffect(() => {
