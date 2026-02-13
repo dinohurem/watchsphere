@@ -39,7 +39,7 @@ export function ChatInput({ value, onChangeText, onSend, onImageSelect, onTyping
   const [isFocused, setIsFocused] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const sendButtonOpacity = useRef(new Animated.Value(1)).current;
-  const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
@@ -83,12 +83,12 @@ export function ChatInput({ value, onChangeText, onSend, onImageSelect, onTyping
       // Set new timeout to stop typing after 3 seconds
       typingTimeoutRef.current = setTimeout(() => {
         onTypingStop?.();
-        typingTimeoutRef.current = undefined;
+        typingTimeoutRef.current = null;
       }, 3000);
     } else {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = undefined;
+        typingTimeoutRef.current = null;
       }
       onTypingStop?.();
     }
@@ -99,7 +99,7 @@ export function ChatInput({ value, onChangeText, onSend, onImageSelect, onTyping
       onSend();
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = undefined;
+        typingTimeoutRef.current = null;
       }
       onTypingStop?.();
     }

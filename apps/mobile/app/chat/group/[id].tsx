@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useChat } from '@/contexts/ChatContext';
@@ -167,7 +167,7 @@ export default function GroupChatScreen() {
   const [showMessageOptions, setShowMessageOptions] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyingTo, setReplyingTo] = useState<QuotedMessage | null>(null);
-  const flashListRef = useRef<FlashList<Message & { showSender: boolean; showAvatar: boolean }>>(null);
+  const flashListRef = useRef<FlashListRef<Message & { showSender: boolean; showAvatar: boolean }>>(null);
   const currentUserId = useRef<string>('');
 
   // Set active conversation on mount and clear on unmount
@@ -981,9 +981,7 @@ export default function GroupChatScreen() {
               data={groupedMessages}
               renderItem={renderMessage}
               keyExtractor={(item) => item.id}
-              estimatedItemSize={80}
               contentContainerStyle={{ paddingVertical: 8 }}
-              inverted={false}
               showsVerticalScrollIndicator={false}
             />
           )}

@@ -388,7 +388,7 @@ export default function MarketScreen() {
         brand: watch.brand,
         model: watch.model,
       },
-    });
+    } as any);
   };
 
   const formatPrice = (price: number) => {

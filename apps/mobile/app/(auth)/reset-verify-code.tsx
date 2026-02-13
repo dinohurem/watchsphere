@@ -147,7 +147,7 @@ export default function ResetVerifyCodeScreen() {
             {code.map((digit, index) => (
               <TextInput
                 key={index}
-                ref={(ref) => (inputRefs.current[index] = ref)}
+                ref={(ref) => { inputRefs.current[index] = ref; }}
                 style={[
                   styles.codeInput,
                   focusedIndex === index && styles.codeInputFocused,

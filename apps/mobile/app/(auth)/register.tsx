@@ -410,7 +410,7 @@ export default function RegisterScreen() {
         {[0, 1, 2, 3, 4, 5].map((index) => (
           <TextInput
             key={index}
-            ref={(el) => (codeInputRefs.current[index] = el)}
+            ref={(el) => { codeInputRefs.current[index] = el; }}
             style={[
               styles.codeInput,
               verificationCode[index] ? styles.codeInputFilled : null
