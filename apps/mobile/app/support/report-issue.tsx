@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -80,67 +80,79 @@ export default function ReportIssueScreen() {
         <View style={styles.headerButton} />
       </View>
 
-      {/* Content */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Title */}
-        <View style={styles.titleSection}>
-          <Text style={styles.title}>{t('support.reportIssueTitle')}</Text>
-          <Text style={styles.subtitle}>
-            {t('support.reportIssueSubtitle')}
-          </Text>
-        </View>
-
-        {/* Form */}
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>{t('support.title')} *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder={t('support.titlePlaceholder')}
-              placeholderTextColor="#999999"
-              value={title}
-              onChangeText={setTitle}
-              editable={!submitting}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>{t('support.description')} *</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder={t('support.issueDescriptionPlaceholder')}
-              placeholderTextColor="#999999"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={8}
-              textAlignVertical="top"
-              editable={!submitting}
-            />
-          </View>
-        </View>
-      </ScrollView>
-
-      {/* Submit Button */}
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={!isValid || submitting}
-          activeOpacity={0.7}
+        {/* Content */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          {submitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitButtonText}>{t('common.submit')}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          {/* Title */}
+          <View style={styles.titleSection}>
+            <Text style={styles.title}>{t('support.reportIssueTitle')}</Text>
+            <Text style={styles.subtitle}>
+              {t('support.reportIssueSubtitle')}
+            </Text>
+          </View>
+
+          {/* Form */}
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{t('support.title')} *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t('support.titlePlaceholder')}
+                placeholderTextColor="#999999"
+                value={title}
+                onChangeText={setTitle}
+                editable={!submitting}
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{t('support.description')} *</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder={t('support.issueDescriptionPlaceholder')}
+                placeholderTextColor="#999999"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={8}
+                textAlignVertical="top"
+                editable={!submitting}
+                returnKeyType="done"
+                blurOnSubmit
+              />
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Submit Button */}
+        <View style={styles.footer} onTouchStart={Keyboard.dismiss}>
+          <TouchableOpacity
+            style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
+            onPress={() => {
+              Keyboard.dismiss();
+              handleSubmit();
+            }}
+            disabled={!isValid || submitting}
+            activeOpacity={0.7}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitButtonText}>{t('common.submit')}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

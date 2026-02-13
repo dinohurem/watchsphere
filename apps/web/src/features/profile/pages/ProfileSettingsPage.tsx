@@ -326,6 +326,8 @@ export function ProfileSettingsPage() {
     const path = location.pathname;
     if (path.includes('billing')) {
       setActiveSection('billing');
+    } else if (path.includes('orders')) {
+      setActiveSection('orders');
     } else if (path.includes('settings')) {
       setActiveSection('profile');
     } else {
@@ -662,7 +664,7 @@ export function ProfileSettingsPage() {
     if (ordersLoaded && activeSection === 'orders') {
       loadOrders();
     }
-  }, [location.key]);
+  }, [location.key, ordersLoaded, activeSection]);
 
   const menuItems = [
     { id: 'profile' as const, label: t('settings.profileSettings'), icon: User },

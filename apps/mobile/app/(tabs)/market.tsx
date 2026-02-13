@@ -2,7 +2,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useFilters } from '@/contexts/FilterContext';
@@ -92,6 +92,7 @@ export default function MarketScreen() {
   const filtersButtonRef = useRef<View>(null);
   const firstWatchRowRef = useRef<View>(null);
   const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
+  const navigation = useNavigation();
   const totalFilterCount = getTotalFilterCount();
   const [selectedCategory, setSelectedCategory] = useState('Hot');
   const [watches, setWatches] = useState<WatchMarketData[]>([]);
@@ -109,6 +110,13 @@ export default function MarketScreen() {
       setSearchQuery(searchParam);
     }
   }, [searchParam]);
+
+  // Clear search query and remove the search param from navigation state
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+    // Reset the route params to remove stale search param
+    navigation.setParams({ search: undefined } as any);
+  }, [navigation]);
 
   // Apply filters and search to watches whenever they change
   useEffect(() => {
@@ -432,6 +440,10 @@ export default function MarketScreen() {
       color: '#212121',
       flex: 1,
     },
+    searchClearButton: {
+      padding: sp(4),
+      marginLeft: wp(4),
+    },
     profileButton: {
       width: sp(44),
       height: sp(44),
@@ -706,14 +718,37 @@ export default function MarketScreen() {
         <View style={styles.logoContainer}>
           <LogoIcon width={33} height={28} color="#212121" />
         </View>
-        <TouchableOpacity style={styles.searchBar} activeOpacity={0.7} onPress={() => router.push('/search')}>
-          <View style={styles.searchIcon}>
-            <Magnifier size={18} color="#212121" />
-          </View>
-          <Text style={searchQuery ? styles.searchText : styles.searchPlaceholder}>
-            {searchQuery || t('home.searchPlaceholder')}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.searchBar}>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+            activeOpacity={0.7}
+            onPress={() => router.push('/search')}
+          >
+            <View style={styles.searchIcon}>
+              <Magnifier size={18} color="#212121" />
+            </View>
+            <Text style={searchQuery ? styles.searchText : styles.searchPlaceholder} numberOfLines={1}>
+              {searchQuery || t('home.searchPlaceholder')}
+            </Text>
+          </TouchableOpacity>
+          {searchQuery ? (
+            <TouchableOpacity
+              style={styles.searchClearButton}
+              onPress={clearSearch}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
+                <Path
+                  d="M4 4L12 12M12 4L4 12"
+                  stroke="rgba(33, 33, 33, 0.5)"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </TouchableOpacity>
+          ) : null}
+        </View>
         <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
           {profileImageUrl ? (
             <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />

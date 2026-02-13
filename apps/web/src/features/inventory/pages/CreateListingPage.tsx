@@ -303,11 +303,19 @@ export function CreateListingPage() {
           location: order.country_name || '',
         };
 
+        // Map backend Order model keys back to config field keys where they differ
+        const orderKeyToFieldKey: Record<string, string> = {
+          caliber: 'caliber_movement',
+          dial: 'dial_color',
+          dial_numerals: 'dial_numbers',
+        };
+
         // Load all watch_details fields dynamically
         if (order.watch_details) {
           Object.entries(order.watch_details).forEach(([key, value]) => {
             if (value !== null && value !== undefined && key !== 'images') {
-              loadedData[key] = String(value);
+              const formKey = orderKeyToFieldKey[key] || key;
+              loadedData[formKey] = String(value);
             }
           });
         }
@@ -320,7 +328,9 @@ export function CreateListingPage() {
 
         extendedFields.forEach(field => {
           if (order[field] !== null && order[field] !== undefined) {
-            loadedData[field] = String(order[field]);
+            // Store under the config field key for proper form rendering
+            const formKey = orderKeyToFieldKey[field] || field;
+            loadedData[formKey] = String(order[field]);
           }
         });
 
@@ -376,10 +386,21 @@ export function CreateListingPage() {
   const removePhoto = (index: number) => {
     const currentUrls = (formData.photoUrls || []) as string[];
     const currentPhotos = (formData.photos || []) as File[];
-    URL.revokeObjectURL(currentUrls[index]);
+    const urlToRemove = currentUrls[index];
+    URL.revokeObjectURL(urlToRemove);
+
+    // Only remove from photos (File) array if a blob URL (newly added file) is removed.
+    // In edit mode, photoUrls contains server URLs first then blob URLs, while photos
+    // only contains newly-added Files — the arrays are not index-aligned.
+    let newPhotos = [...currentPhotos];
+    if (urlToRemove && urlToRemove.startsWith('blob:')) {
+      const blobIndex = currentUrls.slice(0, index).filter(u => u.startsWith('blob:')).length;
+      newPhotos = currentPhotos.filter((_, i) => i !== blobIndex);
+    }
+
     setFormData((prev) => ({
       ...prev,
-      photos: currentPhotos.filter((_, i) => i !== index),
+      photos: newPhotos,
       photoUrls: currentUrls.filter((_, i) => i !== index),
     }));
   };
@@ -459,6 +480,13 @@ export function CreateListingPage() {
         images: allImageUrls,
       };
 
+      // Map config field keys to backend Order model keys where they differ
+      const fieldKeyToOrderKey: Record<string, string> = {
+        caliber_movement: 'caliber',
+        dial_color: 'dial',
+        dial_numbers: 'dial_numerals',
+      };
+
       // Add all enabled listing fields dynamically
       // Skip fields already handled above (price, currency, condition, etc.)
       const handledFields = ['price', 'currency', 'condition', 'condition_description', 'box_papers', 'location', 'brand', 'model', 'reference'];
@@ -466,15 +494,16 @@ export function CreateListingPage() {
         if (handledFields.includes(field.key)) return; // Skip already-handled fields
         const value = formData[field.key];
         if (value !== undefined && value !== null && value !== '') {
+          const orderKey = fieldKeyToOrderKey[field.key] || field.key;
           // Handle numeric fields - strip non-digits first (like price formatting)
           if (field.field_type === 'number') {
             const digitsOnly = String(value).replace(/[^0-9]/g, '');
             const numVal = parseInt(digitsOnly, 10);
             if (!isNaN(numVal)) {
-              orderData[field.key] = numVal;
+              orderData[orderKey] = numVal;
             }
           } else {
-            orderData[field.key] = value;
+            orderData[orderKey] = value;
           }
         }
       });

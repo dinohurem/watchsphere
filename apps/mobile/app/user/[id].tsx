@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
@@ -567,7 +567,7 @@ export default function UserProfileScreen() {
         <View style={styles.headerButton} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
@@ -693,60 +693,73 @@ export default function UserProfileScreen() {
         animationType="fade"
         onRequestClose={() => setShowReviewModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {existingReview ? 'Edit Your Review' : 'Write a Review'}
-              </Text>
-              <Text style={styles.modalSubtitle}>for {profile.name}</Text>
-            </View>
-
-            <View style={styles.modalBody}>
-              <Text style={styles.inputLabel}>Rating</Text>
-              <View style={styles.starSelectContainer}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <TouchableOpacity
-                    key={star}
-                    style={styles.starButton}
-                    onPress={() => setReviewRating(star)}
-                  >
-                    <StarIcon filled={star <= reviewRating} size={32} />
-                  </TouchableOpacity>
-                ))}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {existingReview ? 'Edit Your Review' : 'Write a Review'}
+                </Text>
+                <Text style={styles.modalSubtitle}>for {profile.name}</Text>
               </View>
 
-              <Text style={styles.inputLabel}>Comment (optional)</Text>
-              <TextInput
-                style={styles.commentInput}
-                value={reviewComment}
-                onChangeText={setReviewComment}
-                placeholder="Share your experience..."
-                placeholderTextColor={colors.textTertiary}
-                multiline
-                numberOfLines={4}
-              />
-            </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.inputLabel}>Rating</Text>
+                <View style={styles.starSelectContainer}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <TouchableOpacity
+                      key={star}
+                      style={styles.starButton}
+                      onPress={() => setReviewRating(star)}
+                    >
+                      <StarIcon filled={star <= reviewRating} size={32} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowReviewModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitButton, submittingReview && styles.disabledButton]}
-                onPress={handleSubmitReview}
-                disabled={submittingReview}
-              >
-                <Text style={styles.submitButtonText}>
-                  {submittingReview ? 'Submitting...' : existingReview ? 'Update' : 'Submit'}
-                </Text>
-              </TouchableOpacity>
+                <Text style={styles.inputLabel}>Comment (optional)</Text>
+                <TextInput
+                  style={styles.commentInput}
+                  value={reviewComment}
+                  onChangeText={setReviewComment}
+                  placeholder="Share your experience..."
+                  placeholderTextColor={colors.textTertiary}
+                  multiline
+                  numberOfLines={4}
+                  returnKeyType="done"
+                  blurOnSubmit
+                />
+              </View>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setShowReviewModal(false);
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.submitButton, submittingReview && styles.disabledButton]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    handleSubmitReview();
+                  }}
+                  disabled={submittingReview}
+                >
+                  <Text style={styles.submitButtonText}>
+                    {submittingReview ? 'Submitting...' : existingReview ? 'Update' : 'Submit'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </Modal>
     </SafeAreaView>
   );
