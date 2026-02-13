@@ -174,7 +174,7 @@ export function HomePage() {
     { icon: Activity, titleKey: 'home.quickAccess.activityCenter', color: 'bg-[#ff7373]', href: '/app/notifications', customIcon: false },
     { icon: Sparkles, titleKey: 'home.quickAccess.aiAssistant', color: 'bg-[#d573ff]', href: '/app/ai-assistant', customIcon: false },
     { icon: Watch, titleKey: 'home.quickAccess.myInventory', color: 'bg-[#767676]', href: '/app/inventory', customIcon: false },
-    { icon: FileCheck, titleKey: 'home.quickAccess.myOrders', color: 'bg-[#32d287]', href: '/app/orders', customIcon: false },
+    { icon: FileCheck, titleKey: 'home.quickAccess.myOrders', color: 'bg-[#32d287]', href: '/app/profile/orders', customIcon: false },
     { icon: null, titleKey: 'home.quickAccess.socialSearch', color: 'bg-[#7c73ff]', href: '/app/social-search', customIcon: true },
   ];
 

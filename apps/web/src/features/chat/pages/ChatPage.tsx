@@ -174,9 +174,6 @@ export function ChatPage() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedChatRef = useRef<ChatItem | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  // Track processed message IDs to prevent duplicates from WebSocket
-  const processedMessageIds = useRef<Set<string>>(new Set());
-
   // Keep ref in sync with state and update notification context
   useEffect(() => {
     selectedChatRef.current = selectedChat;
@@ -212,23 +209,16 @@ export function ChatPage() {
     const unsubMessage = chatWebSocket.onMessage((wsMessage: WebSocketMessage) => {
       console.log('Received WebSocket message:', wsMessage);
 
-      // Use ref to check if we already processed this message (prevents duplicates from StrictMode)
-      if (processedMessageIds.current.has(wsMessage.id)) {
-        console.log('Skipping already processed message:', wsMessage.id);
-        return;
-      }
-      processedMessageIds.current.add(wsMessage.id);
-
       // Add message to list if it's for the current chat
       setMessages(prev => {
         // Check if message already exists by real ID
-        const existsById = prev.some(m => m.id === wsMessage.id);
-        if (existsById) {
-          // Message already exists, skip
+        if (prev.some(m => m.id === wsMessage.id)) {
           return prev;
         }
 
-        // Check if this is replacing a temp message
+        // Check if this is replacing a temp message (optimistic update)
+        // Match by tempId first, then fall back to matching by content + sender for
+        // own messages that might not have tempId echoed back
         const tempIndex = wsMessage.tempId
           ? prev.findIndex(m => m.id === wsMessage.tempId)
           : -1;
@@ -238,6 +228,23 @@ export function ChatPage() {
           const newMessages = [...prev];
           newMessages[tempIndex] = {
             ...newMessages[tempIndex],
+            id: wsMessage.id,
+            content: wsMessage.content,
+          };
+          return newMessages;
+        }
+
+        // Also check for temp messages by matching content + sender
+        // This handles the case where tempId doesn't round-trip through the server
+        const ownTempIndex = prev.findIndex(
+          m => m.id.startsWith('temp-') &&
+            m.sender_id === wsMessage.senderId &&
+            m.content === wsMessage.content
+        );
+        if (ownTempIndex !== -1) {
+          const newMessages = [...prev];
+          newMessages[ownTempIndex] = {
+            ...newMessages[ownTempIndex],
             id: wsMessage.id,
             content: wsMessage.content,
           };
@@ -496,8 +503,6 @@ export function ChatPage() {
 
   const loadMessages = async (chatId: string, chatType: string) => {
     setIsLoadingMessages(true);
-    // Clear processed message IDs when loading new conversation
-    processedMessageIds.current.clear();
     try {
       const endpoint = chatType === 'group'
         ? `/chat/groups/${chatId}/messages`
@@ -511,8 +516,6 @@ export function ChatPage() {
       }
       if (response.data) {
         setMessages(response.data);
-        // Add loaded message IDs to processed set to prevent duplicates from WebSocket
-        response.data.forEach((msg: Message) => processedMessageIds.current.add(msg.id));
       }
 
       // Load group members if it's a group chat

@@ -151,21 +151,31 @@ export function OrderDetailPage() {
 
   const isOwnOrder = user?.id === order?.user_id;
 
+  // Map config field keys to order/watch_details field keys where they differ
+  const FIELD_KEY_MAP: Record<string, string> = {
+    caliber_movement: 'caliber',
+    dial_color: 'dial',
+    dial_numbers: 'dial_numerals',
+  };
+
   // Get field value from order/watch_details dynamically
   const getFieldValue = (fieldKey: string): string | undefined => {
     if (!order) return undefined;
 
+    // Resolve the actual data key (config keys may differ from order model keys)
+    const dataKey = FIELD_KEY_MAP[fieldKey] || fieldKey;
+
     // Check watch_details first
-    if (order.watch_details && order.watch_details[fieldKey] !== undefined) {
-      const val = order.watch_details[fieldKey];
+    if (order.watch_details && order.watch_details[dataKey] !== undefined) {
+      const val = order.watch_details[dataKey];
       if (val === null || val === undefined || val === '') return undefined;
       return String(val);
     }
 
     // Check top-level order properties
     const orderAny = order as unknown as Record<string, unknown>;
-    if (orderAny[fieldKey] !== undefined) {
-      const val = orderAny[fieldKey];
+    if (orderAny[dataKey] !== undefined) {
+      const val = orderAny[dataKey];
       if (val === null || val === undefined || val === '') return undefined;
       return String(val);
     }
@@ -173,12 +183,22 @@ export function OrderDetailPage() {
     return undefined;
   };
 
+  // Fields handled manually in the basic section (to avoid duplicates)
+  const MANUALLY_HANDLED_FIELDS = new Set([
+    'brand', 'model', 'reference',
+    'condition', 'condition_description',
+    'box_papers', 'location', 'price', 'currency',
+  ]);
+
   // Render dynamic specs for a category
   const renderCategorySpecs = (category: FieldCategory) => {
     const fields = getFieldsByCategory(category);
     const specsWithValues: { label: string; value: string }[] = [];
 
     fields.forEach(field => {
+      // Skip fields that are manually handled (rendered with special formatting)
+      if (MANUALLY_HANDLED_FIELDS.has(field.key)) return;
+
       const value = getFieldValue(field.key);
       if (value) {
         specsWithValues.push({ label: field.name, value });
@@ -187,7 +207,7 @@ export function OrderDetailPage() {
 
     // Add special fields that aren't in listing fields config
     if (category === 'basic') {
-      // Add core order fields
+      // Add core order fields at the top
       if (order?.brand) specsWithValues.unshift({ label: t('settings.brand'), value: order.brand });
       if (order?.model) specsWithValues.splice(1, 0, { label: t('settings.model'), value: order.model });
       if (order?.reference) specsWithValues.splice(2, 0, { label: t('orderDetails.reference'), value: order.reference });
