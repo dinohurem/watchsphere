@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Upload, FileArchive, CheckCircle, XCircle, Clock, Search, Eye, X, RefreshCw } from 'lucide-react'
+import { Upload, FileArchive, CheckCircle, XCircle, Clock, Search, Eye, X, RefreshCw, Download, AlertTriangle } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface WhatsAppImport {
@@ -14,6 +14,10 @@ interface WhatsAppImport {
   created_at: string
   completed_at?: string
   error_message?: string
+  matched_orders: number
+  unmatched_rows: number
+  skipped_duplicates: number
+  has_unmatched_csv: boolean
 }
 
 interface ExtractedListing {
@@ -28,6 +32,11 @@ interface ExtractedListing {
   seller_name?: string
   raw_text: string
   message_timestamp?: string
+}
+
+interface ImportResult {
+  import: WhatsAppImport
+  isCSV: boolean
 }
 
 const STATUS_ICONS = {
@@ -53,6 +62,7 @@ export function AdminWhatsAppImport() {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState<ExtractedListing[]>([])
   const [searching, setSearching] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -74,13 +84,15 @@ export function AdminWhatsAppImport() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!file.name.endsWith('.zip')) {
-      alert('Please select a .zip file')
+    if (!file.name.endsWith('.zip') && !file.name.endsWith('.csv')) {
+      alert('Please select a .zip or .csv file')
       return
     }
 
+    const isCSV = file.name.endsWith('.csv')
     setUploading(true)
     setUploadProgress(0)
+    setImportResult(null)
 
     const formData = new FormData()
     formData.append('file', file)
@@ -101,7 +113,7 @@ export function AdminWhatsAppImport() {
 
       // Add the new import to the list
       setImports([response.data, ...imports])
-      alert('Import completed successfully!')
+      setImportResult({ import: response.data, isCSV })
     } catch (error: any) {
       console.error('Upload failed:', error)
       alert(error.response?.data?.detail || 'Upload failed')
@@ -111,6 +123,23 @@ export function AdminWhatsAppImport() {
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
+    }
+  }
+
+  const handleDownloadUnmatched = async (importId: string, filename: string) => {
+    try {
+      const response = await api.get(`/whatsapp/admin/whatsapp/imports/${importId}/unmatched-csv`, {
+        responseType: 'blob',
+      })
+      const blob = new Blob([response.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `unmatched-${filename}`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download unmatched CSV:', error)
     }
   }
 
@@ -158,6 +187,10 @@ export function AdminWhatsAppImport() {
     return new Date(dateStr).toLocaleString()
   }
 
+  const isCSVImport = (imp: WhatsAppImport) => {
+    return imp.filename.endsWith('.csv')
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -188,7 +221,7 @@ export function AdminWhatsAppImport() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".zip"
+              accept=".zip,.csv"
               onChange={handleFileSelect}
               className="hidden"
               disabled={uploading}
@@ -213,14 +246,82 @@ export function AdminWhatsAppImport() {
                   <Upload className="w-8 h-8 text-gray-400" />
                 </div>
                 <p className="text-gray-700 font-medium mb-1">
-                  Drag and drop a .zip file here, or click to browse
+                  Drag and drop a .zip or .csv file here, or click to browse
                 </p>
                 <p className="text-sm text-gray-500">
-                  Upload WhatsApp chat export containing _chat.txt
+                  Upload WhatsApp chat export (.zip) or CSV import file
                 </p>
               </>
             )}
           </div>
+
+          {/* Import Result Summary */}
+          {importResult && (
+            <div className="mt-4 border rounded-lg overflow-hidden">
+              {/* Success header */}
+              <div className={`px-4 py-3 flex items-center gap-2 ${
+                importResult.import.unmatched_rows > 0
+                  ? 'bg-amber-50 border-b border-amber-200'
+                  : 'bg-green-50 border-b border-green-200'
+              }`}>
+                {importResult.import.unmatched_rows > 0 ? (
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                ) : (
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                )}
+                <span className={`font-medium ${
+                  importResult.import.unmatched_rows > 0 ? 'text-amber-800' : 'text-green-800'
+                }`}>
+                  {importResult.import.unmatched_rows > 0
+                    ? 'Import completed with unmatched rows'
+                    : 'Import completed successfully'}
+                </span>
+              </div>
+
+              {/* Stats */}
+              <div className="p-4 space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="text-center p-2 bg-gray-50 rounded">
+                    <p className="text-lg font-bold text-gray-900">{importResult.import.total_messages}</p>
+                    <p className="text-xs text-gray-500">Total Rows</p>
+                  </div>
+                  <div className="text-center p-2 bg-green-50 rounded">
+                    <p className="text-lg font-bold text-green-700">{importResult.import.matched_orders}</p>
+                    <p className="text-xs text-gray-500">Orders Created</p>
+                  </div>
+                  <div className={`text-center p-2 rounded ${importResult.import.unmatched_rows > 0 ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                    <p className={`text-lg font-bold ${importResult.import.unmatched_rows > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
+                      {importResult.import.unmatched_rows}
+                    </p>
+                    <p className="text-xs text-gray-500">Unmatched</p>
+                  </div>
+                  <div className="text-center p-2 bg-gray-50 rounded">
+                    <p className="text-lg font-bold text-gray-500">{importResult.import.skipped_duplicates}</p>
+                    <p className="text-xs text-gray-500">Skipped Dupes</p>
+                  </div>
+                </div>
+
+                {importResult.import.unmatched_rows > 0 && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-800 mb-2">
+                      <strong>{importResult.import.unmatched_rows} row{importResult.import.unmatched_rows !== 1 ? 's' : ''}</strong> could not be matched to existing watches.
+                      Create the missing watches in the Market section, then reimport the unmatched CSV below.
+                      Duplicates will be automatically skipped.
+                    </p>
+                    {importResult.import.has_unmatched_csv && (
+                      <button
+                        onClick={() => handleDownloadUnmatched(importResult.import.id, importResult.import.filename)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded-lg hover:bg-amber-200 transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download Unmatched Rows CSV
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -301,6 +402,7 @@ export function AdminWhatsAppImport() {
         <div className="divide-y">
           {imports.map((imp) => {
             const StatusIcon = STATUS_ICONS[imp.status]
+            const csv = isCSVImport(imp)
             return (
               <div key={imp.id} className="p-4 hover:bg-gray-50">
                 <div className="flex items-center justify-between">
@@ -315,17 +417,48 @@ export function AdminWhatsAppImport() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-sm font-medium">
-                        {imp.total_messages} messages
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {imp.extracted_watches} watches extracted
-                      </p>
+                      {csv && imp.status === 'completed' ? (
+                        <>
+                          <p className="text-sm font-medium">
+                            {imp.matched_orders} orders created
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {imp.unmatched_rows > 0 && (
+                              <span className="text-amber-600">{imp.unmatched_rows} unmatched</span>
+                            )}
+                            {imp.unmatched_rows > 0 && imp.skipped_duplicates > 0 && ' · '}
+                            {imp.skipped_duplicates > 0 && (
+                              <span className="text-gray-400">{imp.skipped_duplicates} dupes skipped</span>
+                            )}
+                            {imp.unmatched_rows === 0 && imp.skipped_duplicates === 0 && (
+                              <span>{imp.total_messages} rows processed</span>
+                            )}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium">
+                            {imp.total_messages} messages
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {imp.extracted_watches} watches extracted
+                          </p>
+                        </>
+                      )}
                     </div>
                     <span className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${STATUS_COLORS[imp.status]}`}>
                       <StatusIcon className="w-3 h-3" />
                       {imp.status}
                     </span>
+                    {imp.has_unmatched_csv && (
+                      <button
+                        onClick={() => handleDownloadUnmatched(imp.id, imp.filename)}
+                        className="p-2 hover:bg-amber-100 rounded-lg text-amber-600"
+                        title="Download unmatched rows CSV"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    )}
                     {imp.status === 'completed' && imp.extracted_watches > 0 && (
                       <button
                         onClick={() => handleViewListings(imp)}

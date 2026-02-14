@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X, Download, PlusCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 import { ImageUpload } from '@/components/ui/ImageUpload'
@@ -9,6 +9,12 @@ interface Watch {
   brand: string
   model: string
   reference: string | null
+  collection: string | null
+  oem_references: string[]
+  dial: string | null
+  bracelet: string | null
+  ws_code: string | null
+  aliases: string[]
   price: number
   currency: string
   condition: string
@@ -17,7 +23,7 @@ interface Watch {
   description: string | null
   images: string[]
   cover_image: string | null
-  status: 'draft' | 'active' | 'sold' | 'reserved' | 'archived'
+  status: 'draft' | 'active'
   featured: boolean
   dealer_id: string
   dealer_name: string | null
@@ -39,7 +45,7 @@ interface Order {
   country_name?: string
   user_id: string
   user_name?: string
-  status: 'active' | 'completed' | 'cancelled' | 'expired'
+  status: 'draft' | 'active' | 'completed'
   has_box: boolean
   has_papers: boolean
   notes?: string
@@ -48,48 +54,60 @@ interface Order {
 }
 
 interface OrderFormData {
+  order_type: 'buy' | 'sell'
+  brand: string
+  model: string
+  reference: string
+  collection: string
+  oem_references: string[]
+  dial: string
+  bracelet: string
+  ws_code: string
+  aliases: string[]
+  description: string
   price: number
+  currency: string
+  date: string
   condition: 'Unworn' | 'Used'
-  has_box: boolean
-  has_papers: boolean
+  country_code: string
+  country_name: string
   notes: string
+  user_name: string
+  whatsapp_phone: string
   status: string
 }
 
 interface NewOrderFormData {
   order_type: 'buy' | 'sell'
+  brand: string
+  model: string
+  reference: string
+  collection: string
+  oem_references: string[]
+  dial: string
+  bracelet: string
+  ws_code: string
+  aliases: string[]
+  description: string
   price: number
   currency: string
+  date: string
   condition: 'Unworn' | 'Used'
   country_code: string
   country_name: string
-  has_box: boolean
-  has_papers: boolean
   notes: string
   user_name: string
+  whatsapp_phone: string
 }
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
   active: 'bg-green-100 text-green-800',
-  sold: 'bg-blue-100 text-blue-800',
-  reserved: 'bg-amber-100 text-amber-800',
-  archived: 'bg-red-100 text-red-800',
 }
 
 const orderStatusColors = {
   active: 'bg-green-100 text-green-800',
   completed: 'bg-blue-100 text-blue-800',
-  cancelled: 'bg-red-100 text-red-800',
-  expired: 'bg-gray-100 text-gray-800',
-}
-
-const conditionLabels: Record<string, string> = {
-  new: 'New',
-  excellent: 'Excellent',
-  good: 'Good',
-  fair: 'Fair',
-  nos: 'NOS',
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -112,11 +130,12 @@ interface WatchFormData {
   brand: string
   model: string
   reference: string
-  price: number
-  currency: string
-  condition: string
-  year: number | null
-  serial_number: string
+  collection: string
+  oem_references: string[]
+  dial: string
+  bracelet: string
+  ws_code: string
+  aliases: string[]
   description: string
   images: string[]
   cover_image: string
@@ -128,11 +147,12 @@ const emptyForm: WatchFormData = {
   brand: '',
   model: '',
   reference: '',
-  price: 0,
-  currency: 'USD',
-  condition: 'excellent',
-  year: null,
-  serial_number: '',
+  collection: '',
+  oem_references: [],
+  dial: '',
+  bracelet: '',
+  ws_code: '',
+  aliases: [],
   description: '',
   images: [],
   cover_image: '',
@@ -140,26 +160,64 @@ const emptyForm: WatchFormData = {
   featured: false,
 }
 
+const CURRENCIES = [
+  { code: 'EUR', label: 'EUR' },
+  { code: 'USD', label: 'USD' },
+  { code: 'GBP', label: 'GBP' },
+  { code: 'CHF', label: 'CHF' },
+  { code: 'HKD', label: 'HKD' },
+  { code: 'SGD', label: 'SGD' },
+  { code: 'JPY', label: 'JPY' },
+  { code: 'AED', label: 'AED' },
+  { code: 'CAD', label: 'CAD' },
+  { code: 'AUD', label: 'AUD' },
+]
+
 const emptyOrderForm: OrderFormData = {
+  order_type: 'sell',
+  brand: '',
+  model: '',
+  reference: '',
+  collection: '',
+  oem_references: [],
+  dial: '',
+  bracelet: '',
+  ws_code: '',
+  aliases: [],
+  description: '',
   price: 0,
+  currency: 'EUR',
+  date: '',
   condition: 'Unworn',
-  has_box: false,
-  has_papers: false,
+  country_code: 'CH',
+  country_name: 'Switzerland',
   notes: '',
+  user_name: '',
+  whatsapp_phone: '',
   status: 'active',
 }
 
 const emptyNewOrderForm: NewOrderFormData = {
   order_type: 'sell',
+  brand: '',
+  model: '',
+  reference: '',
+  collection: '',
+  oem_references: [],
+  dial: '',
+  bracelet: '',
+  ws_code: '',
+  aliases: [],
+  description: '',
   price: 0,
   currency: 'EUR',
+  date: '',
   condition: 'Unworn',
-  country_code: 'US',
-  country_name: 'United States',
-  has_box: false,
-  has_papers: false,
+  country_code: 'CH',
+  country_name: 'Switzerland',
   notes: '',
   user_name: '',
+  whatsapp_phone: '',
 }
 
 const COUNTRIES = [
@@ -205,6 +263,9 @@ export function AdminWatches() {
   const [showNewOrderModal, setShowNewOrderModal] = useState(false)
   const [newOrderFormData, setNewOrderFormData] = useState<NewOrderFormData>(emptyNewOrderForm)
   const [creatingOrder, setCreatingOrder] = useState(false)
+  const [oemRefInput, setOemRefInput] = useState('')
+  const [aliasInput, setAliasInput] = useState('')
+  const [watchDetailsOpen, setWatchDetailsOpen] = useState(false)
 
   useEffect(() => {
     fetchWatches()
@@ -246,11 +307,12 @@ export function AdminWatches() {
       brand: watch.brand,
       model: watch.model,
       reference: watch.reference || '',
-      price: watch.price,
-      currency: watch.currency,
-      condition: watch.condition,
-      year: watch.year,
-      serial_number: watch.serial_number || '',
+      collection: watch.collection || '',
+      oem_references: watch.oem_references || [],
+      dial: watch.dial || '',
+      bracelet: watch.bracelet || '',
+      ws_code: watch.ws_code || '',
+      aliases: watch.aliases || [],
       description: watch.description || '',
       images: watch.images,
       cover_image: watch.cover_image || '',
@@ -294,16 +356,118 @@ export function AdminWatches() {
     setActionMenuOpen(null)
   }
 
+  const handleAddOrderDirect = (watch: Watch) => {
+    if (!watch.reference) {
+      alert('This watch has no reference number. Order books are grouped by reference.')
+      return
+    }
+    setOrderBookWatch(watch)
+    setShowOrderBook(true)
+    setOrderTab('sell')
+    fetchOrders(watch.reference)
+    // Open the new order modal immediately
+    setNewOrderFormData({
+      ...emptyNewOrderForm,
+      order_type: 'sell',
+      brand: watch.brand || '',
+      model: watch.model || '',
+      reference: watch.reference || '',
+      collection: watch.collection || '',
+      oem_references: watch.oem_references || [],
+      dial: watch.dial || '',
+      bracelet: watch.bracelet || '',
+      ws_code: watch.ws_code || '',
+      aliases: watch.aliases || [],
+      description: watch.description || '',
+    })
+    setWatchDetailsOpen(false)
+    setShowNewOrderModal(true)
+    setActionMenuOpen(null)
+  }
+
+  const handleExportCsv = async (reference: string) => {
+    try {
+      const response = await api.get(`/orders/admin/export-csv?reference=${encodeURIComponent(reference)}`, {
+        responseType: 'blob',
+      })
+      const blob = new Blob([response.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `orders-${reference}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export CSV:', error)
+    }
+  }
+
+  const handleAddOemRef = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const val = oemRefInput.trim()
+      if (val && !formData.oem_references.includes(val)) {
+        setFormData({ ...formData, oem_references: [...formData.oem_references, val] })
+      }
+      setOemRefInput('')
+    }
+  }
+
+  const handleRemoveOemRef = (ref: string) => {
+    setFormData({ ...formData, oem_references: formData.oem_references.filter(r => r !== ref) })
+  }
+
+  const handleAddAlias = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const val = aliasInput.trim()
+      if (val && !formData.aliases.includes(val)) {
+        setFormData({ ...formData, aliases: [...formData.aliases, val] })
+      }
+      setAliasInput('')
+    }
+  }
+
+  const handleRemoveAlias = (alias: string) => {
+    setFormData({ ...formData, aliases: formData.aliases.filter(a => a !== alias) })
+  }
+
   const handleEditOrder = (order: Order) => {
     setEditingOrder(order)
+    // Format created_at to MM/YY for date field
+    let dateStr = ''
+    if (order.created_at) {
+      const d = new Date(order.created_at)
+      if (!isNaN(d.getTime())) {
+        const mm = (d.getMonth() + 1).toString().padStart(2, '0')
+        const yy = d.getFullYear().toString().slice(-2)
+        dateStr = `${mm}/${yy}`
+      }
+    }
     setOrderFormData({
+      order_type: order.order_type,
+      brand: order.brand || orderBookWatch?.brand || '',
+      model: order.model || orderBookWatch?.model || '',
+      reference: order.reference || orderBookWatch?.reference || '',
+      collection: (order as any).collection || orderBookWatch?.collection || '',
+      oem_references: (order as any).oem_references || orderBookWatch?.oem_references || [],
+      dial: (order as any).dial || orderBookWatch?.dial || '',
+      bracelet: (order as any).bracelet || orderBookWatch?.bracelet || '',
+      ws_code: (order as any).ws_code || orderBookWatch?.ws_code || '',
+      aliases: (order as any).aliases || orderBookWatch?.aliases || [],
+      description: (order as any).description || orderBookWatch?.description || '',
       price: order.price,
+      currency: order.currency || 'EUR',
+      date: dateStr,
       condition: order.condition,
-      has_box: order.has_box,
-      has_papers: order.has_papers,
+      country_code: order.country_code || 'CH',
+      country_name: order.country_name || 'Switzerland',
       notes: order.notes || '',
+      user_name: order.user_name || '',
+      whatsapp_phone: (order as any).whatsapp_phone || '',
       status: order.status,
     })
+    setWatchDetailsOpen(false)
     setShowOrderEditModal(true)
     setOrderMenuOpen(null)
   }
@@ -311,7 +475,7 @@ export function AdminWatches() {
   const handleCancelOrder = async (orderId: string) => {
     if (!confirm('Are you sure you want to cancel this order?')) return
     try {
-      await api.patch(`/orders/admin/${orderId}`, { status: 'cancelled' })
+      await api.patch(`/orders/admin/${orderId}`, { status: 'completed' })
       if (orderBookWatch?.reference) {
         fetchOrders(orderBookWatch.reference)
       }
@@ -334,19 +498,51 @@ export function AdminWatches() {
     setOrderMenuOpen(null)
   }
 
+  const parseDateToISO = (dateStr: string): string | undefined => {
+    if (!dateStr) return undefined
+    const trimmed = dateStr.trim()
+    // MM/YY format
+    if (/^\d{2}\/\d{2}$/.test(trimmed)) {
+      const [mm, yy] = trimmed.split('/')
+      return new Date(2000 + parseInt(yy), parseInt(mm) - 1, 1).toISOString()
+    }
+    // YYYY format
+    if (/^\d{4}$/.test(trimmed)) {
+      return new Date(parseInt(trimmed), 0, 1).toISOString()
+    }
+    return undefined
+  }
+
   const handleSubmitOrderEdit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingOrder) return
     setSavingOrder(true)
 
+    const createdAt = parseDateToISO(orderFormData.date)
+
     try {
       await api.patch(`/orders/admin/${editingOrder.id}`, {
+        order_type: orderFormData.order_type,
+        brand: orderFormData.brand,
+        model: orderFormData.model,
+        reference: orderFormData.reference,
+        collection: orderFormData.collection || undefined,
+        oem_references: orderFormData.oem_references,
+        dial: orderFormData.dial || undefined,
+        bracelet: orderFormData.bracelet || undefined,
+        ws_code: orderFormData.ws_code || undefined,
+        aliases: orderFormData.aliases,
+        description: orderFormData.description || undefined,
         price: orderFormData.price,
+        currency: orderFormData.currency,
         condition: orderFormData.condition,
-        has_box: orderFormData.has_box,
-        has_papers: orderFormData.has_papers,
+        country_code: orderFormData.country_code,
+        country_name: orderFormData.country_name,
         notes: orderFormData.notes || undefined,
+        user_name: orderFormData.user_name || undefined,
+        whatsapp_phone: orderFormData.whatsapp_phone || undefined,
         status: orderFormData.status,
+        ...(createdAt && { created_at: createdAt }),
       })
       setShowOrderEditModal(false)
       if (orderBookWatch?.reference) {
@@ -363,7 +559,18 @@ export function AdminWatches() {
     setNewOrderFormData({
       ...emptyNewOrderForm,
       order_type: orderTab,
+      brand: orderBookWatch?.brand || '',
+      model: orderBookWatch?.model || '',
+      reference: orderBookWatch?.reference || '',
+      collection: orderBookWatch?.collection || '',
+      oem_references: orderBookWatch?.oem_references || [],
+      dial: orderBookWatch?.dial || '',
+      bracelet: orderBookWatch?.bracelet || '',
+      ws_code: orderBookWatch?.ws_code || '',
+      aliases: orderBookWatch?.aliases || [],
+      description: orderBookWatch?.description || '',
     })
+    setWatchDetailsOpen(false)
     setShowNewOrderModal(true)
   }
 
@@ -372,22 +579,31 @@ export function AdminWatches() {
     if (!orderBookWatch?.reference) return
     setCreatingOrder(true)
 
+    const createdAt = parseDateToISO(newOrderFormData.date)
+
     try {
       await api.post('/orders/admin/create', {
         order_type: newOrderFormData.order_type,
-        brand: orderBookWatch.brand,
-        model: orderBookWatch.model,
-        reference: orderBookWatch.reference,
+        brand: newOrderFormData.brand,
+        model: newOrderFormData.model,
+        reference: newOrderFormData.reference || orderBookWatch.reference,
         watch_id: orderBookWatch.id,
         price: newOrderFormData.price,
         currency: newOrderFormData.currency,
         condition: newOrderFormData.condition,
         country_code: newOrderFormData.country_code,
         country_name: newOrderFormData.country_name,
-        has_box: newOrderFormData.has_box,
-        has_papers: newOrderFormData.has_papers,
         notes: newOrderFormData.notes || undefined,
         user_name: newOrderFormData.user_name || undefined,
+        whatsapp_phone: newOrderFormData.whatsapp_phone || undefined,
+        collection: newOrderFormData.collection || undefined,
+        oem_references: newOrderFormData.oem_references,
+        dial: newOrderFormData.dial || undefined,
+        bracelet: newOrderFormData.bracelet || undefined,
+        ws_code: newOrderFormData.ws_code || undefined,
+        aliases: newOrderFormData.aliases,
+        description: newOrderFormData.description || undefined,
+        ...(createdAt && { created_at: createdAt }),
       })
       setShowNewOrderModal(false)
       fetchOrders(orderBookWatch.reference)
@@ -405,9 +621,13 @@ export function AdminWatches() {
     try {
       const payload = {
         ...formData,
-        year: formData.year || undefined,
-        serial_number: formData.serial_number || undefined,
         reference: formData.reference || undefined,
+        collection: formData.collection || undefined,
+        oem_references: formData.oem_references.length > 0 ? formData.oem_references : undefined,
+        dial: formData.dial || undefined,
+        bracelet: formData.bracelet || undefined,
+        ws_code: formData.ws_code || undefined,
+        aliases: formData.aliases.length > 0 ? formData.aliases : undefined,
         description: formData.description || undefined,
         cover_image: formData.cover_image || undefined,
       }
@@ -483,9 +703,6 @@ export function AdminWatches() {
             <option value="all">All Status</option>
             <option value="draft">Draft</option>
             <option value="active">Active</option>
-            <option value="sold">Sold</option>
-            <option value="reserved">Reserved</option>
-            <option value="archived">Archived</option>
           </select>
         </div>
 
@@ -494,9 +711,9 @@ export function AdminWatches() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Watch</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condition</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image + Brand/Model</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WS-Code</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Views</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -520,18 +737,17 @@ export function AdminWatches() {
                           {watch.featured && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
                         </div>
                         <div className="text-sm text-gray-500">{watch.model}</div>
-                        {watch.reference && <div className="text-xs text-gray-400">Ref: {watch.reference}</div>}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-gray-900">
-                      {watch.currency} {watch.price.toLocaleString()}
+                    <span className="text-sm text-gray-600">
+                      {watch.reference || '-'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-600 capitalize">
-                      {conditionLabels[watch.condition] || watch.condition}
+                    <span className="text-sm text-gray-600">
+                      {watch.ws_code || '-'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -560,6 +776,12 @@ export function AdminWatches() {
                         icon={<BookOpen className="w-4 h-4" />}
                       >
                         View Order Book
+                      </ActionMenuItem>
+                      <ActionMenuItem
+                        onClick={() => handleAddOrderDirect(watch)}
+                        icon={<PlusCircle className="w-4 h-4" />}
+                      >
+                        Add Order
                       </ActionMenuItem>
                       <ActionMenuItem
                         onClick={() => handleToggleFeatured(watch)}
@@ -600,6 +822,7 @@ export function AdminWatches() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Row 1: Brand, Model */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Brand *</label>
@@ -625,7 +848,18 @@ export function AdminWatches() {
                 </div>
               </div>
 
+              {/* Row 2: Collection, Reference */}
               <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Collection</label>
+                  <input
+                    type="text"
+                    value={formData.collection}
+                    onChange={(e) => setFormData({ ...formData, collection: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="e.g., Submariner Date"
+                  />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
                   <input
@@ -636,96 +870,99 @@ export function AdminWatches() {
                     placeholder="e.g., 126610LN"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
-                  <input
-                    type="text"
-                    value={formData.serial_number}
-                    onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  />
-                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                  <select
-                    value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                    <option value="HKD">HKD</option>
-                    <option value="CHF">CHF</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                  <input
-                    type="number"
-                    min="1900"
-                    max={new Date().getFullYear()}
-                    value={formData.year || ''}
-                    onChange={(e) => setFormData({ ...formData, year: e.target.value ? parseInt(e.target.value) : null })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  />
-                </div>
-              </div>
-
+              {/* Row 3: OEM-References (tag input), WS-Code */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Condition *</label>
-                  <select
-                    required
-                    value={formData.condition}
-                    onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">OEM-References</label>
+                  <div className="flex flex-wrap gap-1.5 mb-1.5">
+                    {formData.oem_references.map((ref) => (
+                      <span key={ref} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-full">
+                        {ref}
+                        <button type="button" onClick={() => handleRemoveOemRef(ref)} className="hover:text-red-500">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={oemRefInput}
+                    onChange={(e) => setOemRefInput(e.target.value)}
+                    onKeyDown={handleAddOemRef}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="new">New</option>
-                    <option value="nos">New Old Stock (NOS)</option>
-                    <option value="excellent">Excellent</option>
-                    <option value="good">Good</option>
-                    <option value="fair">Fair</option>
-                  </select>
+                    placeholder="Type and press Enter to add"
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">WS-Code</label>
+                  <input
+                    type="text"
+                    value={formData.ws_code}
+                    onChange={(e) => setFormData({ ...formData, ws_code: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="active">Active</option>
-                    <option value="sold">Sold</option>
-                    <option value="reserved">Reserved</option>
-                    <option value="archived">Archived</option>
-                  </select>
+                    placeholder="e.g., WS-ROL-SUB-001"
+                  />
                 </div>
               </div>
 
+              {/* Row 4: Dial, Bracelet */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dial</label>
+                  <input
+                    type="text"
+                    value={formData.dial}
+                    onChange={(e) => setFormData({ ...formData, dial: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="e.g., Black"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bracelet</label>
+                  <input
+                    type="text"
+                    value={formData.bracelet}
+                    onChange={(e) => setFormData({ ...formData, bracelet: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="e.g., Oyster"
+                  />
+                </div>
+              </div>
+
+              {/* Row 5: Aliases (tag input) — full width */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Aliases</label>
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {formData.aliases.map((alias) => (
+                    <span key={alias} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-full">
+                      {alias}
+                      <button type="button" onClick={() => handleRemoveAlias(alias)} className="hover:text-red-500">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={aliasInput}
+                  onChange={(e) => setAliasInput(e.target.value)}
+                  onKeyDown={handleAddAlias}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  placeholder="Type and press Enter to add"
+                />
+              </div>
+
+              {/* Row 6: Photo */}
               <ImageUpload
                 value={formData.cover_image || undefined}
                 onChange={(url) => setFormData({ ...formData, cover_image: url || '' })}
                 uploadEndpoint="/upload/market"
-                label="Cover Image"
+                label="Photo"
               />
 
+              {/* Row 7: Description */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea
@@ -737,17 +974,33 @@ export function AdminWatches() {
                 />
               </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="featured"
-                  checked={formData.featured}
-                  onChange={(e) => setFormData({ ...formData, featured: e.target.checked })}
-                  className="h-4 w-4 text-primary border-gray-300 rounded"
-                />
-                <label htmlFor="featured" className="ml-2 text-sm text-gray-700">
-                  Featured watch (shown prominently in marketplace)
-                </label>
+              {/* Row 8: Status, Featured */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="active">Active</option>
+                  </select>
+                </div>
+                <div className="flex items-end pb-2">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="featured"
+                      checked={formData.featured}
+                      onChange={(e) => setFormData({ ...formData, featured: e.target.checked })}
+                      className="h-4 w-4 text-primary border-gray-300 rounded"
+                    />
+                    <label htmlFor="featured" className="ml-2 text-sm text-gray-700">
+                      Featured watch (shown prominently in marketplace)
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
@@ -782,12 +1035,21 @@ export function AdminWatches() {
                   {orderBookWatch.brand} {orderBookWatch.model} - Ref: {orderBookWatch.reference}
                 </p>
               </div>
-              <button
-                onClick={() => setShowOrderBook(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => orderBookWatch.reference && handleExportCsv(orderBookWatch.reference)}
+                  className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Export CSV
+                </button>
+                <button
+                  onClick={() => setShowOrderBook(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Tabs */}
@@ -801,7 +1063,7 @@ export function AdminWatches() {
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  Sell Orders ({orders.filter(o => o.order_type === 'sell').length})
+                  WTS ({orders.filter(o => o.order_type === 'sell').length})
                 </button>
                 <button
                   onClick={() => setOrderTab('buy')}
@@ -811,7 +1073,7 @@ export function AdminWatches() {
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  Buy Orders ({orders.filter(o => o.order_type === 'buy').length})
+                  WTB ({orders.filter(o => o.order_type === 'buy').length})
                 </button>
               </div>
               <button
@@ -841,7 +1103,6 @@ export function AdminWatches() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Condition</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Country</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box/Papers</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -870,19 +1131,6 @@ export function AdminWatches() {
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
                             <span className="text-sm text-gray-600">{order.country_code}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-1">
-                            {order.has_box && (
-                              <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Box</span>
-                            )}
-                            {order.has_papers && (
-                              <span className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">Papers</span>
-                            )}
-                            {!order.has_box && !order.has_papers && (
-                              <span className="text-xs text-gray-400">-</span>
-                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -942,39 +1190,308 @@ export function AdminWatches() {
       {/* Order Edit Modal */}
       {showOrderEditModal && editingOrder && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b">
               <h2 className="text-xl font-semibold text-gray-900">Edit Order</h2>
-              <p className="text-sm text-gray-500">{editingOrder.brand} {editingOrder.model}</p>
+              <p className="text-sm text-gray-500">
+                {editingOrder.brand} {editingOrder.model} - Ref: {editingOrder.reference}
+              </p>
             </div>
 
             <form onSubmit={handleSubmitOrderEdit} className="p-6 space-y-4">
+              {/* Order Type */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  value={orderFormData.price}
-                  onChange={(e) => setOrderFormData({ ...orderFormData, price: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Order Type *</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="edit_order_type"
+                      value="sell"
+                      checked={orderFormData.order_type === 'sell'}
+                      onChange={() => setOrderFormData({ ...orderFormData, order_type: 'sell' })}
+                      className="h-4 w-4 text-red-600 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">WTS</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="edit_order_type"
+                      value="buy"
+                      checked={orderFormData.order_type === 'buy'}
+                      onChange={() => setOrderFormData({ ...orderFormData, order_type: 'buy' })}
+                      className="h-4 w-4 text-green-600 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">WTB</span>
+                  </label>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
-                  <select
-                    value={orderFormData.condition}
-                    onChange={(e) => setOrderFormData({ ...orderFormData, condition: e.target.value as 'Unworn' | 'Used' })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="Unworn">Unworn</option>
-                    <option value="Used">Used</option>
-                  </select>
+              {/* Watch Catalog Fields — Collapsible */}
+              <div className="border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => setWatchDetailsOpen(!watchDetailsOpen)}
+                  className="flex items-center justify-between w-full text-left"
+                >
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Watch Details</h3>
+                  {watchDetailsOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                </button>
+
+                {watchDetailsOpen && (
+                  <div className="mt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Brand *</label>
+                        <input
+                          type="text"
+                          required
+                          value={orderFormData.brand}
+                          onChange={(e) => setOrderFormData({ ...orderFormData, brand: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Rolex"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
+                        <input
+                          type="text"
+                          required
+                          value={orderFormData.model}
+                          onChange={(e) => setOrderFormData({ ...orderFormData, model: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Submariner Date"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Collection</label>
+                        <input
+                          type="text"
+                          value={orderFormData.collection}
+                          onChange={(e) => setOrderFormData({ ...orderFormData, collection: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Professional"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Reference *</label>
+                        <input
+                          type="text"
+                          required
+                          value={orderFormData.reference}
+                          onChange={(e) => setOrderFormData({ ...orderFormData, reference: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., 126610LN"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">OEM-References</label>
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {orderFormData.oem_references.map((ref, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs">
+                              {ref}
+                              <button type="button" onClick={() => setOrderFormData({ ...orderFormData, oem_references: orderFormData.oem_references.filter((_, j) => j !== i) })} className="text-gray-400 hover:text-gray-600">&times;</button>
+                            </span>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="Type + Enter"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              const val = (e.target as HTMLInputElement).value.trim()
+                              if (val) {
+                                setOrderFormData({ ...orderFormData, oem_references: [...orderFormData.oem_references, val] });
+                                (e.target as HTMLInputElement).value = ''
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">WS-Code</label>
+                        <input
+                          type="text"
+                          value={orderFormData.ws_code}
+                          onChange={(e) => setOrderFormData({ ...orderFormData, ws_code: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="Internal code"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Dial</label>
+                        <input
+                          type="text"
+                          value={orderFormData.dial}
+                          onChange={(e) => setOrderFormData({ ...orderFormData, dial: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Black"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Bracelet</label>
+                        <input
+                          type="text"
+                          value={orderFormData.bracelet}
+                          onChange={(e) => setOrderFormData({ ...orderFormData, bracelet: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Oyster"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Aliases</label>
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {orderFormData.aliases.map((alias, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs">
+                            {alias}
+                            <button type="button" onClick={() => setOrderFormData({ ...orderFormData, aliases: orderFormData.aliases.filter((_, j) => j !== i) })} className="text-gray-400 hover:text-gray-600">&times;</button>
+                          </span>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                        placeholder="Type + Enter"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            const val = (e.target as HTMLInputElement).value.trim()
+                            if (val) {
+                              setOrderFormData({ ...orderFormData, aliases: [...orderFormData.aliases, val] });
+                              (e.target as HTMLInputElement).value = ''
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <textarea
+                        rows={2}
+                        value={orderFormData.description}
+                        onChange={(e) => setOrderFormData({ ...orderFormData, description: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                        placeholder="Watch description..."
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Order Details */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Order Details</h3>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      value={orderFormData.price}
+                      onChange={(e) => setOrderFormData({ ...orderFormData, price: parseFloat(e.target.value) })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="e.g., 12500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Currency *</label>
+                    <select
+                      required
+                      value={orderFormData.currency}
+                      onChange={(e) => setOrderFormData({ ...orderFormData, currency: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    >
+                      {CURRENCIES.map(c => (
+                        <option key={c.code} value={c.code}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input
+                      type="text"
+                      value={orderFormData.date}
+                      onChange={(e) => setOrderFormData({ ...orderFormData, date: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="MM/YY or YYYY"
+                    />
+                  </div>
                 </div>
-                <div>
+
+                <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Condition *</label>
+                    <select
+                      value={orderFormData.condition}
+                      onChange={(e) => setOrderFormData({ ...orderFormData, condition: e.target.value as 'Unworn' | 'Used' })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    >
+                      <option value="Unworn">Unworn</option>
+                      <option value="Used">Used</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <input
+                      type="text"
+                      value={orderFormData.country_code}
+                      onChange={(e) => {
+                        const code = e.target.value.toUpperCase()
+                        const country = COUNTRIES.find(c => c.code === code)
+                        setOrderFormData({
+                          ...orderFormData,
+                          country_code: code,
+                          country_name: country?.name || code,
+                        })
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="e.g., US, DE, CH"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">User Name</label>
+                    <input
+                      type="text"
+                      value={orderFormData.user_name}
+                      onChange={(e) => setOrderFormData({ ...orderFormData, user_name: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="Leave empty for admin"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact (WhatsApp Phone)</label>
+                    <input
+                      type="text"
+                      value={orderFormData.whatsapp_phone}
+                      onChange={(e) => setOrderFormData({ ...orderFormData, whatsapp_phone: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="e.g., +41791234567"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
                     value={orderFormData.status}
@@ -983,44 +1500,19 @@ export function AdminWatches() {
                   >
                     <option value="active">Active</option>
                     <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                    <option value="expired">Expired</option>
                   </select>
                 </div>
-              </div>
 
-              <div className="flex gap-4">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="has_box"
-                    checked={orderFormData.has_box}
-                    onChange={(e) => setOrderFormData({ ...orderFormData, has_box: e.target.checked })}
-                    className="h-4 w-4 text-primary border-gray-300 rounded"
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    rows={2}
+                    value={orderFormData.notes}
+                    onChange={(e) => setOrderFormData({ ...orderFormData, notes: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="Optional notes..."
                   />
-                  <label htmlFor="has_box" className="ml-2 text-sm text-gray-700">Has Box</label>
                 </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="has_papers"
-                    checked={orderFormData.has_papers}
-                    onChange={(e) => setOrderFormData({ ...orderFormData, has_papers: e.target.checked })}
-                    className="h-4 w-4 text-primary border-gray-300 rounded"
-                  />
-                  <label htmlFor="has_papers" className="ml-2 text-sm text-gray-700">Has Papers</label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  rows={2}
-                  value={orderFormData.notes}
-                  onChange={(e) => setOrderFormData({ ...orderFormData, notes: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="Optional notes..."
-                />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
@@ -1056,6 +1548,7 @@ export function AdminWatches() {
             </div>
 
             <form onSubmit={handleSubmitNewOrder} className="p-6 space-y-4">
+              {/* Order Type */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Order Type *</label>
                 <div className="flex gap-4">
@@ -1068,7 +1561,7 @@ export function AdminWatches() {
                       onChange={() => setNewOrderFormData({ ...newOrderFormData, order_type: 'sell' })}
                       className="h-4 w-4 text-red-600 border-gray-300"
                     />
-                    <span className="ml-2 text-sm text-gray-700">Sell Order</span>
+                    <span className="ml-2 text-sm text-gray-700">WTS</span>
                   </label>
                   <label className="flex items-center">
                     <input
@@ -1079,119 +1572,284 @@ export function AdminWatches() {
                       onChange={() => setNewOrderFormData({ ...newOrderFormData, order_type: 'buy' })}
                       className="h-4 w-4 text-green-600 border-gray-300"
                     />
-                    <span className="ml-2 text-sm text-gray-700">Buy Order</span>
+                    <span className="ml-2 text-sm text-gray-700">WTB</span>
                   </label>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={newOrderFormData.price || ''}
-                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, price: parseFloat(e.target.value) || 0 })}
+              {/* Watch Catalog Fields — Collapsible */}
+              <div className="border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => setWatchDetailsOpen(!watchDetailsOpen)}
+                  className="flex items-center justify-between w-full text-left"
+                >
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Watch Details</h3>
+                  {watchDetailsOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                </button>
+
+                {watchDetailsOpen && (
+                  <div className="mt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Brand *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newOrderFormData.brand}
+                          onChange={(e) => setNewOrderFormData({ ...newOrderFormData, brand: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Rolex"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newOrderFormData.model}
+                          onChange={(e) => setNewOrderFormData({ ...newOrderFormData, model: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Submariner Date"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Collection</label>
+                        <input
+                          type="text"
+                          value={newOrderFormData.collection}
+                          onChange={(e) => setNewOrderFormData({ ...newOrderFormData, collection: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Professional"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Reference *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newOrderFormData.reference}
+                          onChange={(e) => setNewOrderFormData({ ...newOrderFormData, reference: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., 126610LN"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">OEM-References</label>
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {newOrderFormData.oem_references.map((ref, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs">
+                              {ref}
+                              <button type="button" onClick={() => setNewOrderFormData({ ...newOrderFormData, oem_references: newOrderFormData.oem_references.filter((_, j) => j !== i) })} className="text-gray-400 hover:text-gray-600">&times;</button>
+                            </span>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="Type + Enter"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              const val = (e.target as HTMLInputElement).value.trim()
+                              if (val) {
+                                setNewOrderFormData({ ...newOrderFormData, oem_references: [...newOrderFormData.oem_references, val] });
+                                (e.target as HTMLInputElement).value = ''
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">WS-Code</label>
+                        <input
+                          type="text"
+                          value={newOrderFormData.ws_code}
+                          onChange={(e) => setNewOrderFormData({ ...newOrderFormData, ws_code: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="Internal code"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Dial</label>
+                        <input
+                          type="text"
+                          value={newOrderFormData.dial}
+                          onChange={(e) => setNewOrderFormData({ ...newOrderFormData, dial: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Black"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Bracelet</label>
+                        <input
+                          type="text"
+                          value={newOrderFormData.bracelet}
+                          onChange={(e) => setNewOrderFormData({ ...newOrderFormData, bracelet: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          placeholder="e.g., Oyster"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Aliases</label>
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {newOrderFormData.aliases.map((alias, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs">
+                            {alias}
+                            <button type="button" onClick={() => setNewOrderFormData({ ...newOrderFormData, aliases: newOrderFormData.aliases.filter((_, j) => j !== i) })} className="text-gray-400 hover:text-gray-600">&times;</button>
+                          </span>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                        placeholder="Type + Enter"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            const val = (e.target as HTMLInputElement).value.trim()
+                            if (val) {
+                              setNewOrderFormData({ ...newOrderFormData, aliases: [...newOrderFormData.aliases, val] });
+                              (e.target as HTMLInputElement).value = ''
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <textarea
+                        rows={2}
+                        value={newOrderFormData.description}
+                        onChange={(e) => setNewOrderFormData({ ...newOrderFormData, description: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                        placeholder="Watch description..."
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Order Details */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Order Details</h3>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      value={newOrderFormData.price || ''}
+                      onChange={(e) => setNewOrderFormData({ ...newOrderFormData, price: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="e.g., 12500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Currency *</label>
+                    <select
+                      required
+                      value={newOrderFormData.currency}
+                      onChange={(e) => setNewOrderFormData({ ...newOrderFormData, currency: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    >
+                      {CURRENCIES.map(c => (
+                        <option key={c.code} value={c.code}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input
+                      type="text"
+                      value={newOrderFormData.date}
+                      onChange={(e) => setNewOrderFormData({ ...newOrderFormData, date: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="MM/YY or YYYY"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Condition *</label>
+                    <select
+                      value={newOrderFormData.condition}
+                      onChange={(e) => setNewOrderFormData({ ...newOrderFormData, condition: e.target.value as 'Unworn' | 'Used' })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    >
+                      <option value="Unworn">Unworn</option>
+                      <option value="Used">Used</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <input
+                      type="text"
+                      value={newOrderFormData.country_code}
+                      onChange={(e) => {
+                        const code = e.target.value.toUpperCase()
+                        const country = COUNTRIES.find(c => c.code === code)
+                        setNewOrderFormData({
+                          ...newOrderFormData,
+                          country_code: code,
+                          country_name: country?.name || code,
+                        })
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="e.g., US, DE, CH"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">User Name</label>
+                    <input
+                      type="text"
+                      value={newOrderFormData.user_name}
+                      onChange={(e) => setNewOrderFormData({ ...newOrderFormData, user_name: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="Leave empty for admin"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact (WhatsApp Phone)</label>
+                    <input
+                      type="text"
+                      value={newOrderFormData.whatsapp_phone}
+                      onChange={(e) => setNewOrderFormData({ ...newOrderFormData, whatsapp_phone: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      placeholder="e.g., +41791234567"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    rows={2}
+                    value={newOrderFormData.notes}
+                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, notes: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="e.g., 12500"
+                    placeholder="Optional notes..."
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                  <select
-                    value={newOrderFormData.currency}
-                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, currency: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="EUR">EUR</option>
-                    <option value="USD">USD</option>
-                    <option value="GBP">GBP</option>
-                    <option value="CHF">CHF</option>
-                    <option value="HKD">HKD</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Condition *</label>
-                  <select
-                    value={newOrderFormData.condition}
-                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, condition: e.target.value as 'Unworn' | 'Used' })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="Unworn">Unworn</option>
-                    <option value="Used">Used</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
-                  <select
-                    value={newOrderFormData.country_code}
-                    onChange={(e) => {
-                      const country = COUNTRIES.find(c => c.code === e.target.value)
-                      setNewOrderFormData({
-                        ...newOrderFormData,
-                        country_code: e.target.value,
-                        country_name: country?.name || e.target.value,
-                      })
-                    }}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
-                    {COUNTRIES.map(country => (
-                      <option key={country.code} value={country.code}>
-                        {country.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">User Name (optional)</label>
-                <input
-                  type="text"
-                  value={newOrderFormData.user_name}
-                  onChange={(e) => setNewOrderFormData({ ...newOrderFormData, user_name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="Leave empty to use admin account"
-                />
-              </div>
-
-              <div className="flex gap-4">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="new_has_box"
-                    checked={newOrderFormData.has_box}
-                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, has_box: e.target.checked })}
-                    className="h-4 w-4 text-primary border-gray-300 rounded"
-                  />
-                  <label htmlFor="new_has_box" className="ml-2 text-sm text-gray-700">Has Box</label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="new_has_papers"
-                    checked={newOrderFormData.has_papers}
-                    onChange={(e) => setNewOrderFormData({ ...newOrderFormData, has_papers: e.target.checked })}
-                    className="h-4 w-4 text-primary border-gray-300 rounded"
-                  />
-                  <label htmlFor="new_has_papers" className="ml-2 text-sm text-gray-700">Has Papers</label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  rows={2}
-                  value={newOrderFormData.notes}
-                  onChange={(e) => setNewOrderFormData({ ...newOrderFormData, notes: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="Optional notes..."
-                />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">

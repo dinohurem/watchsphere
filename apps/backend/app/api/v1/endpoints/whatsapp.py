@@ -5,10 +5,13 @@ from datetime import datetime
 from beanie import PydanticObjectId
 import re
 import zipfile
+import csv
 import io
 
 from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
+from app.models.watch import Watch
+from app.models.order import Order, OrderType, OrderCondition, OrderStatus
 from app.models.whatsapp_import import (
     WhatsAppImport, WhatsAppMessage, ExtractedWatchListing, ImportStatus, OfferType
 )
@@ -28,6 +31,11 @@ class ImportResponse(BaseModel):
     imported_by_name: str
     created_at: datetime
     completed_at: Optional[datetime] = None
+    # CSV import stats
+    matched_orders: int = 0
+    unmatched_rows: int = 0
+    skipped_duplicates: int = 0
+    has_unmatched_csv: bool = False
 
 
 class ExtractedListingResponse(BaseModel):
@@ -203,17 +211,331 @@ def extract_watch_data(content: str) -> Optional[dict]:
     }
 
 
+COUNTRY_NAMES = {
+    "US": "United States", "UK": "United Kingdom", "DE": "Germany", "IT": "Italy",
+    "FR": "France", "CH": "Switzerland", "AE": "United Arab Emirates", "HK": "Hong Kong",
+    "SG": "Singapore", "JP": "Japan", "AU": "Australia", "CA": "Canada",
+    "NL": "Netherlands", "ES": "Spain", "AT": "Austria", "BE": "Belgium",
+    "PT": "Portugal", "SE": "Sweden", "DK": "Denmark", "NO": "Norway",
+    "PL": "Poland", "CZ": "Czech Republic", "TW": "Taiwan", "KR": "South Korea",
+    "TH": "Thailand", "MY": "Malaysia", "PH": "Philippines", "IN": "India",
+    "BR": "Brazil", "MX": "Mexico", "SA": "Saudi Arabia", "QA": "Qatar",
+    "KW": "Kuwait", "BH": "Bahrain", "OM": "Oman",
+}
+
+
+def parse_csv_price(price_str: str) -> tuple[Optional[float], str]:
+    """Parse price string like '62.000 HKD' → (62000.0, 'HKD')"""
+    if not price_str or not price_str.strip():
+        return None, "EUR"
+    price_str = price_str.strip()
+    # Extract currency (last word if it's letters)
+    parts = price_str.split()
+    currency = "EUR"
+    numeric_part = price_str
+    if len(parts) >= 2 and parts[-1].isalpha():
+        currency = parts[-1].upper()
+        numeric_part = " ".join(parts[:-1])
+    # Handle European number format: 62.000 = 62000, 62.500,50 etc.
+    # If there's a dot followed by exactly 3 digits and no comma → thousands separator
+    numeric_part = numeric_part.strip()
+    if re.match(r'^[\d.]+$', numeric_part):
+        # All dots are thousands separators (e.g., 62.000 or 1.234.567)
+        numeric_part = numeric_part.replace('.', '')
+    elif ',' in numeric_part:
+        # Comma is decimal separator
+        numeric_part = numeric_part.replace('.', '').replace(',', '.')
+    try:
+        return float(numeric_part), currency
+    except ValueError:
+        return None, currency
+
+
+def extract_reference_from_ws_code(ws_code: str) -> str:
+    """Extract the core reference from a WS-Code like '126334g Jub' → '126334g'
+    or '124200 Pistachio' → '124200' or '228235 Slate Ombre' → '228235'"""
+    if not ws_code:
+        return ""
+    # The reference is typically the first token (alphanumeric, may include letters like 'g')
+    # Pattern: digits followed by optional letters, then space + description
+    match = re.match(r'^(\d+[A-Za-z]*(?:[-/]\d*[A-Za-z]*)*)', ws_code.strip())
+    if match:
+        return match.group(1).upper()
+    return ws_code.strip().split()[0].upper() if ws_code.strip() else ""
+
+
+async def process_csv_import(
+    csv_content: str,
+    import_record: WhatsAppImport,
+    admin: User,
+) -> dict:
+    """Process CSV import. Returns stats dict."""
+    # Remove BOM if present
+    if csv_content.startswith('\ufeff'):
+        csv_content = csv_content[1:]
+
+    reader = csv.DictReader(io.StringIO(csv_content))
+    # Preserve headers for unmatched CSV output
+    fieldnames = reader.fieldnames or []
+
+    # Build a cache of watches by reference and ws_code for matching
+    all_watches = await Watch.find(Watch.status == "active").to_list()
+    watch_by_ref: dict[str, Watch] = {}
+    watch_by_ws_code: dict[str, Watch] = {}
+    for w in all_watches:
+        if w.reference:
+            watch_by_ref[w.reference.upper()] = w
+        if w.ws_code:
+            watch_by_ws_code[w.ws_code.strip().upper()] = w
+            # Also index the extracted reference from the watch ws_code
+            ws_ref = extract_reference_from_ws_code(w.ws_code)
+            if ws_ref and ws_ref not in watch_by_ref:
+                watch_by_ref[ws_ref] = w
+        for alias in (w.aliases or []):
+            watch_by_ref[alias.upper()] = w
+
+    # Build a set of existing orders for deduplication
+    # Key: (reference_upper, phone, price, order_type)
+    existing_orders = await Order.find(Order.status == OrderStatus.ACTIVE).to_list()
+    existing_order_keys: set[tuple] = set()
+    for o in existing_orders:
+        key = (
+            o.reference.upper() if o.reference else "",
+            o.whatsapp_phone or o.user_name or "",
+            o.price,
+            o.order_type.value,
+        )
+        existing_order_keys.add(key)
+
+    import_id = str(import_record.id)
+    admin_id = str(admin.id)
+    listing_docs = []
+    order_docs = []
+    unmatched_raw_rows: list[dict] = []
+    total_rows = 0
+    matched_count = 0
+    unmatched_count = 0
+    skipped_dupes = 0
+    group_name = None
+
+    for row in reader:
+        total_rows += 1
+        # Map German headers (handle potential variations)
+        offer_type_str = (row.get("Nachrichten Art") or row.get("nachrichten art") or "").strip().upper()
+        brand = (row.get("Marke") or row.get("marke") or "").strip()
+        ws_code = (row.get("WS-Code") or row.get("ws-code") or row.get("WS-code") or "").strip()
+        month_year = (row.get("Monat/Jahr") or row.get("monat/jahr") or "").strip()
+        location = (row.get("Standort") or row.get("standort") or "").strip().upper()
+        condition_str = (row.get("Zustand") or row.get("zustand") or "").strip()
+        remarks = (row.get("Remarks") or row.get("remarks") or "").strip()
+        price_str = (row.get("Preis") or row.get("preis") or "").strip()
+        phone = (row.get("Nummer") or row.get("nummer") or "").strip()
+        group = (row.get("Gruppe") or row.get("gruppe") or "").strip()
+        posted_at_str = (row.get("Nachricht gepostet am") or row.get("nachricht gepostet am") or "").strip()
+
+        if not group_name and group:
+            group_name = group
+
+        # Parse offer type
+        offer_type = OfferType.UNKNOWN
+        if offer_type_str in ("WTS",):
+            offer_type = OfferType.WTS
+        elif offer_type_str in ("WTB",):
+            offer_type = OfferType.WTB
+
+        # Parse price
+        price, currency = parse_csv_price(price_str)
+
+        # Parse month/year (e.g., "09/25", "02/26", "2024")
+        watch_year = None
+        if month_year:
+            if '/' in month_year:
+                try:
+                    yr_part = month_year.split('/')[1]
+                    watch_year = 2000 + int(yr_part) if len(yr_part) == 2 else int(yr_part)
+                except (ValueError, IndexError):
+                    pass
+            else:
+                try:
+                    watch_year = int(month_year)
+                except ValueError:
+                    pass
+
+        # Parse posted timestamp
+        message_timestamp = None
+        if posted_at_str:
+            try:
+                message_timestamp = datetime.strptime(posted_at_str, "%d.%m.%y %H:%M:%S")
+            except ValueError:
+                try:
+                    message_timestamp = datetime.strptime(posted_at_str, "%d.%m.%Y %H:%M:%S")
+                except ValueError:
+                    pass
+
+        # Extract reference from WS-Code
+        reference = extract_reference_from_ws_code(ws_code)
+
+        # Try to match against existing watches (multiple strategies)
+        matched_watch = None
+        # 1. Exact reference match (from extracted numeric prefix)
+        if reference:
+            matched_watch = watch_by_ref.get(reference)
+        # 2. Full WS-Code match (e.g., "124200 Pistachio" == watch.ws_code)
+        if not matched_watch and ws_code:
+            matched_watch = watch_by_ws_code.get(ws_code.strip().upper())
+        # 3. Partial prefix match on reference keys
+        if not matched_watch and reference:
+            for ref_key, w in watch_by_ref.items():
+                if ref_key.startswith(reference):
+                    matched_watch = w
+                    break
+
+        # Resolve country
+        country_code = location if location else None
+        country_name = COUNTRY_NAMES.get(country_code, country_code) if country_code else None
+
+        # Resolve condition
+        condition = None
+        if condition_str.lower() in ("unworn", "new", "brand new", "nos"):
+            condition = "Unworn"
+        elif condition_str.lower() in ("used", "good", "excellent", "mint"):
+            condition = "Used"
+
+        # Build raw text for social search
+        raw_text = f"{offer_type_str} {brand} {ws_code} {price_str}".strip()
+        if remarks:
+            raw_text += f" - {remarks}"
+
+        # Use matched watch data if available
+        watch_brand = matched_watch.brand if matched_watch else (brand or "Unknown")
+        watch_model = matched_watch.model if matched_watch else ws_code
+        watch_reference = matched_watch.reference if matched_watch else reference
+
+        # Track unmatched rows
+        if not matched_watch:
+            unmatched_count += 1
+            unmatched_raw_rows.append(row)
+
+        # 1. Create ExtractedWatchListing (social search) — always
+        listing_docs.append(ExtractedWatchListing(
+            import_id=import_id,
+            brand=watch_brand,
+            reference=watch_reference,
+            model=watch_model,
+            price=price,
+            currency=currency,
+            condition=condition,
+            seller_name=phone,
+            seller_phone=phone,
+            raw_text=raw_text,
+            offer_type=offer_type,
+            country_code=country_code,
+            country_name=country_name,
+            message_timestamp=message_timestamp,
+        ))
+
+        # 2. Create Order (order book) — only for matched watches with enough data
+        if matched_watch and price and watch_reference and offer_type != OfferType.UNKNOWN:
+            order_type = OrderType.SELL if offer_type == OfferType.WTS else OrderType.BUY
+            order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
+
+            # Deduplication check
+            dedup_key = (
+                watch_reference.upper(),
+                phone,
+                price,
+                order_type.value,
+            )
+            if dedup_key in existing_order_keys:
+                skipped_dupes += 1
+                continue
+
+            # Mark as existing so future rows in this import also dedupe
+            existing_order_keys.add(dedup_key)
+            matched_count += 1
+
+            order_docs.append(Order(
+                order_type=order_type,
+                brand=watch_brand,
+                model=watch_model,
+                reference=watch_reference,
+                watch_id=str(matched_watch.id),
+                price=price,
+                currency=currency,
+                condition=order_condition,
+                country_code=country_code or "CH",
+                country_name=country_name,
+                user_id=admin_id,
+                user_name=phone,
+                whatsapp_phone=phone,
+                ws_code=matched_watch.ws_code or (ws_code or None),
+                aliases=matched_watch.aliases or [],
+                year=watch_year,
+                notes=f"Imported from {group or 'CSV'}. {remarks}".strip() if remarks else f"Imported from {group or 'CSV'}",
+                description=ws_code if ws_code != watch_reference else None,
+                status=OrderStatus.ACTIVE,
+                created_at=message_timestamp or datetime.utcnow(),
+            ))
+
+    # Bulk insert
+    BATCH_SIZE = 500
+    if listing_docs:
+        for i in range(0, len(listing_docs), BATCH_SIZE):
+            await ExtractedWatchListing.insert_many(listing_docs[i:i + BATCH_SIZE])
+
+    if order_docs:
+        for i in range(0, len(order_docs), BATCH_SIZE):
+            await Order.insert_many(order_docs[i:i + BATCH_SIZE])
+
+        # Update order counts on matched watches
+        ref_counts: dict[str, int] = {}
+        for o in order_docs:
+            ref_counts[o.reference] = ref_counts.get(o.reference, 0) + 1
+        for ref, count in ref_counts.items():
+            await Watch.find(Watch.reference == ref).update_many({"$inc": {"order_count": count}})
+
+    # Build unmatched CSV content for download
+    unmatched_csv_str = None
+    if unmatched_raw_rows and fieldnames:
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for urow in unmatched_raw_rows:
+            writer.writerow(urow)
+        unmatched_csv_str = output.getvalue()
+
+    # Update import record
+    import_record.group_name = group_name or "CSV Import"
+    import_record.status = ImportStatus.COMPLETED
+    import_record.total_messages = total_rows
+    import_record.extracted_watches = len(listing_docs)
+    import_record.matched_orders = matched_count
+    import_record.unmatched_rows = unmatched_count
+    import_record.skipped_duplicates = skipped_dupes
+    import_record.unmatched_csv = unmatched_csv_str
+    import_record.completed_at = datetime.utcnow()
+    await import_record.save()
+
+    return {
+        "total_rows": total_rows,
+        "extracted_listings": len(listing_docs),
+        "matched_orders": matched_count,
+        "unmatched_rows": unmatched_count,
+        "skipped_duplicates": skipped_dupes,
+    }
+
+
 @router.post("/admin/whatsapp/import", response_model=ImportResponse)
 async def admin_import_whatsapp(
     file: UploadFile = File(...),
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Import WhatsApp chat from .zip file (Admin only)"""
+    """Import WhatsApp chat from .zip or .csv file (Admin only)"""
 
-    if not file.filename.endswith('.zip'):
+    if not file.filename.endswith('.zip') and not file.filename.endswith('.csv'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please upload a .zip file"
+            detail="Please upload a .zip or .csv file"
         )
 
     # Create import record
@@ -227,8 +549,30 @@ async def admin_import_whatsapp(
     await import_record.insert()
 
     try:
-        # Read zip file
         content = await file.read()
+
+        # CSV branch
+        if file.filename.endswith('.csv'):
+            csv_content = content.decode('utf-8-sig')
+            await process_csv_import(csv_content, import_record, current_admin)
+            return {
+                "id": str(import_record.id),
+                "filename": import_record.filename,
+                "group_name": import_record.group_name,
+                "status": import_record.status,
+                "total_messages": import_record.total_messages,
+                "extracted_watches": import_record.extracted_watches,
+                "imported_by": import_record.imported_by,
+                "imported_by_name": import_record.imported_by_name,
+                "created_at": import_record.created_at,
+                "completed_at": import_record.completed_at,
+                "matched_orders": import_record.matched_orders,
+                "unmatched_rows": import_record.unmatched_rows,
+                "skipped_duplicates": import_record.skipped_duplicates,
+                "has_unmatched_csv": import_record.unmatched_csv is not None,
+            }
+
+        # ZIP branch
         zip_buffer = io.BytesIO(content)
 
         with zipfile.ZipFile(zip_buffer, 'r') as zip_ref:
@@ -327,6 +671,10 @@ async def admin_import_whatsapp(
             "imported_by_name": import_record.imported_by_name,
             "created_at": import_record.created_at,
             "completed_at": import_record.completed_at,
+            "matched_orders": 0,
+            "unmatched_rows": 0,
+            "skipped_duplicates": 0,
+            "has_unmatched_csv": False,
         }
 
     except Exception as e:
@@ -361,6 +709,10 @@ async def admin_list_imports(
             "imported_by_name": imp.imported_by_name,
             "created_at": imp.created_at,
             "completed_at": imp.completed_at,
+            "matched_orders": imp.matched_orders,
+            "unmatched_rows": imp.unmatched_rows,
+            "skipped_duplicates": imp.skipped_duplicates,
+            "has_unmatched_csv": imp.unmatched_csv is not None,
         }
         for imp in imports
     ]
@@ -393,7 +745,41 @@ async def admin_get_import(
         "created_at": imp.created_at,
         "completed_at": imp.completed_at,
         "error_message": imp.error_message,
+        "matched_orders": imp.matched_orders,
+        "unmatched_rows": imp.unmatched_rows,
+        "skipped_duplicates": imp.skipped_duplicates,
+        "has_unmatched_csv": imp.unmatched_csv is not None,
     }
+
+
+@router.get("/admin/whatsapp/imports/{import_id}/unmatched-csv")
+async def admin_download_unmatched_csv(
+    import_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Download CSV of unmatched rows from an import (Admin only)"""
+    from fastapi.responses import Response
+
+    imp = await WhatsAppImport.get(PydanticObjectId(import_id))
+    if not imp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Import not found"
+        )
+
+    if not imp.unmatched_csv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No unmatched rows for this import"
+        )
+
+    return Response(
+        content=imp.unmatched_csv,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="unmatched-{imp.filename}"'
+        },
+    )
 
 
 @router.get("/admin/whatsapp/imports/{import_id}/listings", response_model=List[ExtractedListingResponse])

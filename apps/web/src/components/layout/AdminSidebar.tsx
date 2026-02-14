@@ -19,7 +19,8 @@ import {
   ExternalLink,
   List,
   SlidersHorizontal,
-  Headphones
+  Headphones,
+  Settings
 } from 'lucide-react'
 
 interface NavItem {
@@ -75,6 +76,12 @@ const adminNavigationConfig: NavSection[] = [
     titleKey: 'sidebar.supportSection',
     items: [
       { nameKey: 'sidebar.support', to: '/admin/support', icon: Headphones },
+    ]
+  },
+  {
+    titleKey: 'sidebar.settingsSection',
+    items: [
+      { nameKey: 'sidebar.settings', to: '/admin/settings', icon: Settings },
     ]
   },
 ]

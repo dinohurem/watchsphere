@@ -7,6 +7,7 @@ import { AdminRoute } from './features/auth/components/AdminRoute'
 import { PageLoader } from './components/ui/PageLoader'
 import { useAuthStore } from '@watchsphere/shared/stores'
 import { api } from './services/api'
+import { V2Provider } from './contexts/V2Context'
 
 // --- Lazy-loaded page components ---
 
@@ -132,6 +133,7 @@ function App() {
     return null
   }
   return (
+    <V2Provider>
     <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* Public routes */}
@@ -210,6 +212,7 @@ function App() {
         </Route>
       </Routes>
     </Suspense>
+    </V2Provider>
   )
 }
 

@@ -14,18 +14,45 @@ export function ActionMenu({ children, isOpen, onToggle, onClose }: ActionMenuPr
   const menuRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ top: 0, left: 0 })
 
-  // Calculate position when menu opens
+  // Calculate position when menu opens — measure actual menu then adjust for viewport
   useEffect(() => {
-    if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect()
-      const menuWidth = 192 // w-48 = 12rem = 192px
+    if (!isOpen || !buttonRef.current) return
 
-      // Position the menu below the button, aligned to the right
-      setPosition({
-        top: rect.bottom + 8,
-        left: rect.right - menuWidth,
-      })
+    const updatePosition = () => {
+      const rect = buttonRef.current!.getBoundingClientRect()
+      const menuWidth = 192 // w-48 = 12rem = 192px
+      const menuHeight = menuRef.current?.offsetHeight ?? 200
+      const gap = 8
+      const viewportPadding = 8
+
+      // Vertical: prefer below, flip above if not enough space
+      let top: number
+      const spaceBelow = window.innerHeight - rect.bottom - gap
+      const spaceAbove = rect.top - gap
+      if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
+        top = rect.bottom + gap
+      } else {
+        top = rect.top - gap - menuHeight
+      }
+
+      // Horizontal: prefer right-aligned to button, shift right if clipped on left
+      let left = rect.right - menuWidth
+      if (left < viewportPadding) {
+        left = viewportPadding
+      }
+      if (left + menuWidth > window.innerWidth - viewportPadding) {
+        left = window.innerWidth - viewportPadding - menuWidth
+      }
+
+      // Clamp vertical within viewport
+      top = Math.max(viewportPadding, Math.min(top, window.innerHeight - viewportPadding - menuHeight))
+
+      setPosition({ top, left })
     }
+
+    // Run once immediately, then again after render so menuRef.offsetHeight is measured
+    updatePosition()
+    requestAnimationFrame(updatePosition)
   }, [isOpen])
 
   // Close menu when clicking outside

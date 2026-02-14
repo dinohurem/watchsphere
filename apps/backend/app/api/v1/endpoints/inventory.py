@@ -107,16 +107,11 @@ async def get_inventory_stats(
         Watch.dealer_id == str(current_user.id),
         Watch.status == WatchStatus.DRAFT
     ).count()
-    sold = await Watch.find(
-        Watch.dealer_id == str(current_user.id),
-        Watch.status == WatchStatus.SOLD
-    ).count()
 
     return {
         "total": total,
         "active": active,
         "draft": draft,
-        "sold": sold,
     }
 
 
@@ -351,7 +346,7 @@ async def archive_inventory_item(
             detail="Access denied"
         )
 
-    watch.status = WatchStatus.ARCHIVED
+    watch.status = WatchStatus.DRAFT
     watch.updated_at = datetime.utcnow()
     await watch.save()
 

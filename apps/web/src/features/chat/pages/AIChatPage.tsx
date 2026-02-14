@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { Plus, Image, ArrowUp } from 'lucide-react'
+import { Plus, Image, ArrowUp, Trash2 } from 'lucide-react'
 import { api } from '@/services/api'
 import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay'
 
@@ -38,6 +38,8 @@ export function AIChatPage() {
   const [inputText, setInputText] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingConversations, setIsLoadingConversations] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -187,6 +189,24 @@ export function AIChatPage() {
     setActiveConversation(convId)
   }
 
+  const handleDeleteConversation = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      await api.delete(`/ai-chats/${deleteTarget.id}`)
+      setConversations((prev) => prev.filter((c) => c.id !== deleteTarget.id))
+      if (activeConversation === deleteTarget.id) {
+        setActiveConversation(null)
+        setMessages([])
+      }
+    } catch (error) {
+      console.error('Failed to delete AI chat:', error)
+    } finally {
+      setIsDeleting(false)
+      setDeleteTarget(null)
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -314,15 +334,29 @@ export function AIChatPage() {
                 <p className="text-center text-gray-500 py-8 text-sm">No conversations yet</p>
               ) : (
                 conversations.map((conv) => (
-                  <button
+                  <div
                     key={conv.id}
-                    onClick={() => handleSelectConversation(conv.id)}
-                    className={`w-full text-left px-4 py-3 rounded-2xl mb-1 transition-colors ${
+                    className={`group relative flex items-center rounded-2xl mb-1 transition-colors ${
                       activeConversation === conv.id ? 'bg-gray-100' : 'hover:bg-gray-50'
                     }`}
                   >
-                    <p className="text-[15px] text-[#212121] truncate tracking-[0.075px]">{conv.preview}</p>
-                  </button>
+                    <button
+                      onClick={() => handleSelectConversation(conv.id)}
+                      className="w-full text-left px-4 py-3"
+                    >
+                      <p className="text-[15px] text-[#212121] truncate tracking-[0.075px] pr-6">{conv.preview}</p>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget(conv)
+                      }}
+                      className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-gray-200"
+                      title="Delete conversation"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    </button>
+                  </div>
                 ))
               )}
             </div>
@@ -419,6 +453,38 @@ export function AIChatPage() {
         </div>
       </div>
     </div>
+
+    {/* Delete Confirmation Modal */}
+    {deleteTarget && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4">
+          <div className="flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4">
+              <Trash2 className="w-5 h-5 text-red-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-[#212121] mb-2">Delete Conversation</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Are you sure you want to delete this conversation? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-[#212121] hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConversation}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     </SubscriptionOverlay>
   )
 }

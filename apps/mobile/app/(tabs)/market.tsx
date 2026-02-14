@@ -1,4 +1,4 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
@@ -7,11 +7,12 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useFilters } from '@/contexts/FilterContext';
 import { registerGuideMeasurement, useGuide } from '@/contexts/GuideContext';
+import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_MARKET_WATCHES, GUIDE_MOCK_TRENDING_WATCHES } from '@/data/guideMockData';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
-import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, Filter, User } from '@/components/icons';
+import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, Filter, User, Grid } from '@/components/icons';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import Svg, { Path, Line } from 'react-native-svg';
 
@@ -20,8 +21,8 @@ const CATEGORY_KEYS = [
   { value: 'Hot', key: 'market.hot' },
   { value: 'Gainers', key: 'market.gainers' },
   { value: 'Losers', key: 'market.losers' },
-  { value: 'New', key: 'market.new' },
   { value: 'Trending', key: 'market.trending' },
+  { value: 'New', key: 'market.new' },
 ];
 
 interface WatchMarketData {
@@ -84,11 +85,28 @@ function MiniSparkline({ data, width = 40, height = 16, isPositive = true }: { d
   );
 }
 
+// List view icon for view mode toggle
+function ListIcon({ size = 24, color = '#000' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M8 6H21" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M8 12H21" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M8 18H21" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M3 6H3.01" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M3 12H3.01" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M3 18H3.01" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+const GRID_CARD_WIDTH = (SCREEN_WIDTH - 32 - 12) / 2;
+
 export default function MarketScreen() {
   const { colors, fonts } = useTheme();
   const { t } = useTranslation();
   const { filters, getTotalFilterCount, hasActiveFilters } = useFilters();
   const { isGuideActive } = useGuide();
+  const { v2Enabled } = useV2();
   const filtersButtonRef = useRef<View>(null);
   const firstWatchRowRef = useRef<View>(null);
   const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
@@ -102,6 +120,7 @@ export default function MarketScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState(searchParam || '');
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Update search query when param changes
   useEffect(() => {
@@ -587,7 +606,6 @@ export default function MarketScreen() {
       flexDirection: 'row',
       paddingHorizontal: wp(16),
       gap: wp(8),
-      marginBottom: hp(16),
     },
     categoryTab: {
       paddingHorizontal: wp(20),
@@ -606,6 +624,19 @@ export default function MarketScreen() {
     categoryTabTextActive: {
       fontFamily: fonts.medium,
       color: '#FFFFFF',
+    },
+    // Category tabs row with view mode toggle
+    categoryTabsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingRight: wp(16),
+      marginBottom: hp(16),
+    },
+    viewModeToggle: {
+      width: sp(40),
+      height: sp(40),
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     // Watch list
     watchList: {
@@ -629,6 +660,13 @@ export default function MarketScreen() {
       color: '#212121',
       letterSpacing: 0.075,
       lineHeight: fp(20),
+    },
+    watchModel: {
+      fontSize: fp(14),
+      fontFamily: fonts.regular,
+      color: '#212121',
+      letterSpacing: 0.075,
+      lineHeight: fp(18),
     },
     watchReference: {
       fontSize: fp(15),
@@ -657,6 +695,10 @@ export default function MarketScreen() {
       color: '#212121',
       letterSpacing: 0.075,
       lineHeight: fp(20),
+    },
+    watchPriceFrom: {
+      fontSize: fp(12),
+      fontFamily: fonts.regular,
     },
     watchChange: {
       flexDirection: 'row',
@@ -698,6 +740,86 @@ export default function MarketScreen() {
       fontFamily: fonts.medium,
       color: 'rgba(33, 33, 33, 0.5)',
       textAlign: 'center',
+    },
+    // Grid view styles
+    gridContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: wp(12),
+    },
+    gridCard: {
+      width: GRID_CARD_WIDTH,
+      backgroundColor: '#FFFFFF',
+      borderRadius: sp(16),
+      borderWidth: 1,
+      borderColor: 'rgba(0, 0, 0, 0.05)',
+      overflow: 'hidden',
+    },
+    gridImageContainer: {
+      width: '100%',
+      height: hp(140),
+      backgroundColor: '#F6F7F9',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    gridCardContent: {
+      padding: wp(12),
+      paddingTop: hp(10),
+      gap: hp(4),
+    },
+    gridBrand: {
+      fontSize: fp(13),
+      fontFamily: fonts.semiBold,
+      color: '#212121',
+      lineHeight: fp(17),
+    },
+    gridModel: {
+      fontSize: fp(13),
+      fontFamily: fonts.regular,
+      color: '#212121',
+      lineHeight: fp(17),
+    },
+    gridPriceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: hp(4),
+    },
+    gridPrice: {
+      fontSize: fp(15),
+      fontFamily: fonts.semiBold,
+      color: '#212121',
+      lineHeight: fp(20),
+    },
+    gridPriceFrom: {
+      fontSize: fp(12),
+      fontFamily: fonts.regular,
+    },
+    gridReference: {
+      fontSize: fp(13),
+      fontFamily: fonts.medium,
+      color: '#212121',
+      opacity: 0.5,
+      lineHeight: fp(17),
+    },
+    gridChangeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: wp(3),
+      paddingHorizontal: wp(6),
+      paddingVertical: hp(2),
+      borderRadius: sp(99),
+    },
+    gridChangeBadgeUp: {
+      backgroundColor: 'rgba(74, 160, 120, 0.05)',
+    },
+    gridChangeBadgeDown: {
+      backgroundColor: 'rgba(201, 57, 39, 0.05)',
+    },
+    gridChangeText: {
+      fontSize: fp(11),
+      fontFamily: fonts.semiBold,
+      lineHeight: fp(14),
     },
     scrollView: {
       flex: 1,
@@ -768,7 +890,7 @@ export default function MarketScreen() {
         }
       >
         {/* Trending / Featured Watches Section */}
-        <View style={styles.trendingSection}>
+        {v2Enabled && <View style={styles.trendingSection}>
           <Text style={styles.sectionTitle}>
             {trendingWatches.length > 0 ? t('market.trendingWatches') : t('market.featuredWatches')}
           </Text>
@@ -790,7 +912,7 @@ export default function MarketScreen() {
                   >
                     <View style={styles.trendingCardContent}>
                       <View style={styles.trendingTopRow}>
-                        <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand} {watch.model}</Text>
+                        <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand}</Text>
                         <Text style={styles.trendingPrice}>{formatPrice(watch.price)}</Text>
                       </View>
                       <View style={styles.trendingBottomRow}>
@@ -832,7 +954,7 @@ export default function MarketScreen() {
                   >
                     <View style={styles.trendingCardContent}>
                       <View style={styles.trendingTopRow}>
-                        <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand} {watch.model}</Text>
+                        <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand}</Text>
                         <Text style={styles.trendingPrice}>{formatPrice(watch.price)}</Text>
                       </View>
                       <View style={styles.trendingBottomRow}>
@@ -862,10 +984,10 @@ export default function MarketScreen() {
               <Text style={styles.emptyText}>{t('market.noWatchesAvailable')}</Text>
             </View>
           )}
-        </View>
+        </View>}
 
         {/* Watches Section Header */}
-        <View style={styles.watchesHeader}>
+        <View style={[styles.watchesHeader, !v2Enabled && { paddingTop: hp(16) }]}>
           <Text style={styles.watchesTitle}>{t('market.watches')}</Text>
           <TouchableOpacity
             ref={filtersButtonRef}
@@ -890,89 +1012,158 @@ export default function MarketScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Category Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryTabs}
-        >
-          {CATEGORY_KEYS.map((category) => (
-            <TouchableOpacity
-              key={category.value}
-              style={[
-                styles.categoryTab,
-                selectedCategory === category.value && styles.categoryTabActive
-              ]}
-              onPress={() => setSelectedCategory(category.value)}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.categoryTabText,
-                selectedCategory === category.value && styles.categoryTabTextActive
-              ]}>
-                {t(category.key)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* Category Tabs with View Mode Toggle */}
+        <View style={styles.categoryTabsRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryTabs}
+            style={{ flex: 1 }}
+          >
+            {CATEGORY_KEYS.map((category) => (
+              <TouchableOpacity
+                key={category.value}
+                style={[
+                  styles.categoryTab,
+                  selectedCategory === category.value && styles.categoryTabActive
+                ]}
+                onPress={() => setSelectedCategory(category.value)}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.categoryTabText,
+                  selectedCategory === category.value && styles.categoryTabTextActive
+                ]}>
+                  {t(category.key)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <TouchableOpacity
+            style={styles.viewModeToggle}
+            onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+            activeOpacity={0.7}
+          >
+            {viewMode === 'grid' ? (
+              <ListIcon size={20} color="#212121" />
+            ) : (
+              <Grid size={20} color="#212121" />
+            )}
+          </TouchableOpacity>
+        </View>
 
-        {/* Watch List */}
+        {/* Watch List / Grid */}
         <View style={styles.watchList}>
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#212121" />
             </View>
           ) : watches.length > 0 ? (
-            watches.map((watch, index) => {
-              const isPositive = watch.priceChange >= 0;
-              return (
-                <TouchableOpacity
-                  key={`${watch.id}-list-${index}`}
-                  ref={index === 0 ? firstWatchRowRef : undefined}
-                  style={styles.watchItem}
-                  onPress={() => handleWatchPress(watch)}
-                  activeOpacity={0.7}
-                  onLayout={index === 0 ? () => {
-                    firstWatchRowRef.current?.measureInWindow((x, y, width, height) => {
-                      if (width > 0 && height > 0) {
-                        registerGuideMeasurement('watch-details', { x, y, width, height, borderRadius: 8 });
-                      }
-                    });
-                  } : undefined}
-                >
-                  <View style={styles.watchInfo}>
-                    <Text style={styles.watchName} numberOfLines={1}>{watch.brand} {watch.model}</Text>
-                    <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
-                  </View>
-                  <View style={styles.watchPriceSection}>
-                    <View style={styles.chartContainer}>
-                      <MiniSparkline
-                        data={watch.priceHistory}
-                        width={40}
-                        height={16}
-                        isPositive={isPositive}
-                      />
+            viewMode === 'list' ? (
+              watches.map((watch, index) => {
+                const isPositive = watch.priceChange >= 0;
+                return (
+                  <TouchableOpacity
+                    key={`${watch.id}-list-${index}`}
+                    ref={index === 0 ? firstWatchRowRef : undefined}
+                    style={styles.watchItem}
+                    onPress={() => handleWatchPress(watch)}
+                    activeOpacity={0.7}
+                    onLayout={index === 0 ? () => {
+                      firstWatchRowRef.current?.measureInWindow((x, y, width, height) => {
+                        if (width > 0 && height > 0) {
+                          registerGuideMeasurement('watch-details', { x, y, width, height, borderRadius: 8 });
+                        }
+                      });
+                    } : undefined}
+                  >
+                    <View style={styles.watchInfo}>
+                      <Text style={styles.watchName} numberOfLines={1}>{watch.brand}</Text>
+                      <Text style={styles.watchModel} numberOfLines={1}>{watch.model}</Text>
+                      <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
                     </View>
-                    <View style={styles.watchPriceInfo}>
-                      <Text style={styles.watchPrice}>{formatPrice(watch.price)}</Text>
-                      <View style={styles.watchChange}>
-                        {isPositive ? (
-                          <TriangleUp size={12} color="#4AA078" />
-                        ) : (
-                          <TriangleDown size={12} color="#D90429" />
-                        )}
-                        <Text style={[
-                          styles.watchChangeText,
-                          isPositive ? styles.watchChangePositive : styles.watchChangeNegative
-                        ]}>
-                          {Math.abs(watch.priceChange).toFixed(1)}%
-                        </Text>
+                    <View style={styles.watchPriceSection}>
+                      <View style={styles.chartContainer}>
+                        <MiniSparkline
+                          data={watch.priceHistory}
+                          width={40}
+                          height={16}
+                          isPositive={isPositive}
+                        />
+                      </View>
+                      <View style={styles.watchPriceInfo}>
+                        <Text style={styles.watchPrice}><Text style={styles.watchPriceFrom}>from </Text>{formatPrice(watch.price)}</Text>
+                        <View style={styles.watchChange}>
+                          {isPositive ? (
+                            <TriangleUp size={12} color="#4AA078" />
+                          ) : (
+                            <TriangleDown size={12} color="#D90429" />
+                          )}
+                          <Text style={[
+                            styles.watchChangeText,
+                            isPositive ? styles.watchChangePositive : styles.watchChangeNegative
+                          ]}>
+                            {Math.abs(watch.priceChange).toFixed(1)}%
+                          </Text>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <View style={styles.gridContainer}>
+                {watches.map((watch, index) => {
+                  const isPositive = watch.priceChange >= 0;
+                  return (
+                    <TouchableOpacity
+                      key={`${watch.id}-grid-${index}`}
+                      ref={index === 0 ? firstWatchRowRef : undefined}
+                      style={styles.gridCard}
+                      onPress={() => handleWatchPress(watch)}
+                      activeOpacity={0.7}
+                      onLayout={index === 0 ? () => {
+                        firstWatchRowRef.current?.measureInWindow((x, y, width, height) => {
+                          if (width > 0 && height > 0) {
+                            registerGuideMeasurement('watch-details', { x, y, width, height, borderRadius: 8 });
+                          }
+                        });
+                      } : undefined}
+                    >
+                      <View style={styles.gridImageContainer}>
+                        <LogoIcon size={sp(40)} color="rgba(33, 33, 33, 0.12)" />
+                      </View>
+                      <View style={styles.gridCardContent}>
+                        <Text style={styles.gridBrand} numberOfLines={1}>{watch.brand}</Text>
+                        <Text style={styles.gridModel} numberOfLines={1}>{watch.model}</Text>
+                        <Text style={styles.gridReference} numberOfLines={1}>{watch.reference}</Text>
+                        <View style={styles.gridPriceRow}>
+                          <Text style={styles.gridPrice}><Text style={styles.gridPriceFrom}>from </Text>{formatPrice(watch.price)}</Text>
+                          {watch.priceChange !== 0 && (
+                            <View style={[
+                              styles.gridChangeBadge,
+                              isPositive ? styles.gridChangeBadgeUp : styles.gridChangeBadgeDown,
+                            ]}>
+                              {isPositive ? (
+                                <TriangleUp size={10} color="#4AA078" />
+                              ) : (
+                                <TriangleDown size={10} color="#D90429" />
+                              )}
+                              <Text style={[
+                                styles.gridChangeText,
+                                isPositive ? styles.watchChangePositive : styles.watchChangeNegative
+                              ]}>
+                                {Math.abs(watch.priceChange).toFixed(1)}%
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>{t('market.noWatchesFound')}</Text>

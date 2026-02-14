@@ -10,6 +10,7 @@ import { useFilters, OrderBookFilterState } from '@/contexts/FilterContext';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
 import { useGuide } from '@/contexts/GuideContext';
+import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCH_DETAILS, GUIDE_MOCK_BUY_ORDERS, GUIDE_MOCK_SELL_ORDERS } from '@/data/guideMockData';
 
 // Country flag component using flag CDN
@@ -459,13 +460,14 @@ export default function WatchDetailsScreen() {
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   const { isAuthenticated, user } = useAuthStore();
   const { isGuideActive } = useGuide();
+  const { v2Enabled } = useV2();
   const { getOrderBookFilterCount, hasActiveOrderBookFilters } = useFilters();
   const [watch, setWatch] = useState<WatchDetails>(DEFAULT_WATCH);
   const [loading, setLoading] = useState(true);
   const [buyOrders, setBuyOrders] = useState<OrderBookItem[]>([]);
   const [sellOrders, setSellOrders] = useState<OrderBookItem[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('1m');
-  const [selectedTab, setSelectedTab] = useState<'Buy' | 'Sell'>('Buy');
+  const [selectedTab, setSelectedTab] = useState<'Buy' | 'Sell'>('Sell');
 
   // Make an Offer modal state
   const [showMakeOfferModal, setShowMakeOfferModal] = useState(false);
@@ -535,9 +537,11 @@ export default function WatchDetailsScreen() {
     });
   }, [watch]);
 
+  // Real price history from sell orders (fetched from backend)
+  const [fullPriceHistory, setFullPriceHistory] = useState<{ date: string; price: number }[]>([]);
+
   // Slice price history based on selected time period
-  const getDataPointsForPeriod = useCallback((period: string): number => {
-    // Assuming price history has data points representing daily values
+  const getDaysForPeriod = useCallback((period: string): number => {
     switch (period) {
       case '1d': return 1;
       case '7d': return 7;
@@ -549,18 +553,35 @@ export default function WatchDetailsScreen() {
   }, []);
 
   const filteredPriceHistory = useMemo(() => {
-    if (!watch.priceHistory || watch.priceHistory.length === 0) {
-      return [];
+    if (fullPriceHistory.length === 0) return [];
+    const days = getDaysForPeriod(selectedPeriod);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    const filtered = fullPriceHistory.filter(p => p.date >= cutoffStr);
+    // Return just the prices for the chart component
+    return filtered.map(p => p.price);
+  }, [fullPriceHistory, selectedPeriod, getDaysForPeriod]);
+
+  const loadPriceHistory = async () => {
+    if (isGuideActive) return;
+    const watchReference = reference || id;
+    if (!watchReference) return;
+    try {
+      const encodedRef = encodeURIComponent(watchReference);
+      const response = await api.get(`/orders/price-history/${encodedRef}?days=365`);
+      if (response.data?.points) {
+        setFullPriceHistory(response.data.points);
+      }
+    } catch (error) {
+      console.log('Could not load price history');
     }
-    const dataPoints = getDataPointsForPeriod(selectedPeriod);
-    // Take the last N data points based on period, or all if fewer
-    const sliceCount = Math.min(dataPoints, watch.priceHistory.length);
-    return watch.priceHistory.slice(-sliceCount);
-  }, [watch.priceHistory, selectedPeriod, getDataPointsForPeriod]);
+  };
 
   useEffect(() => {
     loadWatchDetails();
     loadOrderBook();
+    loadPriceHistory();
   }, [id, reference]);
 
   // Reload data when screen comes into focus (e.g., after creating an order)
@@ -568,6 +589,7 @@ export default function WatchDetailsScreen() {
     useCallback(() => {
       loadWatchDetails();
       loadOrderBook();
+      loadPriceHistory();
     }, [id, reference])
   );
 
@@ -729,14 +751,19 @@ export default function WatchDetailsScreen() {
       if (response.data) {
         const { buy_orders, sell_orders } = response.data;
 
-        // Helper to format date safely - show MM/DD format (e.g., "12/27")
+        // Helper to format date safely - show MM/YY format (e.g., "02/26")
         const formatOrderDate = (dateStr: string | undefined) => {
           if (!dateStr) return '-';
+          // Try parsing MM.DD.YY format from backend
+          const parts = dateStr.split('.');
+          if (parts.length === 3) {
+            return `${parts[0]}/${parts[2]}`;
+          }
           const date = new Date(dateStr);
           if (isNaN(date.getTime())) return '-';
           const month = (date.getMonth() + 1).toString().padStart(2, '0');
-          const day = date.getDate().toString().padStart(2, '0');
-          return `${month}/${day}`;
+          const year = date.getFullYear().toString().slice(-2);
+          return `${month}/${year}`;
         };
 
         // Transform buy orders
@@ -744,7 +771,7 @@ export default function WatchDetailsScreen() {
           id: order.id,
           country_code: order.country_code || 'us',
           country_name: order.country_name,
-          date: formatOrderDate(order.created_at),
+          date: formatOrderDate(order.date || order.created_at),
           condition: order.condition === 'Unworn' ? 'Unworn' : 'Used',
           price: order.price,
           has_box: order.has_box,
@@ -758,7 +785,7 @@ export default function WatchDetailsScreen() {
           id: order.id,
           country_code: order.country_code || 'us',
           country_name: order.country_name,
-          date: formatOrderDate(order.created_at),
+          date: formatOrderDate(order.date || order.created_at),
           condition: order.condition === 'Unworn' ? 'Unworn' : 'Used',
           price: order.price,
           has_box: order.has_box,
@@ -905,9 +932,9 @@ export default function WatchDetailsScreen() {
       >
         {/* Hero Image with gradient background that extends to price section */}
         <View style={styles.heroContainer}>
-          {/* Top gradient from white to gray */}
+          {/* Top gradient - seamless background */}
           <LinearGradient
-            colors={['#FFFFFF', '#F4F4F4']}
+            colors={['#FAFAFA', '#F0F0F0']}
             locations={[0.067, 1]}
             style={styles.heroGradient}
           />
@@ -990,15 +1017,17 @@ export default function WatchDetailsScreen() {
             </View>
             <Text style={styles.actionLabel}>{isInWatchlist ? 'Saved' : 'Watchlist'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push('/social-search')}
-          >
-            <View style={styles.actionIconContainer}>
-              <SocialSearchIcon />
-            </View>
-            <Text style={styles.actionLabel}>Social Search</Text>
-          </TouchableOpacity>
+          {v2Enabled && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => router.push('/social-search')}
+            >
+              <View style={styles.actionIconContainer}>
+                <SocialSearchIcon />
+              </View>
+              <Text style={styles.actionLabel}>Social Search</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Market Section */}
@@ -1006,20 +1035,22 @@ export default function WatchDetailsScreen() {
           <Text style={styles.sectionTitle}>Market</Text>
 
           {/* Bid/Ask/Spread - € AFTER number per Figma */}
-          <View style={styles.marketStats}>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{formatPriceEurAfter(watch.bestBid)}</Text>
-              <Text style={styles.statLabel}>Best Bid</Text>
+          {v2Enabled && (
+            <View style={styles.marketStats}>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatPriceEurAfter(watch.bestBid)}</Text>
+                <Text style={styles.statLabel}>Best Bid</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatPriceEurAfter(watch.bestAsk)}</Text>
+                <Text style={styles.statLabel}>Best Ask</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatPriceEurAfter(watch.spread)}</Text>
+                <Text style={styles.statLabel}>Spread</Text>
+              </View>
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{formatPriceEurAfter(watch.bestAsk)}</Text>
-              <Text style={styles.statLabel}>Best Ask</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{formatPriceEurAfter(watch.spread)}</Text>
-              <Text style={styles.statLabel}>Spread</Text>
-            </View>
-          </View>
+          )}
 
           {/* Price tooltip - shows selected chart point or latest order book data */}
           {(filteredPriceHistory.length > 0 || sellOrders.length > 0 || buyOrders.length > 0) && (
@@ -1129,16 +1160,16 @@ export default function WatchDetailsScreen() {
           {/* Tab Selector */}
           <View style={styles.tabSelector}>
             <TouchableOpacity
-              style={[styles.tab, selectedTab === 'Buy' && styles.tabActive]}
-              onPress={() => setSelectedTab('Buy')}
-            >
-              <Text style={[styles.tabText, selectedTab === 'Buy' && styles.tabTextActive]}>Buy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               style={[styles.tab, selectedTab === 'Sell' && styles.tabActive]}
               onPress={() => setSelectedTab('Sell')}
             >
-              <Text style={[styles.tabText, selectedTab === 'Sell' && styles.tabTextActive]}>Sell</Text>
+              <Text style={[styles.tabText, selectedTab === 'Sell' && styles.tabTextActive]}>WTS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, selectedTab === 'Buy' && styles.tabActive]}
+              onPress={() => setSelectedTab('Buy')}
+            >
+              <Text style={[styles.tabText, selectedTab === 'Buy' && styles.tabTextActive]}>WTB</Text>
             </TouchableOpacity>
           </View>
 
@@ -1147,8 +1178,7 @@ export default function WatchDetailsScreen() {
             {/* Header */}
             <View style={styles.tableHeader}>
               <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Market</Text>
-              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
-              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Condition</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Details</Text>
               <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Price</Text>
               <Text style={[styles.tableHeaderCell, { flex: 0.7, textAlign: 'center' }]}>Chat</Text>
             </View>
@@ -1162,36 +1192,18 @@ export default function WatchDetailsScreen() {
               </View>
             ) : (
               (selectedTab === 'Buy' ? filteredBuyOrders : filteredSellOrders).slice(0, 5).map((order, index) => (
-                <TouchableOpacity
+                <View
                   key={index}
                   style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}
-                  onPress={() => router.push({
-                    pathname: '/market/watch-details',
-                    params: {
-                      orderId: order.id,
-                      reference: watch.reference,
-                      brand: watch.brand,
-                      model: watch.model,
-                      price: order.price.toString(),
-                      condition: order.condition,
-                      country_code: order.country_code,
-                      country_name: order.country_name || '',
-                      has_box: (order.has_box || false).toString(),
-                      has_papers: (order.has_papers || false).toString(),
-                      user_name: order.user_name || '',
-                      user_id: order.user_id || '',
-                      order_type: selectedTab === 'Buy' ? 'buy' : 'sell',
-                      fromOrderBook: 'true',
-                    },
-                  })}
-                  activeOpacity={0.7}
                 >
                   <View style={[styles.tableCell, { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: wp(4) }]}>
                     <CountryFlag countryCode={order.country_code} size={14} />
                     <Text style={[styles.tableCellText, { fontSize: fp(13) }]}>{order.country_code?.toUpperCase()}</Text>
                   </View>
-                  <Text style={[styles.tableCell, styles.tableCellText, { flex: 1, textAlign: 'center' }]}>{order.date}</Text>
-                  <Text style={[styles.tableCell, styles.tableCellText, { flex: 1, textAlign: 'center' }]}>{order.condition}</Text>
+                  <View style={[styles.tableCell, { flex: 1, alignItems: 'center' }]}>
+                    <Text style={[styles.tableCellText, { textAlign: 'center' }]}>{order.condition}</Text>
+                    <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#999999' }]}>{order.date}</Text>
+                  </View>
                   <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'center' }]}>
                     {formatPriceEurBefore(order.price)}
                   </Text>
@@ -1203,7 +1215,7 @@ export default function WatchDetailsScreen() {
                   >
                     <WhatsAppIcon size={18} />
                   </TouchableOpacity>
-                </TouchableOpacity>
+                </View>
               ))
             )}
           </View>
@@ -1235,21 +1247,23 @@ export default function WatchDetailsScreen() {
         locations={[0, 0.55]}
         style={styles.bottomBar}
       >
-        <View style={styles.bottomBarContent}>
-          <View style={styles.orderButtons}>
-            <TouchableOpacity style={styles.buyButton} onPress={handlePlaceBuyOrder}>
-              <Text style={styles.orderButtonText} numberOfLines={1}>Place Buy Order</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.sellButton} onPress={handlePlaceSellOrder}>
-              <Text style={styles.orderButtonText} numberOfLines={1}>Place Sell Order</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.aiButtonOuter} onPress={() => router.push('/chat/ai')}>
-            <View style={styles.aiButtonInner}>
-              <SparkleIcon />
+        {v2Enabled && (
+          <View style={styles.bottomBarContent}>
+            <View style={styles.orderButtons}>
+              <TouchableOpacity style={styles.buyButton} onPress={handlePlaceBuyOrder}>
+                <Text style={styles.orderButtonText} numberOfLines={1}>Place Buy Order</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sellButton} onPress={handlePlaceSellOrder}>
+                <Text style={styles.orderButtonText} numberOfLines={1}>Place Sell Order</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        </View>
+          </View>
+        )}
+        <TouchableOpacity style={styles.aiButtonOuter} onPress={() => router.push('/chat/ai')}>
+          <View style={styles.aiButtonInner}>
+            <SparkleIcon />
+          </View>
+        </TouchableOpacity>
       </LinearGradient>
 
       {/* Make an Offer Modal */}
@@ -1727,13 +1741,12 @@ const styles = StyleSheet.create({
   bottomBarContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginRight: wp(54),
   },
   orderButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: wp(12),
   },
   buyButton: {
     backgroundColor: '#54B368',
@@ -1771,6 +1784,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   aiButtonOuter: {
+    position: 'absolute',
+    right: wp(16),
+    bottom: hp(25),
     width: sp(42),
     height: sp(42),
     borderRadius: sp(230),

@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { AISparkle, Plus, ChevronLeft } from '@/components/icons';
+import { SwipeableChatItem } from '@/components/SwipeableChatItem';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { api } from '@/services/api';
@@ -78,6 +80,15 @@ export default function AskAIScreen() {
       pathname: '/chat/ai/[id]',
       params: { id: chat.id, title: chat.title },
     });
+  };
+
+  const handleDeleteChat = async (chatId: string) => {
+    try {
+      await api.delete(`/ai-chats/${chatId}`);
+      setChats(prev => prev.filter(c => c.id !== chatId));
+    } catch (error) {
+      console.error('Failed to delete AI chat:', error);
+    }
   };
 
   const styles = StyleSheet.create({
@@ -191,6 +202,7 @@ export default function AskAIScreen() {
   });
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SubscriptionOverlay feature="ai_chat" showBackButton>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -230,25 +242,35 @@ export default function AskAIScreen() {
             </View>
           ) : (
             chats.map((chat) => (
-              <TouchableOpacity
+              <SwipeableChatItem
                 key={chat.id}
-                style={styles.chatItem}
-                onPress={() => handleChatPress(chat)}
-                activeOpacity={0.7}
+                onMore={() => {}}
+                onDelete={() => handleDeleteChat(chat.id)}
+                isGroup={false}
+                aiChat={true}
+                chatId={chat.id}
+                chatName={chat.title || 'New Chat'}
               >
-                <View style={styles.chatIconContainer}>
-                  <SparkleIcon />
-                </View>
-                <View style={styles.chatTextContainer}>
-                  <Text style={styles.chatTitle} numberOfLines={2}>
-                    {chat.title || 'New Chat'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.chatItem}
+                  onPress={() => handleChatPress(chat)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.chatIconContainer}>
+                    <SparkleIcon />
+                  </View>
+                  <View style={styles.chatTextContainer}>
+                    <Text style={styles.chatTitle} numberOfLines={2}>
+                      {chat.title || 'New Chat'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </SwipeableChatItem>
             ))
           )}
         </ScrollView>
       </SafeAreaView>
     </SubscriptionOverlay>
+    </GestureHandlerRootView>
   );
 }

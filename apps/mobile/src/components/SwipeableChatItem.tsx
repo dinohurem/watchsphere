@@ -10,13 +10,14 @@ interface SwipeableChatItemProps {
   onMore: () => void;
   onDelete: () => void;
   isGroup?: boolean;
+  aiChat?: boolean;
   onPress?: () => void;
   chatId?: string;
   chatName?: string;
   onLongPress?: () => void;
 }
 
-export function SwipeableChatItem({ children, onMore, onDelete, isGroup = false, onPress, chatId, chatName, onLongPress }: SwipeableChatItemProps) {
+export function SwipeableChatItem({ children, onMore, onDelete, isGroup = false, aiChat = false, onPress, chatId, chatName, onLongPress }: SwipeableChatItemProps) {
   const { colors, fonts } = useTheme();
   const swipeableRef = useRef<Swipeable>(null);
   const [showModal, setShowModal] = React.useState(false);
@@ -318,33 +319,37 @@ export function SwipeableChatItem({ children, onMore, onDelete, isGroup = false,
               }
             ]}
           >
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => {
-                setShowModal(false);
-                swipeableRef.current?.close();
-                onMore();
-              }}
-            >
-              <CheckCheck size={20} color={colors.text} />
-              <Text style={[styles.modalOptionText, { color: colors.text }]}>Mark as Read</Text>
-            </TouchableOpacity>
+            {!aiChat && (
+              <>
+                <TouchableOpacity
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setShowModal(false);
+                    swipeableRef.current?.close();
+                    onMore();
+                  }}
+                >
+                  <CheckCheck size={20} color={colors.text} />
+                  <Text style={[styles.modalOptionText, { color: colors.text }]}>Mark as Read</Text>
+                </TouchableOpacity>
 
-            <View style={[styles.modalDivider, { backgroundColor: colors.border }]} />
+                <View style={[styles.modalDivider, { backgroundColor: colors.border }]} />
 
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => {
-                setShowModal(false);
-                swipeableRef.current?.close();
-                setShowReportModal(true);
-              }}
-            >
-              <Flag size={20} color={colors.text} />
-              <Text style={[styles.modalOptionText, { color: colors.text }]}>Report</Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setShowModal(false);
+                    swipeableRef.current?.close();
+                    setShowReportModal(true);
+                  }}
+                >
+                  <Flag size={20} color={colors.text} />
+                  <Text style={[styles.modalOptionText, { color: colors.text }]}>Report</Text>
+                </TouchableOpacity>
 
-            <View style={[styles.modalDivider, { backgroundColor: colors.border }]} />
+                <View style={[styles.modalDivider, { backgroundColor: colors.border }]} />
+              </>
+            )}
 
             <TouchableOpacity
               style={styles.modalOption}
@@ -391,7 +396,9 @@ export function SwipeableChatItem({ children, onMore, onDelete, isGroup = false,
             </View>
             <Text style={[styles.deleteModalTitle, { color: colors.text }]}>Delete Conversation</Text>
             <Text style={[styles.deleteModalDesc, { color: colors.text }]}>
-              Are you sure you want to delete this conversation{chatName ? ` with ${chatName}` : ''}? This action cannot be undone.
+              {aiChat
+                ? 'Are you sure you want to delete this conversation?\nThis action cannot be undone.'
+                : `Are you sure you want to delete this conversation${chatName ? ` with ${chatName}` : ''}? This action cannot be undone.`}
             </Text>
             <View style={styles.deleteModalButtons}>
               <TouchableOpacity

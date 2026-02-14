@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
-import { Plus, Search, DollarSign, TrendingUp, Users, Edit2, Crown, Calendar, MoreVertical, History, Trash2, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Plus, Search, DollarSign, TrendingUp, Users, Edit2, Crown, Calendar, History, Trash2, X } from 'lucide-react'
 import { api } from '@/services/api'
+import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 
 interface BillingRecord {
   id: string
@@ -142,7 +143,6 @@ export function AdminBilling() {
   const [deletingSubscription, setDeletingSubscription] = useState<Subscription | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null)
-  const actionMenuRef = useRef<HTMLDivElement>(null)
   const [subscriptionFormData, setSubscriptionFormData] = useState({
     user_id: '',
     plan: 'basic' as 'free' | 'basic' | 'premium' | 'enterprise',
@@ -157,16 +157,6 @@ export function AdminBilling() {
     fetchData()
   }, [])
 
-  // Close action menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (actionMenuRef.current && !actionMenuRef.current.contains(event.target as Node)) {
-        setActiveActionMenu(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
 
   const fetchData = async () => {
     setLoading(true)
@@ -556,42 +546,31 @@ export function AdminBilling() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="relative inline-block" ref={activeActionMenu === sub.id ? actionMenuRef : undefined}>
-                        <button
-                          onClick={() => setActiveActionMenu(activeActionMenu === sub.id ? null : sub.id)}
-                          className="p-1 rounded hover:bg-gray-100"
+                      <ActionMenu
+                        isOpen={activeActionMenu === sub.id}
+                        onToggle={() => setActiveActionMenu(activeActionMenu === sub.id ? null : sub.id)}
+                        onClose={() => setActiveActionMenu(null)}
+                      >
+                        <ActionMenuItem
+                          onClick={() => { openEditSubscriptionModal(sub); setActiveActionMenu(null) }}
+                          icon={<Edit2 className="w-4 h-4" />}
                         >
-                          <MoreVertical className="w-5 h-5 text-gray-500" />
-                        </button>
-                        {activeActionMenu === sub.id && (
-                          <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border z-10">
-                            <button
-                              onClick={() => {
-                                openEditSubscriptionModal(sub)
-                                setActiveActionMenu(null)
-                              }}
-                              className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => openHistoryModal(sub)}
-                              className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <History className="w-4 h-4" />
-                              View History
-                            </button>
-                            <button
-                              onClick={() => openDeleteModal(sub)}
-                              className="w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 flex items-center gap-2"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                          Edit
+                        </ActionMenuItem>
+                        <ActionMenuItem
+                          onClick={() => { openHistoryModal(sub); setActiveActionMenu(null) }}
+                          icon={<History className="w-4 h-4" />}
+                        >
+                          View History
+                        </ActionMenuItem>
+                        <ActionMenuItem
+                          onClick={() => { openDeleteModal(sub); setActiveActionMenu(null) }}
+                          variant="danger"
+                          icon={<Trash2 className="w-4 h-4" />}
+                        >
+                          Delete
+                        </ActionMenuItem>
+                      </ActionMenu>
                     </td>
                   </tr>
                 ))}

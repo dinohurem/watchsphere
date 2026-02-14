@@ -31,6 +31,7 @@ async def connect_to_mongo():
     from app.models.review import Review
     from app.models.auth_handoff import AuthHandoffToken
     from app.models.notification import Notification
+    from app.models.app_settings import AppSettings
 
     await init_beanie(
         database=mongodb_client[settings.MONGODB_DB_NAME],
@@ -43,7 +44,7 @@ async def connect_to_mongo():
             VerificationCode, Order,
             ListingField, Filter,
             Dispute, Issue, Report, Review, AuthHandoffToken,
-            Notification
+            Notification, AppSettings
         ]
     )
 
