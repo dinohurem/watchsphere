@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, X, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useConfig, type ListingField, type FieldCategory } from '@/hooks/useConfig';
+import { orderKeyToConfigKey, configKeyToOrderKey, MANUALLY_HANDLED_FIELDS } from '@/utils/fieldKeyMap';
 
 // Navigation state type for pre-populated data
 interface NavigationState {
@@ -303,36 +304,15 @@ export function CreateListingPage() {
           location: order.country_name || '',
         };
 
-        // Map backend Order model keys back to config field keys where they differ
-        const orderKeyToFieldKey: Record<string, string> = {
-          caliber: 'caliber_movement',
-          dial: 'dial_color',
-          dial_numerals: 'dial_numbers',
-        };
-
-        // Load all watch_details fields dynamically
+        // Load all watch_details fields dynamically, remapping order keys to config keys
         if (order.watch_details) {
           Object.entries(order.watch_details).forEach(([key, value]) => {
-            if (value !== null && value !== undefined && key !== 'images') {
-              const formKey = orderKeyToFieldKey[key] || key;
+            if (value !== null && value !== undefined && key !== 'images' && key !== 'image_url') {
+              const formKey = orderKeyToConfigKey(key);
               loadedData[formKey] = String(value);
             }
           });
         }
-
-        // Also load direct order fields that might be extended fields
-        const extendedFields = ['year', 'size', 'movement', 'case_material', 'bracelet_material',
-          'movement_type', 'caliber', 'base_caliber', 'power_reserve', 'number_of_jewels',
-          'case_diameter', 'water_resistance', 'bezel_material', 'crystal', 'dial', 'dial_numerals',
-          'bracelet_color', 'clasp_type', 'clasp_material', 'gender', 'availability'];
-
-        extendedFields.forEach(field => {
-          if (order[field] !== null && order[field] !== undefined) {
-            // Store under the config field key for proper form rendering
-            const formKey = orderKeyToFieldKey[field] || field;
-            loadedData[formKey] = String(order[field]);
-          }
-        });
 
         setFormData(loadedData);
       } catch (error) {
@@ -480,21 +460,12 @@ export function CreateListingPage() {
         images: allImageUrls,
       };
 
-      // Map config field keys to backend Order model keys where they differ
-      const fieldKeyToOrderKey: Record<string, string> = {
-        caliber_movement: 'caliber',
-        dial_color: 'dial',
-        dial_numbers: 'dial_numerals',
-      };
-
       // Add all enabled listing fields dynamically
-      // Skip fields already handled above (price, currency, condition, etc.)
-      const handledFields = ['price', 'currency', 'condition', 'condition_description', 'box_papers', 'location', 'brand', 'model', 'reference'];
       listingFields.forEach(field => {
-        if (handledFields.includes(field.key)) return; // Skip already-handled fields
+        if (MANUALLY_HANDLED_FIELDS.has(field.key)) return;
         const value = formData[field.key];
         if (value !== undefined && value !== null && value !== '') {
-          const orderKey = fieldKeyToOrderKey[field.key] || field.key;
+          const orderKey = configKeyToOrderKey(field.key);
           // Handle numeric fields - strip non-digits first (like price formatting)
           if (field.field_type === 'number') {
             const digitsOnly = String(value).replace(/[^0-9]/g, '');
@@ -521,8 +492,10 @@ export function CreateListingPage() {
       }
 
       navigate('/app/inventory');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving listing:', error);
+      const detail = error?.response?.data?.detail || 'Failed to save listing. Please try again.';
+      alert(detail);
     } finally {
       setIsSubmitting(false);
     }

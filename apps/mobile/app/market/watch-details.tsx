@@ -9,6 +9,8 @@ import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
+import { useConfig, type FieldCategory } from '@/contexts/ConfigContext';
+import { configKeyToOrderKey, MANUALLY_HANDLED_FIELDS } from '@/utils/fieldKeyMap';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -281,9 +283,18 @@ interface WatchDetails {
   [key: string]: string | number | string[] | undefined;
 }
 
+// Category configuration for display
+const CATEGORY_CONFIG: { key: FieldCategory; title: string }[] = [
+  { key: 'basic', title: 'Basic info' },
+  { key: 'caliber', title: 'Caliber' },
+  { key: 'case', title: 'Case' },
+  { key: 'bracelet', title: 'Bracelet/strap' },
+];
+
 export default function WatchDetailsScreen() {
   const params = useLocalSearchParams() as WatchDetailsParams;
   const { user, isAuthenticated } = useAuthStore();
+  const { getFieldsByCategory, loadListingFields } = useConfig();
   const [isFavorite, setIsFavorite] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -323,6 +334,7 @@ export default function WatchDetailsScreen() {
   const [countryName, setCountryName] = useState(params.country_name || '');
   const [hasBox, setHasBox] = useState(params.has_box === 'true');
   const [hasPapers, setHasPapers] = useState(params.has_papers === 'true');
+  const [orderNotes, setOrderNotes] = useState<string | null>(null);
   const [brand, setBrand] = useState(params.brand || '');
   const [model, setModel] = useState(params.model || '');
   const [reference, setReference] = useState(params.reference || '');
@@ -357,6 +369,7 @@ export default function WatchDetailsScreen() {
         if (data.country_name) setCountryName(data.country_name);
         setHasBox(!!data.has_box);
         setHasPapers(!!data.has_papers);
+        setOrderNotes(data.notes || null);
 
         // Get watch_details from API response
         if (data.watch_details) {
@@ -370,6 +383,11 @@ export default function WatchDetailsScreen() {
       console.error('Failed to fetch order details:', error);
     }
   }, [params.orderId]);
+
+  // Load listing field config on mount
+  useEffect(() => {
+    loadListingFields();
+  }, [loadListingFields]);
 
   // Fetch on mount and re-fetch when screen regains focus (e.g. returning from edit)
   useFocusEffect(
@@ -501,103 +519,34 @@ export default function WatchDetailsScreen() {
   // Effective user ID for profile navigation (from params or fetched from API)
   const effectiveUserId = orderUserId || fetchedUserId;
 
-  // Build dynamic specs from watch_details - showing ALL populated fields
-  const getBasicSpecs = (): WatchSpec[] => {
-    const specs: WatchSpec[] = [
-      { label: 'Brand', value: brand },
-      { label: 'Model', value: model },
-      { label: 'Reference', value: reference },
-    ];
-    if (watchDetails?.year) {
-      specs.push({ label: 'Year', value: watchDetails.year.toString() });
-    }
-    if (watchDetails?.size || watchDetails?.case_size || caseSize) {
-      specs.push({ label: 'Size', value: watchDetails?.size || watchDetails?.case_size || caseSize || '' });
-    }
-    if (watchDetails?.movement) {
-      specs.push({ label: 'Movement', value: watchDetails.movement });
-    }
-    if (watchDetails?.case_material) {
-      specs.push({ label: 'Case material', value: watchDetails.case_material });
-    }
-    if (watchDetails?.bracelet_material) {
-      specs.push({ label: 'Bracelet material', value: watchDetails.bracelet_material });
-    }
-    if (watchDetails?.gender) {
-      specs.push({ label: 'Gender', value: watchDetails.gender });
-    }
-    if (watchDetails?.availability) {
-      specs.push({ label: 'Availability', value: watchDetails.availability });
-    }
-    return specs;
-  };
+  // Build specs — always show every row; use '-' when no value was provided
+  const v = (val: string | number | null | undefined): string =>
+    val !== null && val !== undefined && val !== '' ? String(val) : '-';
 
-  const getCaliberSpecs = (): WatchSpec[] => {
+  // Build specs dynamically from config for a given category
+  const getSpecsForCategory = (category: FieldCategory): WatchSpec[] => {
+    const fields = getFieldsByCategory(category);
     const specs: WatchSpec[] = [];
-    if (watchDetails?.movement_type) {
-      specs.push({ label: 'Movement type', value: watchDetails.movement_type });
-    }
-    if (watchDetails?.caliber) {
-      specs.push({ label: 'Caliber', value: watchDetails.caliber });
-    }
-    if (watchDetails?.base_caliber) {
-      specs.push({ label: 'Base caliber', value: watchDetails.base_caliber });
-    }
-    if (watchDetails?.power_reserve) {
-      specs.push({ label: 'Power reserve', value: watchDetails.power_reserve });
-    }
-    if (watchDetails?.number_of_jewels) {
-      specs.push({ label: 'Number of jewels', value: watchDetails.number_of_jewels.toString() });
-    }
-    return specs;
-  };
 
-  const getCaseSpecs = (): WatchSpec[] => {
-    const specs: WatchSpec[] = [];
-    if (watchDetails?.case_material) {
-      specs.push({ label: 'Material', value: watchDetails.case_material });
+    // Prepend brand/model/reference for the basic section
+    if (category === 'basic') {
+      specs.push(
+        { label: 'Brand', value: v(brand) },
+        { label: 'Model', value: v(model) },
+        { label: 'Reference', value: v(reference) },
+      );
     }
-    if (caseSize || watchDetails?.case_diameter || watchDetails?.case_size) {
-      specs.push({ label: 'Diameter', value: caseSize || watchDetails?.case_diameter || watchDetails?.case_size || '' });
-    }
-    if (watchDetails?.water_resistance) {
-      specs.push({ label: 'Water resistance', value: watchDetails.water_resistance });
-    }
-    if (watchDetails?.bezel_material) {
-      specs.push({ label: 'Bezel material', value: watchDetails.bezel_material });
-    }
-    if (watchDetails?.crystal) {
-      specs.push({ label: 'Crystal', value: watchDetails.crystal });
-    }
-    if (watchDetails?.dial) {
-      specs.push({ label: 'Dial', value: watchDetails.dial });
-    }
-    if (watchDetails?.dial_numerals) {
-      specs.push({ label: 'Dial numerals', value: watchDetails.dial_numerals });
-    }
-    return specs;
-  };
 
-  const getBraceletSpecs = (): WatchSpec[] => {
-    const specs: WatchSpec[] = [];
-    if (watchDetails?.bracelet_material) {
-      specs.push({ label: 'Material', value: watchDetails.bracelet_material });
-    }
-    if (watchDetails?.bracelet_color) {
-      specs.push({ label: 'Color', value: watchDetails.bracelet_color });
-    }
-    if (watchDetails?.clasp_type || watchDetails?.clasp) {
-      specs.push({ label: 'Clasp type', value: watchDetails?.clasp_type || watchDetails?.clasp || '' });
-    }
-    if (watchDetails?.clasp_material) {
-      specs.push({ label: 'Clasp material', value: watchDetails.clasp_material });
-    }
-    return specs;
-  };
+    fields.forEach(field => {
+      if (MANUALLY_HANDLED_FIELDS.has(field.key)) return;
+      const orderKey = configKeyToOrderKey(field.key);
+      const raw = watchDetails?.[orderKey];
+      // Skip array values (e.g. images) — v() expects scalar
+      const scalar = Array.isArray(raw) ? undefined : raw;
+      specs.push({ label: field.name, value: v(scalar) });
+    });
 
-  const getOtherSpecs = (): WatchSpec[] => {
-    // No longer needed - dial moved to Case specs
-    return [];
+    return specs;
   };
 
   const handleContactNow = async () => {
@@ -659,17 +608,20 @@ export default function WatchDetailsScreen() {
     } as any);
   };
 
-  const renderSpecSection = (title: string, specs: WatchSpec[]) => (
-    <View style={styles.specSection}>
-      <Text style={styles.specSectionTitle}>{title}</Text>
-      {specs.map((spec, index) => (
-        <View key={index} style={styles.specRow}>
-          <Text style={styles.specLabel}>{spec.label}</Text>
-          <Text style={styles.specValue}>{spec.value}</Text>
-        </View>
-      ))}
-    </View>
-  );
+  const renderSpecSection = (sectionKey: string, title: string, specs: WatchSpec[]) => {
+    if (!specs || !Array.isArray(specs)) return null;
+    return (
+      <View key={sectionKey} style={styles.specSection}>
+        <Text style={styles.specSectionTitle}>{title}</Text>
+        {specs.map((spec, index) => (
+          <View key={index} style={styles.specRow}>
+            <Text style={styles.specLabel}>{spec.label}</Text>
+            <Text style={styles.specValue}>{spec.value}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -817,7 +769,7 @@ export default function WatchDetailsScreen() {
             </View>
             <View style={styles.quickInfoRow}>
               <Text style={styles.quickInfoLabel}>Case size</Text>
-              <Text style={styles.quickInfoValue}>{caseSize || '—'}</Text>
+              <Text style={styles.quickInfoValue}>{caseSize || '-'}</Text>
             </View>
             <View style={styles.quickInfoRow}>
               <Text style={styles.quickInfoLabel}>Box/papers</Text>
@@ -866,11 +818,8 @@ export default function WatchDetailsScreen() {
 
         {/* Specifications */}
         <View style={styles.specsContainer}>
-          {renderSpecSection('Basic info', getBasicSpecs())}
-          {getCaliberSpecs().length > 0 && renderSpecSection('Caliber', getCaliberSpecs())}
-          {getCaseSpecs().length > 0 && renderSpecSection('Case', getCaseSpecs())}
-          {getBraceletSpecs().length > 0 && renderSpecSection('Bracelet/strap', getBraceletSpecs())}
-          {getOtherSpecs().length > 0 && renderSpecSection('Other', getOtherSpecs())}
+          {CATEGORY_CONFIG.map(({ key, title }) => renderSpecSection(key, title, getSpecsForCategory(key)))}
+          {orderNotes ? renderSpecSection('other', 'Other', [{ label: 'More details', value: orderNotes }]) : null}
         </View>
 
         {/* Bottom spacing for action bar */}

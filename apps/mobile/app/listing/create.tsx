@@ -1,15 +1,19 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert, ActivityIndicator, Keyboard, InputAccessoryView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useConfig, ListingField, FieldCategory, CATEGORY_STEPS } from '@/contexts/ConfigContext';
+import { configKeyToOrderKey, orderKeyToConfigKey, MANUALLY_HANDLED_FIELDS } from '@/utils/fieldKeyMap';
 import { api } from '@/services/api';
 import { BackArrow, ChevronDown, ChevronRight, Plus, X, Trash2, Check } from '@/components/icons';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path, Rect } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
+
+// Unique ID for the numeric keyboard accessory toolbar (iOS only)
+const NUMERIC_KEYBOARD_ACCESSORY_ID = 'numericKeyboardDone';
 
 // Step indicator component
 const TOTAL_STEPS = 6;
@@ -156,8 +160,8 @@ export default function CreateListingScreen() {
         else if (order.condition) conditionValue = 'Used';
 
         // Build form data from order details
+        // Core fields set manually, then all watch_details loaded dynamically
         const orderFormData: ListingFormData = {
-          // Basic info
           brand: order.brand || '',
           model: order.model || '',
           reference: order.reference || '',
@@ -166,31 +170,19 @@ export default function CreateListingScreen() {
           location: order.country_name || '',
           price: order.price ? order.price.toLocaleString('de-DE') : '',
           currency: order.currency || 'EUR',
-          year: order.watch_details?.year?.toString() || '',
-          // Caliber info
-          movementType: order.watch_details?.movement_type || '',
-          caliberMovement: order.watch_details?.caliber || '',
-          baseCaliber: order.watch_details?.base_caliber || '',
-          powerReserve: order.watch_details?.power_reserve || '',
-          number_of_jewels: order.watch_details?.number_of_jewels?.toString() || '',
-          // Case info
-          caseDiameter: order.watch_details?.case_diameter || order.watch_details?.case_size || '',
-          caseMaterial: order.watch_details?.case_material || '',
-          waterResistance: order.watch_details?.water_resistance || '',
-          bezelMaterial: order.watch_details?.bezel_material || '',
-          crystal: order.watch_details?.crystal || '',
-          dialColor: order.watch_details?.dial || '',
-          dialNumbers: order.watch_details?.dial_numerals || '',
-          // Bracelet info
-          braceletMaterial: order.watch_details?.bracelet_material || '',
-          braceletColor: order.watch_details?.bracelet_color || '',
-          claspType: order.watch_details?.clasp_type || '',
-          claspMaterial: order.watch_details?.clasp_material || '',
-          // Photos
           photos: order.watch_details?.images || [],
-          // Notes
-          conditionDescription: order.notes || '',
+          condition_description: order.notes || '',
         };
+
+        // Dynamically load all watch_details fields, remapping order keys to config keys
+        if (order.watch_details) {
+          Object.entries(order.watch_details).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && key !== 'images' && key !== 'image_url') {
+              const formKey = orderKeyToConfigKey(key);
+              orderFormData[formKey] = String(value);
+            }
+          });
+        }
 
         setFormData(orderFormData);
       } catch (error) {
@@ -330,37 +322,30 @@ export default function CreateListingScreen() {
 
       // Parse year (already validated above)
       const parsedYear = parseInt(getFormValue('year'), 10);
-      // Parse number of jewels if provided
-      const jewelsStr = getFormValue('number_of_jewels');
-      const jewelsValue = jewelsStr ? parseInt(jewelsStr, 10) : undefined;
 
-      // Build extended watch details
-      const extendedFields = {
+      // Build extended watch details dynamically from all listing fields
+      const extendedFields: Record<string, any> = {
         images: uploadedPhotoUrls,
-        year: parsedYear,
-        size: formData.size || formData.caseDiameter || undefined,
-        movement: formData.movement || undefined,
-        case_material: formData.caseMaterial || formData.caseMaterialDetail || undefined,
-        bracelet_material: formData.braceletMaterial || formData.braceletMaterialDetail || undefined,
-        availability: formData.availability || undefined,
-        // Caliber information
-        movement_type: formData.movementType || undefined,
-        caliber: formData.caliberMovement || undefined,
-        base_caliber: formData.baseCaliber || undefined,
-        power_reserve: formData.powerReserve || undefined,
-        number_of_jewels: jewelsValue,
-        // Case information
-        case_diameter: formData.caseDiameter || formData.size || undefined,
-        water_resistance: formData.waterResistance || undefined,
-        bezel_material: formData.bezelMaterial || undefined,
-        crystal: formData.crystal || undefined,
-        dial: formData.dialColor || undefined,
-        dial_numerals: formData.dialNumbers || undefined,
-        // Bracelet/strap information
-        bracelet_color: formData.braceletColor || undefined,
-        clasp_type: formData.claspType || undefined,
-        clasp_material: formData.claspMaterial || undefined,
       };
+
+      listingFields.forEach(field => {
+        if (MANUALLY_HANDLED_FIELDS.has(field.key)) return;
+        const value = formData[field.key];
+        if (value !== undefined && value !== null && value !== '') {
+          const orderKey = configKeyToOrderKey(field.key);
+          if (field.field_type === 'number') {
+            const numVal = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(numVal)) {
+              extendedFields[orderKey] = numVal;
+            }
+          } else {
+            extendedFields[orderKey] = value;
+          }
+        }
+      });
+
+      // Ensure year is always set as a number (already validated above)
+      extendedFields.year = parsedYear;
 
       if (isEditMode && orderId) {
         // Update existing order - send all updatable fields
@@ -370,7 +355,7 @@ export default function CreateListingScreen() {
           condition: formData.condition === 'Unworn' ? 'Unworn' : 'Used',
           has_box: boxPapersValue === 'Box and Papers' || boxPapersValue === 'Box Only',
           has_papers: boxPapersValue === 'Box and Papers' || boxPapersValue === 'Papers Only',
-          notes: formData.conditionDescription || null,
+          notes: formData['condition_description'] || null,
           ...extendedFields,
         };
 
@@ -394,7 +379,7 @@ export default function CreateListingScreen() {
           country_name: formData.location,
           has_box: createBoxPapersValue === 'Box and Papers' || createBoxPapersValue === 'Box Only',
           has_papers: createBoxPapersValue === 'Box and Papers' || createBoxPapersValue === 'Papers Only',
-          notes: formData.conditionDescription,
+          notes: formData['condition_description'],
           ...extendedFields,
         };
 
@@ -672,6 +657,26 @@ export default function CreateListingScreen() {
       letterSpacing: 0.08,
     },
 
+    // Keyboard toolbar (iOS InputAccessoryView)
+    keyboardToolbar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#D1D5DB',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: '#B0B0B0',
+    },
+    keyboardDoneButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+    },
+    keyboardDoneText: {
+      fontSize: 17,
+      fontFamily: fonts.semiBold,
+      color: '#007AFF',
+    },
+
     // Dropdown Modal
     dropdownOverlay: {
       flex: 1,
@@ -799,9 +804,8 @@ export default function CreateListingScreen() {
                 onChangeText={(text) => updateField(field.key, formatPriceInput(text))}
                 placeholder={placeholder}
                 placeholderTextColor="rgba(29, 29, 31, 0.5)"
-                keyboardType="numeric"
-                returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
+                keyboardType="number-pad"
+                {...(Platform.OS === 'ios' ? { inputAccessoryViewID: NUMERIC_KEYBOARD_ACCESSORY_ID } : { returnKeyType: 'done', onSubmitEditing: Keyboard.dismiss })}
               />
             </View>
           </View>
@@ -818,10 +822,9 @@ export default function CreateListingScreen() {
               onChangeText={(text) => updateField(field.key, text)}
               placeholder={placeholder}
               placeholderTextColor="rgba(29, 29, 31, 0.5)"
-              keyboardType="numeric"
+              keyboardType="number-pad"
               maxLength={field.key === 'year' ? 4 : undefined}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
+              {...(Platform.OS === 'ios' ? { inputAccessoryViewID: NUMERIC_KEYBOARD_ACCESSORY_ID } : { returnKeyType: 'done', onSubmitEditing: Keyboard.dismiss })}
             />
           </View>
         </View>
@@ -1156,6 +1159,18 @@ export default function CreateListingScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* iOS keyboard toolbar for numeric fields — renders above the keyboard natively */}
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID={NUMERIC_KEYBOARD_ACCESSORY_ID}>
+          <View style={styles.keyboardToolbar}>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={Keyboard.dismiss} style={styles.keyboardDoneButton}>
+              <Text style={styles.keyboardDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
     </SafeAreaView>
   );
 }

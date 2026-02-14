@@ -2,7 +2,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useFilters } from '@/contexts/FilterContext';
@@ -92,7 +92,6 @@ export default function MarketScreen() {
   const filtersButtonRef = useRef<View>(null);
   const firstWatchRowRef = useRef<View>(null);
   const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
-  const navigation = useNavigation();
   const totalFilterCount = getTotalFilterCount();
   const [selectedCategory, setSelectedCategory] = useState('Hot');
   const [watches, setWatches] = useState<WatchMarketData[]>([]);
@@ -106,17 +105,14 @@ export default function MarketScreen() {
 
   // Update search query when param changes
   useEffect(() => {
-    if (searchParam) {
-      setSearchQuery(searchParam);
-    }
+    setSearchQuery(searchParam || '');
   }, [searchParam]);
 
   // Clear search query and remove the search param from navigation state
   const clearSearch = useCallback(() => {
     setSearchQuery('');
-    // Reset the route params to remove stale search param
-    navigation.setParams({ search: undefined } as any);
-  }, [navigation]);
+    router.setParams({ search: '' });
+  }, []);
 
   // Apply filters and search to watches whenever they change
   useEffect(() => {

@@ -156,8 +156,17 @@ export function useConfig() {
     let values = field.values.filter((v) => v.is_enabled)
 
     // If parentValue is provided and field has parent_field_key, filter by parent_value
+    // The form may store a label (e.g. "Rolex") while parent_value is a key (e.g. "rolex"),
+    // so we resolve the label to its value key before matching.
     if (parentValue && field.parent_field_key) {
-      values = values.filter((v) => v.parent_value === parentValue)
+      const parentField = listingFields.find((f) => f.key === field.parent_field_key)
+      const parentEntry = parentField?.values.find(
+        (v) => v.label === parentValue || v.value === parentValue
+      )
+      const normalizedParent = parentEntry?.value || parentValue
+      values = values.filter(
+        (v) => v.parent_value?.toLowerCase() === normalizedParent.toLowerCase()
+      )
     }
 
     return values

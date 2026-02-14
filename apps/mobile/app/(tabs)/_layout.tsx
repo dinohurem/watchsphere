@@ -42,19 +42,15 @@ function CustomTabBar() {
         <GlassWrapper
           style={styles.tabsPillContainer}
           fallbackStyle={styles.tabsPillFallback}
-          intensity={50}
+          intensity={95}
           tint="light"
         >
           {tabs.map((tab) => {
             const active = isActive(tab.route, tab.name);
             const IconComponent = tab.icon;
-            return (
-              <TouchableOpacity
-                key={tab.name}
-                style={[styles.tabItem, active && styles.tabItemActive]}
-                onPress={() => router.replace(tab.route as any)}
-                activeOpacity={0.7}
-              >
+
+            const tabContent = (
+              <>
                 <View style={styles.tabIconWrapper}>
                   <View style={{ opacity: active ? 1 : 0.7 }}>
                     <IconComponent
@@ -76,6 +72,30 @@ function CustomTabBar() {
                 >
                   {t(tab.titleKey)}
                 </Text>
+              </>
+            );
+
+            return (
+              <TouchableOpacity
+                key={tab.name}
+                style={styles.tabItem}
+                onPress={() => router.replace(tab.route as any)}
+                activeOpacity={0.7}
+              >
+                {active ? (
+                  <GlassWrapper
+                    style={styles.tabItemActiveGlass}
+                    fallbackStyle={styles.tabItemActiveFallback}
+                    intensity={95}
+                    tint="light"
+                  >
+                    {tabContent}
+                  </GlassWrapper>
+                ) : (
+                  <View style={styles.tabItemInner}>
+                    {tabContent}
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -90,7 +110,7 @@ function CustomTabBar() {
           <GlassWrapper
             style={styles.aiButton}
             fallbackStyle={styles.aiButtonFallback}
-            intensity={50}
+            intensity={95}
             tint="light"
           >
             <AISparkle size={26} color="#9747FF" />
@@ -158,14 +178,27 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tabItemInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingTop: hp(6),
     paddingBottom: hp(7),
     paddingHorizontal: wp(8),
     gap: hp(1),
   },
-  tabItemActive: {
-    backgroundColor: '#F0F0F0',
+  tabItemActiveGlass: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: hp(6),
+    paddingBottom: hp(7),
+    paddingHorizontal: wp(18),
+    gap: hp(1),
     borderRadius: sp(100),
+    overflow: 'hidden',
+  },
+  tabItemActiveFallback: {
+    backgroundColor: 'rgba(230, 230, 230, 0.7)',
   },
   tabIconWrapper: {
     height: sp(28),

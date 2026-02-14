@@ -132,7 +132,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemColorScheme = useColorScheme();
   const [theme, setThemeState] = useState<Theme>('system');
-  const [colorScheme, setColorScheme] = useState<ColorScheme>(systemColorScheme || 'light');
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(systemColorScheme === 'dark' ? 'dark' : 'light');
 
   // Load saved theme preference on mount
   useEffect(() => {
@@ -152,7 +152,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Update color scheme when theme or system preference changes
   useEffect(() => {
     if (theme === 'system') {
-      setColorScheme(systemColorScheme || 'light');
+      setColorScheme(systemColorScheme === 'dark' ? 'dark' : 'light');
     } else {
       setColorScheme(theme as ColorScheme);
     }
