@@ -309,7 +309,7 @@ export default function RootLayout() {
   };
 
   if (!fontsLoaded) {
-    return null;
+    return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
   }
 
   if (showSplash) {
