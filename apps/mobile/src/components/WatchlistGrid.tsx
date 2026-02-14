@@ -71,7 +71,7 @@ export function WatchlistGrid({ watches, onViewAll, onWatchPress }: WatchlistGri
     imageContainer: {
       width: '100%',
       height: CARD_WIDTH * 0.9,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#F8F8F8',
       justifyContent: 'center',
       alignItems: 'center',
     },

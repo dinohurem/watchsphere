@@ -537,7 +537,7 @@ export function WatchDetailsPage() {
         {/* Left Column - Watch Image */}
         <div className="w-full lg:w-[340px] flex flex-col gap-4">
           {/* Watch Image Card */}
-          <div className="bg-gradient-to-b from-white to-[#f4f4f4] rounded-2xl border border-black/5 overflow-hidden">
+          <div className="bg-gradient-to-b from-[#FAFAFA] to-[#F0F0F0] rounded-2xl border border-black/5 overflow-hidden">
             {/* Watch Image Area */}
             <div className="h-[300px] flex items-center justify-center p-6">
               {watchDetails.image ? (
@@ -912,7 +912,7 @@ export function WatchDetailsPage() {
 
             {/* Watch Info */}
             <div className="flex items-center gap-3 px-6 py-[13px] border-b border-[rgba(33,33,33,0.05)]">
-              <div className="w-[79px] h-[78px] rounded-2xl border border-[rgba(0,0,0,0.05)] overflow-hidden bg-gradient-to-b from-white to-[#f4f4f4] flex items-center justify-center shrink-0">
+              <div className="w-[79px] h-[78px] rounded-2xl border border-[rgba(0,0,0,0.05)] overflow-hidden flex items-center justify-center shrink-0 bg-gradient-to-b from-[#FAFAFA] to-[#F0F0F0]">
                 {watchDetails.image ? (
                   <img
                     src={watchDetails.image}
@@ -998,7 +998,7 @@ export function WatchDetailsPage() {
 
             {/* Watch Info */}
             <div className="px-6 py-4 border-b flex items-center gap-4 shrink-0">
-              <div className="w-12 h-12 bg-gradient-to-b from-white to-[#f4f4f4] rounded-lg flex items-center justify-center overflow-hidden">
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden bg-gradient-to-b from-[#FAFAFA] to-[#F0F0F0]">
                 {watchDetails.image ? (
                   <img
                     src={watchDetails.image}
@@ -1116,7 +1116,7 @@ export function WatchDetailsPage() {
 
             {/* Watch Info */}
             <div className="flex items-center gap-3 px-6 py-[13px] border-b border-[rgba(33,33,33,0.05)]">
-              <div className="w-[79px] h-[78px] rounded-2xl border border-[rgba(0,0,0,0.05)] overflow-hidden bg-gradient-to-b from-white to-[#f4f4f4] flex items-center justify-center shrink-0">
+              <div className="w-[79px] h-[78px] rounded-2xl border border-[rgba(0,0,0,0.05)] overflow-hidden flex items-center justify-center shrink-0 bg-gradient-to-b from-[#FAFAFA] to-[#F0F0F0]">
                 {watchDetails.image ? (
                   <img
                     src={watchDetails.image}

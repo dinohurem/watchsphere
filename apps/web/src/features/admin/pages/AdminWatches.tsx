@@ -724,7 +724,7 @@ export function AdminWatches() {
                 <tr key={watch.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                      <div className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden bg-gray-100">
                         {watch.cover_image ? (
                           <img src={watch.cover_image} alt={watch.model} className="w-full h-full object-cover" loading="lazy" />
                         ) : (

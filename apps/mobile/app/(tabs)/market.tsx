@@ -37,6 +37,7 @@ interface WatchMarketData {
   orderCount?: number;
   lowestOrderPrice?: number;
   adminPrice?: number;
+  coverImage?: string;
 }
 
 // Mini sparkline component for price chart
@@ -248,6 +249,7 @@ export default function MarketScreen() {
           orderCount: item.total_orders || 0,
           lowestOrderPrice: item.lowest_order_price,
           adminPrice: item.admin_price,
+          coverImage: item.cover_image || undefined,
         }));
 
         setAllWatches(watchData);
@@ -282,6 +284,7 @@ export default function MarketScreen() {
             priceHistory: item.price_history || [],
             trending: item.trending || false,
             orderCount: item.order_count || 0,
+            coverImage: item.cover_image || undefined,
           }));
 
           setAllWatches(watchData);
@@ -341,6 +344,7 @@ export default function MarketScreen() {
           priceHistory: item.price_history || [],
           trending: item.trending || true,
           orderCount: item.order_count || 0,
+          coverImage: item.cover_image || undefined,
         }));
         setTrendingWatches(trending);
         return trending.length > 0;
@@ -374,6 +378,7 @@ export default function MarketScreen() {
           priceHistory: item.price_history || [],
           trending: item.trending || false,
           orderCount: item.order_count || 0,
+          coverImage: item.cover_image || undefined,
         }));
         setFeaturedWatches(featured);
       } else {
@@ -762,6 +767,10 @@ export default function MarketScreen() {
       justifyContent: 'center',
       alignItems: 'center',
     },
+    gridImage: {
+      width: '80%',
+      height: '80%',
+    },
     gridCardContent: {
       padding: wp(12),
       paddingTop: hp(10),
@@ -1131,7 +1140,11 @@ export default function MarketScreen() {
                       } : undefined}
                     >
                       <View style={styles.gridImageContainer}>
-                        <LogoIcon size={sp(40)} color="rgba(33, 33, 33, 0.12)" />
+                        {watch.coverImage ? (
+                          <Image source={{ uri: watch.coverImage }} style={styles.gridImage} resizeMode="contain" />
+                        ) : (
+                          <LogoIcon size={sp(40)} color="rgba(33, 33, 33, 0.12)" />
+                        )}
                       </View>
                       <View style={styles.gridCardContent}>
                         <Text style={styles.gridBrand} numberOfLines={1}>{watch.brand}</Text>

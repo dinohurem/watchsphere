@@ -932,7 +932,7 @@ export default function WatchDetailsScreen() {
       >
         {/* Hero Image with gradient background that extends to price section */}
         <View style={styles.heroContainer}>
-          {/* Top gradient - seamless background */}
+          {/* Gray gradient background */}
           <LinearGradient
             colors={['#FAFAFA', '#F0F0F0']}
             locations={[0.067, 1]}
