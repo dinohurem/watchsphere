@@ -222,6 +222,14 @@ export default function ChatScreen() {
     }
   };
 
+  const handleDeleteAiChat = async (chatId: string) => {
+    try {
+      await api.delete(`/ai-chats/${chatId}`);
+      setAiChats(prev => prev.filter(c => c.id !== chatId));
+    } catch (error) {
+      console.error('Failed to delete AI chat:', error);
+    }
+  };
 
   const handleMarkAsRead = async (chatId: string, isGroup: boolean) => {
     try {
@@ -333,23 +341,32 @@ export default function ChatScreen() {
 
   // Render AI chat item matching Figma design (same as Ask AI page)
   const renderAIChatItem = ({ item }: { item: AIChat }) => (
-    <TouchableOpacity
-      style={styles.aiChatItem}
-      onPress={() => router.push({
-        pathname: '/chat/ai/[id]',
-        params: { id: item.id, title: item.title },
-      } as any)}
-      activeOpacity={0.7}
+    <SwipeableChatItem
+      onMore={() => {}}
+      onDelete={() => handleDeleteAiChat(item.id)}
+      isGroup={false}
+      aiChat={true}
+      chatId={item.id}
+      chatName={item.title}
     >
-      <View style={styles.aiChatIconContainer}>
-        <SparkleIcon />
-      </View>
-      <View style={styles.aiChatTextContainer}>
-        <Text style={styles.aiChatTitle} numberOfLines={2}>
-          {item.title}
-        </Text>
-      </View>
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.aiChatItem}
+        onPress={() => router.push({
+          pathname: '/chat/ai/[id]',
+          params: { id: item.id, title: item.title },
+        } as any)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.aiChatIconContainer}>
+          <SparkleIcon />
+        </View>
+        <View style={styles.aiChatTextContainer}>
+          <Text style={styles.aiChatTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </SwipeableChatItem>
   );
 
   const renderTabContent = () => {

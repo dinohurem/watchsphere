@@ -1,9 +1,12 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from beanie import PydanticObjectId
 import asyncio
+import csv
+import io
 import logging
 import random
 
@@ -202,14 +205,30 @@ class OrderCreate(BaseModel):
 
 
 class OrderUpdate(BaseModel):
+    order_type: Optional[OrderType] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    reference: Optional[str] = None
     price: Optional[float] = None
     currency: Optional[str] = None
     condition: Optional[OrderCondition] = None
+    country_code: Optional[str] = None
     country_name: Optional[str] = None
     has_box: Optional[bool] = None
     has_papers: Optional[bool] = None
     notes: Optional[str] = None
+    user_name: Optional[str] = None
+    whatsapp_phone: Optional[str] = None
     status: Optional[OrderStatus] = None
+    created_at: Optional[datetime] = None
+    # Catalog fields
+    collection: Optional[str] = None
+    oem_references: Optional[List[str]] = None
+    dial: Optional[str] = None
+    bracelet: Optional[str] = None
+    ws_code: Optional[str] = None
+    aliases: Optional[List[str]] = None
+    description: Optional[str] = None
     # Extended watch details (for sell listings)
     images: Optional[list[str]] = None
     year: Optional[int] = None
@@ -239,6 +258,82 @@ class OrderUpdate(BaseModel):
 
 
 # ============== PUBLIC ENDPOINTS ==============
+
+class PriceHistoryPoint(BaseModel):
+    """A single data point for price chart"""
+    date: str  # ISO format date string
+    price: float
+
+
+class PriceHistoryResponse(BaseModel):
+    """Price history from real sell orders"""
+    reference: str
+    points: List[PriceHistoryPoint]
+    current_price: float
+    price_change: float
+
+
+@router.get("/price-history/{reference:path}", response_model=PriceHistoryResponse)
+async def get_price_history(
+    reference: str,
+    days: int = Query(default=365, le=730),
+) -> Any:
+    """
+    Get real price history from sell orders for chart display.
+
+    Returns the lowest sell order price per day for the given reference,
+    covering up to the requested number of days. Includes both active
+    and completed orders to show historical pricing.
+    """
+    cutoff_date = datetime.utcnow() - timedelta(days=days)
+
+    # Get all sell orders (active + completed) created within the time range
+    sell_orders = await Order.find(
+        Order.reference == reference,
+        Order.order_type == OrderType.SELL,
+        Order.created_at >= cutoff_date,
+    ).sort([("created_at", 1)]).to_list()
+
+    # Group by date (day), take the lowest price per day
+    daily_prices: dict[str, float] = {}
+    for order in sell_orders:
+        day_key = order.created_at.strftime("%Y-%m-%d")
+        if day_key not in daily_prices or order.price < daily_prices[day_key]:
+            daily_prices[day_key] = order.price
+
+    points = [
+        PriceHistoryPoint(date=day, price=price)
+        for day, price in sorted(daily_prices.items())
+    ]
+
+    # Calculate current price (lowest active sell, or last recorded price)
+    current_price = 0.0
+    lowest_active = await Order.find(
+        Order.reference == reference,
+        Order.order_type == OrderType.SELL,
+        Order.status == OrderStatus.ACTIVE,
+    ).sort([("price", 1)]).limit(1).to_list()
+
+    if lowest_active:
+        current_price = lowest_active[0].price
+    elif points:
+        current_price = points[-1].price
+
+    # Get admin price for price_change calculation
+    watch = await Watch.find_one(Watch.reference == reference, Watch.status == WatchStatus.ACTIVE)
+    admin_price = watch.price if watch else 0
+
+    price_change = 0.0
+    if admin_price and admin_price > 0 and current_price > 0:
+        price_change = ((current_price - admin_price) / admin_price) * 100
+
+    return PriceHistoryResponse(
+        reference=reference,
+        points=points,
+        current_price=current_price,
+        price_change=price_change,
+    )
+
 
 @router.get("/book/{reference:path}", response_model=OrderBookResponse)
 async def get_order_book(
@@ -285,7 +380,8 @@ async def get_order_book(
     def format_order(order: Order) -> OrderBookEntry:
         # Use order.user_name if available, otherwise lookup from user_names_map
         user_name = order.user_name or user_names_map.get(order.user_id)
-        whatsapp_phone = user_whatsapp_map.get(order.user_id)
+        # Prefer order-level whatsapp_phone (set by admin), fall back to user profile
+        whatsapp_phone = order.whatsapp_phone or user_whatsapp_map.get(order.user_id)
         return OrderBookEntry(
             id=str(order.id),
             date=order.created_at.strftime("%m.%d.%y"),
@@ -820,7 +916,6 @@ async def get_my_orders(
     current_user: User = Depends(get_current_active_user),
     order_type: Optional[OrderType] = None,
     status_filter: Optional[OrderStatus] = None,
-    include_cancelled: bool = False,
 ) -> Any:
     """Get current user's orders with best bid for sell orders"""
 
@@ -830,9 +925,6 @@ async def get_my_orders(
         query_conditions.append(Order.order_type == order_type)
     if status_filter:
         query_conditions.append(Order.status == status_filter)
-    elif not include_cancelled:
-        # By default, exclude cancelled orders unless explicitly requested
-        query_conditions.append(Order.status != OrderStatus.CANCELLED)
 
     orders = await Order.find(*query_conditions).sort([("created_at", -1)]).to_list()
 
@@ -1174,7 +1266,7 @@ async def cancel_order(
     reference = order.reference
     price = order.price
 
-    order.status = OrderStatus.CANCELLED
+    order.status = OrderStatus.COMPLETED
     order.updated_at = datetime.utcnow()
     await order.save()
 
@@ -1227,7 +1319,7 @@ async def mark_order_as_sold(
             detail="Only sell orders can be marked as sold"
         )
 
-    order.status = OrderStatus.SOLD
+    order.status = OrderStatus.COMPLETED
     order.updated_at = datetime.utcnow()
     await order.save()
 
@@ -1453,13 +1545,80 @@ async def admin_order_stats(
         "total_orders": total,
         "active_orders": status_map.get(OrderStatus.ACTIVE.value, status_map.get(OrderStatus.ACTIVE, 0)),
         "completed_orders": status_map.get(OrderStatus.COMPLETED.value, status_map.get(OrderStatus.COMPLETED, 0)),
-        "cancelled_orders": status_map.get(OrderStatus.CANCELLED.value, status_map.get(OrderStatus.CANCELLED, 0)),
         "buy_orders": type_map.get(OrderType.BUY.value, type_map.get(OrderType.BUY, 0)),
         "sell_orders": type_map.get(OrderType.SELL.value, type_map.get(OrderType.SELL, 0)),
         "unique_references": unique_refs,
     }
 
     return stats
+
+
+@router.get("/admin/export-csv")
+async def admin_export_orders_csv(
+    current_admin: User = Depends(get_current_admin_user),
+    reference: Optional[str] = None,
+) -> Any:
+    """Export orders as CSV (Admin only). Optionally filter by reference."""
+
+    query_conditions = []
+    if reference:
+        query_conditions.append(Order.reference == reference)
+
+    if query_conditions:
+        orders = await Order.find(*query_conditions).sort([("created_at", -1)]).to_list()
+    else:
+        orders = await Order.find_all().sort([("created_at", -1)]).to_list()
+
+    # Build a map of reference -> Watch for parent watch data
+    refs = list(set(o.reference for o in orders if o.reference))
+    watch_map = {}
+    if refs:
+        watches = await Watch.find({"reference": {"$in": refs}, "status": {"$ne": "completed"}}).to_list()
+        for w in watches:
+            if w.reference and w.reference not in watch_map:
+                watch_map[w.reference] = w
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Reference", "Brand", "Model", "Collection", "OEM-References", "Dial",
+        "Bracelet", "WS-Code", "Aliases", "Description", "Order Type",
+        "Price", "Currency", "Condition", "Country", "User Name",
+        "Has Box", "Has Papers", "Notes", "Created At",
+    ])
+
+    for order in orders:
+        watch = watch_map.get(order.reference)
+        writer.writerow([
+            order.reference,
+            order.brand,
+            order.model,
+            getattr(watch, "collection", "") or "",
+            ", ".join(getattr(watch, "oem_references", []) or []),
+            getattr(watch, "dial", "") or "",
+            getattr(watch, "bracelet", "") or "",
+            getattr(watch, "ws_code", "") or "",
+            ", ".join(getattr(watch, "aliases", []) or []),
+            getattr(watch, "description", "") or "",
+            order.order_type.value.upper(),
+            order.price,
+            order.currency,
+            order.condition.value if order.condition else "",
+            order.country_name or order.country_code,
+            order.user_name or "",
+            "Yes" if order.has_box else "No",
+            "Yes" if order.has_papers else "No",
+            order.notes or "",
+            order.created_at.isoformat() if order.created_at else "",
+        ])
+
+    output.seek(0)
+    filename = f"orders-{reference}.csv" if reference else "orders-all.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.get("/admin/by-reference/{reference:path}", response_model=List[OrderResponse])
@@ -1517,13 +1676,23 @@ class AdminOrderCreate(BaseModel):
     price: float
     currency: str = "EUR"
     condition: OrderCondition = OrderCondition.UNWORN
-    country_code: str
+    country_code: str = "CH"
     country_name: Optional[str] = None
     has_box: bool = False
     has_papers: bool = False
     notes: Optional[str] = None
     user_id: Optional[str] = None
     user_name: Optional[str] = None
+    # Catalog fields
+    collection: Optional[str] = None
+    oem_references: List[str] = []
+    dial: Optional[str] = None
+    bracelet: Optional[str] = None
+    ws_code: Optional[str] = None
+    aliases: List[str] = []
+    description: Optional[str] = None
+    whatsapp_phone: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 @router.post("/admin/create", response_model=OrderResponse)
@@ -1549,7 +1718,7 @@ async def admin_create_order(
         except Exception:
             pass
 
-    order = Order(
+    order_kwargs = dict(
         order_type=order_data.order_type,
         brand=order_data.brand,
         model=order_data.model,
@@ -1566,7 +1735,18 @@ async def admin_create_order(
         has_box=order_data.has_box,
         has_papers=order_data.has_papers,
         notes=order_data.notes,
+        collection=order_data.collection,
+        oem_references=order_data.oem_references,
+        dial=order_data.dial,
+        bracelet=order_data.bracelet,
+        ws_code=order_data.ws_code,
+        aliases=order_data.aliases,
+        description=order_data.description,
+        whatsapp_phone=order_data.whatsapp_phone,
     )
+    if order_data.created_at:
+        order_kwargs["created_at"] = order_data.created_at
+    order = Order(**order_kwargs)
 
     await order.insert()
 

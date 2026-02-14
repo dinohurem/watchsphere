@@ -33,16 +33,22 @@ def optimize_image(
     """
     img = Image.open(io.BytesIO(image_data))
 
-    # Convert to RGB if necessary (for PNG with transparency)
-    if img.mode in ('RGBA', 'P'):
-        # Create white background for transparent images
-        background = Image.new('RGB', img.size, (255, 255, 255))
+    # Preserve transparency for WebP output; flatten to RGB only for JPEG
+    if format.upper() == "WEBP":
         if img.mode == 'P':
             img = img.convert('RGBA')
-        background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-        img = background
-    elif img.mode != 'RGB':
-        img = img.convert('RGB')
+        elif img.mode not in ('RGB', 'RGBA'):
+            img = img.convert('RGBA')
+    else:
+        # JPEG doesn't support transparency — flatten onto white
+        if img.mode in ('RGBA', 'P'):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
 
     # Resize if needed
     img.thumbnail(max_size, Image.Resampling.LANCZOS)

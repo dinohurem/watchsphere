@@ -5,6 +5,7 @@ import { api } from '@/services/api';
 import { SlidersHorizontal, Star } from 'lucide-react';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
+import { useV2 } from '@/contexts/V2Context';
 
 // Triangle Up icon for positive price change (matching Figma)
 function TriangleUp({ className }: { className?: string }) {
@@ -123,7 +124,7 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
         <Star className="w-[17px] h-[17px] text-[#1d1d1f]" fill="currentColor" />
       </button>
       {/* Watch Image */}
-      <div className="h-[150px] bg-gradient-to-b from-white to-[#f4f4f4] flex items-center justify-center rounded-t-xl">
+      <div className="h-[150px] bg-gradient-to-b from-[#FAFAFA] to-[#F0F0F0] flex items-center justify-center rounded-t-xl">
         {watch.image_url ? (
           <img src={watch.image_url} alt={watch.model} className="max-h-full max-w-full object-contain" loading="lazy" />
         ) : (
@@ -133,12 +134,13 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
       {/* Watch Info */}
       <div className="px-4 pb-4 pt-3 flex flex-col gap-3">
         <div>
-          <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">{watch.brand} {watch.model}</p>
+          <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">{watch.brand}</p>
+          <p className="text-[13px] font-normal text-[#212121]/70 leading-[1.3] truncate">{watch.model}</p>
           <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">{watch.reference}</p>
         </div>
         <div className="flex items-center justify-between gap-2">
           <p className="text-[15px] font-semibold text-[#212121] leading-[1.3]">
-            {watch.price?.toLocaleString() || '0'}€
+            <span className="text-[12px] font-normal text-[#212121]/50">from </span>{watch.price?.toLocaleString() || '0'}€
           </p>
           <div className={`flex items-center gap-1 px-[7px] py-[3px] rounded-full ${
             isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
@@ -163,6 +165,7 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
 export function MarketPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { v2Enabled } = useV2();
   const [searchParams] = useSearchParams();
   const [watches, setWatches] = useState<WatchData[]>([]);
   const [trendingWatches, setTrendingWatches] = useState<WatchData[]>([]);
@@ -333,6 +336,7 @@ export function MarketPage() {
     <div className="p-4 lg:p-6 bg-white min-h-screen">
       <div className="max-w-[1000px] mx-auto flex flex-col gap-16">
         {/* Trending Watches Section */}
+        {v2Enabled && (
         <div className="flex flex-col gap-8">
           <h2 className="text-xl sm:text-2xl font-semibold text-[#1d1d1f]/80 leading-[1.1]">{t('market.trendingWatches')}</h2>
 
@@ -364,6 +368,7 @@ export function MarketPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Market Activity Section */}
         <div className="flex flex-col gap-8">
@@ -462,7 +467,8 @@ export function MarketPage() {
                         onClick={() => handleWatchClick(watch)}
                       >
                         <div className="w-[200px]">
-                          <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{watch.brand} {watch.model}</p>
+                          <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{watch.brand}</p>
+                          <p className="text-base font-normal text-[#212121]/70 leading-[20px] tracking-[0.08px]">{watch.model}</p>
                           <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{watch.reference}</p>
                         </div>
                         <div className="w-[168px]">
@@ -482,7 +488,7 @@ export function MarketPage() {
                         </div>
                         <div className="w-[168px]">
                           <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">
-                            €{watch.price?.toLocaleString() || '0'}
+                            <span className="text-sm font-normal text-[#212121]/50">from </span>€{watch.price?.toLocaleString() || '0'}
                           </p>
                         </div>
                         <div className="w-[129px]">
@@ -536,7 +542,7 @@ export function MarketPage() {
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-[#f5f5f7] flex items-center justify-center overflow-hidden shrink-0">
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden shrink-0 bg-[#f5f5f7]">
                             {watch.image_url ? (
                               <img src={watch.image_url} alt={watch.brand} className="w-full h-full object-contain" loading="lazy" />
                             ) : (
@@ -544,7 +550,8 @@ export function MarketPage() {
                             )}
                           </div>
                           <div>
-                            <p className="text-base font-semibold text-[#212121]">{watch.brand} {watch.model}</p>
+                            <p className="text-base font-semibold text-[#212121]">{watch.brand}</p>
+                            <p className="text-sm font-normal text-[#212121]/70">{watch.model}</p>
                             <p className="text-sm font-medium text-[#212121]/50">{watch.reference}</p>
                           </div>
                         </div>
@@ -564,7 +571,7 @@ export function MarketPage() {
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <p className="text-lg font-semibold text-[#212121]">€{watch.price?.toLocaleString() || '0'}</p>
+                        <p className="text-lg font-semibold text-[#212121]"><span className="text-sm font-normal text-[#212121]/50">from </span>€{watch.price?.toLocaleString() || '0'}</p>
                         <span className="text-sm font-medium text-[#212121]/50">{t('market.viewDetails')} →</span>
                       </div>
                     </div>

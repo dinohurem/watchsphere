@@ -12,6 +12,7 @@ import { api } from '@/services/api';
 import { LogoIcon } from '@/components/LogoIcon';
 import { User } from '@/components/icons';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
+import { useV2 } from '@/contexts/V2Context';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -231,6 +232,7 @@ function RatingStarIcon() {
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
+  const { v2Enabled } = useV2();
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
   const [favoriteWatches, setFavoriteWatches] = useState<FavoriteWatch[]>([]);
@@ -583,7 +585,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Orders and Favorites - wrapped in single subscription overlay */}
-        <SubscriptionOverlay feature="orders" compact>
+        {v2Enabled && <SubscriptionOverlay feature="orders" compact>
           <>
             {/* Buy Orders Section */}
             <View style={styles.favoritesSection}>
@@ -685,7 +687,7 @@ export default function ProfileScreen() {
               )}
             </View>
           </>
-        </SubscriptionOverlay>
+        </SubscriptionOverlay>}
       </ScrollView>
     </SafeAreaView>
   );
