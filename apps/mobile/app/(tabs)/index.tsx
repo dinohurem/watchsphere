@@ -10,6 +10,7 @@ import { api } from '@/services/api';
 import { User } from '@/components/icons';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import { useGuide } from '@/contexts/GuideContext';
+import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCHLIST, GUIDE_MOCK_ACTIVITY, GUIDE_MOCK_NEWS } from '@/data/guideMockData';
 import {
   Magnifier,
@@ -76,6 +77,7 @@ export default function HomeScreen() {
   const { colors, fonts } = useTheme();
   const { t } = useTranslation();
   const { isGuideActive } = useGuide();
+  const { v2Enabled } = useV2();
 
   // State for API data
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
@@ -550,13 +552,19 @@ export default function HomeScreen() {
       resizeMode: 'contain',
     },
     watchCardContent: {
-      padding: wp(16),
-      paddingTop: hp(12),
-      gap: hp(12),
+      padding: wp(12),
+      paddingTop: hp(10),
+      gap: hp(4),
     },
     watchName: {
       fontSize: fp(13),
       fontFamily: fonts.semiBold,
+      color: '#212121',
+      lineHeight: fp(17),
+    },
+    watchModel: {
+      fontSize: fp(13),
+      fontFamily: fonts.regular,
       color: '#212121',
       lineHeight: fp(17),
     },
@@ -569,8 +577,9 @@ export default function HomeScreen() {
     },
     watchPriceRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: hp(4),
     },
     watchPrice: {
       fontSize: fp(15),
@@ -578,12 +587,16 @@ export default function HomeScreen() {
       color: '#212121',
       lineHeight: fp(20),
     },
+    watchPriceFrom: {
+      fontSize: fp(12),
+      fontFamily: fonts.regular,
+    },
     watchChangeBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: wp(4),
-      paddingHorizontal: wp(7),
-      paddingVertical: hp(3),
+      gap: wp(3),
+      paddingHorizontal: wp(6),
+      paddingVertical: hp(2),
       borderRadius: sp(99),
     },
     watchChangeBadgeUp: {
@@ -756,7 +769,7 @@ export default function HomeScreen() {
       >
 
         {/* Latest Activity Section */}
-        <View style={styles.activitySection}>
+        {v2Enabled && <View style={styles.activitySection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('home.latestActivity')}</Text>
             <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/(tabs)/notifications' as any)}>
@@ -828,10 +841,10 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))
           )}
-        </View>
+        </View>}
 
         {/* Watchlist Section */}
-        <View style={styles.watchlistSection}>
+        <View style={[styles.watchlistSection, !v2Enabled && { paddingTop: hp(8) }]}>
           <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
             <Text style={styles.sectionTitle}>{t('home.watchlist')}</Text>
             <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/market')}>
@@ -889,11 +902,12 @@ export default function HomeScreen() {
                     </View>
                     <View style={styles.watchCardContent}>
                       <View>
-                        <Text style={styles.watchName} numberOfLines={1}>{watch.brand} {watch.model}</Text>
+                        <Text style={styles.watchName} numberOfLines={1}>{watch.brand}</Text>
+                        <Text style={styles.watchModel} numberOfLines={1}>{watch.model}</Text>
                         <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
                       </View>
                       <View style={styles.watchPriceRow}>
-                        <Text style={styles.watchPrice}>{formatPrice(watch.price)}€</Text>
+                        <Text style={styles.watchPrice}><Text style={styles.watchPriceFrom}>from </Text>{formatPrice(watch.price)}</Text>
                         <View
                           style={[
                             styles.watchChangeBadge,
@@ -901,9 +915,9 @@ export default function HomeScreen() {
                           ]}
                         >
                           {isPositive ? (
-                            <TrendingUp size={12} color="#4AA078" />
+                            <TrendingUp size={10} color="#4AA078" />
                           ) : (
-                            <PriceAlertDown size={12} color="#C93927" />
+                            <PriceAlertDown size={10} color="#C93927" />
                           )}
                           <Text
                             style={[
@@ -924,7 +938,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Quick Access Section */}
-        <View style={styles.quickAccessSection}>
+        {v2Enabled && <View style={styles.quickAccessSection}>
           <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
             <Text style={styles.sectionTitle}>{t('home.quickAccess')}</Text>
           </View>
@@ -968,7 +982,7 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
-        </View>
+        </View>}
 
         {/* Trending News Section */}
         <View style={styles.newsSection}>

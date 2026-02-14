@@ -153,52 +153,23 @@ export default function OrderBookScreen() {
     return `€${price.toLocaleString('de-DE')}`;
   };
 
-  // Format date to show MM/DD format (e.g., "12/27")
+  // Format date to show MM/YY format (e.g., "02/26")
   const formatOrderDate = (dateStr: string | undefined) => {
     if (!dateStr) return '-';
-    // Try parsing as ISO date first
-    let date = new Date(dateStr);
-    if (isNaN(date.getTime())) {
-      // Try parsing DD.MM.YY format from mock data
-      const parts = dateStr.split('.');
-      if (parts.length === 3) {
-        const [day, month, year] = parts;
-        const fullYear = parseInt(year) > 50 ? `19${year}` : `20${year}`;
-        date = new Date(`${fullYear}-${month}-${day}`);
-      }
+    // Try parsing MM.DD.YY format from backend API
+    const parts = dateStr.split('.');
+    if (parts.length === 3) {
+      return `${parts[0]}/${parts[2]}`;
     }
+    // Fallback: parse as ISO date
+    const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${month}/${day}`;
-  };
-
-  const handleOrderPress = (order: OrderBookEntry, orderType: 'buy' | 'sell') => {
-    // Navigate to watch details page with fromOrderBook flag
-    // Use router.replace to close the order book and show watch details
-    router.replace({
-      pathname: '/market/watch-details',
-      params: {
-        orderId: order.id,
-        reference: params.reference,
-        brand: orderBook?.brand || '',
-        model: orderBook?.model || '',
-        price: order.price.toString(),
-        condition: order.condition,
-        country_code: order.country_code,
-        country_name: order.country_name || '',
-        has_box: order.has_box.toString(),
-        has_papers: order.has_papers.toString(),
-        user_name: order.user_name || '',
-        user_id: order.user_id,
-        order_type: orderType,
-        fromOrderBook: 'true',
-      },
-    });
+    const year = date.getFullYear().toString().slice(-2);
+    return `${month}/${year}`;
   };
 
   const orders = selectedTab === 'Buy' ? orderBook?.buy_orders : orderBook?.sell_orders;
-  const currentOrderType = selectedTab === 'Buy' ? 'buy' : 'sell';
 
   const handleWhatsAppChat = (order: OrderBookEntry) => {
     if (!order.whatsapp_phone) return;
@@ -214,30 +185,27 @@ export default function OrderBookScreen() {
   const renderOrderRow = ({ item, index }: { item: OrderBookEntry; index: number }) => {
     const isAlt = index % 2 === 0;
     return (
-      <TouchableOpacity
+      <View
         style={[styles.tableRow, isAlt && styles.tableRowAlt]}
-        onPress={() => handleOrderPress(item, currentOrderType)}
-        activeOpacity={0.7}
       >
         <View style={[styles.tableCell, styles.marketCellContainer]}>
           <CountryFlag countryCode={item.country_code} size={16} />
           <Text style={styles.marketCodeText}>{item.country_code?.toUpperCase()}</Text>
         </View>
-        <Text style={[styles.tableCell, styles.tableCellText, styles.dateCellData]}>{formatOrderDate(item.date)}</Text>
-        <Text style={[styles.tableCell, styles.tableCellText, styles.conditionCell]}>{item.condition}</Text>
+        <View style={[styles.tableCell, styles.detailsCell, { alignItems: 'center' }]}>
+          <Text style={styles.tableCellText}>{item.condition}</Text>
+          <Text style={[styles.tableCellText, { fontSize: fp(11), color: '#999999' }]}>{formatOrderDate(item.date)}</Text>
+        </View>
         <Text style={[styles.tableCell, styles.tableCellTextBold, styles.priceCell]}>{formatPrice(item.price)}</Text>
         <TouchableOpacity
             style={[styles.tableCell, styles.chatCell]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleWhatsAppChat(item);
-            }}
+            onPress={() => handleWhatsAppChat(item)}
             disabled={!item.whatsapp_phone}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <WhatsAppIcon size={20} />
           </TouchableOpacity>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -274,16 +242,16 @@ export default function OrderBookScreen() {
       <View style={styles.tabSelectorContainer}>
         <View style={styles.tabSelector}>
           <TouchableOpacity
-            style={[styles.tab, selectedTab === 'Buy' && styles.tabActive]}
-            onPress={() => setSelectedTab('Buy')}
-          >
-            <Text style={[styles.tabText, selectedTab === 'Buy' && styles.tabTextActive]}>{t('orderBook.buy')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
             style={[styles.tab, selectedTab === 'Sell' && styles.tabActive]}
             onPress={() => setSelectedTab('Sell')}
           >
-            <Text style={[styles.tabText, selectedTab === 'Sell' && styles.tabTextActive]}>{t('orderBook.sell')}</Text>
+            <Text style={[styles.tabText, selectedTab === 'Sell' && styles.tabTextActive]}>WTS</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'Buy' && styles.tabActive]}
+            onPress={() => setSelectedTab('Buy')}
+          >
+            <Text style={[styles.tabText, selectedTab === 'Buy' && styles.tabTextActive]}>WTB</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -293,8 +261,7 @@ export default function OrderBookScreen() {
         {/* Table Header */}
         <View style={styles.tableHeader}>
           <Text style={[styles.tableHeaderCell, styles.marketCell]}>{t('orderBook.market')}</Text>
-          <Text style={[styles.tableHeaderCell, styles.dateCell]}>{t('orderBook.date')}</Text>
-          <Text style={[styles.tableHeaderCell, styles.conditionCell]}>{t('orderBook.condition')}</Text>
+          <Text style={[styles.tableHeaderCell, styles.detailsCell]}>Details</Text>
           <Text style={[styles.tableHeaderCell, styles.priceCell]}>{t('orderBook.price')}</Text>
           <Text style={[styles.tableHeaderCell, styles.chatCell]}>Chat</Text>
         </View>
@@ -486,15 +453,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
   },
-  dateCell: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  dateCellData: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  conditionCell: {
+  detailsCell: {
     flex: 1,
     textAlign: 'center',
   },

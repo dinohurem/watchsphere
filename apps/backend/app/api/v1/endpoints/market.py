@@ -63,9 +63,9 @@ class WatchResponse(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
-    price: float
-    currency: str
-    condition: WatchCondition
+    price: float = 0
+    currency: str = "EUR"
+    condition: Optional[WatchCondition] = None
     year: Optional[int] = None
     serial_number: Optional[str] = None
     description: Optional[str] = None
@@ -83,6 +83,12 @@ class WatchResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     published_at: Optional[datetime] = None
+    collection: Optional[str] = None
+    oem_references: List[str] = []
+    dial: Optional[str] = None
+    bracelet: Optional[str] = None
+    ws_code: Optional[str] = None
+    aliases: List[str] = []
 
     class Config:
         from_attributes = True
@@ -108,9 +114,9 @@ class WatchListResponse(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
-    price: float
-    currency: str
-    condition: WatchCondition
+    price: float = 0
+    currency: str = "EUR"
+    condition: Optional[WatchCondition] = None
     cover_image: Optional[str] = None
     status: WatchStatus
     featured: bool
@@ -123,9 +129,9 @@ class WatchCreate(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
-    price: float
-    currency: str = "USD"
-    condition: WatchCondition
+    price: Optional[float] = 0
+    currency: str = "EUR"
+    condition: Optional[WatchCondition] = None
     year: Optional[int] = None
     serial_number: Optional[str] = None
     description: Optional[str] = None
@@ -133,7 +139,13 @@ class WatchCreate(BaseModel):
     cover_image: Optional[str] = None
     status: WatchStatus = WatchStatus.DRAFT
     featured: bool = False
-    dealer_id: Optional[str] = None  # Admin can assign to any dealer
+    dealer_id: Optional[str] = None
+    collection: Optional[str] = None
+    oem_references: List[str] = []
+    dial: Optional[str] = None
+    bracelet: Optional[str] = None
+    ws_code: Optional[str] = None
+    aliases: List[str] = []
 
 
 class WatchUpdate(BaseModel):
@@ -154,6 +166,12 @@ class WatchUpdate(BaseModel):
     order_count: Optional[int] = None
     price_change: Optional[float] = None
     price_history: Optional[List[float]] = None
+    collection: Optional[str] = None
+    oem_references: Optional[List[str]] = None
+    dial: Optional[str] = None
+    bracelet: Optional[str] = None
+    ws_code: Optional[str] = None
+    aliases: Optional[List[str]] = None
 
 
 # ============== PUBLIC ENDPOINTS ==============
@@ -816,7 +834,7 @@ async def admin_create_watch(
         brand=watch_data.brand,
         model=watch_data.model,
         reference=watch_data.reference,
-        price=watch_data.price,
+        price=watch_data.price or 0,
         currency=watch_data.currency,
         condition=watch_data.condition,
         year=watch_data.year,
@@ -829,35 +847,15 @@ async def admin_create_watch(
         dealer_id=dealer_id,
         dealer_name=dealer_name,
         published_at=datetime.utcnow() if watch_data.status == WatchStatus.ACTIVE else None,
+        collection=watch_data.collection,
+        oem_references=watch_data.oem_references,
+        dial=watch_data.dial,
+        bracelet=watch_data.bracelet,
+        ws_code=watch_data.ws_code,
+        aliases=watch_data.aliases,
     )
 
     await watch.insert()
-
-    # Auto-create sell order if watch is active and has a reference
-    if watch_data.status == WatchStatus.ACTIVE and watch_data.reference:
-        sell_order = Order(
-            order_type=OrderType.SELL,
-            brand=watch_data.brand,
-            model=watch_data.model,
-            reference=watch_data.reference,
-            watch_id=str(watch.id),
-            price=watch_data.price,
-            currency=watch_data.currency,
-            condition=map_watch_to_order_condition(watch_data.condition),
-            country_code="CH",  # Default to Switzerland for admin-created listings
-            country_name="Switzerland",
-            user_id=dealer_id,
-            user_name=dealer_name,
-            user_email=current_admin.email,
-            status=OrderStatus.ACTIVE,
-            has_box=True,  # Default to true for admin listings
-            has_papers=True,
-        )
-        await sell_order.insert()
-
-        # Increment order count on the watch
-        watch.order_count = 1
-        await watch.save()
 
     return {
         "id": str(watch.id),
@@ -880,6 +878,12 @@ async def admin_create_watch(
         "created_at": watch.created_at,
         "updated_at": watch.updated_at,
         "published_at": watch.published_at,
+        "collection": watch.collection,
+        "oem_references": watch.oem_references,
+        "dial": watch.dial,
+        "bracelet": watch.bracelet,
+        "ws_code": watch.ws_code,
+        "aliases": watch.aliases,
     }
 
 
@@ -1016,8 +1020,7 @@ async def admin_watch_stats(
         "total_watches": total,
         "active_watches": status_map.get(WatchStatus.ACTIVE.value, status_map.get(WatchStatus.ACTIVE, 0)),
         "draft_watches": status_map.get(WatchStatus.DRAFT.value, status_map.get(WatchStatus.DRAFT, 0)),
-        "sold_watches": status_map.get(WatchStatus.SOLD.value, status_map.get(WatchStatus.SOLD, 0)),
-        "reserved_watches": status_map.get(WatchStatus.RESERVED.value, status_map.get(WatchStatus.RESERVED, 0)),
+        "completed_watches": status_map.get("completed", 0),
         "featured_watches": summary["featured_count"],
         "total_views": summary["total_views"],
         "brands_count": len(summary["brands"]),

@@ -25,6 +25,12 @@ class WhatsAppImport(Document):
     total_messages: int = 0
     extracted_watches: int = 0
 
+    # CSV import stats
+    matched_orders: int = 0
+    unmatched_rows: int = 0
+    skipped_duplicates: int = 0
+    unmatched_csv: Optional[str] = None  # CSV content of unmatched rows for download
+
     # Admin who imported
     imported_by: str = Field(..., index=True)
     imported_by_name: str

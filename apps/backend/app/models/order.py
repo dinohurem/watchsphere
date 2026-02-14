@@ -2,7 +2,7 @@ from beanie import Document
 from pydantic import Field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 
 class OrderType(str, Enum):
@@ -18,9 +18,6 @@ class OrderCondition(str, Enum):
 class OrderStatus(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
-    CANCELLED = "cancelled"
-    EXPIRED = "expired"
-    SOLD = "sold"
 
 
 class Order(Document):
@@ -55,6 +52,17 @@ class Order(Document):
 
     # Status
     status: OrderStatus = OrderStatus.ACTIVE
+
+    # Catalog fields (from parent watch or entered directly)
+    collection: Optional[str] = None
+    oem_references: List[str] = Field(default_factory=list)
+    bracelet: Optional[str] = None
+    ws_code: Optional[str] = None
+    aliases: List[str] = Field(default_factory=list)
+    description: Optional[str] = None
+
+    # Contact (WhatsApp phone for order book)
+    whatsapp_phone: Optional[str] = None
 
     # Optional details
     notes: Optional[str] = None

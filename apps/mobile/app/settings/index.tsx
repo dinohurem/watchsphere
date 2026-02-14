@@ -7,6 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Constants from 'expo-constants';
 import { useTranslation } from 'react-i18next';
+import { useV2 } from '@/contexts/V2Context';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -60,6 +61,7 @@ function SettingsItem({ title, onPress }: SettingsItemProps) {
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const logout = useAuthStore((state) => state.logout);
+  const { v2Enabled } = useV2();
   const appVersion = Constants.expoConfig?.version || '0.1.0';
 
   const handleLogout = () => {
@@ -117,10 +119,12 @@ export default function SettingsScreen() {
             title={t('settings.accountDetails')}
             onPress={() => router.push('/account-details' as any)}
           />
-          <SettingsItem
-            title={t('settings.orders')}
-            onPress={() => router.push('/settings/orders-menu' as any)}
-          />
+          <View style={!v2Enabled ? { opacity: 0.4 } : undefined} pointerEvents={v2Enabled ? 'auto' : 'none'}>
+            <SettingsItem
+              title={t('settings.orders')}
+              onPress={() => router.push('/settings/orders-menu' as any)}
+            />
+          </View>
           <SettingsItem
             title={t('settings.general')}
             onPress={() => router.push('/settings/general' as any)}

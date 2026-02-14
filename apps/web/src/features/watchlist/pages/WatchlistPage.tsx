@@ -85,7 +85,7 @@ export function WatchlistPage() {
                 >
                   <div className="flex items-center gap-6">
                     {/* Watch Image */}
-                    <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    <div className="w-32 h-32 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden bg-gray-100">
                       {watch.image ? (
                         <img
                           src={watch.image}

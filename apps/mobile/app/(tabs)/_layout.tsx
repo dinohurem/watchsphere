@@ -7,6 +7,7 @@ import { Home, BarChart, WristWatch, MessageCircle, AISparkle } from '@/componen
 import { AIChatModal } from '@/components/AIChatModal';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useChat } from '@/contexts/ChatContext';
+import { useV2 } from '@/contexts/V2Context';
 import { useTranslation } from 'react-i18next';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import { GlassWrapper } from '@/components/LiquidGlassWrapper';
@@ -20,6 +21,7 @@ function CustomTabBar() {
   // Get unread count from chat context
   const { getTotalUnreadCount } = useChat();
   const totalUnreadCount = getTotalUnreadCount();
+  const { v2Enabled } = useV2();
 
   const tabs = [
     { name: 'index', titleKey: 'tabs.home', icon: Home, route: '/(tabs)/' },
@@ -27,6 +29,9 @@ function CustomTabBar() {
     { name: 'chat', titleKey: 'tabs.chat', icon: MessageCircle, route: '/(tabs)/chat', hasNotification: totalUnreadCount > 0 },
     { name: 'dashboard', titleKey: 'tabs.inventory', icon: WristWatch, route: '/(tabs)/dashboard' },
   ];
+
+  const v2OnlyTabs = ['chat', 'dashboard'];
+  const filteredTabs = tabs;
 
   const isActive = (route: string, name: string) => {
     if (name === 'index') {
@@ -45,29 +50,31 @@ function CustomTabBar() {
           intensity={95}
           tint="light"
         >
-          {tabs.map((tab) => {
+          {filteredTabs.map((tab) => {
             const active = isActive(tab.route, tab.name);
             const IconComponent = tab.icon;
+            const isDisabled = !v2Enabled && v2OnlyTabs.includes(tab.name);
 
             const tabContent = (
               <>
                 <View style={styles.tabIconWrapper}>
-                  <View style={{ opacity: active ? 1 : 0.7 }}>
+                  <View style={{ opacity: isDisabled ? 0.3 : (active ? 1 : 0.7) }}>
                     <IconComponent
                       size={24}
-                      color={active ? '#0088FF' : '#404040'}
+                      color={active && !isDisabled ? '#0088FF' : '#404040'}
                       fill="none"
                     />
                   </View>
-                  {tab.hasNotification && (
+                  {tab.hasNotification && !isDisabled && (
                     <View style={styles.notificationDot} />
                   )}
                 </View>
                 <Text
                   style={[
                     styles.tabLabel,
-                    active && styles.tabLabelActive,
-                    { fontFamily: active ? fonts.semiBold : fonts.medium },
+                    active && !isDisabled && styles.tabLabelActive,
+                    { fontFamily: active && !isDisabled ? fonts.semiBold : fonts.medium },
+                    isDisabled && { opacity: 0.3 },
                   ]}
                   numberOfLines={1}
                 >
@@ -80,8 +87,9 @@ function CustomTabBar() {
               <TouchableOpacity
                 key={tab.name}
                 style={styles.tabItem}
-                onPress={() => router.replace(tab.route as any)}
-                activeOpacity={0.7}
+                onPress={() => !isDisabled && router.replace(tab.route as any)}
+                activeOpacity={isDisabled ? 1 : 0.7}
+                disabled={isDisabled}
               >
                 {active ? (
                   <GlassWrapper

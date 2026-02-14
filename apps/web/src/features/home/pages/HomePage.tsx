@@ -19,6 +19,7 @@ import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
 import { useAuthStore } from '@watchsphere/shared/stores';
+import { useV2 } from '@/contexts/V2Context';
 
 // Mini chart component for price trend visualization - matching Figma design
 function MiniChart({ data, isPositive = true }: { data?: number[]; isPositive?: boolean }) {
@@ -160,6 +161,7 @@ interface NewsItem {
 export function HomePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { v2Enabled } = useV2();
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loadingWatchlist, setLoadingWatchlist] = useState(true);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -416,6 +418,7 @@ export function HomePage() {
     <div className="p-4 lg:p-6 bg-white min-h-screen">
       <div className="max-w-[1000px] mx-auto flex flex-col gap-16">
       {/* Top Section: Latest Activity + Quick Access */}
+      {v2Enabled && (
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Latest Activity */}
         <div className="w-full lg:w-[472px] flex flex-col gap-8">
@@ -528,6 +531,7 @@ export function HomePage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Watchlist Section */}
       <div className="flex flex-col gap-8">
@@ -581,7 +585,10 @@ export function HomePage() {
                 <div className="px-4 pb-4 pt-3 flex flex-col gap-3">
                   <div>
                     <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">
-                      {watch.brand} {watch.model}
+                      {watch.brand}
+                    </p>
+                    <p className="text-[13px] font-normal text-[#212121]/70 leading-[1.3] truncate">
+                      {watch.model}
                     </p>
                     <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">
                       {watch.reference}
@@ -589,7 +596,7 @@ export function HomePage() {
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[15px] font-semibold text-[#212121] leading-[1.3]">
-                      {watch.price.toLocaleString()}€
+                      <span className="text-[12px] font-normal text-[#212121]/50">from </span>{watch.price.toLocaleString()}€
                     </p>
                     <div className={`flex items-center gap-1 px-[7px] py-[3px] rounded-full ${
                       watch.priceChange >= 0 ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
@@ -660,7 +667,8 @@ export function HomePage() {
                     onClick={() => handleWatchClick(item)}
                   >
                     <div className="w-[200px]">
-                      <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{item.brand} {item.model}</p>
+                      <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{item.brand}</p>
+                      <p className="text-base font-normal text-[#212121]/70 leading-[20px] tracking-[0.08px]">{item.model}</p>
                       <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{item.reference}</p>
                     </div>
                     <div className="w-[168px]">
@@ -680,7 +688,7 @@ export function HomePage() {
                     </div>
                     <div className="w-[168px]">
                       <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">
-                        €{item.price.toLocaleString()}
+                        <span className="text-sm font-normal text-[#212121]/50">from </span>€{item.price.toLocaleString()}
                       </p>
                     </div>
                     <div className="w-[129px]">
@@ -717,7 +725,8 @@ export function HomePage() {
                         )}
                       </div>
                       <div>
-                        <p className="text-base font-semibold text-[#212121]">{item.brand} {item.model}</p>
+                        <p className="text-base font-semibold text-[#212121]">{item.brand}</p>
+                        <p className="text-sm font-normal text-[#212121]/70">{item.model}</p>
                         <p className="text-sm font-medium text-[#212121]/50">{item.reference}</p>
                       </div>
                     </div>
@@ -737,7 +746,7 @@ export function HomePage() {
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
-                    <p className="text-lg font-semibold text-[#212121]">€{item.price.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-[#212121]"><span className="text-sm font-normal text-[#212121]/50">from </span>€{item.price.toLocaleString()}</p>
                     <span className="text-sm font-medium text-[#212121]/50">{t('home.marketActivity.viewDetails')} →</span>
                   </div>
                 </div>

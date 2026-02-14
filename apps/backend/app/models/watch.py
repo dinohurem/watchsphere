@@ -17,9 +17,6 @@ class WatchCondition(str, Enum):
 class WatchStatus(str, Enum):
     DRAFT = "draft"
     ACTIVE = "active"
-    SOLD = "sold"
-    RESERVED = "reserved"
-    ARCHIVED = "archived"
 
 
 class Watch(Document):
@@ -28,15 +25,23 @@ class Watch(Document):
     model: str
     reference: Optional[str] = None  # Reference number (e.g., 126610LN)
 
-    # Pricing
-    price: float
-    currency: str = "USD"
+    # Pricing (optional — price derived from orders)
+    price: float = 0
+    currency: str = "EUR"
 
-    # Condition & Details
-    condition: WatchCondition
+    # Condition & Details (optional — live on orders now)
+    condition: Optional[WatchCondition] = None
     year: Optional[int] = None
     serial_number: Optional[str] = Field(None, unique=True)
     description: Optional[str] = None
+
+    # New catalog fields
+    collection: Optional[str] = None
+    oem_references: List[str] = Field(default_factory=list)
+    dial: Optional[str] = None
+    bracelet: Optional[str] = None
+    ws_code: Optional[str] = None
+    aliases: List[str] = Field(default_factory=list)
 
     # Images - URLs to Firebase Storage
     images: List[str] = Field(default_factory=list)  # Full-size image URLs

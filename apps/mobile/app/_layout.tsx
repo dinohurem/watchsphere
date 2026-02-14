@@ -19,6 +19,7 @@ import { FilterProvider } from '@/contexts/FilterContext';
 import { ConfigProvider } from '@/contexts/ConfigContext';
 import { GuideProvider, useGuide } from '@/contexts/GuideContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
+import { V2Provider } from '@/contexts/V2Context';
 import { AnimatedSplashScreen } from '@/components/AnimatedSplashScreen';
 import { NotificationBanner } from '@/components/NotificationBanner';
 import { useFonts } from 'expo-font';
@@ -107,7 +108,7 @@ function NotificationHandler() {
   );
 }
 
-function RootLayoutNav() {
+function RootLayoutNav({ onSessionRestoreDone }: { onSessionRestoreDone: () => void }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
   const login = useAuthStore((state) => state.login);
@@ -120,6 +121,7 @@ function RootLayoutNav() {
   const hasNavigatedRef = useRef(false);
   const isFreshLoginRef = useRef(false);
   const sessionRestoreHandledRef = useRef(false);
+  const splashDismissedRef = useRef(false);
 
   // Try to restore session from stored tokens on app startup
   useEffect(() => {
@@ -241,19 +243,25 @@ function RootLayoutNav() {
             });
           }
         }
+
+        // Dismiss splash after navigation commit
+        if (!splashDismissedRef.current) {
+          splashDismissedRef.current = true;
+          setTimeout(() => onSessionRestoreDone(), 150);
+        }
       };
       navigateAfterAuth();
     } else {
       // Not authenticated — reset so navigation fires again on next login
       hasNavigatedRef.current = false;
       router.replace('/(auth)');
+      // Dismiss splash
+      if (!splashDismissedRef.current) {
+        splashDismissedRef.current = true;
+        setTimeout(() => onSessionRestoreDone(), 150);
+      }
     }
   }, [isAuthenticated, hasHydrated, isRestoringSession]);
-
-  // Show nothing while hydrating or restoring session
-  if (!hasHydrated || isRestoringSession) {
-    return null;
-  }
 
   return (
     <>
@@ -283,7 +291,8 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  const [showSplash, setShowSplash] = useState(true);
+  const [splashAnimationDone, setSplashAnimationDone] = useState(false);
+  const [sessionRestoreDone, setSessionRestoreDone] = useState(false);
   const [fontsLoaded] = useFonts({
     HankenGrotesk_300Light,
     HankenGrotesk_400Regular,
@@ -305,38 +314,50 @@ export default function RootLayout() {
   }, [fontsLoaded, onLayoutRootView]);
 
   const handleSplashComplete = () => {
-    setShowSplash(false);
+    setSplashAnimationDone(true);
   };
+
+  // Callback for RootLayoutNav to signal navigation has committed
+  const handleSessionRestoreDone = useCallback(() => {
+    setSessionRestoreDone(true);
+  }, []);
+
+  // Show splash until both animation is done AND initial navigation is done
+  const showSplash = !splashAnimationDone || !sessionRestoreDone;
 
   if (!fontsLoaded) {
     return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
   }
 
-  if (showSplash) {
-    return <AnimatedSplashScreen onAnimationComplete={handleSplashComplete} />;
-  }
-
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <ConfigProvider>
-          <FilterProvider>
-            <SubscriptionProvider>
-              <AIButtonProvider>
-                <NotificationProvider>
-                  <ChatProvider>
-                    <GuideProvider>
-                      <RootLayoutNav />
-                      {/* In-app notification banner - must be inside NotificationProvider */}
-                      <NotificationHandler />
-                    </GuideProvider>
-                  </ChatProvider>
-                </NotificationProvider>
-              </AIButtonProvider>
-            </SubscriptionProvider>
-          </FilterProvider>
-        </ConfigProvider>
+        <V2Provider>
+          <ConfigProvider>
+            <FilterProvider>
+              <SubscriptionProvider>
+                <AIButtonProvider>
+                  <NotificationProvider>
+                    <ChatProvider>
+                      <GuideProvider>
+                        <RootLayoutNav onSessionRestoreDone={handleSessionRestoreDone} />
+                        {/* In-app notification banner - must be inside NotificationProvider */}
+                        <NotificationHandler />
+                      </GuideProvider>
+                    </ChatProvider>
+                  </NotificationProvider>
+                </AIButtonProvider>
+              </SubscriptionProvider>
+            </FilterProvider>
+          </ConfigProvider>
+        </V2Provider>
       </ThemeProvider>
+      {/* Splash overlay — covers everything until auth decision + navigation commit */}
+      {showSplash && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 9999 }]}>
+          <AnimatedSplashScreen onAnimationComplete={handleSplashComplete} />
+        </View>
+      )}
     </QueryClientProvider>
   );
 }

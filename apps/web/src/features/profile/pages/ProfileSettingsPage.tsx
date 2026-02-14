@@ -5,6 +5,7 @@ import { useAuthStore } from '@watchsphere/shared/stores';
 import { User, CreditCard, Settings, ChevronRight, ChevronDown, LogOut, Crown, Check, Loader2, ShoppingBag, Sliders, FileText, HelpCircle, BookOpen, PlayCircle, AlertTriangle, Bug, Mail, Plus, ArrowLeft, Trash2, TrendingUp, TrendingDown, Tag, Globe } from 'lucide-react';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { useV2 } from '@/contexts/V2Context';
 
 // FAQ Data keys (questions and answers are fetched via i18n)
 const FAQ_COUNT = 10;
@@ -254,6 +255,7 @@ export function ProfileSettingsPage() {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const updateUser = useAuthStore((state) => state.updateUser);
+  const { v2Enabled } = useV2();
 
   const [activeSection, setActiveSection] = useState<ActiveSection>('profile');
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -666,15 +668,17 @@ export function ProfileSettingsPage() {
     }
   }, [location.key, ordersLoaded, activeSection]);
 
-  const menuItems = [
+  const allMenuItems = [
     { id: 'profile' as const, label: t('settings.profileSettings'), icon: User },
     { id: 'account' as const, label: t('settings.accountDetails'), icon: Settings },
     { id: 'billing' as const, label: t('settings.billingSubscription'), icon: CreditCard },
-    { id: 'orders' as const, label: t('settings.orders'), icon: ShoppingBag },
+    { id: 'orders' as const, label: t('settings.orders'), icon: ShoppingBag, v2Only: true },
     { id: 'general' as const, label: t('settings.general'), icon: Sliders },
     { id: 'terms' as const, label: t('settings.termsPrivacy'), icon: FileText },
     { id: 'support' as const, label: t('settings.support'), icon: HelpCircle },
   ];
+
+  const menuItems = allMenuItems;
 
   const renderContent = () => {
     if (loading) {
@@ -685,7 +689,7 @@ export function ProfileSettingsPage() {
       );
     }
 
-    if (activeSection === 'orders') {
+    if (activeSection === 'orders' && v2Enabled) {
       // Load orders when this section is selected
       if (!ordersLoaded && !loadingOrders) {
         loadOrders();
@@ -1722,14 +1726,19 @@ export function ProfileSettingsPage() {
 
               {/* Navigation */}
               <nav className="py-4 space-y-1">
-                {menuItems.map((item) => (
+                {menuItems.map((item) => {
+                  const isDisabled = 'v2Only' in item && item.v2Only && !v2Enabled;
+                  return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveSection(item.id)}
+                    onClick={() => !isDisabled && setActiveSection(item.id)}
+                    disabled={isDisabled}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
-                      activeSection === item.id
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'text-gray-600 hover:bg-gray-50'
+                      isDisabled
+                        ? 'text-gray-300 cursor-not-allowed'
+                        : activeSection === item.id
+                          ? 'bg-gray-100 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1738,7 +1747,8 @@ export function ProfileSettingsPage() {
                     </div>
                     <ChevronRight className="w-4 h-4 text-gray-400" />
                   </button>
-                ))}
+                  );
+                })}
               </nav>
 
               {/* Logout */}
