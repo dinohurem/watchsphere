@@ -174,6 +174,8 @@ export function ChatPage() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedChatRef = useRef<ChatItem | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   // Keep ref in sync with state and update notification context
   useEffect(() => {
     selectedChatRef.current = selectedChat;
@@ -705,6 +707,66 @@ export function ChatPage() {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedChat || isUploadingImage) return;
+
+    // Reset input so the same file can be re-selected
+    e.target.value = '';
+
+    setIsUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadResponse = await api.post(`/upload/chat/${selectedChat.id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const imageUrl = uploadResponse.data.url || uploadResponse.data.image_url;
+      if (!imageUrl) throw new Error('No image URL returned');
+
+      // Send the image URL as a message
+      const tempId = `temp-${Date.now()}`;
+      const tempMessage: Message = {
+        id: tempId,
+        conversation_id: selectedChat.id,
+        sender_id: currentUserId,
+        sender_name: 'You',
+        content: imageUrl,
+        type: 'image',
+        is_ai: false,
+        read: true,
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, tempMessage]);
+
+      if (wsConnected) {
+        chatWebSocket.joinConversation(selectedChat.id);
+        chatWebSocket.sendMessage(selectedChat.id, imageUrl, tempId);
+      } else {
+        const endpoint = selectedChat.type === 'group'
+          ? `/chat/groups/${selectedChat.id}/messages`
+          : `/chat/conversations/${selectedChat.id}/messages`;
+
+        const response = await api.post(endpoint, {
+          content: imageUrl,
+          type: 'image',
+        });
+
+        if (response.data) {
+          setMessages(prev =>
+            prev.map(msg => msg.id === tempMessage.id ? response.data : msg)
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1101,7 +1163,17 @@ export function ChatPage() {
                               </p>
                             </div>
                           )}
-                          <p className="text-[15px] leading-5">{message.content}</p>
+                          {message.type === 'image' ? (
+                            <img
+                              src={message.content}
+                              alt="Shared image"
+                              className="max-w-[280px] rounded-lg cursor-pointer"
+                              loading="lazy"
+                              onClick={() => window.open(message.content, '_blank')}
+                            />
+                          ) : (
+                            <p className="text-[15px] leading-5">{message.content}</p>
+                          )}
                           <p className={`text-[11px] mt-1 ${isOwnMessage ? 'text-white/60' : 'text-[#212121]/50'}`}>
                             {formatTime(message.created_at)}
                           </p>
@@ -1183,7 +1255,18 @@ export function ChatPage() {
                     className="flex-1 bg-transparent text-[15px] text-[#212121] placeholder:text-[#212121]/50 outline-none"
                   />
                 </div>
-                <button className="w-11 h-11 rounded-full bg-[#f1f1f1] flex items-center justify-center hover:bg-gray-200 transition-colors">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingImage}
+                  className="w-11 h-11 rounded-full bg-[#f1f1f1] flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
                   <Image className="w-[18px] h-[18px] text-[#212121]" />
                 </button>
                 <button

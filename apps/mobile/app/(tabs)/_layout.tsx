@@ -69,6 +69,7 @@ function CustomTabBar() {
                     active && styles.tabLabelActive,
                     { fontFamily: active ? fonts.semiBold : fonts.medium },
                   ]}
+                  numberOfLines={1}
                 >
                   {t(tab.titleKey)}
                 </Text>
@@ -180,19 +181,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabItemInner: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: hp(6),
     paddingBottom: hp(7),
-    paddingHorizontal: wp(8),
     gap: hp(1),
   },
   tabItemActiveGlass: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: hp(6),
     paddingBottom: hp(7),
-    paddingHorizontal: wp(18),
     gap: hp(1),
     borderRadius: sp(100),
     overflow: 'hidden',
