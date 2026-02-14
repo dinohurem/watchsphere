@@ -190,6 +190,9 @@ async def get_market_watches(
             base_query,
             Watch.price_change > 0
         ).sort([("price_change", -1)]).limit(limit).to_list()
+        # Fallback: if no watches have positive price_change, show by price desc
+        if not watches:
+            watches = await Watch.find(base_query).sort([("price", -1)]).limit(limit).to_list()
 
     elif category == "losers":
         # Negative price change, sorted by change amount (most negative first)
@@ -197,6 +200,9 @@ async def get_market_watches(
             base_query,
             Watch.price_change < 0
         ).sort([("price_change", 1)]).limit(limit).to_list()
+        # Fallback: if no watches have negative price_change, show by price asc
+        if not watches:
+            watches = await Watch.find(base_query).sort([("price", 1)]).limit(limit).to_list()
 
     elif category == "new":
         # Recently published
@@ -485,12 +491,13 @@ async def get_aggregated_market_data(
         # Get all active watches
         base_query = Watch.status == WatchStatus.ACTIVE
 
+        # For gainers/losers, we need to compute price_change dynamically from
+        # sell orders vs admin price, so fetch all watches first then filter.
         if category == "hot":
             watches = await Watch.find(base_query).sort([("order_count", -1)]).limit(limit).to_list()
-        elif category == "gainers":
-            watches = await Watch.find(base_query, Watch.price_change > 0).sort([("price_change", -1)]).limit(limit).to_list()
-        elif category == "losers":
-            watches = await Watch.find(base_query, Watch.price_change < 0).sort([("price_change", 1)]).limit(limit).to_list()
+        elif category in ("gainers", "losers"):
+            # Fetch more watches than needed — we'll filter after computing price_change
+            watches = await Watch.find(base_query).sort([("created_at", -1)]).to_list()
         elif category == "new":
             watches = await Watch.find(base_query).sort([("published_at", -1)]).limit(limit).to_list()
         elif category == "trending":
@@ -585,6 +592,29 @@ async def get_aggregated_market_data(
                 total_orders=order_counts_by_ref.get(watch.reference, 0) + (watch.order_count or 0),
                 trending=watch.trending or False,
             ))
+
+        # For gainers/losers, filter and sort by dynamically computed price_change
+        if category == "gainers":
+            filtered = sorted(
+                [r for r in result if r.price_change > 0],
+                key=lambda r: r.price_change,
+                reverse=True,
+            )[:limit]
+            # Fallback: if no watches have positive price_change, show all sorted by
+            # price descending so the category isn't empty
+            if not filtered:
+                filtered = sorted(result, key=lambda r: r.display_price, reverse=True)[:limit]
+            result = filtered
+        elif category == "losers":
+            filtered = sorted(
+                [r for r in result if r.price_change < 0],
+                key=lambda r: r.price_change,
+            )[:limit]
+            # Fallback: if no watches have negative price_change, show all sorted by
+            # price ascending so the category isn't empty
+            if not filtered:
+                filtered = sorted(result, key=lambda r: r.display_price)[:limit]
+            result = filtered
 
         return result
     except Exception as e:

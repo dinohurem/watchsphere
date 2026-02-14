@@ -13,6 +13,7 @@ import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { useConfig, type FieldCategory } from '@/hooks/useConfig';
+import { configKeyToOrderKey, MANUALLY_HANDLED_FIELDS } from '@/utils/fieldKeyMap';
 
 // Category configuration for display
 const CATEGORY_CONFIG: { key: FieldCategory; title: string }[] = [
@@ -151,19 +152,12 @@ export function OrderDetailPage() {
 
   const isOwnOrder = user?.id === order?.user_id;
 
-  // Map config field keys to order/watch_details field keys where they differ
-  const FIELD_KEY_MAP: Record<string, string> = {
-    caliber_movement: 'caliber',
-    dial_color: 'dial',
-    dial_numbers: 'dial_numerals',
-  };
-
   // Get field value from order/watch_details dynamically
   const getFieldValue = (fieldKey: string): string | undefined => {
     if (!order) return undefined;
 
     // Resolve the actual data key (config keys may differ from order model keys)
-    const dataKey = FIELD_KEY_MAP[fieldKey] || fieldKey;
+    const dataKey = configKeyToOrderKey(fieldKey);
 
     // Check watch_details first
     if (order.watch_details && order.watch_details[dataKey] !== undefined) {
@@ -183,60 +177,49 @@ export function OrderDetailPage() {
     return undefined;
   };
 
-  // Fields handled manually in the basic section (to avoid duplicates)
-  const MANUALLY_HANDLED_FIELDS = new Set([
-    'brand', 'model', 'reference',
-    'condition', 'condition_description',
-    'box_papers', 'location', 'price', 'currency',
-  ]);
-
   // Render dynamic specs for a category
   const renderCategorySpecs = (category: FieldCategory) => {
     const fields = getFieldsByCategory(category);
-    const specsWithValues: { label: string; value: string }[] = [];
+    const specs: { label: string; value: string }[] = [];
 
+    // Add special fields for the basic section
+    if (category === 'basic') {
+      specs.push({ label: t('settings.brand'), value: order?.brand || '-' });
+      specs.push({ label: t('settings.model'), value: order?.model || '-' });
+      specs.push({ label: t('orderDetails.reference'), value: order?.reference || '-' });
+    }
+
+    // Always show every field row — use '-' when no value was provided
     fields.forEach(field => {
-      // Skip fields that are manually handled (rendered with special formatting)
       if (MANUALLY_HANDLED_FIELDS.has(field.key)) return;
 
       const value = getFieldValue(field.key);
-      if (value) {
-        specsWithValues.push({ label: field.name, value });
-      }
+      specs.push({ label: field.name, value: value || '-' });
     });
 
-    // Add special fields that aren't in listing fields config
+    // Append special fields for the basic section
     if (category === 'basic') {
-      // Add core order fields at the top
-      if (order?.brand) specsWithValues.unshift({ label: t('settings.brand'), value: order.brand });
-      if (order?.model) specsWithValues.splice(1, 0, { label: t('settings.model'), value: order.model });
-      if (order?.reference) specsWithValues.splice(2, 0, { label: t('orderDetails.reference'), value: order.reference });
-
-      // Add box & papers
+      // Box & papers
       const boxPapers = order?.has_box && order?.has_papers
         ? t('orderDetails.boxPapersOptions.both')
         : order?.has_box
         ? t('orderDetails.boxPapersOptions.boxOnly')
         : order?.has_papers
         ? t('orderDetails.boxPapersOptions.papersOnly')
-        : undefined;
-      if (boxPapers) specsWithValues.push({ label: t('orderDetails.boxPapers'), value: boxPapers });
+        : '-';
+      specs.push({ label: t('orderDetails.boxPapers'), value: boxPapers });
 
-      // Add location
-      if (order?.country_name || order?.country_code) {
-        specsWithValues.push({
-          label: t('orderDetails.location'),
-          value: `${getFlagEmoji(order.country_code)} ${order.country_name || order.country_code}`
-        });
-      }
+      // Location
+      const location = (order?.country_name || order?.country_code)
+        ? `${getFlagEmoji(order!.country_code)} ${order!.country_name || order!.country_code}`
+        : '-';
+      specs.push({ label: t('orderDetails.location'), value: location });
 
-      // Add price
-      if (order?.price) {
-        specsWithValues.push({ label: t('watchDetails.price'), value: `€${order.price.toLocaleString()}` });
-      }
+      // Price
+      specs.push({ label: t('watchDetails.price'), value: order?.price ? `€${order.price.toLocaleString()}` : '-' });
     }
 
-    return specsWithValues;
+    return specs;
   };
 
   useEffect(() => {
@@ -665,9 +648,7 @@ export function OrderDetailPage() {
           {CATEGORY_CONFIG.map(({ key }) => {
             const specs = renderCategorySpecs(key);
 
-            // For basic category, always show (it has required fields)
-            // For other categories, only show if there are values
-            if (key !== 'basic' && specs.length === 0) return null;
+            // Always show all category sections
 
             return (
               <div key={key}>

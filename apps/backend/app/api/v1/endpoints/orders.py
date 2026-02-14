@@ -203,7 +203,9 @@ class OrderCreate(BaseModel):
 
 class OrderUpdate(BaseModel):
     price: Optional[float] = None
+    currency: Optional[str] = None
     condition: Optional[OrderCondition] = None
+    country_name: Optional[str] = None
     has_box: Optional[bool] = None
     has_papers: Optional[bool] = None
     notes: Optional[str] = None
@@ -975,17 +977,17 @@ async def get_order(
         if watch:
             price_change = watch.price_change or 0.0
 
-    # Build watch_details from order fields - include ALL extended fields
+    # Build watch_details from order fields — no fallback values, only actual stored data
     watch_details = WatchDetailsResponse(
         image_url=order.images[0] if order.images else None,
         images=order.images or [],
         # Basic information
         year=order.year,
         size=order.size,
-        movement=order.movement or order.movement_type,
+        movement=order.movement,
         case_material=order.case_material,
         bracelet_material=order.bracelet_material,
-        case_size=order.size or order.case_diameter,
+        case_size=order.case_size if hasattr(order, 'case_size') else None,
         gender=order.gender,
         availability=order.availability,
         # Caliber information
@@ -1005,7 +1007,7 @@ async def get_order(
         bracelet_color=order.bracelet_color,
         clasp_type=order.clasp_type,
         clasp_material=order.clasp_material,
-        clasp=order.clasp_type,  # Alias for backwards compatibility
+        clasp=order.clasp_type,
     )
 
     return OrderDetailResponse(
@@ -1037,7 +1039,7 @@ async def get_order(
     )
 
 
-@router.patch("/{order_id}", response_model=OrderResponse)
+@router.patch("/{order_id}", response_model=OrderDetailResponse)
 async def update_order(
     order_id: str,
     order_update: OrderUpdate,
@@ -1087,7 +1089,36 @@ async def update_order(
         }
     )
 
-    return OrderResponse(
+    # Build watch_details from order fields — no fallback values
+    watch_details = WatchDetailsResponse(
+        image_url=order.images[0] if order.images else None,
+        images=order.images or [],
+        year=order.year,
+        size=order.size,
+        movement=order.movement,
+        case_material=order.case_material,
+        bracelet_material=order.bracelet_material,
+        case_size=order.case_size if hasattr(order, 'case_size') else None,
+        gender=order.gender,
+        availability=order.availability,
+        movement_type=order.movement_type,
+        caliber=order.caliber,
+        base_caliber=order.base_caliber,
+        power_reserve=order.power_reserve,
+        number_of_jewels=order.number_of_jewels,
+        case_diameter=order.case_diameter,
+        water_resistance=order.water_resistance,
+        bezel_material=order.bezel_material,
+        crystal=order.crystal,
+        dial=order.dial,
+        dial_numerals=order.dial_numerals,
+        bracelet_color=order.bracelet_color,
+        clasp_type=order.clasp_type,
+        clasp_material=order.clasp_material,
+        clasp=order.clasp_type,
+    )
+
+    return OrderDetailResponse(
         id=str(order.id),
         order_type=order.order_type,
         brand=order.brand,
@@ -1100,15 +1131,17 @@ async def update_order(
         country_code=order.country_code,
         country_name=order.country_name,
         user_id=order.user_id,
-        user_name=order.user_name,
+        user_name=current_user.name,
+        user_profile_image=current_user.profile_image_url,
+        user_rating=0.0,
+        user_review_count=0,
         status=order.status,
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
-        cover_image=order.images[0] if order.images else None,
-        images=order.images or [],
         created_at=order.created_at,
         updated_at=order.updated_at,
+        watch_details=watch_details,
     )
 
 
