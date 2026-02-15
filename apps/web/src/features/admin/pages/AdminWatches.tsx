@@ -848,7 +848,7 @@ export function AdminWatches() {
                 </div>
               </div>
 
-              {/* Row 2: Collection, Reference */}
+              {/* Row 2: Collection, WS-Code */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Collection</label>
@@ -861,18 +861,18 @@ export function AdminWatches() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">WS-Code</label>
                   <input
                     type="text"
-                    value={formData.reference}
-                    onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                    value={formData.ws_code}
+                    onChange={(e) => setFormData({ ...formData, ws_code: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="e.g., 126610LN"
+                    placeholder="e.g., WS-ROL-SUB-001"
                   />
                 </div>
               </div>
 
-              {/* Row 3: OEM-References (tag input), WS-Code */}
+              {/* Row 3: OEM-References (tag input), Reference */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">OEM-References</label>
@@ -896,13 +896,13 @@ export function AdminWatches() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">WS-Code</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
                   <input
                     type="text"
-                    value={formData.ws_code}
-                    onChange={(e) => setFormData({ ...formData, ws_code: e.target.value })}
+                    value={formData.reference}
+                    onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="e.g., WS-ROL-SUB-001"
+                    placeholder="e.g., 126610LN"
                   />
                 </div>
               </div>

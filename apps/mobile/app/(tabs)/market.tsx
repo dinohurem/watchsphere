@@ -30,6 +30,7 @@ interface WatchMarketData {
   brand: string;
   model: string;
   reference: string;
+  ws_code?: string;
   price: number;
   priceChange: number;
   priceHistory: number[];
@@ -241,6 +242,7 @@ export default function MarketScreen() {
           brand: item.brand,
           model: item.model,
           reference: item.reference || '',
+          ws_code: item.ws_code,
           // Use display_price which is lowest order price OR admin price
           price: item.display_price || 0,
           priceChange: item.price_change || 0,
@@ -279,6 +281,7 @@ export default function MarketScreen() {
             brand: item.brand,
             model: item.model,
             reference: item.reference || '',
+            ws_code: item.ws_code,
             price: item.price || 0,
             priceChange: item.price_change || 0,
             priceHistory: item.price_history || [],
@@ -339,6 +342,7 @@ export default function MarketScreen() {
           brand: item.brand,
           model: item.model,
           reference: item.reference || '',
+          ws_code: item.ws_code,
           price: item.price || 0,
           priceChange: item.price_change || 0,
           priceHistory: item.price_history || [],
@@ -373,6 +377,7 @@ export default function MarketScreen() {
           brand: item.brand,
           model: item.model,
           reference: item.reference || '',
+          ws_code: item.ws_code,
           price: item.price || 0,
           priceChange: item.price_change || 0,
           priceHistory: item.price_history || [],
@@ -925,7 +930,7 @@ export default function MarketScreen() {
                         <Text style={styles.trendingPrice}>{formatPrice(watch.price)}</Text>
                       </View>
                       <View style={styles.trendingBottomRow}>
-                        <Text style={styles.trendingReference}>{watch.reference}</Text>
+                        <Text style={styles.trendingReference}>{watch.ws_code || watch.reference}</Text>
                         <View style={styles.trendingChange}>
                           {isPositive ? (
                             <TriangleUp size={12} color="#4AA078" />
@@ -967,7 +972,7 @@ export default function MarketScreen() {
                         <Text style={styles.trendingPrice}>{formatPrice(watch.price)}</Text>
                       </View>
                       <View style={styles.trendingBottomRow}>
-                        <Text style={styles.trendingReference}>{watch.reference}</Text>
+                        <Text style={styles.trendingReference}>{watch.ws_code || watch.reference}</Text>
                         <View style={styles.trendingChange}>
                           {isPositive ? (
                             <TriangleUp size={12} color="#4AA078" />
@@ -1089,7 +1094,7 @@ export default function MarketScreen() {
                     <View style={styles.watchInfo}>
                       <Text style={styles.watchName} numberOfLines={1}>{watch.brand}</Text>
                       <Text style={styles.watchModel} numberOfLines={1}>{watch.model}</Text>
-                      <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
+                      <Text style={styles.watchReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
                     </View>
                     <View style={styles.watchPriceSection}>
                       <View style={styles.chartContainer}>
@@ -1149,7 +1154,7 @@ export default function MarketScreen() {
                       <View style={styles.gridCardContent}>
                         <Text style={styles.gridBrand} numberOfLines={1}>{watch.brand}</Text>
                         <Text style={styles.gridModel} numberOfLines={1}>{watch.model}</Text>
-                        <Text style={styles.gridReference} numberOfLines={1}>{watch.reference}</Text>
+                        <Text style={styles.gridReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
                         <View style={styles.gridPriceRow}>
                           <Text style={styles.gridPrice}><Text style={styles.gridPriceFrom}>from </Text>{formatPrice(watch.price)}</Text>
                           {watch.priceChange !== 0 && (
