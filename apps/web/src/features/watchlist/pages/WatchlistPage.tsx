@@ -113,7 +113,7 @@ export function WatchlistPage() {
                         <h3 className="text-2xl font-semibold text-gray-900 mb-1">
                           {watch.brand} {watch.model}
                         </h3>
-                        <p className="text-sm text-gray-600">{watch.reference}</p>
+                        <p className="text-sm text-gray-600">{watch.ws_code || watch.reference}</p>
                       </div>
 
                       <div className="flex items-center gap-6 mb-3">

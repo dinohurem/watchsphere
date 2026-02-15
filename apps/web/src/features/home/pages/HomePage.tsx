@@ -133,6 +133,7 @@ interface WatchlistItem {
   brand: string;
   model: string;
   reference: string;
+  ws_code?: string;
   price: number;
   priceChange: number;
   image?: string;
@@ -143,6 +144,7 @@ interface MarketItem {
   brand: string;
   model: string;
   reference: string;
+  ws_code?: string;
   price: number;
   priceChange: number;
   isPositive: boolean;
@@ -197,6 +199,7 @@ export function HomePage() {
           brand: item.brand,
           model: item.model,
           reference: item.reference || '',
+          ws_code: item.ws_code,
           price: item.price || item.target_price || 0,
           priceChange: item.priceChange || item.price_change || 0,
           image: item.image || item.cover_image,
@@ -211,6 +214,7 @@ export function HomePage() {
               brand: item.brand,
               model: item.model,
               reference: item.reference || '',
+              ws_code: item.ws_code,
               price: item.price || item.target_price || 0,
               priceChange: item.priceChange || item.price_change || 0,
               image: item.image || item.cover_image,
@@ -234,6 +238,7 @@ export function HomePage() {
             brand: item.brand,
             model: item.model,
             reference: item.reference || '',
+            ws_code: item.ws_code,
             price: item.price || item.target_price || 0,
             priceChange: item.priceChange || item.price_change || 0,
             image: item.image || item.cover_image,
@@ -338,6 +343,7 @@ export function HomePage() {
           brand: item.brand,
           model: item.model || '',
           reference: item.reference || '',
+          ws_code: item.ws_code,
           price: item.display_price || item.price || 0,
           priceChange: item.price_change || 0,
           isPositive: (item.price_change || 0) >= 0,
@@ -353,6 +359,7 @@ export function HomePage() {
             brand: item.brand,
             model: item.model || '',
             reference: item.reference || '',
+            ws_code: item.ws_code,
             price: item.price || 0,
             priceChange: item.price_change || 0,
             isPositive: (item.price_change || 0) >= 0,
@@ -591,7 +598,7 @@ export function HomePage() {
                       {watch.model}
                     </p>
                     <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">
-                      {watch.reference}
+                      {watch.ws_code || watch.reference}
                     </p>
                   </div>
                   <div className="flex items-center justify-between gap-2">
@@ -669,7 +676,7 @@ export function HomePage() {
                     <div className="w-[200px]">
                       <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{item.brand}</p>
                       <p className="text-base font-normal text-[#212121]/70 leading-[20px] tracking-[0.08px]">{item.model}</p>
-                      <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{item.reference}</p>
+                      <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{item.ws_code || item.reference}</p>
                     </div>
                     <div className="w-[168px]">
                       <MiniChart data={item.priceHistory} isPositive={item.isPositive} />
@@ -727,7 +734,7 @@ export function HomePage() {
                       <div>
                         <p className="text-base font-semibold text-[#212121]">{item.brand}</p>
                         <p className="text-sm font-normal text-[#212121]/70">{item.model}</p>
-                        <p className="text-sm font-medium text-[#212121]/50">{item.reference}</p>
+                        <p className="text-sm font-medium text-[#212121]/50">{item.ws_code || item.reference}</p>
                       </div>
                     </div>
                     <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${

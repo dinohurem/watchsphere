@@ -28,6 +28,7 @@ function TriangleDown({ className }: { className?: string }) {
 interface WatchData {
   id: string;
   reference: string;
+  ws_code?: string;
   brand: string;
   model: string;
   price: number;
@@ -136,7 +137,7 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
         <div>
           <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">{watch.brand}</p>
           <p className="text-[13px] font-normal text-[#212121]/70 leading-[1.3] truncate">{watch.model}</p>
-          <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">{watch.reference}</p>
+          <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">{watch.ws_code || watch.reference}</p>
         </div>
         <div className="flex items-center justify-between gap-2">
           <p className="text-[15px] font-semibold text-[#212121] leading-[1.3]">
@@ -213,6 +214,7 @@ export function MarketPage() {
         const featured = response.data.map((item: any) => ({
           id: item.id,
           reference: item.reference,
+          ws_code: item.ws_code,
           brand: item.brand,
           model: item.model,
           price: item.price || 0,
@@ -242,6 +244,7 @@ export function MarketPage() {
         const watchData = response.data.map((item: any) => ({
           id: item.reference,
           reference: item.reference,
+          ws_code: item.ws_code,
           brand: item.brand,
           model: item.model,
           price: item.display_price || 0,
@@ -256,6 +259,7 @@ export function MarketPage() {
         const fallbackData = (fallbackResponse.data || []).map((item: any) => ({
           id: item.reference || item.id,
           reference: item.reference,
+          ws_code: item.ws_code,
           brand: item.brand,
           model: item.model,
           price: item.price || item.display_price || 0,
@@ -469,7 +473,7 @@ export function MarketPage() {
                         <div className="w-[200px]">
                           <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">{watch.brand}</p>
                           <p className="text-base font-normal text-[#212121]/70 leading-[20px] tracking-[0.08px]">{watch.model}</p>
-                          <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{watch.reference}</p>
+                          <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{watch.ws_code || watch.reference}</p>
                         </div>
                         <div className="w-[168px]">
                           <MiniChart data={watch.priceHistory || []} isPositive={isPositive} />
@@ -552,7 +556,7 @@ export function MarketPage() {
                           <div>
                             <p className="text-base font-semibold text-[#212121]">{watch.brand}</p>
                             <p className="text-sm font-normal text-[#212121]/70">{watch.model}</p>
-                            <p className="text-sm font-medium text-[#212121]/50">{watch.reference}</p>
+                            <p className="text-sm font-medium text-[#212121]/50">{watch.ws_code || watch.reference}</p>
                           </div>
                         </div>
                         <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${

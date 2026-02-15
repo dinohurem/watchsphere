@@ -100,6 +100,7 @@ class MarketWatchResponse(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
+    ws_code: Optional[str] = None
     price: float
     currency: str
     cover_image: Optional[str] = None
@@ -246,6 +247,7 @@ async def get_market_watches(
             "brand": watch.brand,
             "model": watch.model,
             "reference": watch.reference,
+            "ws_code": watch.ws_code,
             "price": watch.price,
             "currency": watch.currency,
             "cover_image": watch.cover_image,
@@ -380,6 +382,7 @@ async def get_trending_watches(
             "brand": watch.brand,
             "model": watch.model,
             "reference": watch.reference,
+            "ws_code": watch.ws_code,
             "price": watch.price,
             "currency": watch.currency,
             "cover_image": watch.cover_image,
@@ -451,6 +454,7 @@ async def get_featured_watches(
             "brand": watch.brand,
             "model": watch.model,
             "reference": watch.reference,
+            "ws_code": watch.ws_code,
             "price": watch.price,
             "currency": watch.currency,
             "cover_image": watch.cover_image,
@@ -471,6 +475,7 @@ class AggregatedWatchResponse(BaseModel):
     reference: str
     brand: str
     model: str
+    ws_code: Optional[str] = None
     cover_image: Optional[str] = None
     # Price is the lowest from active sell orders, or admin price if no orders
     display_price: float
@@ -600,6 +605,7 @@ async def get_aggregated_market_data(
                 reference=watch.reference or str(watch.id),
                 brand=watch.brand,
                 model=watch.model,
+                ws_code=watch.ws_code,
                 cover_image=watch.cover_image,
                 display_price=display_price,
                 lowest_order_price=lowest_order_price,
@@ -700,6 +706,7 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
         reference=watch.reference,
         brand=watch.brand,
         model=watch.model,
+        ws_code=watch.ws_code,
         cover_image=watch.cover_image,
         display_price=display_price,
         lowest_order_price=lowest_order_price,
@@ -763,6 +770,12 @@ async def admin_list_all_watches(
             "created_at": watch.created_at,
             "updated_at": watch.updated_at,
             "published_at": watch.published_at,
+            "collection": watch.collection,
+            "oem_references": watch.oem_references,
+            "dial": watch.dial,
+            "bracelet": watch.bracelet,
+            "ws_code": watch.ws_code,
+            "aliases": watch.aliases,
         }
         for watch in watches
     ]
@@ -804,6 +817,12 @@ async def admin_get_watch(
         "created_at": watch.created_at,
         "updated_at": watch.updated_at,
         "published_at": watch.published_at,
+        "collection": watch.collection,
+        "oem_references": watch.oem_references,
+        "dial": watch.dial,
+        "bracelet": watch.bracelet,
+        "ws_code": watch.ws_code,
+        "aliases": watch.aliases,
     }
 
 
@@ -937,6 +956,12 @@ async def admin_update_watch(
         "created_at": watch.created_at,
         "updated_at": watch.updated_at,
         "published_at": watch.published_at,
+        "collection": watch.collection,
+        "oem_references": watch.oem_references,
+        "dial": watch.dial,
+        "bracelet": watch.bracelet,
+        "ws_code": watch.ws_code,
+        "aliases": watch.aliases,
     }
 
 
@@ -1142,4 +1167,10 @@ async def get_watch(watch_id: str) -> Any:
         "created_at": watch.created_at,
         "updated_at": watch.updated_at,
         "published_at": watch.published_at,
+        "collection": watch.collection,
+        "oem_references": watch.oem_references,
+        "dial": watch.dial,
+        "bracelet": watch.bracelet,
+        "ws_code": watch.ws_code,
+        "aliases": watch.aliases,
     }

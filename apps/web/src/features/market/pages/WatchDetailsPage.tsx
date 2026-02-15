@@ -71,6 +71,7 @@ interface WatchDetails {
   brand: string;
   model: string;
   reference: string;
+  ws_code?: string;
   image?: string;
   currency: string;
   priceData: PriceData;
@@ -291,6 +292,7 @@ export function WatchDetailsPage() {
         brand: watch.brand,
         model: watch.model,
         reference: watch.reference || '',
+        ws_code: watch.ws_code,
         image: watch.cover_image,
         currency: watch.currency || 'EUR',
         priceData: {
@@ -399,7 +401,7 @@ export function WatchDetailsPage() {
     try {
       if (isInWatchlist) {
         // Remove from watchlist
-        await api.delete(`/profile/watchlist/${watchDetails?.reference}`);
+        await api.delete(`/profile/watchlist/${encodeURIComponent(watchDetails?.reference || '')}`);
         setIsInWatchlist(false);
       } else {
         // Add to watchlist
@@ -482,7 +484,7 @@ export function WatchDetailsPage() {
             <h1 className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
               {watchDetails.brand} {watchDetails.model}
             </h1>
-            <p className="text-[15px] text-[#1d1d1f]/50 leading-[1.3]">{watchDetails.reference}</p>
+            <p className="text-[15px] text-[#1d1d1f]/50 leading-[1.3]">{watchDetails.ws_code || watchDetails.reference}</p>
           </div>
         </div>
 

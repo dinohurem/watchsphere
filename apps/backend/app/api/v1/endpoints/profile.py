@@ -22,6 +22,7 @@ class WatchlistItemResponse(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
+    ws_code: Optional[str] = None
     target_price: Optional[float] = None
     currency: str = "USD"
     price_alert_enabled: bool = False
@@ -282,6 +283,7 @@ async def get_my_watchlist(
                     "price_change": watch.price_change or 0.0,
                     "image": watch.cover_image,
                     "display_price": display_price,
+                    "ws_code": watch.ws_code,
                 }
 
     return [
@@ -291,6 +293,7 @@ async def get_my_watchlist(
             "brand": item.brand,
             "model": item.model,
             "reference": item.reference,
+            "ws_code": market_data.get(item.reference, {}).get("ws_code"),
             "target_price": item.target_price,
             "currency": item.currency,
             "price_alert_enabled": item.price_alert_enabled,
@@ -433,7 +436,7 @@ async def update_watchlist_item(
     }
 
 
-@router.delete("/watchlist/{item_id}")
+@router.delete("/watchlist/{item_id:path}")
 async def remove_from_watchlist(
     item_id: str,
     current_user: User = Depends(get_current_active_user),

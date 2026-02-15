@@ -8,6 +8,8 @@ from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
 from app.models.default_watchlist import DefaultWatchlistItem
 from app.models.watchlist import WatchlistItemType
+from app.models.watch import Watch, WatchStatus
+from beanie.operators import In
 
 router = APIRouter()
 
@@ -18,6 +20,7 @@ class DefaultWatchlistResponse(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
+    ws_code: Optional[str] = None
     image_url: Optional[str] = None
     item_type: WatchlistItemType
     target_price: Optional[float] = None
@@ -70,12 +73,25 @@ async def get_public_default_watchlist(
         DefaultWatchlistItem.is_active == True
     ).sort([("display_order", 1), ("created_at", -1)]).to_list()
 
+    # Look up ws_code from Watch model by reference
+    references = [item.reference for item in items if item.reference]
+    ws_code_map = {}
+    if references:
+        watches = await Watch.find(
+            In(Watch.reference, references),
+            Watch.status == WatchStatus.ACTIVE,
+        ).to_list()
+        for watch in watches:
+            if watch.reference:
+                ws_code_map[watch.reference] = watch.ws_code
+
     return [
         {
             "id": str(item.id),
             "brand": item.brand,
             "model": item.model,
             "reference": item.reference,
+            "ws_code": ws_code_map.get(item.reference),
             "image_url": item.image_url,
             "item_type": item.item_type,
             "target_price": item.target_price,

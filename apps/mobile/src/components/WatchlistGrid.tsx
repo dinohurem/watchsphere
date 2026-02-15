@@ -7,6 +7,7 @@ export interface WatchlistGridItem {
   brand: string;
   model: string;
   reference: string;
+  ws_code?: string;
   price: number;
   priceChange: number;
   image: any; // require() image
@@ -156,7 +157,7 @@ export function WatchlistGrid({ watches, onViewAll, onWatchPress }: WatchlistGri
                   {watch.brand} {watch.model}
                 </Text>
                 <Text style={styles.reference} numberOfLines={1}>
-                  {watch.reference}
+                  {watch.ws_code || watch.reference}
                 </Text>
                 <View style={styles.priceRow}>
                   <Text style={styles.price}>{formatPrice(watch.price)}</Text>

@@ -10,8 +10,8 @@ import { api } from '@/services/api';
 import { User } from '@/components/icons';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import { useGuide } from '@/contexts/GuideContext';
-import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCHLIST, GUIDE_MOCK_ACTIVITY, GUIDE_MOCK_NEWS } from '@/data/guideMockData';
+import { useV2 } from '@/contexts/V2Context';
 import {
   Magnifier,
   UserCircleFilled,
@@ -41,6 +41,7 @@ interface WatchlistItem {
   brand: string;
   model: string;
   reference: string;
+  ws_code?: string;
   price: number;
   priceChange: number;
   image?: string;
@@ -164,6 +165,7 @@ export default function HomeScreen() {
           brand: item.brand,
           model: item.model,
           reference: item.reference || '',
+          ws_code: item.ws_code,
           price: item.price || item.target_price || 0,
           priceChange: item.priceChange || 0,
           image: item.image,
@@ -180,6 +182,7 @@ export default function HomeScreen() {
               brand: item.brand,
               model: item.model,
               reference: item.reference || '',
+              ws_code: item.ws_code,
               price: item.target_price || 0,
               priceChange: 0,
               image: item.image_url || null,
@@ -904,7 +907,7 @@ export default function HomeScreen() {
                       <View>
                         <Text style={styles.watchName} numberOfLines={1}>{watch.brand}</Text>
                         <Text style={styles.watchModel} numberOfLines={1}>{watch.model}</Text>
-                        <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
+                        <Text style={styles.watchReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
                       </View>
                       <View style={styles.watchPriceRow}>
                         <Text style={styles.watchPrice}><Text style={styles.watchPriceFrom}>from </Text>{formatPrice(watch.price)}</Text>

@@ -408,6 +408,7 @@ interface WatchDetails {
   brand: string;
   model: string;
   reference: string;
+  ws_code?: string;
   image?: string;
   marketPriceMin: number;
   marketPriceMax: number;
@@ -680,6 +681,7 @@ export default function WatchDetailsScreen() {
             brand: data.brand,
             model: data.model,
             reference: data.reference || '',
+            ws_code: data.ws_code,
             image: data.cover_image,
             marketPriceMin: data.lowest_order_price || data.admin_price || 0,
             marketPriceMax: data.admin_price || data.display_price || 0,
@@ -953,7 +955,7 @@ export default function WatchDetailsScreen() {
             </TouchableOpacity>
             <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>{watch.brand} {watch.model}</Text>
-              <Text style={styles.headerSubtitle}>{watch.reference}</Text>
+              <Text style={styles.headerSubtitle}>{watch.ws_code || watch.reference}</Text>
             </View>
           </SafeAreaView>
 
