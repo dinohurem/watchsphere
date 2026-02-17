@@ -150,7 +150,8 @@ export default function OrderBookScreen() {
   };
 
   const formatPrice = (price: number, currency: string = 'EUR') => {
-    return `€${price.toLocaleString('de-DE')}`;
+    if (currency === 'EUR') return `€${price.toLocaleString('de-DE')}`;
+    return `${currency} ${price.toLocaleString('de-DE')}`;
   };
 
   // Format date to show MM/YY format (e.g., "02/26")
@@ -196,7 +197,7 @@ export default function OrderBookScreen() {
           <Text style={styles.tableCellText}>{item.condition}</Text>
           <Text style={[styles.tableCellText, { fontSize: fp(11), color: '#999999' }]}>{formatOrderDate(item.date)}</Text>
         </View>
-        <Text style={[styles.tableCell, styles.tableCellTextBold, styles.priceCell]}>{formatPrice(item.price)}</Text>
+        <Text style={[styles.tableCell, styles.tableCellTextBold, styles.priceCell]}>{formatPrice(item.price, item.currency)}</Text>
         <TouchableOpacity
             style={[styles.tableCell, styles.chatCell]}
             onPress={() => handleWhatsAppChat(item)}

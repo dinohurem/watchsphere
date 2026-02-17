@@ -2,28 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/services/api';
-import { SlidersHorizontal, Star } from 'lucide-react';
+import { SlidersHorizontal, Star, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { SubscriptionOverlay } from '@/components/subscription/SubscriptionOverlay';
 import { useV2 } from '@/contexts/V2Context';
-
-// Triangle Up icon for positive price change (matching Figma)
-function TriangleUp({ className }: { className?: string }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className}>
-      <path d="M6 3L9 9H3L6 3Z" fill="currentColor" />
-    </svg>
-  );
-}
-
-// Triangle Down icon for negative price change (matching Figma)
-function TriangleDown({ className }: { className?: string }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className}>
-      <path d="M6 9L3 3H9L6 9Z" fill="currentColor" />
-    </svg>
-  );
-}
 
 interface WatchData {
   id: string;
@@ -139,17 +121,14 @@ function TrendingWatchCard({ watch, onAddToWatchlist, onClick }: {
           <p className="text-[13px] font-normal text-[#212121]/70 leading-[1.3] truncate">{watch.model}</p>
           <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">{watch.ws_code || watch.reference}</p>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[15px] font-semibold text-[#212121] leading-[1.3]">
-            <span className="text-[12px] font-normal text-[#212121]/50">from </span>{watch.price?.toLocaleString() || '0'}€
-          </p>
+        <div className="flex items-center justify-end gap-2">
           <div className={`flex items-center gap-1 px-[7px] py-[3px] rounded-full ${
             isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
           }`}>
             {isPositive ? (
-              <TriangleUp className="text-[#4aa078]" />
+              <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
             ) : (
-              <TriangleDown className="text-[#c93927]" />
+              <ArrowDownRight className="w-3 h-3 text-[#c93927]" />
             )}
             <span className={`text-[11px] font-semibold leading-[1.3] font-mono ${
               isPositive ? 'text-[#4aa078]' : 'text-[#c93927]'
@@ -171,7 +150,8 @@ export function MarketPage() {
   const [watches, setWatches] = useState<WatchData[]>([]);
   const [trendingWatches, setTrendingWatches] = useState<WatchData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState('hot');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [brandTabs, setBrandTabs] = useState<{ key: string; label: string }[]>([{ key: 'all', label: 'All' }]);
 
   // Dynamic filter state (from URL params)
   const [filters, setFilters] = useState<DynamicFilterState>({});
@@ -185,13 +165,29 @@ export function MarketPage() {
     setFilters(initialFilters);
   }, [searchParams]);
 
-  const categories = [
-    { key: 'hot', labelKey: 'market.categories.hot' },
-    { key: 'gainers', labelKey: 'market.categories.gainers' },
-    { key: 'losers', labelKey: 'market.categories.losers' },
-    { key: 'new', labelKey: 'market.categories.new' },
-    { key: 'trending', labelKey: 'market.categories.trending' },
-  ];
+  // Load brand tabs on mount
+  useEffect(() => {
+    const loadBrands = async () => {
+      try {
+        const response = await api.get('/market/brands');
+        if (response.data && response.data.length > 0) {
+          // Deduplicate brands (case-insensitive)
+          const seen = new Set<string>();
+          const uniqueBrands = (response.data as string[]).filter((b: string) => {
+            const key = b.toLowerCase().trim();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          const tabs = [{ key: 'all', label: 'All' }, ...uniqueBrands.map((b: string) => ({ key: b, label: b }))];
+          setBrandTabs(tabs);
+        }
+      } catch (error) {
+        console.error('Failed to load brands:', error);
+      }
+    };
+    loadBrands();
+  }, []);
 
   useEffect(() => {
     loadWatches();
@@ -233,16 +229,17 @@ export function MarketPage() {
   const loadWatches = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/market/aggregated', {
-        params: {
-          category: selectedCategory,
-          limit: 50
-        }
-      });
+      const params: any = { limit: 50 };
+      if (selectedCategory === 'all') {
+        params.category = 'hot';
+      } else {
+        params.brand = selectedCategory;
+      }
+      const response = await api.get('/market/aggregated', { params });
 
       if (response.data && response.data.length > 0) {
         const watchData = response.data.map((item: any) => ({
-          id: item.reference,
+          id: item.id || item.reference,
           reference: item.reference,
           ws_code: item.ws_code,
           brand: item.brand,
@@ -382,17 +379,17 @@ export function MarketPage() {
           <div className="flex items-center justify-between">
             {/* Category Tabs */}
             <div className="flex gap-2">
-              {categories.map((category) => (
+              {brandTabs.map((tab) => (
                 <button
-                  key={category.key}
-                  onClick={() => setSelectedCategory(category.key)}
-                  className={`px-5 py-[11px] rounded-full text-[15px] leading-[20px] tracking-[0.075px] transition-colors ${
-                    selectedCategory === category.key
+                  key={tab.key}
+                  onClick={() => setSelectedCategory(tab.key)}
+                  className={`px-5 py-[11px] rounded-full text-[15px] leading-[20px] tracking-[0.075px] transition-colors whitespace-nowrap ${
+                    selectedCategory === tab.key
                       ? 'bg-[#212121] text-white font-medium'
                       : 'text-[#212121] font-normal hover:bg-[rgba(29,29,31,0.02)]'
                   }`}
                 >
-                  {t(category.labelKey)}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -480,20 +477,15 @@ export function MarketPage() {
                         </div>
                         <div className="w-[168px] flex items-center gap-1">
                           {isPositive ? (
-                            <TriangleUp className="text-[#4aa078]" />
+                            <ArrowUpRight className="w-4 h-4 text-[#4aa078]" />
                           ) : (
-                            <TriangleDown className="text-[#cc6045]" />
+                            <ArrowDownRight className="w-4 h-4 text-[#cc6045]" />
                           )}
                           <span className={`text-sm font-normal leading-[16px] font-mono ${
                             isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
                           }`}>
                             {Math.abs(watch.priceChange || 0).toFixed(1)}%
                           </span>
-                        </div>
-                        <div className="w-[168px]">
-                          <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">
-                            <span className="text-sm font-normal text-[#212121]/50">from </span>€{watch.price?.toLocaleString() || '0'}
-                          </p>
                         </div>
                         <div className="w-[129px]">
                           <button
@@ -563,9 +555,9 @@ export function MarketPage() {
                           isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
                         }`}>
                           {isPositive ? (
-                            <TriangleUp className="text-[#4aa078]" />
+                            <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
                           ) : (
-                            <TriangleDown className="text-[#cc6045]" />
+                            <ArrowDownRight className="w-3 h-3 text-[#cc6045]" />
                           )}
                           <span className={`text-sm font-medium font-mono ${
                             isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
@@ -574,8 +566,7 @@ export function MarketPage() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-lg font-semibold text-[#212121]"><span className="text-sm font-normal text-[#212121]/50">from </span>€{watch.price?.toLocaleString() || '0'}</p>
+                      <div className="flex items-center justify-end">
                         <span className="text-sm font-medium text-[#212121]/50">{t('market.viewDetails')} →</span>
                       </div>
                     </div>

@@ -83,6 +83,7 @@ class ExtractedWatchListing(Document):
     # Watch info
     brand: Optional[str] = None
     reference: Optional[str] = None
+    ws_code: Optional[str] = None
     model: Optional[str] = None
 
     # Pricing
@@ -104,6 +105,9 @@ class ExtractedWatchListing(Document):
 
     # Embedding for semantic search
     embedding: Optional[List[float]] = None
+
+    # Month/Year from CSV (e.g. "09/25", "02/26")
+    month_year: Optional[str] = None
 
     # Timestamps
     message_timestamp: Optional[datetime] = None

@@ -180,6 +180,39 @@ class WatchUpdate(BaseModel):
 # NOTE: Route order matters in FastAPI! More specific routes must come before parameterized routes.
 # The /watches endpoint must be defined before /{watch_id} to avoid "watches" being matched as a watch_id.
 
+
+@router.get("/brands", response_model=List[str])
+async def get_market_brands() -> Any:
+    """Get unique brand names from active watches, sorted with Rolex first."""
+    try:
+        pipeline = [
+            {"$match": {"status": WatchStatus.ACTIVE.value}},
+            {"$group": {
+                "_id": {"$toLower": {"$trim": {"input": "$brand"}}},
+                "display_name": {"$first": "$brand"},
+            }},
+            {"$sort": {"_id": 1}},
+        ]
+        raw = await Watch.aggregate(pipeline).to_list()
+        # Deduplicate by lowercased name (safety net)
+        seen = set()
+        brands = []
+        for item in raw:
+            name = (item.get("display_name") or "").strip()
+            key = name.lower()
+            if name and key not in seen:
+                seen.add(key)
+                brands.append(name)
+        # Move Rolex to front if present (case-insensitive)
+        rolex_entry = next((b for b in brands if b.lower() == "rolex"), None)
+        if rolex_entry:
+            brands.remove(rolex_entry)
+            brands.insert(0, rolex_entry)
+        return brands
+    except Exception:
+        return []
+
+
 @router.get("/watches", response_model=List[MarketWatchResponse])
 async def get_market_watches(
     category: str = Query(default="hot"),
@@ -471,7 +504,8 @@ async def get_featured_watches(
 # NOTE: These must be defined BEFORE /{watch_id} to avoid route conflicts
 
 class AggregatedWatchResponse(BaseModel):
-    """Aggregated market data for a watch reference (combines listings with orders)"""
+    """Aggregated market data for a watch (combines listings with orders)"""
+    id: str
     reference: str
     brand: str
     model: str
@@ -493,6 +527,8 @@ class AggregatedWatchResponse(BaseModel):
 @router.get("/aggregated", response_model=List[AggregatedWatchResponse])
 async def get_aggregated_market_data(
     category: str = Query(default="hot"),
+    brand: Optional[str] = Query(default=None),
+    skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, le=100),
 ) -> Any:
     """
@@ -513,23 +549,30 @@ async def get_aggregated_market_data(
     try:
         # Get all active watches
         base_query = Watch.status == WatchStatus.ACTIVE
+        # Fetch enough records to cover skip + limit
+        fetch_limit = skip + limit
 
+        # If brand filter is provided, filter by brand (case-insensitive)
+        if brand:
+            import re
+            brand_regex = re.compile(f"^{re.escape(brand)}$", re.IGNORECASE)
+            watches = await Watch.find(base_query, {"brand": {"$regex": brand_regex}}).sort([("order_count", -1)]).limit(fetch_limit).to_list()
         # For gainers/losers, we need to compute price_change dynamically from
         # sell orders vs admin price, so fetch all watches first then filter.
-        if category == "hot":
-            watches = await Watch.find(base_query).sort([("order_count", -1)]).limit(limit).to_list()
+        elif category == "hot":
+            watches = await Watch.find(base_query).sort([("order_count", -1)]).limit(fetch_limit).to_list()
         elif category in ("gainers", "losers"):
             # Fetch more watches than needed — we'll filter after computing price_change
             watches = await Watch.find(base_query).sort([("created_at", -1)]).to_list()
         elif category == "new":
-            watches = await Watch.find(base_query).sort([("published_at", -1)]).limit(limit).to_list()
+            watches = await Watch.find(base_query).sort([("published_at", -1)]).limit(fetch_limit).to_list()
         elif category == "trending":
             watches = await Watch.find(
                 base_query,
                 {"$or": [{"trending": True}, {"order_count": {"$gt": 0}}]}
-            ).sort([("trending", -1), ("order_count", -1)]).limit(limit).to_list()
+            ).sort([("trending", -1), ("order_count", -1)]).limit(fetch_limit).to_list()
         else:
-            watches = await Watch.find(base_query).sort([("created_at", -1)]).limit(limit).to_list()
+            watches = await Watch.find(base_query).sort([("created_at", -1)]).limit(fetch_limit).to_list()
 
         # Return empty list if no watches
         if not watches:
@@ -567,18 +610,18 @@ async def get_aggregated_market_data(
             except Exception:
                 pass
 
-        # Build response with proper pricing
+        # Build response — unique per ws_code
         result = []
-        seen_refs = set()
+        seen_keys = set()
 
         for watch in watches:
-            # Include watches without reference too (use id as fallback)
-            ref_key = watch.reference or str(watch.id)
+            watch_id = str(watch.id)
+            # Deduplicate by ws_code (most unique identifier); fall back to watch id
+            dedup_key = (watch.ws_code or "").strip().lower() or watch_id
 
-            # Skip duplicates (group by reference)
-            if ref_key in seen_refs:
+            if dedup_key in seen_keys:
                 continue
-            seen_refs.add(ref_key)
+            seen_keys.add(dedup_key)
 
             lowest_order_price = lowest_prices_by_ref.get(watch.reference) if watch.reference else None
             admin_price = watch.price
@@ -602,7 +645,8 @@ async def get_aggregated_market_data(
             generated_history = generate_price_history_from_change(display_price, price_change)
 
             result.append(AggregatedWatchResponse(
-                reference=watch.reference or str(watch.id),
+                id=watch_id,
+                reference=watch.reference or watch_id,
                 brand=watch.brand,
                 model=watch.model,
                 ws_code=watch.ws_code,
@@ -623,24 +667,25 @@ async def get_aggregated_market_data(
                 [r for r in result if r.price_change > 0],
                 key=lambda r: r.price_change,
                 reverse=True,
-            )[:limit]
+            )
             # Fallback: if no watches have positive price_change, show all sorted by
             # price descending so the category isn't empty
             if not filtered:
-                filtered = sorted(result, key=lambda r: r.display_price, reverse=True)[:limit]
+                filtered = sorted(result, key=lambda r: r.display_price, reverse=True)
             result = filtered
         elif category == "losers":
             filtered = sorted(
                 [r for r in result if r.price_change < 0],
                 key=lambda r: r.price_change,
-            )[:limit]
+            )
             # Fallback: if no watches have negative price_change, show all sorted by
             # price ascending so the category isn't empty
             if not filtered:
-                filtered = sorted(result, key=lambda r: r.display_price)[:limit]
+                filtered = sorted(result, key=lambda r: r.display_price)
             result = filtered
 
-        return result
+        # Apply pagination (skip/limit)
+        return result[skip:skip + limit]
     except Exception as e:
         # Log the error for debugging
         import logging
@@ -657,11 +702,18 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
     Returns combined data from watch model and active orders.
     """
 
-    # Get the watch model
+    # Get the watch model — try ws_code first (primary identifier), then reference
+    import re as re_mod
+    ws_regex = re_mod.compile(f"^{re_mod.escape(reference)}$", re_mod.IGNORECASE)
     watch = await Watch.find_one(
-        Watch.reference == reference,
+        {"ws_code": {"$regex": ws_regex}},
         Watch.status == WatchStatus.ACTIVE,
     )
+    if not watch:
+        watch = await Watch.find_one(
+            Watch.reference == reference,
+            Watch.status == WatchStatus.ACTIVE,
+        )
 
     if not watch:
         raise HTTPException(
@@ -703,6 +755,7 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
     generated_history = generate_price_history_from_change(display_price, price_change)
 
     return AggregatedWatchResponse(
+        id=str(watch.id),
         reference=watch.reference,
         brand=watch.brand,
         model=watch.model,
