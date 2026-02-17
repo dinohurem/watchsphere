@@ -601,10 +601,7 @@ export function HomePage() {
                       {watch.ws_code || watch.reference}
                     </p>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[15px] font-semibold text-[#212121] leading-[1.3]">
-                      <span className="text-[12px] font-normal text-[#212121]/50">from </span>{watch.price.toLocaleString()}€
-                    </p>
+                  <div className="flex items-center justify-end gap-2">
                     <div className={`flex items-center gap-1 px-[7px] py-[3px] rounded-full ${
                       watch.priceChange >= 0 ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
                     }`}>
@@ -693,11 +690,6 @@ export function HomePage() {
                         {Math.abs(item.priceChange).toFixed(1)}%
                       </span>
                     </div>
-                    <div className="w-[168px]">
-                      <p className="text-base font-semibold text-[#212121] leading-[20px] tracking-[0.08px]">
-                        <span className="text-sm font-normal text-[#212121]/50">from </span>€{item.price.toLocaleString()}
-                      </p>
-                    </div>
                     <div className="w-[129px]">
                       <button
                         onClick={(e) => {
@@ -752,8 +744,7 @@ export function HomePage() {
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-lg font-semibold text-[#212121]"><span className="text-sm font-normal text-[#212121]/50">from </span>€{item.price.toLocaleString()}</p>
+                  <div className="flex items-center justify-end">
                     <span className="text-sm font-medium text-[#212121]/50">{t('home.marketActivity.viewDetails')} →</span>
                   </div>
                 </div>

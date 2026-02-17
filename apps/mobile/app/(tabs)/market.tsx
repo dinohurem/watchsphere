@@ -1,4 +1,4 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image, FlatList } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
@@ -12,18 +12,12 @@ import { GUIDE_MOCK_MARKET_WATCHES, GUIDE_MOCK_TRENDING_WATCHES } from '@/data/g
 import { api } from '@/services/api';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
-import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, Filter, User, Grid } from '@/components/icons';
+import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, TrendingUp, PriceAlertDown, Filter, User, Grid } from '@/components/icons';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import Svg, { Path, Line } from 'react-native-svg';
 
-// Category tabs - values used for API, keys for translation
-const CATEGORY_KEYS = [
-  { value: 'Hot', key: 'market.hot' },
-  { value: 'Gainers', key: 'market.gainers' },
-  { value: 'Losers', key: 'market.losers' },
-  { value: 'Trending', key: 'market.trending' },
-  { value: 'New', key: 'market.new' },
-];
+// Default category tab (before brands are loaded)
+const DEFAULT_CATEGORY = { value: 'All', label: 'All' };
 
 interface WatchMarketData {
   id: string;
@@ -113,13 +107,17 @@ export default function MarketScreen() {
   const firstWatchRowRef = useRef<View>(null);
   const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
   const totalFilterCount = getTotalFilterCount();
-  const [selectedCategory, setSelectedCategory] = useState('Hot');
+  const PAGE_SIZE = 8;
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [brandTabs, setBrandTabs] = useState<{ value: string; label: string }[]>([DEFAULT_CATEGORY]);
   const [watches, setWatches] = useState<WatchMarketData[]>([]);
   const [allWatches, setAllWatches] = useState<WatchMarketData[]>([]); // Unfiltered watches
   const [trendingWatches, setTrendingWatches] = useState<WatchMarketData[]>([]);
   const [featuredWatches, setFeaturedWatches] = useState<WatchMarketData[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState(searchParam || '');
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -197,6 +195,31 @@ export default function MarketScreen() {
     });
   };
 
+  // Load brand tabs on mount
+  useEffect(() => {
+    const loadBrands = async () => {
+      if (isGuideActive) return;
+      try {
+        const response = await api.get('/market/brands');
+        if (response.data && response.data.length > 0) {
+          // Deduplicate brands (case-insensitive)
+          const seen = new Set<string>();
+          const uniqueBrands = (response.data as string[]).filter((b) => {
+            const key = b.toLowerCase().trim();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          const tabs = [DEFAULT_CATEGORY, ...uniqueBrands.map((b) => ({ value: b, label: b }))];
+          setBrandTabs(tabs);
+        }
+      } catch (error) {
+        console.error('Failed to load brands:', error);
+      }
+    };
+    loadBrands();
+  }, []);
+
   // Refresh data when screen comes into focus (also fires on initial mount)
   useFocusEffect(
     useCallback(() => {
@@ -217,6 +240,22 @@ export default function MarketScreen() {
     }
   };
 
+  const mapAggregatedItem = (item: any): WatchMarketData => ({
+    id: item.id || item.reference,
+    brand: item.brand,
+    model: item.model,
+    reference: item.reference || '',
+    ws_code: item.ws_code,
+    price: item.display_price || 0,
+    priceChange: item.price_change || 0,
+    priceHistory: item.price_history || [],
+    trending: item.trending || false,
+    orderCount: item.total_orders || 0,
+    lowestOrderPrice: item.lowest_order_price,
+    adminPrice: item.admin_price,
+    coverImage: item.cover_image || undefined,
+  });
+
   const loadMarketData = async () => {
     if (isGuideActive) {
       setAllWatches(GUIDE_MOCK_MARKET_WATCHES);
@@ -224,107 +263,80 @@ export default function MarketScreen() {
       setTrendingWatches(GUIDE_MOCK_TRENDING_WATCHES);
       setFeaturedWatches([]);
       setLoading(false);
+      setHasMore(false);
       return;
     }
     setLoading(true);
+    setHasMore(true);
     try {
-      // Try to fetch from aggregated API (proper pricing logic)
-      const response = await api.get('/market/aggregated', {
-        params: {
-          category: selectedCategory.toLowerCase(),
-          limit: 20
-        }
-      });
+      const params: any = { limit: PAGE_SIZE, skip: 0 };
+      if (selectedCategory === 'All') {
+        params.category = 'hot';
+      } else {
+        params.brand = selectedCategory;
+      }
+      const response = await api.get('/market/aggregated', { params });
 
       if (response.data && response.data.length > 0) {
-        const watchData = response.data.map((item: any) => ({
-          id: item.reference, // Use reference as ID for aggregated data
-          brand: item.brand,
-          model: item.model,
-          reference: item.reference || '',
-          ws_code: item.ws_code,
-          // Use display_price which is lowest order price OR admin price
-          price: item.display_price || 0,
-          priceChange: item.price_change || 0,
-          priceHistory: item.price_history || [],
-          trending: item.trending || false,
-          orderCount: item.total_orders || 0,
-          lowestOrderPrice: item.lowest_order_price,
-          adminPrice: item.admin_price,
-          coverImage: item.cover_image || undefined,
-        }));
-
+        const watchData = response.data.map(mapAggregatedItem);
         setAllWatches(watchData);
         setWatches(applyFiltersToWatches(watchData));
+        setHasMore(response.data.length >= PAGE_SIZE);
 
-        // Fetch trending watches from dedicated endpoint (respects admin-set trending)
         const hasTrending = await loadTrendingWatches();
-
-        // If no trending watches, fetch featured watches as fallback
         if (!hasTrending) {
           await loadFeaturedWatches();
         } else {
           setFeaturedWatches([]);
         }
       } else {
-        // Fallback to old endpoint
-        const fallbackResponse = await api.get('/market/watches', {
-          params: {
-            category: selectedCategory.toLowerCase(),
-            limit: 20
-          }
-        });
-
-        if (fallbackResponse.data && fallbackResponse.data.length > 0) {
-          const watchData = fallbackResponse.data.map((item: any) => ({
-            id: item.id,
-            brand: item.brand,
-            model: item.model,
-            reference: item.reference || '',
-            ws_code: item.ws_code,
-            price: item.price || 0,
-            priceChange: item.price_change || 0,
-            priceHistory: item.price_history || [],
-            trending: item.trending || false,
-            orderCount: item.order_count || 0,
-            coverImage: item.cover_image || undefined,
-          }));
-
-          setAllWatches(watchData);
-          setWatches(applyFiltersToWatches(watchData));
-
-          // Fetch trending watches from dedicated endpoint (respects admin-set trending)
-          const hasTrending = await loadTrendingWatches();
-
-          // If no trending, fetch featured
-          if (!hasTrending) {
-            await loadFeaturedWatches();
-          } else {
-            setFeaturedWatches([]);
-          }
-        } else {
-          // No data available - show empty state
-          setAllWatches([]);
-          setWatches([]);
-          // Still try to load trending/featured watches
-          const hasTrending = await loadTrendingWatches();
-          if (!hasTrending) {
-            await loadFeaturedWatches();
-          }
+        setAllWatches([]);
+        setWatches([]);
+        setHasMore(false);
+        const hasTrending = await loadTrendingWatches();
+        if (!hasTrending) {
+          await loadFeaturedWatches();
         }
       }
     } catch (error) {
-      // Error fetching - show empty state
       console.error('Failed to load market data:', error);
       setAllWatches([]);
       setWatches([]);
-      // Still try to load trending/featured watches
+      setHasMore(false);
       const hasTrending = await loadTrendingWatches();
       if (!hasTrending) {
         await loadFeaturedWatches();
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreWatches = async () => {
+    if (loadingMore || !hasMore || isGuideActive) return;
+    setLoadingMore(true);
+    try {
+      const params: any = { limit: PAGE_SIZE, skip: allWatches.length };
+      if (selectedCategory === 'All') {
+        params.category = 'hot';
+      } else {
+        params.brand = selectedCategory;
+      }
+      const response = await api.get('/market/aggregated', { params });
+
+      if (response.data && response.data.length > 0) {
+        const newWatchData = response.data.map(mapAggregatedItem);
+        const combined = [...allWatches, ...newWatchData];
+        setAllWatches(combined);
+        setWatches(applyFiltersToWatches(combined));
+        setHasMore(response.data.length >= PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('Failed to load more watches:', error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -403,8 +415,6 @@ export default function MarketScreen() {
   }, [selectedCategory]);
 
   const handleWatchPress = (watch: WatchMarketData) => {
-    // Navigate with both ID and reference for flexibility
-    // Encode the ID to handle references with special characters (e.g., 5711/1A-010)
     const encodedId = encodeURIComponent(watch.id);
     router.push({
       pathname: `/market/${encodedId}`,
@@ -412,6 +422,7 @@ export default function MarketScreen() {
         reference: watch.reference,
         brand: watch.brand,
         model: watch.model,
+        ws_code: watch.ws_code || '',
       },
     } as any);
   };
@@ -902,6 +913,14 @@ export default function MarketScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
         }
+        onScroll={({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+          if (distanceFromBottom < 300 && !loadingMore && hasMore && !loading) {
+            loadMoreWatches();
+          }
+        }}
+        scrollEventThrottle={400}
       >
         {/* Trending / Featured Watches Section */}
         {v2Enabled && <View style={styles.trendingSection}>
@@ -1034,21 +1053,21 @@ export default function MarketScreen() {
             contentContainerStyle={styles.categoryTabs}
             style={{ flex: 1 }}
           >
-            {CATEGORY_KEYS.map((category) => (
+            {brandTabs.map((tab) => (
               <TouchableOpacity
-                key={category.value}
+                key={tab.value}
                 style={[
                   styles.categoryTab,
-                  selectedCategory === category.value && styles.categoryTabActive
+                  selectedCategory === tab.value && styles.categoryTabActive
                 ]}
-                onPress={() => setSelectedCategory(category.value)}
+                onPress={() => setSelectedCategory(tab.value)}
                 activeOpacity={0.7}
               >
                 <Text style={[
                   styles.categoryTabText,
-                  selectedCategory === category.value && styles.categoryTabTextActive
+                  selectedCategory === tab.value && styles.categoryTabTextActive
                 ]}>
-                  {t(category.key)}
+                  {tab.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -1106,12 +1125,11 @@ export default function MarketScreen() {
                         />
                       </View>
                       <View style={styles.watchPriceInfo}>
-                        <Text style={styles.watchPrice}><Text style={styles.watchPriceFrom}>from </Text>{formatPrice(watch.price)}</Text>
                         <View style={styles.watchChange}>
                           {isPositive ? (
-                            <TriangleUp size={12} color="#4AA078" />
+                            <TrendingUp size={12} color="#4AA078" />
                           ) : (
-                            <TriangleDown size={12} color="#D90429" />
+                            <PriceAlertDown size={12} color="#C93927" />
                           )}
                           <Text style={[
                             styles.watchChangeText,
@@ -1155,26 +1173,23 @@ export default function MarketScreen() {
                         <Text style={styles.gridBrand} numberOfLines={1}>{watch.brand}</Text>
                         <Text style={styles.gridModel} numberOfLines={1}>{watch.model}</Text>
                         <Text style={styles.gridReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
-                        <View style={styles.gridPriceRow}>
-                          <Text style={styles.gridPrice}><Text style={styles.gridPriceFrom}>from </Text>{formatPrice(watch.price)}</Text>
-                          {watch.priceChange !== 0 && (
-                            <View style={[
-                              styles.gridChangeBadge,
-                              isPositive ? styles.gridChangeBadgeUp : styles.gridChangeBadgeDown,
+                        <View style={[styles.gridPriceRow]}>
+                          <View style={[
+                            styles.gridChangeBadge,
+                            isPositive ? styles.gridChangeBadgeUp : styles.gridChangeBadgeDown,
+                          ]}>
+                            {isPositive ? (
+                              <TrendingUp size={10} color="#4AA078" />
+                            ) : (
+                              <PriceAlertDown size={10} color="#C93927" />
+                            )}
+                            <Text style={[
+                              styles.gridChangeText,
+                              isPositive ? styles.watchChangePositive : styles.watchChangeNegative
                             ]}>
-                              {isPositive ? (
-                                <TriangleUp size={10} color="#4AA078" />
-                              ) : (
-                                <TriangleDown size={10} color="#D90429" />
-                              )}
-                              <Text style={[
-                                styles.gridChangeText,
-                                isPositive ? styles.watchChangePositive : styles.watchChangeNegative
-                              ]}>
-                                {Math.abs(watch.priceChange).toFixed(1)}%
-                              </Text>
-                            </View>
-                          )}
+                              {Math.abs(watch.priceChange).toFixed(1)}%
+                            </Text>
+                          </View>
                         </View>
                       </View>
                     </TouchableOpacity>
@@ -1185,6 +1200,11 @@ export default function MarketScreen() {
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>{t('market.noWatchesFound')}</Text>
+            </View>
+          )}
+          {loadingMore && (
+            <View style={{ paddingVertical: hp(20), alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#212121" />
             </View>
           )}
         </View>

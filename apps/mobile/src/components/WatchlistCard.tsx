@@ -18,7 +18,7 @@ interface WatchlistCardProps {
 
 export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
   const { colors, fonts } = useTheme();
-  const hasPositiveChange = watch.priceChange > 0;
+  const hasPositiveChange = watch.priceChange >= 0;
   const chartColor = hasPositiveChange ? colors.success : colors.error;
   const formattedPrice = `€${watch.price.toLocaleString()}`;
 
@@ -103,10 +103,6 @@ export function WatchlistCard({ watch, onPress }: WatchlistCardProps) {
       </View>
 
       <View style={styles.rightSection}>
-        <View style={styles.priceRow}>
-          <Text style={styles.fromLabel}>from</Text>
-          <Text style={styles.price}>{formattedPrice}</Text>
-        </View>
         <Text style={[styles.priceChange, hasPositiveChange ? styles.priceUp : styles.priceDown]}>
           {hasPositiveChange ? '▲' : '▼'} {Math.abs(watch.priceChange).toFixed(1)}%
         </Text>

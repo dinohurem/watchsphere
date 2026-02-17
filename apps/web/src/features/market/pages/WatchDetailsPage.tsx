@@ -101,6 +101,11 @@ interface FilterState {
   [key: string]: string[];
 }
 
+const formatCurrency = (price: number, currency?: string): string => {
+  if (!currency || currency === 'EUR') return `€${price.toLocaleString()}`;
+  return `${currency} ${price.toLocaleString()}`;
+};
+
 export function WatchDetailsPage() {
   const { watchId } = useParams<{ watchId: string }>();
   const navigate = useNavigate();
@@ -236,10 +241,14 @@ export function WatchDetailsPage() {
 
           buyOrders = (orderBookData.buy_orders || []).map((o: any) => {
             let dateStr = o.date || '--';
-            if (dateStr === '--' && o.created_at) {
+            // Convert MM.DD.YY to MM/YY format
+            const dateParts = dateStr.split('.');
+            if (dateParts.length === 3) {
+              dateStr = `${dateParts[0]}/${dateParts[2]}`;
+            } else if (dateStr === '--' && o.created_at) {
               const d = new Date(o.created_at);
               if (!isNaN(d.getTime())) {
-                dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+                dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear() % 100).toString().padStart(2, '0')}`;
               }
             }
             return {
@@ -251,15 +260,20 @@ export function WatchDetailsPage() {
               price: o.price,
               order_type: 'buy' as const,
               whatsapp_phone: o.whatsapp_phone,
+              currency: o.currency || 'EUR',
             };
           });
 
           sellOrders = (orderBookData.sell_orders || []).map((o: any) => {
             let dateStr = o.date || '--';
-            if (dateStr === '--' && o.created_at) {
+            // Convert MM.DD.YY to MM/YY format
+            const dateParts = dateStr.split('.');
+            if (dateParts.length === 3) {
+              dateStr = `${dateParts[0]}/${dateParts[2]}`;
+            } else if (dateStr === '--' && o.created_at) {
               const d = new Date(o.created_at);
               if (!isNaN(d.getTime())) {
-                dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+                dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear() % 100).toString().padStart(2, '0')}`;
               }
             }
             return {
@@ -874,7 +888,7 @@ export function WatchDetailsPage() {
                         <span className="text-[12px] font-normal text-[#212121]/50 tracking-[-0.3px]">{entry.date}</span>
                       </span>
                       <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
-                        €{entry.price.toLocaleString()}
+                        {formatCurrency(entry.price, entry.currency)}
                       </span>
                       <button
                           className="w-[48px] flex items-center justify-center hover:opacity-70 transition-opacity"
@@ -1078,7 +1092,7 @@ export function WatchDetailsPage() {
                         <span className="text-[12px] font-normal text-[#212121]/50 tracking-[-0.3px]">{entry.date}</span>
                       </span>
                       <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
-                        €{entry.price.toLocaleString()}
+                        {formatCurrency(entry.price, entry.currency)}
                       </span>
                       <button
                           className="w-[48px] flex items-center justify-center hover:opacity-70 transition-opacity"

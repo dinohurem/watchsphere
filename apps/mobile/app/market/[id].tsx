@@ -442,6 +442,7 @@ interface OrderBookItem {
   date: string;
   condition: 'Used' | 'Unworn';
   price: number;
+  currency?: string;
   has_box?: boolean;
   has_papers?: boolean;
   user_id?: string;
@@ -450,11 +451,12 @@ interface OrderBookItem {
 }
 
 export default function WatchDetailsScreen() {
-  const { id: rawId, reference, brand, model, fromUserWatchlist } = useLocalSearchParams<{
+  const { id: rawId, reference, brand, model, ws_code: wsCodeParam, fromUserWatchlist } = useLocalSearchParams<{
     id: string;
     reference?: string;
     brand?: string;
     model?: string;
+    ws_code?: string;
     fromUserWatchlist?: string;
   }>();
   // Decode the ID to handle references with special characters (e.g., 5711/1A-010)
@@ -706,6 +708,7 @@ export default function WatchDetailsScreen() {
             brand: response.data.brand,
             model: response.data.model,
             reference: response.data.reference || '',
+            ws_code: response.data.ws_code,
             image: response.data.cover_image,
             marketPriceMin: response.data.price || 0,
             marketPriceMax: response.data.price || 0,
@@ -726,6 +729,7 @@ export default function WatchDetailsScreen() {
           brand: brand,
           model: model,
           reference: reference || '',
+          ws_code: wsCodeParam || undefined,
           image: undefined,
           marketPriceMin: 0,
           marketPriceMax: 0,
@@ -776,6 +780,7 @@ export default function WatchDetailsScreen() {
           date: formatOrderDate(order.date || order.created_at),
           condition: order.condition === 'Unworn' ? 'Unworn' : 'Used',
           price: order.price,
+          currency: order.currency || 'EUR',
           has_box: order.has_box,
           has_papers: order.has_papers,
           user_id: order.user_id,
@@ -790,6 +795,7 @@ export default function WatchDetailsScreen() {
           date: formatOrderDate(order.date || order.created_at),
           condition: order.condition === 'Unworn' ? 'Unworn' : 'Used',
           price: order.price,
+          currency: order.currency || 'EUR',
           has_box: order.has_box,
           has_papers: order.has_papers,
           user_id: order.user_id,
@@ -955,7 +961,7 @@ export default function WatchDetailsScreen() {
             </TouchableOpacity>
             <View style={styles.titleContainer}>
               <Text style={styles.headerTitle}>{watch.brand} {watch.model}</Text>
-              <Text style={styles.headerSubtitle}>{watch.ws_code || watch.reference}</Text>
+              <Text style={styles.headerSubtitle}>{watch.ws_code || wsCodeParam || watch.reference}</Text>
             </View>
           </SafeAreaView>
 
@@ -1207,7 +1213,7 @@ export default function WatchDetailsScreen() {
                     <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#999999' }]}>{order.date}</Text>
                   </View>
                   <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'center' }]}>
-                    {formatPriceEurBefore(order.price)}
+                    {order.currency && order.currency !== 'EUR' ? `${order.currency} ${order.price.toLocaleString('de-DE')}` : formatPriceEurBefore(order.price)}
                   </Text>
                   <TouchableOpacity
                     style={{ flex: 0.7, alignItems: 'center', justifyContent: 'center' }}

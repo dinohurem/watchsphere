@@ -25,12 +25,14 @@ interface ExtractedListing {
   import_id: string
   brand?: string
   reference?: string
+  ws_code?: string
   model?: string
   price?: number
   currency: string
   condition?: string
   seller_name?: string
   raw_text: string
+  month_year?: string
   message_timestamp?: string
 }
 
@@ -362,8 +364,8 @@ export function AdminWhatsAppImport() {
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="font-medium">{listing.brand || 'Unknown'}</span>
-                        {listing.reference && (
-                          <span className="ml-2 text-sm text-gray-500">{listing.reference}</span>
+                        {(listing.ws_code || listing.reference) && (
+                          <span className="ml-2 text-sm text-gray-500">{listing.ws_code || listing.reference}</span>
                         )}
                       </div>
                       {listing.price && (
@@ -376,9 +378,7 @@ export function AdminWhatsAppImport() {
                     <div className="flex items-center gap-4 mt-1 text-xs text-gray-400">
                       {listing.seller_name && <span>Seller: {listing.seller_name}</span>}
                       {listing.condition && <span>Condition: {listing.condition}</span>}
-                      {listing.message_timestamp && (
-                        <span>{new Date(listing.message_timestamp).toLocaleDateString()}</span>
-                      )}
+                      {listing.month_year && <span>{listing.month_year}</span>}
                     </div>
                   </div>
                 ))}
@@ -519,14 +519,19 @@ export function AdminWhatsAppImport() {
                               {listing.brand}
                             </span>
                           )}
-                          {listing.reference && (
+                          {(listing.ws_code || listing.reference) && (
                             <span className="px-2 py-1 bg-gray-100 text-gray-800 text-sm font-mono rounded">
-                              {listing.reference}
+                              {listing.ws_code || listing.reference}
                             </span>
                           )}
                           {listing.condition && (
                             <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
                               {listing.condition}
+                            </span>
+                          )}
+                          {listing.month_year && (
+                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">
+                              {listing.month_year}
                             </span>
                           )}
                         </div>
@@ -539,9 +544,6 @@ export function AdminWhatsAppImport() {
                       <p className="text-gray-700 text-sm mb-2">{listing.raw_text}</p>
                       <div className="flex items-center gap-4 text-xs text-gray-400">
                         {listing.seller_name && <span>Seller: {listing.seller_name}</span>}
-                        {listing.message_timestamp && (
-                          <span>{formatDate(listing.message_timestamp)}</span>
-                        )}
                       </div>
                     </div>
                   ))}
