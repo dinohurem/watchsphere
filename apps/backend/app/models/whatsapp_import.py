@@ -106,6 +106,9 @@ class ExtractedWatchListing(Document):
     # Embedding for semantic search
     embedding: Optional[List[float]] = None
 
+    # Month/Year from CSV (e.g. "09/25", "02/26")
+    month_year: Optional[str] = None
+
     # Timestamps
     message_timestamp: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

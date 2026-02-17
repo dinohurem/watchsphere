@@ -10,7 +10,7 @@ import io
 
 from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
-from app.models.watch import Watch
+from app.models.watch import Watch, WatchStatus
 from app.models.order import Order, OrderType, OrderCondition, OrderStatus
 from app.models.whatsapp_import import (
     WhatsAppImport, WhatsAppMessage, ExtractedWatchListing, ImportStatus, OfferType
@@ -50,6 +50,7 @@ class ExtractedListingResponse(BaseModel):
     condition: Optional[str] = None
     seller_name: Optional[str] = None
     raw_text: str
+    month_year: Optional[str] = None
     message_timestamp: Optional[datetime] = None
 
 
@@ -279,19 +280,15 @@ async def process_csv_import(
     # Preserve headers for unmatched CSV output
     fieldnames = reader.fieldnames or []
 
-    # Build a cache of watches by reference and ws_code for matching
+    # Build a cache of watches by ws_code (primary key) and reference (fallback)
     all_watches = await Watch.find(Watch.status == "active").to_list()
-    watch_by_ref: dict[str, Watch] = {}
     watch_by_ws_code: dict[str, Watch] = {}
+    watch_by_ref: dict[str, Watch] = {}
     for w in all_watches:
-        if w.reference:
-            watch_by_ref[w.reference.upper()] = w
         if w.ws_code:
             watch_by_ws_code[w.ws_code.strip().upper()] = w
-            # Also index the extracted reference from the watch ws_code
-            ws_ref = extract_reference_from_ws_code(w.ws_code)
-            if ws_ref and ws_ref not in watch_by_ref:
-                watch_by_ref[ws_ref] = w
+        if w.reference:
+            watch_by_ref[w.reference.upper()] = w
         for alias in (w.aliases or []):
             watch_by_ref[alias.upper()] = w
 
@@ -379,20 +376,12 @@ async def process_csv_import(
         # Extract reference from WS-Code
         reference = extract_reference_from_ws_code(ws_code)
 
-        # Try to match against existing watches (multiple strategies)
+        # Match by ws_code first (primary connecting point), then fallback to reference
         matched_watch = None
-        # 1. Exact reference match (from extracted numeric prefix)
-        if reference:
-            matched_watch = watch_by_ref.get(reference)
-        # 2. Full WS-Code match (e.g., "124200 Pistachio" == watch.ws_code)
-        if not matched_watch and ws_code:
+        if ws_code:
             matched_watch = watch_by_ws_code.get(ws_code.strip().upper())
-        # 3. Partial prefix match on reference keys
         if not matched_watch and reference:
-            for ref_key, w in watch_by_ref.items():
-                if ref_key.startswith(reference):
-                    matched_watch = w
-                    break
+            matched_watch = watch_by_ref.get(reference)
 
         # Resolve country
         country_code = location if location else None
@@ -410,12 +399,33 @@ async def process_csv_import(
         if remarks:
             raw_text += f" - {remarks}"
 
+        # If no watch found, create a new one with the CSV data
+        if not matched_watch and ws_code and brand:
+            new_watch = Watch(
+                brand=brand,
+                model=ws_code,  # Use ws_code as model until manually corrected
+                reference=reference or None,
+                ws_code=ws_code,
+                price=0,
+                currency=currency,
+                status=WatchStatus.ACTIVE,
+                dealer_id=admin_id,
+                dealer_name=admin.name,
+                published_at=datetime.utcnow(),
+            )
+            await new_watch.insert()
+            matched_watch = new_watch
+            # Add to caches so subsequent rows with the same ws_code reuse it
+            watch_by_ws_code[ws_code.strip().upper()] = new_watch
+            if reference:
+                watch_by_ref[reference] = new_watch
+
         # Use matched watch data if available
         watch_brand = matched_watch.brand if matched_watch else (brand or "Unknown")
         watch_model = matched_watch.model if matched_watch else ws_code
         watch_reference = matched_watch.reference if matched_watch else reference
 
-        # Track unmatched rows
+        # Track unmatched rows (no watch could be found or created)
         if not matched_watch:
             unmatched_count += 1
             unmatched_raw_rows.append(row)
@@ -436,17 +446,19 @@ async def process_csv_import(
             offer_type=offer_type,
             country_code=country_code,
             country_name=country_name,
+            month_year=month_year or None,
             message_timestamp=message_timestamp,
         ))
 
-        # 2. Create Order (order book) — only for matched watches with enough data
-        if matched_watch and price and watch_reference and offer_type != OfferType.UNKNOWN:
+        # 2. Create Order (order book) — for watches with enough data
+        if matched_watch and price and offer_type != OfferType.UNKNOWN:
             order_type = OrderType.SELL if offer_type == OfferType.WTS else OrderType.BUY
             order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
+            order_reference = watch_reference or ws_code
 
             # Deduplication check
             dedup_key = (
-                watch_reference.upper(),
+                (order_reference or "").upper(),
                 phone,
                 price,
                 order_type.value,
@@ -463,7 +475,7 @@ async def process_csv_import(
                 order_type=order_type,
                 brand=watch_brand,
                 model=watch_model,
-                reference=watch_reference,
+                reference=order_reference,
                 watch_id=str(matched_watch.id),
                 price=price,
                 currency=currency,
@@ -478,7 +490,7 @@ async def process_csv_import(
                 year=watch_year,
                 watch_month=watch_month,
                 notes=f"Imported from {group or 'CSV'}. {remarks}".strip() if remarks else f"Imported from {group or 'CSV'}",
-                description=ws_code if ws_code != watch_reference else None,
+                description=ws_code if ws_code != order_reference else None,
                 status=OrderStatus.ACTIVE,
                 created_at=message_timestamp or datetime.utcnow(),
             ))
@@ -814,6 +826,7 @@ async def admin_get_import_listings(
             "condition": lst.condition,
             "seller_name": lst.seller_name,
             "raw_text": lst.raw_text,
+            "month_year": lst.month_year,
             "message_timestamp": lst.message_timestamp,
         }
         for lst in listings
@@ -862,6 +875,7 @@ async def admin_search_whatsapp(
                 "condition": lst.condition,
                 "seller_name": lst.seller_name,
                 "raw_text": lst.raw_text,
+                "month_year": lst.month_year,
                 "message_timestamp": lst.message_timestamp,
             }
             for lst in listings
@@ -962,6 +976,7 @@ async def social_search(
                 "offer_type": lst.offer_type.value if lst.offer_type else "unknown",
                 "country_code": lst.country_code,
                 "country_name": lst.country_name,
+                "month_year": lst.month_year,
                 "message_timestamp": lst.message_timestamp,
             }
             for lst in listings

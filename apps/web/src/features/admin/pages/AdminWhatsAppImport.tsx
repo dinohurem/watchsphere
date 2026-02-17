@@ -32,6 +32,7 @@ interface ExtractedListing {
   condition?: string
   seller_name?: string
   raw_text: string
+  month_year?: string
   message_timestamp?: string
 }
 
@@ -377,9 +378,7 @@ export function AdminWhatsAppImport() {
                     <div className="flex items-center gap-4 mt-1 text-xs text-gray-400">
                       {listing.seller_name && <span>Seller: {listing.seller_name}</span>}
                       {listing.condition && <span>Condition: {listing.condition}</span>}
-                      {listing.message_timestamp && (
-                        <span>{new Date(listing.message_timestamp).toLocaleDateString()}</span>
-                      )}
+                      {listing.month_year && <span>{listing.month_year}</span>}
                     </div>
                   </div>
                 ))}
@@ -530,6 +529,11 @@ export function AdminWhatsAppImport() {
                               {listing.condition}
                             </span>
                           )}
+                          {listing.month_year && (
+                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">
+                              {listing.month_year}
+                            </span>
+                          )}
                         </div>
                         {listing.price && (
                           <span className="text-lg font-bold text-green-600">
@@ -540,9 +544,6 @@ export function AdminWhatsAppImport() {
                       <p className="text-gray-700 text-sm mb-2">{listing.raw_text}</p>
                       <div className="flex items-center gap-4 text-xs text-gray-400">
                         {listing.seller_name && <span>Seller: {listing.seller_name}</span>}
-                        {listing.message_timestamp && (
-                          <span>{formatDate(listing.message_timestamp)}</span>
-                        )}
                       </div>
                     </div>
                   ))}

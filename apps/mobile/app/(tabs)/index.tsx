@@ -872,7 +872,7 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.watchlistGrid}>
               {watchlistItems.map((watch) => {
-                const isPositive = watch.priceChange > 0;
+                const isPositive = watch.priceChange >= 0;
                 return (
                   <TouchableOpacity
                     key={watch.id}
@@ -910,7 +910,6 @@ export default function HomeScreen() {
                         <Text style={styles.watchReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
                       </View>
                       <View style={styles.watchPriceRow}>
-                        <Text style={styles.watchPrice}><Text style={styles.watchPriceFrom}>from </Text>{formatPrice(watch.price)}</Text>
                         <View
                           style={[
                             styles.watchChangeBadge,

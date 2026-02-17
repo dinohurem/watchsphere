@@ -101,15 +101,9 @@ interface FilterState {
   [key: string]: string[];
 }
 
-const getCurrencySymbol = (currency?: string): string => {
-  switch (currency) {
-    case 'USD': return '$';
-    case 'GBP': return '£';
-    case 'HKD': return 'HK$';
-    case 'CHF': return 'CHF ';
-    case 'EUR': return '€';
-    default: return currency ? `${currency} ` : '€';
-  }
+const formatCurrency = (price: number, currency?: string): string => {
+  if (!currency || currency === 'EUR') return `€${price.toLocaleString()}`;
+  return `${currency} ${price.toLocaleString()}`;
 };
 
 export function WatchDetailsPage() {
@@ -894,7 +888,7 @@ export function WatchDetailsPage() {
                         <span className="text-[12px] font-normal text-[#212121]/50 tracking-[-0.3px]">{entry.date}</span>
                       </span>
                       <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
-                        {getCurrencySymbol(entry.currency)}{entry.price.toLocaleString()}
+                        {formatCurrency(entry.price, entry.currency)}
                       </span>
                       <button
                           className="w-[48px] flex items-center justify-center hover:opacity-70 transition-opacity"
@@ -1098,7 +1092,7 @@ export function WatchDetailsPage() {
                         <span className="text-[12px] font-normal text-[#212121]/50 tracking-[-0.3px]">{entry.date}</span>
                       </span>
                       <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
-                        {getCurrencySymbol(entry.currency)}{entry.price.toLocaleString()}
+                        {formatCurrency(entry.price, entry.currency)}
                       </span>
                       <button
                           className="w-[48px] flex items-center justify-center hover:opacity-70 transition-opacity"

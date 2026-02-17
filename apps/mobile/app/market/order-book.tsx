@@ -149,19 +149,9 @@ export default function OrderBookScreen() {
     }
   };
 
-  const getCurrencySymbol = (currency?: string): string => {
-    switch (currency) {
-      case 'USD': return '$';
-      case 'GBP': return '£';
-      case 'HKD': return 'HK$';
-      case 'CHF': return 'CHF ';
-      case 'EUR': return '€';
-      default: return currency ? `${currency} ` : '€';
-    }
-  };
-
   const formatPrice = (price: number, currency: string = 'EUR') => {
-    return `${getCurrencySymbol(currency)}${price.toLocaleString('de-DE')}`;
+    if (currency === 'EUR') return `€${price.toLocaleString('de-DE')}`;
+    return `${currency} ${price.toLocaleString('de-DE')}`;
   };
 
   // Format date to show MM/YY format (e.g., "02/26")
