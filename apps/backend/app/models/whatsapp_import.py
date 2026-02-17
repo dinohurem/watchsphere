@@ -83,6 +83,7 @@ class ExtractedWatchListing(Document):
     # Watch info
     brand: Optional[str] = None
     reference: Optional[str] = None
+    ws_code: Optional[str] = None
     model: Optional[str] = None
 
     # Pricing

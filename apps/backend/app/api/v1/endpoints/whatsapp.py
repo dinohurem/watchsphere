@@ -43,6 +43,7 @@ class ExtractedListingResponse(BaseModel):
     import_id: str
     brand: Optional[str] = None
     reference: Optional[str] = None
+    ws_code: Optional[str] = None
     model: Optional[str] = None
     price: Optional[float] = None
     currency: str
@@ -348,10 +349,13 @@ async def process_csv_import(
 
         # Parse month/year (e.g., "09/25", "02/26", "2024")
         watch_year = None
+        watch_month = None
         if month_year:
             if '/' in month_year:
                 try:
-                    yr_part = month_year.split('/')[1]
+                    parts = month_year.split('/')
+                    watch_month = int(parts[0])
+                    yr_part = parts[1]
                     watch_year = 2000 + int(yr_part) if len(yr_part) == 2 else int(yr_part)
                 except (ValueError, IndexError):
                     pass
@@ -421,6 +425,7 @@ async def process_csv_import(
             import_id=import_id,
             brand=watch_brand,
             reference=watch_reference,
+            ws_code=ws_code or None,
             model=watch_model,
             price=price,
             currency=currency,
@@ -471,6 +476,7 @@ async def process_csv_import(
                 ws_code=matched_watch.ws_code or (ws_code or None),
                 aliases=matched_watch.aliases or [],
                 year=watch_year,
+                watch_month=watch_month,
                 notes=f"Imported from {group or 'CSV'}. {remarks}".strip() if remarks else f"Imported from {group or 'CSV'}",
                 description=ws_code if ws_code != watch_reference else None,
                 status=OrderStatus.ACTIVE,
@@ -801,6 +807,7 @@ async def admin_get_import_listings(
             "import_id": lst.import_id,
             "brand": lst.brand,
             "reference": lst.reference,
+            "ws_code": lst.ws_code,
             "model": lst.model,
             "price": lst.price,
             "currency": lst.currency,
@@ -849,6 +856,7 @@ async def admin_search_whatsapp(
                 "import_id": lst.import_id,
                 "brand": lst.brand,
                 "reference": lst.reference,
+                "ws_code": lst.ws_code,
                 "price": lst.price,
                 "currency": lst.currency,
                 "condition": lst.condition,

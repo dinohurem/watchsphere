@@ -74,6 +74,7 @@ class Order(Document):
 
     # Extended watch details (for sell listings)
     year: Optional[int] = None
+    watch_month: Optional[int] = None  # Month from "Monat/Jahr" CSV field
     size: Optional[str] = None
     movement: Optional[str] = None
     case_material: Optional[str] = None

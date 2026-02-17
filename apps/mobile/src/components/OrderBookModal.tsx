@@ -251,7 +251,9 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
                 </View>
                 <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.date}</Text>
                 <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.condition}</Text>
-                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.price}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>
+                  {order.currency && order.currency !== 'EUR' ? `${order.currency} ` : '€'}{order.price}
+                </Text>
                 <TouchableOpacity
                     style={{ flex: 0.7, alignItems: 'center', justifyContent: 'center' }}
                     onPress={(e) => {

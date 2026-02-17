@@ -382,9 +382,20 @@ async def get_order_book(
         user_name = order.user_name or user_names_map.get(order.user_id)
         # Prefer order-level whatsapp_phone (set by admin), fall back to user profile
         whatsapp_phone = order.whatsapp_phone or user_whatsapp_map.get(order.user_id)
+
+        # Use watch month/year if available (from CSV import), fall back to created_at
+        if order.year:
+            short_year = order.year % 100
+            if order.watch_month:
+                date_str = f"{order.watch_month:02d}.01.{short_year:02d}"
+            else:
+                date_str = f"01.01.{short_year:02d}"
+        else:
+            date_str = order.created_at.strftime("%m.%d.%y")
+
         return OrderBookEntry(
             id=str(order.id),
-            date=order.created_at.strftime("%m.%d.%y"),
+            date=date_str,
             condition=order.condition.value,
             price=order.price,
             currency=order.currency,

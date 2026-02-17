@@ -25,6 +25,7 @@ interface ExtractedListing {
   import_id: string
   brand?: string
   reference?: string
+  ws_code?: string
   model?: string
   price?: number
   currency: string
@@ -362,8 +363,8 @@ export function AdminWhatsAppImport() {
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="font-medium">{listing.brand || 'Unknown'}</span>
-                        {listing.reference && (
-                          <span className="ml-2 text-sm text-gray-500">{listing.reference}</span>
+                        {(listing.ws_code || listing.reference) && (
+                          <span className="ml-2 text-sm text-gray-500">{listing.ws_code || listing.reference}</span>
                         )}
                       </div>
                       {listing.price && (
@@ -519,9 +520,9 @@ export function AdminWhatsAppImport() {
                               {listing.brand}
                             </span>
                           )}
-                          {listing.reference && (
+                          {(listing.ws_code || listing.reference) && (
                             <span className="px-2 py-1 bg-gray-100 text-gray-800 text-sm font-mono rounded">
-                              {listing.reference}
+                              {listing.ws_code || listing.reference}
                             </span>
                           )}
                           {listing.condition && (
