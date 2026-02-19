@@ -34,6 +34,8 @@ interface WatchMarketData {
   lowestOrderPrice?: number;
   adminPrice?: number;
   coverImage?: string;
+  wtsCount?: number;
+  wtbCount?: number;
 }
 
 // Mini sparkline component for price chart
@@ -256,6 +258,8 @@ export default function MarketScreen() {
     lowestOrderPrice: item.lowest_order_price,
     adminPrice: item.admin_price,
     coverImage: item.cover_image || undefined,
+    wtsCount: item.wts_count || 0,
+    wtbCount: item.wtb_count || 0,
   });
 
   const loadMarketData = async () => {
@@ -897,13 +901,15 @@ export default function MarketScreen() {
             </TouchableOpacity>
           ) : null}
         </View>
-        <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-          {profileImageUrl ? (
-            <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
-          ) : (
-            <User size={24} color="#212121" />
-          )}
-        </TouchableOpacity>
+        {v2Enabled && (
+          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+            {profileImageUrl ? (
+              <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
+            ) : (
+              <User size={24} color="#212121" />
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -1121,29 +1127,42 @@ export default function MarketScreen() {
                       <Text style={styles.watchReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
                     </View>
                     <View style={styles.watchPriceSection}>
-                      <View style={styles.chartContainer}>
-                        <MiniSparkline
-                          data={watch.priceHistory}
-                          width={40}
-                          height={16}
-                          isPositive={isPositive}
-                        />
-                      </View>
-                      <View style={styles.watchPriceInfo}>
-                        <View style={styles.watchChange}>
-                          {isPositive ? (
-                            <TrendingUp size={12} color="#4AA078" />
-                          ) : (
-                            <PriceAlertDown size={12} color="#C93927" />
-                          )}
-                          <Text style={[
-                            styles.watchChangeText,
-                            isPositive ? styles.watchChangePositive : styles.watchChangeNegative
-                          ]}>
-                            {Math.abs(watch.priceChange).toFixed(1)}%
-                          </Text>
+                      {v2Enabled ? (
+                        <>
+                          <View style={styles.chartContainer}>
+                            <MiniSparkline
+                              data={watch.priceHistory}
+                              width={40}
+                              height={16}
+                              isPositive={isPositive}
+                            />
+                          </View>
+                          <View style={styles.watchPriceInfo}>
+                            <View style={styles.watchChange}>
+                              {isPositive ? (
+                                <TrendingUp size={12} color="#4AA078" />
+                              ) : (
+                                <PriceAlertDown size={12} color="#C93927" />
+                              )}
+                              <Text style={[
+                                styles.watchChangeText,
+                                isPositive ? styles.watchChangePositive : styles.watchChangeNegative
+                              ]}>
+                                {Math.abs(watch.priceChange).toFixed(1)}%
+                              </Text>
+                            </View>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(6) }}>
+                          <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(8), paddingVertical: hp(3), borderRadius: sp(99) }}>
+                            <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(11), color: '#4AA078' }}>WTS {watch.wtsCount || 0}</Text>
+                          </View>
+                          <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(8), paddingVertical: hp(3), borderRadius: sp(99) }}>
+                            <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(11), color: '#5B9BD5' }}>WTB {watch.wtbCount || 0}</Text>
+                          </View>
                         </View>
-                      </View>
+                      )}
                     </View>
                   </TouchableOpacity>
                 );
@@ -1179,22 +1198,33 @@ export default function MarketScreen() {
                         <Text style={styles.gridModel} numberOfLines={1}>{watch.model}</Text>
                         <Text style={styles.gridReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
                         <View style={[styles.gridPriceRow]}>
-                          <View style={[
-                            styles.gridChangeBadge,
-                            isPositive ? styles.gridChangeBadgeUp : styles.gridChangeBadgeDown,
-                          ]}>
-                            {isPositive ? (
-                              <TrendingUp size={10} color="#4AA078" />
-                            ) : (
-                              <PriceAlertDown size={10} color="#C93927" />
-                            )}
-                            <Text style={[
-                              styles.gridChangeText,
-                              isPositive ? styles.watchChangePositive : styles.watchChangeNegative
+                          {v2Enabled ? (
+                            <View style={[
+                              styles.gridChangeBadge,
+                              isPositive ? styles.gridChangeBadgeUp : styles.gridChangeBadgeDown,
                             ]}>
-                              {Math.abs(watch.priceChange).toFixed(1)}%
-                            </Text>
-                          </View>
+                              {isPositive ? (
+                                <TrendingUp size={10} color="#4AA078" />
+                              ) : (
+                                <PriceAlertDown size={10} color="#C93927" />
+                              )}
+                              <Text style={[
+                                styles.gridChangeText,
+                                isPositive ? styles.watchChangePositive : styles.watchChangeNegative
+                              ]}>
+                                {Math.abs(watch.priceChange).toFixed(1)}%
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4) }}>
+                              <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
+                                <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(10), color: '#4AA078' }}>WTS {watch.wtsCount || 0}</Text>
+                              </View>
+                              <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
+                                <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(10), color: '#5B9BD5' }}>WTB {watch.wtbCount || 0}</Text>
+                              </View>
+                            </View>
+                          )}
                         </View>
                       </View>
                     </TouchableOpacity>

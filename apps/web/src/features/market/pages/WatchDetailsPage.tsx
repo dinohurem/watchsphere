@@ -64,6 +64,8 @@ interface OrderBookEntry {
   order_type: 'buy' | 'sell';
   whatsapp_phone?: string;
   currency?: string;
+  remarks?: string;
+  country_name?: string;
 }
 
 interface WatchDetails {
@@ -173,11 +175,12 @@ export function WatchDetailsPage() {
 
   // Fetch real price history from sell orders
   useEffect(() => {
-    if (!watchDetails?.reference) return;
+    if (!watchDetails?.reference && !watchDetails?.ws_code) return;
 
     const fetchPriceHistory = async () => {
       try {
-        const response = await api.get(`/orders/price-history/${encodeURIComponent(watchDetails.reference)}?days=365`);
+        const lookupKey = watchDetails.ws_code || watchDetails.reference;
+        const response = await api.get(`/orders/price-history/${encodeURIComponent(lookupKey)}?days=365`);
         if (response.data?.points) {
           setFullPriceHistory(response.data.points);
         }
@@ -187,7 +190,7 @@ export function WatchDetailsPage() {
     };
 
     fetchPriceHistory();
-  }, [watchDetails?.reference]);
+  }, [watchDetails?.reference, watchDetails?.ws_code]);
 
   // Slice the appropriate portion based on selected period (like zooming in/out)
   useEffect(() => {
@@ -234,9 +237,10 @@ export function WatchDetailsPage() {
       let bestBid = 0;
       let bestAsk = 0;
 
-      if (watch.reference) {
+      const orderBookLookup = watch.ws_code || watch.reference;
+      if (orderBookLookup) {
         try {
-          const orderBookResponse = await api.get(`/orders/book/${encodeURIComponent(watch.reference)}`);
+          const orderBookResponse = await api.get(`/orders/book/${encodeURIComponent(orderBookLookup)}`);
           const orderBookData = orderBookResponse.data;
 
           buyOrders = (orderBookData.buy_orders || []).map((o: any) => {
@@ -261,6 +265,8 @@ export function WatchDetailsPage() {
               order_type: 'buy' as const,
               whatsapp_phone: o.whatsapp_phone,
               currency: o.currency || 'EUR',
+              remarks: o.remarks,
+              country_name: o.country_name,
             };
           });
 
@@ -286,6 +292,8 @@ export function WatchDetailsPage() {
               order_type: 'sell' as const,
               whatsapp_phone: o.whatsapp_phone,
               currency: o.currency || 'EUR',
+              remarks: o.remarks,
+              country_name: o.country_name,
             };
           });
 
@@ -510,27 +518,31 @@ export function WatchDetailsPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
-          {/* Order Book - opens the full order book modal */}
-          <button
-            onClick={() => setShowFullOrderBook(true)}
-            className="w-10 h-10 rounded-full border border-black/10 flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors"
-          >
-            <OrderBookIcon size={20} color="rgba(29,29,31,0.6)" />
-          </button>
-          {/* Filters */}
-          <button
-            onClick={() => navigate('/app/market/filters', { state: { fromWatchDetails: true, watchId } })}
-            className={`w-10 h-10 rounded-full border flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors relative ${
-              hasActiveFilters ? 'border-[#1d1d1f] bg-[rgba(29,29,31,0.05)]' : 'border-black/10'
-            }`}
-          >
-            <ListFilter className={`w-5 h-5 ${hasActiveFilters ? 'text-[#1d1d1f]' : 'text-[#1d1d1f]/60'}`} />
-            {hasActiveFilters && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#1d1d1f] text-white text-[10px] font-semibold rounded-full flex items-center justify-center">
-                {Object.values(appliedFilters).reduce((sum, arr) => sum + (arr?.length || 0), 0)}
-              </span>
-            )}
-          </button>
+          {v2Enabled && (
+            <>
+              {/* Order Book - opens the full order book modal */}
+              <button
+                onClick={() => setShowFullOrderBook(true)}
+                className="w-10 h-10 rounded-full border border-black/10 flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors"
+              >
+                <OrderBookIcon size={20} color="rgba(29,29,31,0.6)" />
+              </button>
+              {/* Filters */}
+              <button
+                onClick={() => navigate('/app/market/filters', { state: { fromWatchDetails: true, watchId } })}
+                className={`w-10 h-10 rounded-full border flex items-center justify-center hover:bg-[rgba(29,29,31,0.02)] transition-colors relative ${
+                  hasActiveFilters ? 'border-[#1d1d1f] bg-[rgba(29,29,31,0.05)]' : 'border-black/10'
+                }`}
+              >
+                <ListFilter className={`w-5 h-5 ${hasActiveFilters ? 'text-[#1d1d1f]' : 'text-[#1d1d1f]/60'}`} />
+                {hasActiveFilters && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#1d1d1f] text-white text-[10px] font-semibold rounded-full flex items-center justify-center">
+                    {Object.values(appliedFilters).reduce((sum, arr) => sum + (arr?.length || 0), 0)}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
           {/* Watchlist - toggles watchlist status */}
           <button
             onClick={toggleWatchlist}
@@ -579,28 +591,49 @@ export function WatchDetailsPage() {
 
             {/* Price Range - at bottom of card */}
             <div className="px-4 pb-4 pt-2">
-              <div className="flex items-end justify-between">
-                <div>
-                  <p className="text-[12px] text-[#1d1d1f]/50 leading-[1.3]">{t('watchDetails.marketPrice')}</p>
-                  <p className="text-[15px] font-semibold text-[#1d1d1f] leading-[1.3]">
-                    {formatCurrency(watchDetails.priceData.minPrice, watchDetails.currency)} - {formatCurrency(watchDetails.priceData.maxPrice, watchDetails.currency)}
-                  </p>
-                </div>
-                <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full ${
-                  watchDetails.priceData.priceChange >= 0 ? 'bg-[rgba(74,160,120,0.1)]' : 'bg-[rgba(201,57,39,0.1)]'
-                }`}>
-                  {watchDetails.priceData.priceChange >= 0 ? (
-                    <TrendingUp className="w-3.5 h-3.5 text-[#4aa078]" />
-                  ) : (
-                    <TrendingDown className="w-3.5 h-3.5 text-[#c93927]" />
-                  )}
-                  <span className={`text-[12px] font-semibold ${
-                    watchDetails.priceData.priceChange >= 0 ? 'text-[#4aa078]' : 'text-[#c93927]'
+              {v2Enabled ? (
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-[12px] text-[#1d1d1f]/50 leading-[1.3]">{t('watchDetails.marketPrice')}</p>
+                    <p className="text-[15px] font-semibold text-[#1d1d1f] leading-[1.3]">
+                      {formatCurrency(watchDetails.priceData.minPrice, watchDetails.currency)} - {formatCurrency(watchDetails.priceData.maxPrice, watchDetails.currency)}
+                    </p>
+                  </div>
+                  <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full ${
+                    watchDetails.priceData.priceChange >= 0 ? 'bg-[rgba(74,160,120,0.1)]' : 'bg-[rgba(201,57,39,0.1)]'
                   }`}>
-                    {Math.abs(watchDetails.priceData.priceChange * 100).toFixed(2)}%
-                  </span>
+                    {watchDetails.priceData.priceChange >= 0 ? (
+                      <TrendingUp className="w-3.5 h-3.5 text-[#4aa078]" />
+                    ) : (
+                      <TrendingDown className="w-3.5 h-3.5 text-[#c93927]" />
+                    )}
+                    <span className={`text-[12px] font-semibold ${
+                      watchDetails.priceData.priceChange >= 0 ? 'text-[#4aa078]' : 'text-[#c93927]'
+                    }`}>
+                      {Math.abs(watchDetails.priceData.priceChange * 100).toFixed(2)}%
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-end justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-semibold bg-[rgba(74,160,120,0.1)] text-[#4aa078]">
+                      WTS {orderBook.filter(o => o.order_type === 'sell').length}
+                    </span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-semibold bg-[rgba(91,155,213,0.1)] text-[#5B9BD5]">
+                      WTB {orderBook.filter(o => o.order_type === 'buy').length}
+                    </span>
+                  </div>
+                  <button
+                    onClick={toggleWatchlist}
+                    className="p-1"
+                  >
+                    <Star
+                      className={`w-5 h-5 ${isInWatchlist ? 'text-[#D4AF37] fill-[#D4AF37]' : 'text-[#1d1d1f]/30'}`}
+                    />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -650,6 +683,7 @@ export function WatchDetailsPage() {
           )}
 
           {/* Price Chart */}
+          {v2Enabled && (
           <div className="flex-1">
             {/* Chart Area */}
             <div className="h-[200px] mb-4 relative">
@@ -823,18 +857,21 @@ export function WatchDetailsPage() {
               ))}
             </div>
           </div>
+          )}
 
           {/* Order Book */}
           <div>
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-[24px] font-semibold text-[#1d1d1f] leading-[1.1] tracking-[-0.24px]">{t('watchDetails.orderBook')}</h2>
-              <button
-                onClick={() => setShowFullOrderBook(true)}
-                className="text-[16px] font-semibold text-[#212121] tracking-[0.08px] leading-[20px] hover:opacity-70 flex items-center gap-[12px] transition-colors"
-              >
-                {t('watchDetails.seeOrderBook')}
-                <span className="text-[18px]">→</span>
-              </button>
+              {v2Enabled && (
+                <button
+                  onClick={() => setShowFullOrderBook(true)}
+                  className="text-[16px] font-semibold text-[#212121] tracking-[0.08px] leading-[20px] hover:opacity-70 flex items-center gap-[12px] transition-colors"
+                >
+                  {t('watchDetails.seeOrderBook')}
+                  <span className="text-[18px]">→</span>
+                </button>
+              )}
             </div>
 
             {/* Order Book Tabs - iOS segmented control style */}
@@ -865,14 +902,17 @@ export function WatchDetailsPage() {
             <div className="overflow-hidden">
               {/* Table Header */}
               <div className="flex items-center h-[44px] border-b border-[rgba(0,0,0,0.05)]">
-                <span className="w-[22%] pl-[12px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.market')}</span>
-                <span className="w-[28%] px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Details</span>
-                <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{t('watchDetails.price')}</span>
+                <span className={`${!v2Enabled ? 'w-[18%]' : 'w-[22%]'} pl-[12px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]`}>{!v2Enabled ? 'Location' : t('watchDetails.market')}</span>
+                <span className={`${!v2Enabled ? 'w-[20%]' : 'w-[28%]'} px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]`}>Details</span>
+                {!v2Enabled && (
+                  <span className="w-[22%] px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Remarks</span>
+                )}
+                <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{!v2Enabled && orderBookTab === 'buy' ? 'Target' : t('watchDetails.price')}</span>
                 <span className="w-[48px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-center">Chat</span>
               </div>
 
               {/* Table Rows */}
-              <div className="max-h-[400px] overflow-y-auto">
+              <div className={v2Enabled ? 'max-h-[400px] overflow-y-auto' : 'overflow-y-auto'}>
                 {filteredOrderBook.length === 0 ? (
                   <div className="text-center py-8 text-[#212121]/50 text-[15px]">
                     {t('watchDetails.noOrdersAvailable', { type: orderBookTab })}
@@ -885,14 +925,19 @@ export function WatchDetailsPage() {
                         index % 2 === 0 ? 'bg-[#fbfbfb]' : 'bg-white'
                       }`}
                     >
-                      <span className="w-[22%] pl-[12px] pr-[4px] py-[8px] flex items-center gap-[8px]">
+                      <span className={`${!v2Enabled ? 'w-[18%]' : 'w-[22%]'} pl-[12px] pr-[4px] py-[8px] flex items-center gap-[8px]`}>
                         <span className="text-[14px]">{entry.flag}</span>
-                        <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.market.toUpperCase()}</span>
+                        <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{!v2Enabled ? (entry.country_name || entry.market.toUpperCase()) : entry.market.toUpperCase()}</span>
                       </span>
-                      <span className="w-[28%] px-[4px] py-[6px] flex flex-col">
+                      <span className={`${!v2Enabled ? 'w-[20%]' : 'w-[28%]'} px-[4px] py-[6px] flex flex-col`}>
                         <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
                         <span className="text-[12px] font-normal text-[#212121]/50 tracking-[-0.3px]">{entry.date}</span>
                       </span>
+                      {!v2Enabled && (
+                        <span className="w-[22%] px-[4px] py-[8px] text-[13px] font-normal text-[#212121]/70 tracking-[-0.3px] truncate">
+                          {entry.remarks || '--'}
+                        </span>
+                      )}
                       <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
                         {formatCurrency(entry.price, entry.currency)}
                       </span>
@@ -1069,9 +1114,12 @@ export function WatchDetailsPage() {
             <div className="flex-1 overflow-hidden px-6 py-4">
               {/* Table Header */}
               <div className="flex items-center h-[44px] border-b border-[rgba(0,0,0,0.05)]">
-                <span className="w-[22%] pl-[12px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">{t('watchDetails.market')}</span>
-                <span className="w-[28%] px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Details</span>
-                <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{t('watchDetails.price')}</span>
+                <span className={`${!v2Enabled ? 'w-[18%]' : 'w-[22%]'} pl-[12px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]`}>{!v2Enabled ? 'Location' : t('watchDetails.market')}</span>
+                <span className={`${!v2Enabled ? 'w-[20%]' : 'w-[28%]'} px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]`}>Details</span>
+                {!v2Enabled && (
+                  <span className="w-[22%] px-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px]">Remarks</span>
+                )}
+                <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-right">{!v2Enabled && orderBookTab === 'buy' ? 'Target' : t('watchDetails.price')}</span>
                 <span className="w-[48px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[0.075px] leading-[20px] text-center">Chat</span>
               </div>
 
@@ -1089,14 +1137,19 @@ export function WatchDetailsPage() {
                         index % 2 === 0 ? 'bg-[#fbfbfb]' : 'bg-white'
                       }`}
                     >
-                      <span className="w-[22%] pl-[12px] pr-[4px] py-[8px] flex items-center gap-[8px]">
+                      <span className={`${!v2Enabled ? 'w-[18%]' : 'w-[22%]'} pl-[12px] pr-[4px] py-[8px] flex items-center gap-[8px]`}>
                         <span className="text-[14px]">{entry.flag}</span>
-                        <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.market.toUpperCase()}</span>
+                        <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{!v2Enabled ? (entry.country_name || entry.market.toUpperCase()) : entry.market.toUpperCase()}</span>
                       </span>
-                      <span className="w-[28%] px-[4px] py-[6px] flex flex-col">
+                      <span className={`${!v2Enabled ? 'w-[20%]' : 'w-[28%]'} px-[4px] py-[6px] flex flex-col`}>
                         <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
                         <span className="text-[12px] font-normal text-[#212121]/50 tracking-[-0.3px]">{entry.date}</span>
                       </span>
+                      {!v2Enabled && (
+                        <span className="w-[22%] px-[4px] py-[8px] text-[13px] font-normal text-[#212121]/70 tracking-[-0.3px] truncate">
+                          {entry.remarks || '--'}
+                        </span>
+                      )}
                       <span className="flex-1 pl-[4px] pr-[4px] py-[8px] text-[15px] font-semibold text-[#212121] tracking-[-0.3px] text-right">
                         {formatCurrency(entry.price, entry.currency)}
                       </span>

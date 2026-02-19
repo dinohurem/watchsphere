@@ -64,6 +64,7 @@ class Watch(Document):
 
     # Market/Trending
     trending: bool = False  # Admin can manually flag watches as trending
+    is_popular_search: bool = False  # Admin can flag watches as popular searches
     price_history: List[float] = Field(default_factory=list)  # Historical prices for charts
     price_change: float = 0.0  # Percentage change
 

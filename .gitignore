@@ -225,6 +225,16 @@ yarn-error.log*
 # NPM
 package-lock.json
 
+# Expo prebuild / native output (use EAS build, not local Xcode project)
+ios/
+.expo/
+
+# Turborepo daemon logs
+.turbo/daemon/
+
+# Root tsconfig (monorepo apps have their own)
+/tsconfig.json
+
 # MCP Configuration (contains sensitive tokens)
 .mcp.json
 .worktrees/

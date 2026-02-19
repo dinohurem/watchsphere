@@ -73,6 +73,7 @@ class WatchResponse(BaseModel):
     cover_image: Optional[str] = None
     status: WatchStatus
     featured: bool
+    is_popular_search: bool = False
     trending: bool = False
     order_count: int = 0
     price_change: float = 0.0
@@ -500,6 +501,29 @@ async def get_featured_watches(
     ]
 
 
+@router.get("/popular-searches")
+async def get_popular_searches(
+    limit: int = Query(default=10, le=20),
+) -> Any:
+    """Get watches flagged as popular searches"""
+    watches = await Watch.find(
+        Watch.status == WatchStatus.ACTIVE,
+        Watch.is_popular_search == True,
+    ).sort([("brand", 1), ("model", 1)]).limit(limit).to_list()
+
+    return [
+        {
+            "id": str(watch.id),
+            "brand": watch.brand,
+            "model": watch.model,
+            "reference": watch.reference,
+            "ws_code": watch.ws_code,
+            "cover_image": watch.cover_image,
+        }
+        for watch in watches
+    ]
+
+
 # ============== AGGREGATED MARKET DATA ENDPOINTS ==============
 # NOTE: These must be defined BEFORE /{watch_id} to avoid route conflicts
 
@@ -521,6 +545,8 @@ class AggregatedWatchResponse(BaseModel):
     price_history: List[float] = []
     # Order counts for trending
     total_orders: int = 0
+    wts_count: int = 0
+    wtb_count: int = 0
     trending: bool = False
 
 
@@ -614,6 +640,25 @@ async def get_aggregated_market_data(
             except Exception:
                 pass
 
+            # Get WTS/WTB counts per reference
+            wts_counts_by_ref = {}
+            wtb_counts_by_ref = {}
+            split_count_pipeline = [
+                {"$match": {"reference": {"$in": references}, "status": OrderStatus.ACTIVE.value}},
+                {"$group": {"_id": {"reference": "$reference", "order_type": "$order_type"}, "count": {"$sum": 1}}},
+            ]
+            try:
+                split_raw = await Order.aggregate(split_count_pipeline).to_list()
+                for item in split_raw:
+                    ref = item["_id"]["reference"]
+                    ot = item["_id"]["order_type"]
+                    if ot == OrderType.SELL.value:
+                        wts_counts_by_ref[ref] = item["count"]
+                    elif ot == OrderType.BUY.value:
+                        wtb_counts_by_ref[ref] = item["count"]
+            except Exception:
+                pass
+
         # Build response — unique per ws_code
         result = []
         seen_keys = set()
@@ -664,6 +709,8 @@ async def get_aggregated_market_data(
                 price_change=price_change,
                 price_history=generated_history if generated_history else (watch.price_history or []),
                 total_orders=order_counts_by_ref.get(watch.reference, 0) + (watch.order_count or 0),
+                wts_count=wts_counts_by_ref.get(watch.reference, 0) if watch.reference else 0,
+                wtb_count=wtb_counts_by_ref.get(watch.reference, 0) if watch.reference else 0,
                 trending=watch.trending or False,
             ))
 
@@ -745,11 +792,23 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
     # Use the currency from the lowest WTS order when available
     display_currency = lowest_order_currency if lowest_order_price and lowest_order_currency else watch.currency
 
-    # Get total order count
+    # Get total order count and WTS/WTB counts
     order_count = 0
+    wts_count = 0
+    wtb_count = 0
     if watch_ref:
         order_count = await Order.find(
             Order.reference == watch_ref,
+            Order.status == OrderStatus.ACTIVE,
+        ).count()
+        wts_count = await Order.find(
+            Order.reference == watch_ref,
+            Order.order_type == OrderType.SELL,
+            Order.status == OrderStatus.ACTIVE,
+        ).count()
+        wtb_count = await Order.find(
+            Order.reference == watch_ref,
+            Order.order_type == OrderType.BUY,
             Order.status == OrderStatus.ACTIVE,
         ).count()
 
@@ -784,6 +843,8 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
         price_change=price_change,
         price_history=generated_history if generated_history else (watch.price_history or []),
         total_orders=order_count + watch.order_count,
+        wts_count=wts_count,
+        wtb_count=wtb_count,
         trending=watch.trending,
     )
 
@@ -845,6 +906,7 @@ async def admin_list_all_watches(
             "bracelet": watch.bracelet,
             "ws_code": watch.ws_code,
             "aliases": watch.aliases,
+            "is_popular_search": watch.is_popular_search,
         }
         for watch in watches
     ]
@@ -1147,6 +1209,32 @@ async def admin_toggle_trending(
         "message": f"Watch trending status {'enabled' if watch.trending else 'disabled'}",
         "id": str(watch.id),
         "trending": watch.trending
+    }
+
+
+@router.post("/admin/{watch_id}/toggle-popular-search")
+async def admin_toggle_popular_search(
+    watch_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Toggle popular search status for a watch (Admin only)"""
+
+    watch = await Watch.get(PydanticObjectId(watch_id))
+
+    if not watch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watch not found"
+        )
+
+    watch.is_popular_search = not watch.is_popular_search
+    watch.updated_at = datetime.utcnow()
+    await watch.save()
+
+    return {
+        "message": f"Watch popular search status {'enabled' if watch.is_popular_search else 'disabled'}",
+        "id": str(watch.id),
+        "is_popular_search": watch.is_popular_search
     }
 
 

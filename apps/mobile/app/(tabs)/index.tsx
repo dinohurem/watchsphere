@@ -46,6 +46,8 @@ interface WatchlistItem {
   priceChange: number;
   image?: string;
   isFromUserWatchlist?: boolean; // true if from user's watchlist, false if from default
+  wtsCount?: number;
+  wtbCount?: number;
 }
 
 interface ActivityItem {
@@ -284,6 +286,27 @@ export default function HomeScreen() {
     }
   };
 
+  const enrichWatchlistWithCounts = async (items: WatchlistItem[]) => {
+    if (items.length === 0 || v2Enabled) return;
+    try {
+      const response = await api.get('/market/aggregated');
+      if (response.data) {
+        const countMap = new Map<string, { wts: number; wtb: number }>();
+        response.data.forEach((item: any) => {
+          if (item.ws_code) countMap.set(item.ws_code.toUpperCase(), { wts: item.wts_count || 0, wtb: item.wtb_count || 0 });
+          if (item.reference) countMap.set(item.reference.toUpperCase(), { wts: item.wts_count || 0, wtb: item.wtb_count || 0 });
+        });
+        setWatchlistItems(prev => prev.map(w => {
+          const key = (w.ws_code || w.reference || '').toUpperCase();
+          const counts = countMap.get(key);
+          return counts ? { ...w, wtsCount: counts.wts, wtbCount: counts.wtb } : w;
+        }));
+      }
+    } catch (error) {
+      // Counts are optional — keep items without them
+    }
+  };
+
   const loadAllData = useCallback(async () => {
     await Promise.all([loadWatchlist(), loadActivity(), loadNews(), loadProfile()]);
   }, [isGuideActive]);
@@ -293,6 +316,15 @@ export default function HomeScreen() {
     useCallback(() => {
       loadAllData();
     }, [loadAllData])
+  );
+
+  // Enrich watchlist items with WTS/WTB counts when v2 is off
+  useFocusEffect(
+    useCallback(() => {
+      if (!v2Enabled && watchlistItems.length > 0 && watchlistItems[0].wtsCount === undefined) {
+        enrichWatchlistWithCounts(watchlistItems);
+      }
+    }, [watchlistItems, v2Enabled])
   );
 
   const onRefresh = useCallback(async () => {
@@ -748,13 +780,15 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         {/* Profile Button */}
-        <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-          {profileImageUrl ? (
-            <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
-          ) : (
-            <User size={24} color="#212121" />
-          )}
-        </TouchableOpacity>
+        {v2Enabled && (
+          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+            {profileImageUrl ? (
+              <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
+            ) : (
+              <User size={24} color="#212121" />
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -885,6 +919,7 @@ export default function HomeScreen() {
                         reference: watch.reference,
                         brand: watch.brand,
                         model: watch.model,
+                        ws_code: watch.ws_code || '',
                         // Pass flag to indicate if from user's watchlist (affects Saved icon display)
                         fromUserWatchlist: watch.isFromUserWatchlist ? 'true' : 'false',
                       },
@@ -910,26 +945,37 @@ export default function HomeScreen() {
                         <Text style={styles.watchReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
                       </View>
                       <View style={styles.watchPriceRow}>
-                        <View
-                          style={[
-                            styles.watchChangeBadge,
-                            isPositive ? styles.watchChangeBadgeUp : styles.watchChangeBadgeDown,
-                          ]}
-                        >
-                          {isPositive ? (
-                            <TrendingUp size={10} color="#4AA078" />
-                          ) : (
-                            <PriceAlertDown size={10} color="#C93927" />
-                          )}
-                          <Text
+                        {v2Enabled ? (
+                          <View
                             style={[
-                              styles.watchChangeText,
-                              isPositive ? styles.watchChangeTextUp : styles.watchChangeTextDown,
+                              styles.watchChangeBadge,
+                              isPositive ? styles.watchChangeBadgeUp : styles.watchChangeBadgeDown,
                             ]}
                           >
-                            {Math.abs(watch.priceChange).toFixed(1)}%
-                          </Text>
-                        </View>
+                            {isPositive ? (
+                              <TrendingUp size={10} color="#4AA078" />
+                            ) : (
+                              <PriceAlertDown size={10} color="#C93927" />
+                            )}
+                            <Text
+                              style={[
+                                styles.watchChangeText,
+                                isPositive ? styles.watchChangeTextUp : styles.watchChangeTextDown,
+                              ]}
+                            >
+                              {Math.abs(watch.priceChange).toFixed(1)}%
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4) }}>
+                            <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
+                              <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(10), color: '#4AA078' }}>WTS {watch.wtsCount ?? 0}</Text>
+                            </View>
+                            <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
+                              <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(10), color: '#5B9BD5' }}>WTB {watch.wtbCount ?? 0}</Text>
+                            </View>
+                          </View>
+                        )}
                       </View>
                     </View>
                   </TouchableOpacity>
