@@ -418,8 +418,7 @@ async def get_order_book(
         condition_raw = getattr(order, 'condition_raw', None)
         condition_str = condition_raw if condition_raw else order.condition.value
 
-        # Remarks: prefer order.remarks, fall back to order.notes
-        remarks = getattr(order, 'remarks', None) or order.notes
+        remarks = getattr(order, 'remarks', None)
 
         return OrderBookEntry(
             id=str(order.id),
