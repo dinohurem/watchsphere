@@ -74,6 +74,7 @@ class OrderResponse(BaseModel):
     has_box: bool
     has_papers: bool
     notes: Optional[str] = None
+    remarks: Optional[str] = None
     cover_image: Optional[str] = None
     images: List[str] = []
     created_at: datetime
@@ -98,6 +99,8 @@ class OrderBookEntry(BaseModel):
     user_id: str
     user_name: Optional[str] = None
     whatsapp_phone: Optional[str] = None
+    remarks: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class OrderBookResponse(BaseModel):
@@ -281,15 +284,22 @@ async def get_price_history(
     """
     Get real price history from sell orders for chart display.
 
-    Returns the lowest sell order price per day for the given reference,
+    Returns the lowest sell order price per day for the given reference or ws_code,
     covering up to the requested number of days. Includes both active
     and completed orders to show historical pricing.
     """
+    import re as re_mod
+
+    # Try ws_code-first lookup for the watch to resolve reference
+    ws_regex = re_mod.compile(f"^{re_mod.escape(reference)}$", re_mod.IGNORECASE)
+    watch_match = await Watch.find_one({"ws_code": {"$regex": ws_regex}})
+    lookup_ref = watch_match.reference if watch_match else reference
+
     cutoff_date = datetime.utcnow() - timedelta(days=days)
 
     # Get all sell orders (active + completed) created within the time range
     sell_orders = await Order.find(
-        Order.reference == reference,
+        Order.reference == lookup_ref,
         Order.order_type == OrderType.SELL,
         Order.created_at >= cutoff_date,
     ).sort([("created_at", 1)]).to_list()
@@ -309,7 +319,7 @@ async def get_price_history(
     # Calculate current price (lowest active sell, or last recorded price)
     current_price = 0.0
     lowest_active = await Order.find(
-        Order.reference == reference,
+        Order.reference == lookup_ref,
         Order.order_type == OrderType.SELL,
         Order.status == OrderStatus.ACTIVE,
     ).sort([("price", 1)]).limit(1).to_list()
@@ -320,7 +330,7 @@ async def get_price_history(
         current_price = points[-1].price
 
     # Get admin price for price_change calculation
-    watch = await Watch.find_one(Watch.reference == reference, Watch.status == WatchStatus.ACTIVE)
+    watch = watch_match or await Watch.find_one(Watch.reference == lookup_ref, Watch.status == WatchStatus.ACTIVE)
     admin_price = watch.price if watch else 0
 
     price_change = 0.0
@@ -341,24 +351,32 @@ async def get_order_book(
     limit: int = Query(default=50, le=100),
 ) -> Any:
     """
-    Get order book for a specific watch reference.
+    Get order book for a specific watch reference or ws_code.
     Returns both buy and sell orders sorted by price.
     """
+    import re as re_mod
+
+    # Try ws_code-first lookup for the watch
+    ws_regex = re_mod.compile(f"^{re_mod.escape(reference)}$", re_mod.IGNORECASE)
+    watch = await Watch.find_one({"ws_code": {"$regex": ws_regex}})
+    if not watch:
+        watch = await Watch.find_one(Watch.reference == reference)
+
+    # Use the watch's reference for order lookups (orders are keyed by reference)
+    lookup_ref = watch.reference if watch else reference
+
     # Get all active orders for this reference
     buy_orders = await Order.find(
-        Order.reference == reference,
+        Order.reference == lookup_ref,
         Order.order_type == OrderType.BUY,
         Order.status == OrderStatus.ACTIVE,
     ).sort([("price", -1)]).limit(limit).to_list()  # Highest bids first
 
     sell_orders = await Order.find(
-        Order.reference == reference,
+        Order.reference == lookup_ref,
         Order.order_type == OrderType.SELL,
         Order.status == OrderStatus.ACTIVE,
     ).sort([("price", 1)]).limit(limit).to_list()  # Lowest asks first
-
-    # Get watch info for brand/model
-    watch = await Watch.find_one(Watch.reference == reference)
     brand = watch.brand if watch else ""
     model = watch.model if watch else ""
 
@@ -383,8 +401,11 @@ async def get_order_book(
         # Prefer order-level whatsapp_phone (set by admin), fall back to user profile
         whatsapp_phone = order.whatsapp_phone or user_whatsapp_map.get(order.user_id)
 
-        # Use watch month/year if available (from CSV import), fall back to created_at
-        if order.year:
+        # If year_raw is set (e.g., "2022+"), use it directly as date string
+        year_raw = getattr(order, 'year_raw', None)
+        if year_raw:
+            date_str = year_raw
+        elif order.year:
             short_year = order.year % 100
             if order.watch_month:
                 date_str = f"{order.watch_month:02d}.01.{short_year:02d}"
@@ -393,10 +414,17 @@ async def get_order_book(
         else:
             date_str = order.created_at.strftime("%m.%d.%y")
 
+        # Use condition_raw if available (e.g., "Unworn only"), otherwise use enum value
+        condition_raw = getattr(order, 'condition_raw', None)
+        condition_str = condition_raw if condition_raw else order.condition.value
+
+        # Remarks: prefer order.remarks, fall back to order.notes
+        remarks = getattr(order, 'remarks', None) or order.notes
+
         return OrderBookEntry(
             id=str(order.id),
             date=date_str,
-            condition=order.condition.value,
+            condition=condition_str,
             price=order.price,
             currency=order.currency,
             country_code=order.country_code,
@@ -406,6 +434,8 @@ async def get_order_book(
             user_id=order.user_id,
             user_name=user_name,
             whatsapp_phone=whatsapp_phone,
+            remarks=remarks,
+            created_at=order.created_at,
         )
 
     formatted_buy = [format_order(o) for o in buy_orders]
@@ -915,6 +945,7 @@ async def create_order(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        remarks=getattr(order, 'remarks', None),
         cover_image=order.images[0] if order.images else None,
         images=order.images or [],
         created_at=order.created_at,
@@ -1000,6 +1031,7 @@ async def get_my_orders(
             has_box=order.has_box,
             has_papers=order.has_papers,
             notes=order.notes,
+            remarks=getattr(order, 'remarks', None),
             cover_image=order.images[0] if order.images else None,
             images=order.images or [],
             created_at=order.created_at,
@@ -1371,6 +1403,7 @@ async def mark_order_as_sold(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        remarks=getattr(order, 'remarks', None),
         cover_image=order.images[0] if order.images else None,
         images=order.images or [],
         created_at=order.created_at,
@@ -1447,6 +1480,7 @@ async def mark_order_as_completed(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        remarks=getattr(order, 'remarks', None),
         cover_image=order.images[0] if order.images else None,
         images=order.images or [],
         created_at=order.created_at,
@@ -1500,6 +1534,7 @@ async def admin_list_all_orders(
             has_box=order.has_box,
             has_papers=order.has_papers,
             notes=order.notes,
+            remarks=getattr(order, 'remarks', None),
             cover_image=order.images[0] if order.images else None,
             images=order.images or [],
             created_at=order.created_at,
@@ -1669,6 +1704,7 @@ async def admin_get_orders_by_reference(
             has_box=order.has_box,
             has_papers=order.has_papers,
             notes=order.notes,
+            remarks=getattr(order, 'remarks', None),
             cover_image=order.images[0] if order.images else None,
             images=order.images or [],
             created_at=order.created_at,
@@ -1784,6 +1820,7 @@ async def admin_create_order(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        remarks=getattr(order, 'remarks', None),
         cover_image=order.images[0] if order.images else None,
         images=order.images or [],
         created_at=order.created_at,
@@ -1833,6 +1870,7 @@ async def admin_update_order(
         has_box=order.has_box,
         has_papers=order.has_papers,
         notes=order.notes,
+        remarks=getattr(order, 'remarks', None),
         cover_image=order.images[0] if order.images else None,
         images=order.images or [],
         created_at=order.created_at,

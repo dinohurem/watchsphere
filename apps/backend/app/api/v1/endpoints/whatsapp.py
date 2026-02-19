@@ -344,13 +344,19 @@ async def process_csv_import(
         # Parse price
         price, currency = parse_csv_price(price_str)
 
-        # Parse month/year (e.g., "09/25", "02/26", "2024")
+        # Parse month/year (e.g., "09/25", "02/26", "2024", "2022+")
         watch_year = None
         watch_month = None
+        year_raw = None
+        # Check for non-standard year formats like "2022+" before parsing
+        if month_year and ('+' in month_year or not month_year.replace('/', '').replace(' ', '').isdigit()):
+            year_raw = month_year  # Store raw text for display
         if month_year:
-            if '/' in month_year:
+            # Still try to parse numeric year even if year_raw is set
+            clean_my = month_year.replace('+', '').strip()
+            if '/' in clean_my:
                 try:
-                    parts = month_year.split('/')
+                    parts = clean_my.split('/')
                     watch_month = int(parts[0])
                     yr_part = parts[1]
                     watch_year = 2000 + int(yr_part) if len(yr_part) == 2 else int(yr_part)
@@ -358,7 +364,7 @@ async def process_csv_import(
                     pass
             else:
                 try:
-                    watch_year = int(month_year)
+                    watch_year = int(clean_my)
                 except ValueError:
                     pass
 
@@ -387,12 +393,17 @@ async def process_csv_import(
         country_code = location if location else None
         country_name = COUNTRY_NAMES.get(country_code, country_code) if country_code else None
 
-        # Resolve condition
+        # Resolve condition — store raw text for non-standard conditions
         condition = None
+        condition_raw = None
         if condition_str.lower() in ("unworn", "new", "brand new", "nos"):
             condition = "Unworn"
         elif condition_str.lower() in ("used", "good", "excellent", "mint"):
             condition = "Used"
+        elif condition_str:
+            # Non-standard condition text (e.g., "Unworn only") — default to Unworn, store raw
+            condition = "Unworn"
+            condition_raw = condition_str
 
         # Build raw text for social search
         raw_text = f"{offer_type_str} {brand} {ws_code} {price_str}".strip()
@@ -489,6 +500,9 @@ async def process_csv_import(
                 aliases=matched_watch.aliases or [],
                 year=watch_year,
                 watch_month=watch_month,
+                year_raw=year_raw,
+                condition_raw=condition_raw,
+                remarks=remarks or None,
                 notes=f"Imported from {group or 'CSV'}. {remarks}".strip() if remarks else f"Imported from {group or 'CSV'}",
                 description=ws_code if ws_code != order_reference else None,
                 status=OrderStatus.ACTIVE,

@@ -25,6 +25,7 @@ interface Watch {
   cover_image: string | null
   status: 'draft' | 'active'
   featured: boolean
+  is_popular_search: boolean
   dealer_id: string
   dealer_name: string | null
   views: number
@@ -49,6 +50,7 @@ interface Order {
   has_box: boolean
   has_papers: boolean
   notes?: string
+  remarks?: string
   created_at: string
   updated_at?: string
 }
@@ -340,6 +342,16 @@ export function AdminWatches() {
       fetchWatches()
     } catch (error) {
       console.error('Failed to toggle featured:', error)
+    }
+    setActionMenuOpen(null)
+  }
+
+  const handleTogglePopularSearch = async (watch: Watch) => {
+    try {
+      await api.post(`/market/admin/${watch.id}/toggle-popular-search`)
+      fetchWatches()
+    } catch (error) {
+      console.error('Failed to toggle popular search:', error)
     }
     setActionMenuOpen(null)
   }
@@ -734,7 +746,6 @@ export function AdminWatches() {
                       <div className="ml-4">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-gray-900">{watch.brand}</span>
-                          {watch.featured && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
                         </div>
                         <div className="text-sm text-gray-500">{watch.model}</div>
                       </div>
@@ -751,7 +762,19 @@ export function AdminWatches() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <StatusBadge status={watch.status} />
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <StatusBadge status={watch.status} />
+                      {watch.featured && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200">
+                          <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                        </span>
+                      )}
+                      {watch.is_popular_search && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200">
+                          <Search className="w-3 h-3 text-blue-600" />
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center text-sm text-gray-500">
@@ -788,6 +811,12 @@ export function AdminWatches() {
                         icon={watch.featured ? <StarOff className="w-4 h-4" /> : <Star className="w-4 h-4" />}
                       >
                         {watch.featured ? 'Remove Featured' : 'Set Featured'}
+                      </ActionMenuItem>
+                      <ActionMenuItem
+                        onClick={() => handleTogglePopularSearch(watch)}
+                        icon={watch.is_popular_search ? <StarOff className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+                      >
+                        {watch.is_popular_search ? 'Remove Popular Search' : 'Set Popular Search'}
                       </ActionMenuItem>
                       <ActionMenuItem
                         onClick={() => handleDelete(watch.id)}
@@ -1103,6 +1132,7 @@ export function AdminWatches() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Condition</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Country</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Remarks</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -1134,10 +1164,29 @@ export function AdminWatches() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
+                          {order.remarks ? (
+                            <span className="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded max-w-[140px] truncate" title={order.remarks}>
+                              {order.remarks}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-300">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
                           <OrderStatusBadge status={order.status} />
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          {new Date(order.created_at).toLocaleDateString()}
+                        <td className="px-4 py-3">
+                          {(() => {
+                            const daysAgo = Math.floor((Date.now() - new Date(order.created_at).getTime()) / (1000 * 60 * 60 * 24))
+                            const dotColor = daysAgo <= 7 ? '#4AA078' : daysAgo <= 14 ? '#E8A838' : '#D35741'
+                            const label = daysAgo === 0 ? 'today' : `${daysAgo}d ago`
+                            return (
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
+                                <span className="text-sm text-gray-500">{label}</span>
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <ActionMenu

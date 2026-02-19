@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Keyboard, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { BackArrow, Magnifier } from '@/components/icons';
+import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path } from 'react-native-svg';
 
@@ -27,8 +28,8 @@ function CloseIcon({ size = 16, color = '#212121' }: { size?: number; color?: st
 const RECENT_SEARCHES_KEY = 'recent_searches';
 const MAX_RECENT_SEARCHES = 10;
 
-// Popular searches (can be fetched from API later)
-const POPULAR_SEARCHES = [
+// Fallback popular searches (used while API loads or if API fails)
+const FALLBACK_POPULAR_SEARCHES = [
   'Rolex Daytona',
   'Rolex Submariner',
   'Rolex Datejust',
@@ -46,11 +47,29 @@ export default function SearchScreen() {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [popularSearches, setPopularSearches] = useState<string[]>(FALLBACK_POPULAR_SEARCHES);
+  const [loadingPopular, setLoadingPopular] = useState(true);
   const [isFocused, setIsFocused] = useState(true);
 
   useEffect(() => {
     loadRecentSearches();
+    loadPopularSearches();
   }, []);
+
+  const loadPopularSearches = async () => {
+    try {
+      const response = await api.get('/market/popular-searches?limit=10');
+      if (response.data && response.data.length > 0) {
+        setPopularSearches(response.data.map((item: any) =>
+          `${item.brand} ${item.model}`
+        ));
+      }
+    } catch (error) {
+      // Keep fallback popular searches
+    } finally {
+      setLoadingPopular(false);
+    }
+  };
 
   const loadRecentSearches = async () => {
     try {
@@ -294,7 +313,7 @@ export default function SearchScreen() {
             <Text style={styles.sectionTitle}>{t('search.popularSearches')}</Text>
           </View>
           <View style={styles.searchList}>
-            {POPULAR_SEARCHES.map((search, index) => (
+            {popularSearches.map((search, index) => (
               <TouchableOpacity
                 key={`popular-${index}`}
                 style={styles.searchItem}

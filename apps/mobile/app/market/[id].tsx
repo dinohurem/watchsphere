@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent, Linking, Alert, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -14,14 +14,18 @@ import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCH_DETAILS, GUIDE_MOCK_BUY_ORDERS, GUIDE_MOCK_SELL_ORDERS } from '@/data/guideMockData';
 
 // Country flag component using flag CDN
+function countryCodeToEmoji(code: string): string {
+  const upper = code.toUpperCase();
+  return String.fromCodePoint(
+    ...Array.from(upper).map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
+  );
+}
+
 function CountryFlag({ countryCode, size = 14 }: { countryCode: string; size?: number }) {
-  const flagUrl = `https://flagcdn.com/w40/${countryCode.toLowerCase()}.png`;
   return (
-    <Image
-      source={{ uri: flagUrl }}
-      style={{ width: size, height: size * 0.7, borderRadius: 2 }}
-      resizeMode="cover"
-    />
+    <Text style={{ fontSize: size, lineHeight: size * 1.3 }}>
+      {countryCodeToEmoji(countryCode)}
+    </Text>
   );
 }
 
@@ -450,6 +454,8 @@ interface OrderBookItem {
   user_id?: string;
   user_name?: string;
   whatsapp_phone?: string;
+  remarks?: string;
+  created_at?: string;
 }
 
 export default function WatchDetailsScreen() {
@@ -487,6 +493,14 @@ export default function WatchDetailsScreen() {
 
   // Chart interaction state
   const [selectedChartIndex, setSelectedChartIndex] = useState<number | null>(null);
+
+  // V2-off filter state (Location + Year)
+  const [showLocationFilter, setShowLocationFilter] = useState(false);
+  const [showYearFilter, setShowYearFilter] = useState(false);
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]); // empty = worldwide (all)
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // null = all
+  const [selectedYear, setSelectedYear] = useState<number | null>(null); // null = all
+  const [showMoreLocations, setShowMoreLocations] = useState(false);
 
   // Get order book filters from context
   const { orderBookFilters } = useFilters();
@@ -531,6 +545,73 @@ export default function WatchDetailsScreen() {
     return filterOrders(sellOrders, orderBookFilters);
   }, [sellOrders, orderBookFilters, filterOrders]);
 
+  // V2-off local filters (Location + Year) applied on top of context filters
+  // EU country codes for the EU location filter
+  const EU_COUNTRY_CODES = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE', 'CH', 'GB', 'NO'];
+
+  const matchesLocationFilter = (countryCode: string | undefined) => {
+    if (selectedLocations.length === 0) return true;
+    const code = countryCode?.toUpperCase();
+    if (!code) return false;
+    return selectedLocations.some(loc => {
+      if (loc === 'EU') return EU_COUNTRY_CODES.includes(code);
+      return code === loc;
+    });
+  };
+
+  const v2OffFilteredBuyOrders = useMemo(() => {
+    if (v2Enabled) return filteredBuyOrders;
+    return filteredBuyOrders.filter(order => {
+      if (!matchesLocationFilter(order.country_code)) return false;
+      if (selectedYear !== null || selectedMonth !== null) {
+        const parts = order.date?.split('/');
+        if (parts && parts.length === 2) {
+          const orderMonth = parseInt(parts[0], 10);
+          const orderYear = 2000 + parseInt(parts[1], 10);
+          if (selectedYear !== null && orderYear !== selectedYear) return false;
+          if (selectedMonth !== null && orderMonth !== selectedMonth) return false;
+        } else if (selectedYear !== null || selectedMonth !== null) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [filteredBuyOrders, v2Enabled, selectedLocations, selectedYear, selectedMonth]);
+
+  const v2OffFilteredSellOrders = useMemo(() => {
+    if (v2Enabled) return filteredSellOrders;
+    return filteredSellOrders.filter(order => {
+      if (!matchesLocationFilter(order.country_code)) return false;
+      if (selectedYear !== null || selectedMonth !== null) {
+        const parts = order.date?.split('/');
+        if (parts && parts.length === 2) {
+          const orderMonth = parseInt(parts[0], 10);
+          const orderYear = 2000 + parseInt(parts[1], 10);
+          if (selectedYear !== null && orderYear !== selectedYear) return false;
+          if (selectedMonth !== null && orderMonth !== selectedMonth) return false;
+        } else if (selectedYear !== null || selectedMonth !== null) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [filteredSellOrders, v2Enabled, selectedLocations, selectedYear, selectedMonth]);  // Derive "other" locations from order data (not in main list)
+  const MAIN_LOCATION_CODES = ['AE', 'US', 'HK'];
+  const otherLocations = useMemo(() => {
+    const allOrders = [...buyOrders, ...sellOrders];
+    const locationMap = new Map<string, string>();
+    allOrders.forEach(o => {
+      const code = o.country_code?.toUpperCase();
+      if (code && !locationMap.has(code) && !MAIN_LOCATION_CODES.includes(code) && !EU_COUNTRY_CODES.includes(code)) {
+        locationMap.set(code, o.country_name || code);
+      }
+    });
+    const result: { code: string; name: string }[] = [];
+    locationMap.forEach((name, code) => result.push({ code, name }));
+    result.sort((a, b) => a.name.localeCompare(b.name));
+    return result;
+  }, [buyOrders, sellOrders]);
+
   const handleWhatsAppChat = useCallback((order: OrderBookItem) => {
     if (!order.whatsapp_phone) return;
     const watchName = `${watch?.brand || ''} ${watch?.model || ''}`.trim();
@@ -571,7 +652,7 @@ export default function WatchDetailsScreen() {
 
   const loadPriceHistory = async () => {
     if (isGuideActive) return;
-    const watchReference = reference || id;
+    const watchReference = wsCodeParam || reference || id;
     if (!watchReference) return;
     try {
       const encodedRef = encodeURIComponent(watchReference);
@@ -756,7 +837,7 @@ export default function WatchDetailsScreen() {
   const loadOrderBook = async () => {
     if (isGuideActive) { setBuyOrders(GUIDE_MOCK_BUY_ORDERS); setSellOrders(GUIDE_MOCK_SELL_ORDERS); return; }
     try {
-      const watchReference = reference || id;
+      const watchReference = wsCodeParam || reference || id;
       // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
       const encodedReference = encodeURIComponent(watchReference || '');
       const response = await api.get(`/orders/book/${encodedReference}`);
@@ -791,6 +872,9 @@ export default function WatchDetailsScreen() {
           has_papers: order.has_papers,
           user_id: order.user_id,
           user_name: order.user_name,
+          whatsapp_phone: order.whatsapp_phone,
+          remarks: order.remarks,
+          created_at: order.created_at,
         }));
 
         // Transform sell orders
@@ -806,6 +890,9 @@ export default function WatchDetailsScreen() {
           has_papers: order.has_papers,
           user_id: order.user_id,
           user_name: order.user_name,
+          whatsapp_phone: order.whatsapp_phone,
+          remarks: order.remarks,
+          created_at: order.created_at,
         }));
 
         setBuyOrders(formattedBuyOrders);
@@ -980,27 +1067,49 @@ export default function WatchDetailsScreen() {
 
           {/* Price Info - inside hero container so gray bg extends behind it */}
           <View style={styles.priceSection}>
-            <View style={styles.priceInfo}>
-              <Text style={styles.priceLabel}>Market Price</Text>
-              <Text style={styles.priceValue}>
-                {formatPriceRange(watch.marketPriceMin, watch.marketPriceMax)}
-              </Text>
-            </View>
-            <View style={[styles.changeTag, watch.priceChange >= 0 ? styles.changeTagPositive : styles.changeTagNegative]}>
-              {watch.priceChange >= 0 ? (
-                <TrendUpIcon color="#4AA078" />
-              ) : (
-                <TrendDownIcon color="#D35741" />
-              )}
-              <Text style={[styles.changeText, watch.priceChange >= 0 ? styles.changeTextPositive : styles.changeTextNegative]}>
-                {formatPriceChange(watch.priceChange)}
-              </Text>
-            </View>
+            {v2Enabled ? (
+              <>
+                <View style={styles.priceInfo}>
+                  <Text style={styles.priceLabel}>Market Price</Text>
+                  <Text style={styles.priceValue}>
+                    {formatPriceRange(watch.marketPriceMin, watch.marketPriceMax)}
+                  </Text>
+                </View>
+                <View style={[styles.changeTag, watch.priceChange >= 0 ? styles.changeTagPositive : styles.changeTagNegative]}>
+                  {watch.priceChange >= 0 ? (
+                    <TrendUpIcon color="#4AA078" />
+                  ) : (
+                    <TrendDownIcon color="#D35741" />
+                  )}
+                  <Text style={[styles.changeText, watch.priceChange >= 0 ? styles.changeTextPositive : styles.changeTextNegative]}>
+                    {formatPriceChange(watch.priceChange)}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
+                  <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(12), paddingVertical: hp(6), borderRadius: sp(99) }}>
+                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#4AA078' }}>WTS {sellOrders.length}</Text>
+                  </View>
+                  <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(12), paddingVertical: hp(6), borderRadius: sp(99) }}>
+                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#5B9BD5' }}>WTB {buyOrders.length}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={toggleWatchlist}
+                  disabled={watchlistLoading}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <StarIcon filled={isInWatchlist} />
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
 
         {/* Action Buttons */}
-        <View style={styles.actionButtons}>
+        {v2Enabled && <View style={styles.actionButtons}>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => router.push({
@@ -1049,10 +1158,56 @@ export default function WatchDetailsScreen() {
               <Text style={styles.actionLabel}>Social Search</Text>
             </TouchableOpacity>
           )}
-        </View>
+        </View>}
+
+        {/* V2-Off Filters (Location + Year) */}
+        {!v2Enabled && (
+          <View style={styles.v2OffFiltersSection}>
+            <View style={styles.v2OffFiltersRow}>
+              <TouchableOpacity
+                style={[styles.v2OffFilterButton, selectedLocations.length > 0 && styles.v2OffFilterButtonActive]}
+                onPress={() => setShowLocationFilter(true)}
+              >
+                <Text style={[styles.v2OffFilterButtonText, selectedLocations.length > 0 && styles.v2OffFilterButtonTextActive]}>
+                  {selectedLocations.length > 0 ? selectedLocations.join(', ') : 'Location'}
+                </Text>
+                {selectedLocations.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setSelectedLocations([])}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Svg width={14} height={14} viewBox="0 0 16 16" fill="none">
+                      <Path d="M4 4L12 12M12 4L4 12" stroke="#212121" strokeWidth={1.5} strokeLinecap="round" />
+                    </Svg>
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.v2OffFilterButton, (selectedYear !== null || selectedMonth !== null) && styles.v2OffFilterButtonActive]}
+                onPress={() => setShowYearFilter(true)}
+              >
+                <Text style={[styles.v2OffFilterButtonText, (selectedYear !== null || selectedMonth !== null) && styles.v2OffFilterButtonTextActive]}>
+                  {selectedYear !== null || selectedMonth !== null
+                    ? `${selectedMonth !== null ? String(selectedMonth).padStart(2, '0') + '/' : ''}${selectedYear !== null ? selectedYear : 'All'}`
+                    : 'Year'}
+                </Text>
+                {(selectedYear !== null || selectedMonth !== null) && (
+                  <TouchableOpacity
+                    onPress={() => { setSelectedYear(null); setSelectedMonth(null); }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Svg width={14} height={14} viewBox="0 0 16 16" fill="none">
+                      <Path d="M4 4L12 12M12 4L4 12" stroke="#212121" strokeWidth={1.5} strokeLinecap="round" />
+                    </Svg>
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Market Section */}
-        <View style={styles.section}>
+        {v2Enabled && <View style={styles.section}>
           <Text style={styles.sectionTitle}>Market</Text>
 
           {/* Bid/Ask/Spread - € AFTER number per Figma */}
@@ -1178,11 +1333,11 @@ export default function WatchDetailsScreen() {
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </View>}
 
         {/* Order Book Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Book</Text>
+          {v2Enabled && <Text style={styles.sectionTitle}>Order Book</Text>}
 
           {/* Tab Selector */}
           <View style={styles.tabSelector}>
@@ -1201,67 +1356,100 @@ export default function WatchDetailsScreen() {
           </View>
 
           {/* Order Book Table */}
-          <View style={styles.orderBookTable}>
+          {(() => {
+            const currentOrders = selectedTab === 'Buy' ? v2OffFilteredBuyOrders : v2OffFilteredSellOrders;
+            const hasRemarks = !v2Enabled && currentOrders.some(o => !!o.remarks);
+            return (<View style={styles.orderBookTable}>
             {/* Header */}
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Market</Text>
-              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Details</Text>
-              <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Price</Text>
-              <Text style={[styles.tableHeaderCell, { flex: 0.7, textAlign: 'center' }]}>Chat</Text>
+              <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>{v2Enabled ? 'Market' : 'Location'}</Text>
+              <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>Details</Text>
+              {hasRemarks && <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Remarks</Text>}
+              <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>{!v2Enabled && selectedTab === 'Buy' ? 'Target' : 'Price'}</Text>
+              <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 0.7 : 0.5, textAlign: 'center' }]}>Chat</Text>
             </View>
 
             {/* Rows - use dynamic data from API with filters applied */}
-            {(selectedTab === 'Buy' ? filteredBuyOrders : filteredSellOrders).length === 0 ? (
+            {currentOrders.length === 0 ? (
               <View style={styles.orderBookEmptyState}>
                 <Text style={styles.orderBookEmptyText}>
                   No {selectedTab.toLowerCase()} orders available for this watch
                 </Text>
               </View>
             ) : (
-              (selectedTab === 'Buy' ? filteredBuyOrders : filteredSellOrders).slice(0, 5).map((order, index) => (
+              (v2Enabled ? currentOrders.slice(0, 5) : currentOrders).map((order, index) => (
                 <View
                   key={index}
                   style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}
                 >
-                  <View style={[styles.tableCell, { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: wp(4) }]}>
+                  <View style={[styles.tableCell, { flex: v2Enabled ? 1 : 0.8, alignItems: 'center' }]}>
                     <CountryFlag countryCode={order.country_code} size={14} />
-                    <Text style={[styles.tableCellText, { fontSize: fp(13) }]}>{order.country_code?.toUpperCase()}</Text>
+                    <Text style={[styles.tableCellText, { fontSize: fp(11), textAlign: 'center', marginTop: hp(2), color: v2Enabled ? '#212121' : '#999999' }]}>
+                      {v2Enabled ? order.country_code?.toUpperCase() : (order.country_name || order.country_code?.toUpperCase())}
+                    </Text>
                   </View>
-                  <View style={[styles.tableCell, { flex: 1, alignItems: 'center' }]}>
+                  <View style={[styles.tableCell, { flex: v2Enabled ? 1 : 0.8, alignItems: 'center' }]}>
                     <Text style={[styles.tableCellText, { textAlign: 'center' }]}>{order.condition}</Text>
                     <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#999999' }]}>{order.date}</Text>
                   </View>
-                  <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'center' }]}>
+                  {hasRemarks && (
+                    <View style={[styles.tableCell, { flex: 1, alignItems: 'center' }]}>
+                      {order.remarks ? (
+                        <View style={{ backgroundColor: 'rgba(33,33,33,0.06)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(6) }}>
+                          <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(10), color: '#555555' }]} numberOfLines={2}>
+                            {order.remarks}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#CCCCCC' }]}>-</Text>
+                      )}
+                    </View>
+                  )}
+                  <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>
                     {order.currency && order.currency !== 'EUR' ? `${order.currency} ${order.price.toLocaleString('de-DE')}` : formatPriceEurBefore(order.price)}
                   </Text>
-                  <TouchableOpacity
-                    style={{ flex: 0.7, alignItems: 'center', justifyContent: 'center' }}
-                    onPress={() => handleWhatsAppChat(order)}
-                    disabled={!order.whatsapp_phone}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <WhatsAppIcon size={18} />
-                  </TouchableOpacity>
+                  <View style={{ flex: v2Enabled ? 0.7 : 0.5, alignItems: 'center', justifyContent: 'center', paddingVertical: hp(6) }}>
+                    <TouchableOpacity
+                      onPress={() => handleWhatsAppChat(order)}
+                      disabled={!order.whatsapp_phone}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <WhatsAppIcon size={18} />
+                    </TouchableOpacity>
+                    {!v2Enabled && order.created_at && (() => {
+                      const daysAgo = Math.floor((Date.now() - new Date(order.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                      const dotColor = daysAgo <= 7 ? '#4AA078' : daysAgo <= 14 ? '#E8A838' : '#D35741';
+                      const label = daysAgo === 0 ? 'today' : `${daysAgo}d`;
+                      return (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(3), marginTop: hp(4) }}>
+                          <View style={{ width: sp(6), height: sp(6), borderRadius: sp(3), backgroundColor: dotColor }} />
+                          <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(9), color: dotColor }}>{label}</Text>
+                        </View>
+                      );
+                    })()}
+                  </View>
                 </View>
               ))
             )}
-          </View>
+          </View>); })()}
 
           {/* See Order Book Button */}
-          <TouchableOpacity
-            style={styles.seeOrderBookButton}
-            onPress={() => router.push({
-              pathname: '/market/order-book',
-              params: {
-                reference: watch.reference,
-                brand: watch.brand,
-                model: watch.model,
-              },
-            })}
-          >
-            <Text style={styles.seeOrderBookText}>See Order Book</Text>
-            <ArrowRightIcon />
-          </TouchableOpacity>
+          {v2Enabled && (
+            <TouchableOpacity
+              style={styles.seeOrderBookButton}
+              onPress={() => router.push({
+                pathname: '/market/order-book',
+                params: {
+                  reference: watch.reference,
+                  brand: watch.brand,
+                  model: watch.model,
+                },
+              })}
+            >
+              <Text style={styles.seeOrderBookText}>See Order Book</Text>
+              <ArrowRightIcon />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Bottom spacing for action bar */}
@@ -1272,9 +1460,9 @@ export default function WatchDetailsScreen() {
       <LinearGradient
         colors={['rgba(255,255,255,0)', '#FFFFFF']}
         locations={[0, 0.55]}
-        style={styles.bottomBar}
+        style={[styles.bottomBar, !v2Enabled && { paddingTop: hp(20), paddingBottom: hp(40) }]}
       >
-        {v2Enabled && (
+        {v2Enabled ? (
           <View style={styles.bottomBarContent}>
             <View style={styles.orderButtons}>
               <TouchableOpacity style={styles.buyButton} onPress={handlePlaceBuyOrder}>
@@ -1285,6 +1473,8 @@ export default function WatchDetailsScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        ) : (
+          <View style={{ height: sp(42) }} />
         )}
         <TouchableOpacity style={styles.aiButtonOuter} onPress={() => router.push('/chat/ai')}>
           <View style={styles.aiButtonInner}>
@@ -1382,6 +1572,203 @@ export default function WatchDetailsScreen() {
             )}
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Location Filter Modal */}
+      <Modal
+        visible={showLocationFilter}
+        animationType="fade"
+        transparent={true}
+        statusBarTranslucent={true}
+        onRequestClose={() => setShowLocationFilter(false)}
+      >
+        <TouchableOpacity
+          style={styles.filterModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLocationFilter(false)}
+        >
+          <View style={styles.filterModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.filterModalHandle} />
+            <Text style={styles.filterModalTitle}>Location</Text>
+
+            <ScrollView style={styles.filterModalScroll} showsVerticalScrollIndicator={false}>
+              {[
+                { code: '', name: 'Worldwide', icon: '🌐' },
+                { code: 'EU', name: 'EU', icon: '🇪🇺' },
+                { code: 'AE', name: 'United Arab Emirates' },
+                { code: 'US', name: 'United States' },
+                { code: 'HK', name: 'Hong Kong' },
+              ].map((loc) => {
+                const isWorldwide = loc.code === '';
+                const isSelected = isWorldwide ? selectedLocations.length === 0 : selectedLocations.includes(loc.code);
+                return (
+                  <TouchableOpacity
+                    key={loc.code || 'worldwide'}
+                    style={styles.filterModalOption}
+                    onPress={() => {
+                      if (isWorldwide) {
+                        setSelectedLocations([]);
+                      } else {
+                        setSelectedLocations(prev =>
+                          prev.includes(loc.code)
+                            ? prev.filter(c => c !== loc.code)
+                            : [...prev, loc.code]
+                        );
+                      }
+                    }}
+                  >
+                    {loc.icon ? (
+                      <Text style={styles.filterModalOptionIcon}>{loc.icon}</Text>
+                    ) : (
+                      <CountryFlag countryCode={loc.code} size={20} />
+                    )}
+                    <Text style={[styles.filterModalOptionText, isSelected && styles.filterModalOptionTextActive]}>{loc.name}</Text>
+                    {isSelected && (
+                      <View style={styles.filterModalCheckmark}>
+                        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                          <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Other locations - expand/collapse */}
+              {otherLocations.length > 0 && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.filterModalOption, { borderBottomWidth: 0 }]}
+                    onPress={() => setShowMoreLocations(!showMoreLocations)}
+                  >
+                    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                      <Path d="M12 5v14M5 12h14" stroke="#8E8E93" strokeWidth={1.5} strokeLinecap="round" />
+                    </Svg>
+                    <Text style={[styles.filterModalOptionText, { color: '#8E8E93' }]}>
+                      Other locations ({otherLocations.length})
+                    </Text>
+                    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto' }}>
+                      <Path
+                        d={showMoreLocations ? 'M18 15L12 9L6 15' : 'M6 9L12 15L18 9'}
+                        stroke="#8E8E93" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                      />
+                    </Svg>
+                  </TouchableOpacity>
+                  {showMoreLocations && otherLocations.map((loc) => {
+                    const isSelected = selectedLocations.includes(loc.code);
+                    return (
+                      <TouchableOpacity
+                        key={loc.code}
+                        style={[styles.filterModalOption, { paddingLeft: wp(32) }]}
+                        onPress={() => {
+                          setSelectedLocations(prev =>
+                            prev.includes(loc.code)
+                              ? prev.filter(c => c !== loc.code)
+                              : [...prev, loc.code]
+                          );
+                        }}
+                      >
+                        <CountryFlag countryCode={loc.code} size={20} />
+                        <Text style={[styles.filterModalOptionText, isSelected && styles.filterModalOptionTextActive]}>{loc.name}</Text>
+                        {isSelected && (
+                          <View style={styles.filterModalCheckmark}>
+                            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                              <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                            </Svg>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.yearFilterApplyButton}
+              onPress={() => setShowLocationFilter(false)}
+            >
+              <Text style={styles.yearFilterApplyText}>Apply</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Year Filter Modal */}
+      <Modal
+        visible={showYearFilter}
+        animationType="fade"
+        transparent={true}
+        statusBarTranslucent={true}
+        onRequestClose={() => setShowYearFilter(false)}
+      >
+        <TouchableOpacity
+          style={styles.filterModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowYearFilter(false)}
+        >
+          <View style={styles.filterModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.filterModalHandle} />
+            <Text style={styles.filterModalTitle}>Month / Year</Text>
+
+            <View style={styles.yearFilterColumns}>
+              {/* Month column */}
+              <View style={styles.yearFilterColumn}>
+                <Text style={styles.yearFilterColumnHeader}>Month</Text>
+                <ScrollView style={styles.yearFilterScroll} showsVerticalScrollIndicator={false}>
+                  <TouchableOpacity
+                    style={[styles.yearFilterItem, selectedMonth === null && styles.yearFilterItemActive]}
+                    onPress={() => setSelectedMonth(null)}
+                  >
+                    <Text style={[styles.yearFilterItemText, selectedMonth === null && styles.yearFilterItemTextActive]}>All</Text>
+                  </TouchableOpacity>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <TouchableOpacity
+                      key={m}
+                      style={[styles.yearFilterItem, selectedMonth === m && styles.yearFilterItemActive]}
+                      onPress={() => setSelectedMonth(m)}
+                    >
+                      <Text style={[styles.yearFilterItemText, selectedMonth === m && styles.yearFilterItemTextActive]}>
+                        {String(m).padStart(2, '0')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Year column */}
+              <View style={styles.yearFilterColumn}>
+                <Text style={styles.yearFilterColumnHeader}>Year</Text>
+                <ScrollView style={styles.yearFilterScroll} showsVerticalScrollIndicator={false}>
+                  <TouchableOpacity
+                    style={[styles.yearFilterItem, selectedYear === null && styles.yearFilterItemActive]}
+                    onPress={() => setSelectedYear(null)}
+                  >
+                    <Text style={[styles.yearFilterItemText, selectedYear === null && styles.yearFilterItemTextActive]}>All</Text>
+                  </TouchableOpacity>
+                  {Array.from({ length: 12 }, (_, i) => 2026 - i).map((y) => (
+                    <TouchableOpacity
+                      key={y}
+                      style={[styles.yearFilterItem, selectedYear === y && styles.yearFilterItemActive]}
+                      onPress={() => setSelectedYear(y)}
+                    >
+                      <Text style={[styles.yearFilterItemText, selectedYear === y && styles.yearFilterItemTextActive]}>
+                        {y}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.yearFilterApplyButton}
+              onPress={() => setShowYearFilter(false)}
+            >
+              <Text style={styles.yearFilterApplyText}>Apply</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -1978,5 +2365,165 @@ const styles = StyleSheet.create({
     fontFamily: 'HankenGrotesk_700Bold',
     fontSize: fp(32),
     color: '#212121',
+  },
+  // V2-Off Filters
+  v2OffFiltersSection: {
+    paddingHorizontal: wp(16),
+    paddingTop: hp(20),
+    paddingBottom: hp(8),
+  },
+  v2OffFiltersTitle: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(18),
+    color: '#212121',
+    letterSpacing: 0.09,
+    lineHeight: fp(22),
+    marginBottom: hp(12),
+  },
+  v2OffFiltersRow: {
+    flexDirection: 'row',
+    gap: wp(10),
+    justifyContent: 'flex-end',
+  },
+  v2OffFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(16),
+    paddingVertical: hp(10),
+    borderRadius: sp(99),
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
+    gap: wp(6),
+  },
+  v2OffFilterButtonActive: {
+    borderColor: '#212121',
+    backgroundColor: '#F5F5F5',
+  },
+  v2OffFilterButtonText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(14),
+    color: '#212121',
+    letterSpacing: 0.07,
+  },
+  v2OffFilterButtonTextActive: {
+    color: '#212121',
+    fontFamily: 'HankenGrotesk_600SemiBold',
+  },
+  // Filter Modals
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  filterModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: sp(24),
+    borderTopRightRadius: sp(24),
+    paddingTop: hp(12),
+    paddingBottom: Platform.OS === 'ios' ? hp(34) : hp(24),
+    maxHeight: '70%',
+  },
+  filterModalHandle: {
+    width: sp(36),
+    height: sp(4),
+    borderRadius: sp(2),
+    backgroundColor: '#E0E0E0',
+    alignSelf: 'center',
+    marginBottom: hp(16),
+  },
+  filterModalTitle: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(18),
+    color: '#212121',
+    paddingHorizontal: wp(20),
+    marginBottom: hp(16),
+  },
+  filterModalScroll: {
+    paddingHorizontal: wp(20),
+  },
+  filterModalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: hp(14),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+    gap: wp(12),
+  },
+  filterModalOptionIcon: {
+    fontSize: fp(20),
+    width: sp(24),
+    textAlign: 'center',
+  },
+  filterModalOptionText: {
+    flex: 1,
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(15),
+    color: '#666666',
+    letterSpacing: 0.075,
+  },
+  filterModalOptionTextActive: {
+    color: '#212121',
+    fontFamily: 'HankenGrotesk_600SemiBold',
+  },
+  filterModalCheckmark: {
+    width: sp(24),
+    height: sp(24),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Year Filter
+  yearFilterColumns: {
+    flexDirection: 'row',
+    paddingHorizontal: wp(20),
+    gap: wp(16),
+    height: hp(280),
+  },
+  yearFilterColumn: {
+    flex: 1,
+  },
+  yearFilterColumnHeader: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(14),
+    color: '#8E8E93',
+    textAlign: 'center',
+    paddingBottom: hp(10),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    marginBottom: hp(4),
+  },
+  yearFilterScroll: {
+    flex: 1,
+  },
+  yearFilterItem: {
+    paddingVertical: hp(10),
+    paddingHorizontal: wp(12),
+    borderRadius: sp(10),
+    alignItems: 'center',
+  },
+  yearFilterItemActive: {
+    backgroundColor: '#F0F0F0',
+  },
+  yearFilterItemText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: fp(15),
+    color: '#666666',
+  },
+  yearFilterItemTextActive: {
+    color: '#212121',
+    fontFamily: 'HankenGrotesk_600SemiBold',
+  },
+  yearFilterApplyButton: {
+    marginHorizontal: wp(20),
+    marginTop: hp(16),
+    paddingVertical: hp(14),
+    borderRadius: sp(99),
+    backgroundColor: '#212121',
+    alignItems: 'center',
+  },
+  yearFilterApplyText: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: fp(16),
+    color: '#FFFFFF',
   },
 });

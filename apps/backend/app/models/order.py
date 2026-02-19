@@ -66,6 +66,9 @@ class Order(Document):
 
     # Optional details
     notes: Optional[str] = None
+    remarks: Optional[str] = None  # Raw remarks from CSV import
+    year_raw: Optional[str] = None  # Raw year text (e.g., "2022+") for non-standard formats
+    condition_raw: Optional[str] = None  # Raw condition text (e.g., "Unworn only")
     has_box: bool = False
     has_papers: bool = False
 

@@ -20,6 +20,8 @@ interface WatchData {
   condition?: string;
   year?: number;
   location?: string;
+  wtsCount?: number;
+  wtbCount?: number;
 }
 
 // Dynamic filter state based on filter keys
@@ -249,6 +251,8 @@ export function MarketPage() {
           priceHistory: item.price_history || [],
           image_url: item.image_url,
           condition: item.condition,
+          wtsCount: item.wts_count || 0,
+          wtbCount: item.wtb_count || 0,
         }));
         setWatches(watchData);
       } else {
@@ -264,6 +268,8 @@ export function MarketPage() {
           priceHistory: item.price_history || [],
           image_url: item.image_url || item.cover_image,
           condition: item.condition,
+          wtsCount: item.wts_count || 0,
+          wtbCount: item.wtb_count || 0,
         }));
         setWatches(fallbackData);
       }
@@ -415,12 +421,20 @@ export function MarketPage() {
                 <div className="w-[200px]">
                   <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.watch')}</p>
                 </div>
-                <div className="w-[168px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.chart')}</p>
-                </div>
-                <div className="w-[168px]">
-                  <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.change')}</p>
-                </div>
+                {v2Enabled ? (
+                  <>
+                    <div className="w-[168px]">
+                      <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.chart')}</p>
+                    </div>
+                    <div className="w-[168px]">
+                      <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.change')}</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-[168px]">
+                    <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">Orders</p>
+                  </div>
+                )}
                 <div className="w-[168px]">
                   <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{t('market.table.price')}</p>
                 </div>
@@ -472,21 +486,34 @@ export function MarketPage() {
                           <p className="text-base font-normal text-[#212121]/70 leading-[20px] tracking-[0.08px]">{watch.model}</p>
                           <p className="text-base font-medium text-[#212121]/50 leading-[20px] tracking-[0.08px]">{watch.ws_code || watch.reference}</p>
                         </div>
-                        <div className="w-[168px]">
-                          <MiniChart data={watch.priceHistory || []} isPositive={isPositive} />
-                        </div>
-                        <div className="w-[168px] flex items-center gap-1">
-                          {isPositive ? (
-                            <ArrowUpRight className="w-4 h-4 text-[#4aa078]" />
-                          ) : (
-                            <ArrowDownRight className="w-4 h-4 text-[#cc6045]" />
-                          )}
-                          <span className={`text-sm font-normal leading-[16px] font-mono ${
-                            isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
-                          }`}>
-                            {Math.abs(watch.priceChange || 0).toFixed(1)}%
-                          </span>
-                        </div>
+                        {v2Enabled ? (
+                          <>
+                            <div className="w-[168px]">
+                              <MiniChart data={watch.priceHistory || []} isPositive={isPositive} />
+                            </div>
+                            <div className="w-[168px] flex items-center gap-1">
+                              {isPositive ? (
+                                <ArrowUpRight className="w-4 h-4 text-[#4aa078]" />
+                              ) : (
+                                <ArrowDownRight className="w-4 h-4 text-[#cc6045]" />
+                              )}
+                              <span className={`text-sm font-normal leading-[16px] font-mono ${
+                                isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
+                              }`}>
+                                {Math.abs(watch.priceChange || 0).toFixed(1)}%
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="w-[168px] flex items-center gap-2">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-semibold bg-[rgba(74,160,120,0.1)] text-[#4aa078]">
+                              WTS {watch.wtsCount || 0}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-semibold bg-[rgba(91,155,213,0.1)] text-[#5B9BD5]">
+                              WTB {watch.wtbCount || 0}
+                            </span>
+                          </div>
+                        )}
                         <div className="w-[129px]">
                           <button
                             onClick={(e) => {
@@ -551,20 +578,31 @@ export function MarketPage() {
                             <p className="text-sm font-medium text-[#212121]/50">{watch.ws_code || watch.reference}</p>
                           </div>
                         </div>
-                        <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${
-                          isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
-                        }`}>
-                          {isPositive ? (
-                            <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
-                          ) : (
-                            <ArrowDownRight className="w-3 h-3 text-[#cc6045]" />
-                          )}
-                          <span className={`text-sm font-medium font-mono ${
-                            isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
+                        {v2Enabled ? (
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${
+                            isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
                           }`}>
-                            {Math.abs(watch.priceChange || 0).toFixed(1)}%
-                          </span>
-                        </div>
+                            {isPositive ? (
+                              <ArrowUpRight className="w-3 h-3 text-[#4aa078]" />
+                            ) : (
+                              <ArrowDownRight className="w-3 h-3 text-[#cc6045]" />
+                            )}
+                            <span className={`text-sm font-medium font-mono ${
+                              isPositive ? 'text-[#4aa078]' : 'text-[#cc6045]'
+                            }`}>
+                              {Math.abs(watch.priceChange || 0).toFixed(1)}%
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-[rgba(74,160,120,0.1)] text-[#4aa078]">
+                              WTS {watch.wtsCount || 0}
+                            </span>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-[rgba(91,155,213,0.1)] text-[#5B9BD5]">
+                              WTB {watch.wtbCount || 0}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center justify-end">
                         <span className="text-sm font-medium text-[#212121]/50">{t('market.viewDetails')} →</span>
