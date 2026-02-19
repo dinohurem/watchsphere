@@ -581,20 +581,24 @@ async def get_aggregated_market_data(
         # Get unique references (only non-empty ones)
         references = list(set(w.reference for w in watches if w.reference))
 
-        # Batch-fetch lowest sell order prices and order counts using aggregation
+        # Batch-fetch lowest sell order prices (with currency) and order counts
         lowest_prices_by_ref = {}
+        lowest_currency_by_ref = {}
         order_counts_by_ref = {}
 
         if references:
-            # Get lowest sell price per reference in one query
+            # Get lowest sell price + its currency per reference
+            # Sort first so $first in $group picks the cheapest order's currency
             sell_price_pipeline = [
                 {"$match": {"reference": {"$in": references}, "order_type": OrderType.SELL.value, "status": OrderStatus.ACTIVE.value}},
-                {"$group": {"_id": "$reference", "min_price": {"$min": "$price"}}},
+                {"$sort": {"price": 1}},
+                {"$group": {"_id": "$reference", "min_price": {"$first": "$price"}, "currency": {"$first": "$currency"}}},
             ]
             try:
                 sell_price_raw = await Order.aggregate(sell_price_pipeline).to_list()
                 for item in sell_price_raw:
                     lowest_prices_by_ref[item["_id"]] = item["min_price"]
+                    lowest_currency_by_ref[item["_id"]] = item.get("currency", "EUR")
             except Exception:
                 pass
 
@@ -626,6 +630,8 @@ async def get_aggregated_market_data(
             lowest_order_price = lowest_prices_by_ref.get(watch.reference) if watch.reference else None
             admin_price = watch.price
             display_price = lowest_order_price if lowest_order_price else admin_price
+            # Use the currency from the lowest WTS order when available
+            display_currency = lowest_currency_by_ref.get(watch.reference, watch.currency) if lowest_order_price and watch.reference else watch.currency
 
             # Calculate price_change based on SELL orders (lowest ask) vs admin base price
             price_change = 0.0
@@ -654,7 +660,7 @@ async def get_aggregated_market_data(
                 display_price=display_price,
                 lowest_order_price=lowest_order_price,
                 admin_price=admin_price,
-                currency=watch.currency,
+                currency=display_currency,
                 price_change=price_change,
                 price_history=generated_history if generated_history else (watch.price_history or []),
                 total_orders=order_counts_by_ref.get(watch.reference, 0) + (watch.order_count or 0),
@@ -721,21 +727,31 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
             detail="Watch not found"
         )
 
+    # Use the watch's own reference for order lookups (not the URL param, which may be ws_code)
+    watch_ref = watch.reference
+
     # Get lowest active sell order price
-    sell_orders = await Order.find(
-        Order.reference == reference,
-        Order.order_type == OrderType.SELL,
-        Order.status == OrderStatus.ACTIVE,
-    ).sort([("price", 1)]).limit(1).to_list()
+    sell_orders = []
+    if watch_ref:
+        sell_orders = await Order.find(
+            Order.reference == watch_ref,
+            Order.order_type == OrderType.SELL,
+            Order.status == OrderStatus.ACTIVE,
+        ).sort([("price", 1)]).limit(1).to_list()
 
     lowest_order_price = sell_orders[0].price if sell_orders else None
+    lowest_order_currency = sell_orders[0].currency if sell_orders else None
     display_price = lowest_order_price if lowest_order_price else watch.price
+    # Use the currency from the lowest WTS order when available
+    display_currency = lowest_order_currency if lowest_order_price and lowest_order_currency else watch.currency
 
     # Get total order count
-    order_count = await Order.find(
-        Order.reference == reference,
-        Order.status == OrderStatus.ACTIVE,
-    ).count()
+    order_count = 0
+    if watch_ref:
+        order_count = await Order.find(
+            Order.reference == watch_ref,
+            Order.status == OrderStatus.ACTIVE,
+        ).count()
 
     # Calculate price_change based on SELL orders (lowest ask) vs admin base price
     price_change = 0.0
@@ -764,7 +780,7 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
         display_price=display_price,
         lowest_order_price=lowest_order_price,
         admin_price=watch.price,
-        currency=watch.currency,
+        currency=display_currency,
         price_change=price_change,
         price_history=generated_history if generated_history else (watch.price_history or []),
         total_orders=order_count + watch.order_count,

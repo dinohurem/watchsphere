@@ -301,6 +301,12 @@ export function WatchDetailsPage() {
       const minPrice = watch.price * 0.8;
       const maxPrice = watch.price * 1.2;
 
+      // Use the lowest sell order's currency when available (matches order book display)
+      const lowestSellOrder = sellOrders.length > 0
+        ? sellOrders.reduce((min, o) => o.price < min.price ? o : min, sellOrders[0])
+        : null;
+      const displayCurrency = lowestSellOrder?.currency || watch.currency || 'EUR';
+
       setWatchDetails({
         id: watch.id,
         brand: watch.brand,
@@ -308,12 +314,12 @@ export function WatchDetailsPage() {
         reference: watch.reference || '',
         ws_code: watch.ws_code,
         image: watch.cover_image,
-        currency: watch.currency || 'EUR',
+        currency: displayCurrency,
         priceData: {
           bestBid: bestBid || watch.price * 0.95,
           bestAsk: bestAsk || watch.price,
           spread: (bestAsk || watch.price) - (bestBid || watch.price * 0.95),
-          currentPrice: watch.price,
+          currentPrice: lowestSellOrder ? lowestSellOrder.price : watch.price,
           priceChange: watch.price_change || 0,
           minPrice,
           maxPrice,
@@ -577,7 +583,7 @@ export function WatchDetailsPage() {
                 <div>
                   <p className="text-[12px] text-[#1d1d1f]/50 leading-[1.3]">{t('watchDetails.marketPrice')}</p>
                   <p className="text-[15px] font-semibold text-[#1d1d1f] leading-[1.3]">
-                    €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
+                    {formatCurrency(watchDetails.priceData.minPrice, watchDetails.currency)} - {formatCurrency(watchDetails.priceData.maxPrice, watchDetails.currency)}
                   </p>
                 </div>
                 <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full ${
@@ -624,19 +630,19 @@ export function WatchDetailsPage() {
           <div className="flex border border-black/5 rounded-2xl overflow-hidden">
             <div className="flex-1 p-5 text-center border-r border-black/5">
               <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
-                {watchDetails.priceData.bestBid.toLocaleString()}€
+                {formatCurrency(watchDetails.priceData.bestBid, watchDetails.currency)}
               </p>
               <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">{t('watchDetails.bestBid')}</p>
             </div>
             <div className="flex-1 p-5 text-center border-r border-black/5">
               <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
-                {watchDetails.priceData.bestAsk.toLocaleString()}€
+                {formatCurrency(watchDetails.priceData.bestAsk, watchDetails.currency)}
               </p>
               <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">{t('watchDetails.bestAsk')}</p>
             </div>
             <div className="flex-1 p-5 text-center">
               <p className="text-[22px] font-semibold text-[#1d1d1f] leading-[1.2]">
-                {watchDetails.priceData.spread.toLocaleString()}€
+                {formatCurrency(watchDetails.priceData.spread, watchDetails.currency)}
               </p>
               <p className="text-[13px] text-[#1d1d1f]/50 leading-[1.3] mt-1">{t('watchDetails.spread')}</p>
             </div>
@@ -666,7 +672,7 @@ export function WatchDetailsPage() {
                     className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#1d1d1f] text-white text-[12px] px-3 py-1.5 rounded-lg flex items-center gap-2 z-10 pointer-events-none"
                   >
                     <span className={`font-semibold ${isPositive ? 'text-[#4aa078]' : 'text-[#c93927]'}`}>
-                      €{displayPrice?.toLocaleString() || watchDetails.priceData.currentPrice.toLocaleString()}
+                      {formatCurrency(displayPrice || watchDetails.priceData.currentPrice, watchDetails.currency)}
                     </span>
                     <span className="text-white/60">
                       {displayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -790,9 +796,9 @@ export function WatchDetailsPage() {
                 </div>
                 {/* Y-axis labels */}
                 <div className="w-16 flex flex-col justify-between text-[12px] text-[#1d1d1f]/50 text-right pl-3">
-                  <span>€{(Math.max(...(priceHistory.length ? priceHistory : [watchDetails.priceData.maxPrice])) / 1000).toFixed(1)}K</span>
-                  <span>€{(watchDetails.priceData.currentPrice / 1000).toFixed(1)}K</span>
-                  <span>€{(Math.min(...(priceHistory.length ? priceHistory : [watchDetails.priceData.minPrice])) / 1000).toFixed(1)}K</span>
+                  <span>{watchDetails.currency === 'EUR' ? '€' : watchDetails.currency + ' '}{(Math.max(...(priceHistory.length ? priceHistory : [watchDetails.priceData.maxPrice])) / 1000).toFixed(1)}K</span>
+                  <span>{watchDetails.currency === 'EUR' ? '€' : watchDetails.currency + ' '}{(watchDetails.priceData.currentPrice / 1000).toFixed(1)}K</span>
+                  <span>{watchDetails.currency === 'EUR' ? '€' : watchDetails.currency + ' '}{(Math.min(...(priceHistory.length ? priceHistory : [watchDetails.priceData.minPrice])) / 1000).toFixed(1)}K</span>
                 </div>
               </div>
             </div>
@@ -944,7 +950,7 @@ export function WatchDetailsPage() {
                   {watchDetails.brand} {watchDetails.model}
                 </p>
                 <p className="text-[16px] font-medium text-[#1d1d1f]/50 leading-[1.3]">
-                  €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
+                  {formatCurrency(watchDetails.priceData.minPrice, watchDetails.currency)} - {formatCurrency(watchDetails.priceData.maxPrice, watchDetails.currency)}
                 </p>
               </div>
             </div>
@@ -963,7 +969,7 @@ export function WatchDetailsPage() {
                   {t('watchDetails.yourOffer')}
                 </label>
                 <div className="flex items-center gap-2 px-4 py-[14px] border border-[rgba(29,29,31,0.1)] rounded-2xl bg-white">
-                  <span className="text-[15px] font-medium text-[#1d1d1f]/50 tracking-[0.075px] leading-[20px]">€</span>
+                  <span className="text-[15px] font-medium text-[#1d1d1f]/50 tracking-[0.075px] leading-[20px]">{watchDetails.currency === 'EUR' ? '€' : watchDetails.currency}</span>
                   <input
                     type="text"
                     required
@@ -1028,7 +1034,7 @@ export function WatchDetailsPage() {
               <div>
                 <p className="font-semibold text-[#1d1d1f] text-[15px]">{watchDetails.brand} {watchDetails.model}</p>
                 <p className="text-[13px] text-[#1d1d1f]/50">
-                  €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
+                  {formatCurrency(watchDetails.priceData.minPrice, watchDetails.currency)} - {formatCurrency(watchDetails.priceData.maxPrice, watchDetails.currency)}
                 </p>
               </div>
             </div>
@@ -1148,7 +1154,7 @@ export function WatchDetailsPage() {
                   {watchDetails.brand} {watchDetails.model}
                 </p>
                 <p className="text-[16px] font-medium text-[#1d1d1f]/50 leading-[1.3]">
-                  €{watchDetails.priceData.minPrice.toLocaleString()} - €{watchDetails.priceData.maxPrice.toLocaleString()}
+                  {formatCurrency(watchDetails.priceData.minPrice, watchDetails.currency)} - {formatCurrency(watchDetails.priceData.maxPrice, watchDetails.currency)}
                 </p>
               </div>
             </div>
@@ -1169,7 +1175,7 @@ export function WatchDetailsPage() {
 
               {/* Price */}
               <p className="text-[34px] font-bold text-[#212121] tracking-[-0.68px] leading-[1.1]">
-                €{confirmedPrice.toLocaleString()}
+                {formatCurrency(confirmedPrice, watchDetails?.currency)}
               </p>
             </div>
           </div>

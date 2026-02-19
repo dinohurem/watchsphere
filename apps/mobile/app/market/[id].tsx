@@ -410,6 +410,7 @@ interface WatchDetails {
   reference: string;
   ws_code?: string;
   image?: string;
+  currency: string;
   marketPriceMin: number;
   marketPriceMax: number;
   priceChange: number;
@@ -426,6 +427,7 @@ const DEFAULT_WATCH: WatchDetails = {
   model: '',
   reference: '',
   image: undefined,
+  currency: 'EUR',
   marketPriceMin: 0,
   marketPriceMax: 0,
   priceChange: 0,
@@ -533,7 +535,8 @@ export default function WatchDetailsScreen() {
     if (!order.whatsapp_phone) return;
     const watchName = `${watch?.brand || ''} ${watch?.model || ''}`.trim();
     const watchRef = watch?.reference || '';
-    const message = `Hi, is ${watchName} ${watchRef} available?\nEUR ${order.price.toLocaleString('de-DE')} - thank you very much!`;
+    const orderCurrency = order.currency || watch.currency || 'EUR';
+    const message = `Hi, is ${watchName} ${watchRef} available?\n${orderCurrency} ${order.price.toLocaleString('de-DE')} - thank you very much!`;
     const url = `https://wa.me/${order.whatsapp_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open WhatsApp. Make sure it is installed.');
@@ -685,6 +688,7 @@ export default function WatchDetailsScreen() {
             reference: data.reference || '',
             ws_code: data.ws_code,
             image: data.cover_image,
+            currency: data.currency || 'EUR',
             marketPriceMin: data.lowest_order_price || data.admin_price || 0,
             marketPriceMax: data.admin_price || data.display_price || 0,
             priceChange: data.price_change || 0,
@@ -710,6 +714,7 @@ export default function WatchDetailsScreen() {
             reference: response.data.reference || '',
             ws_code: response.data.ws_code,
             image: response.data.cover_image,
+            currency: response.data.currency || 'EUR',
             marketPriceMin: response.data.price || 0,
             marketPriceMax: response.data.price || 0,
             priceChange: response.data.price_change || 0,
@@ -731,6 +736,7 @@ export default function WatchDetailsScreen() {
           reference: reference || '',
           ws_code: wsCodeParam || undefined,
           image: undefined,
+          currency: 'EUR',
           marketPriceMin: 0,
           marketPriceMax: 0,
           priceChange: 0,
@@ -815,11 +821,14 @@ export default function WatchDetailsScreen() {
           }));
         }
         if (formattedSellOrders.length > 0) {
-          const lowestAsk = Math.min(...formattedSellOrders.map(o => o.price));
+          // Find the lowest-priced sell order to get its currency
+          const lowestSellOrder = formattedSellOrders.reduce((min, o) => o.price < min.price ? o : min, formattedSellOrders[0]);
           setWatch(prev => ({
             ...prev,
-            bestAsk: lowestAsk,
-            spread: prev.bestBid ? lowestAsk - prev.bestBid : 0,
+            bestAsk: lowestSellOrder.price,
+            currency: lowestSellOrder.currency || prev.currency,
+            marketPriceMin: lowestSellOrder.price,
+            spread: prev.bestBid ? lowestSellOrder.price - prev.bestBid : 0,
           }));
         }
       }
@@ -831,24 +840,28 @@ export default function WatchDetailsScreen() {
     }
   };
 
-  // Stats format: € AFTER number with period as thousands separator (e.g., "104.500€")
+  // Currency-aware formatting helpers
+  const currencyPrefix = watch.currency !== 'EUR' ? `${watch.currency} ` : '€';
+
+  // Stats format: symbol AFTER number with period as thousands separator (e.g., "104.500€" or "HKD 104.500")
   // Returns "-" for 0 or undefined values
   const formatPriceEurAfter = (price: number) => {
     if (!price || price === 0) return '-';
+    if (watch.currency !== 'EUR') return `${watch.currency} ${price.toLocaleString('de-DE')}`;
     return `${price.toLocaleString('de-DE')}€`;
   };
 
-  // Order book format: € BEFORE number (e.g., "€104,500")
+  // Price format: symbol BEFORE number (e.g., "€104,500" or "HKD 104,500")
   const formatPriceEurBefore = (price: number) => {
-    return `€${price.toLocaleString('de-DE')}`;
+    return `${currencyPrefix}${price.toLocaleString('de-DE')}`;
   };
 
-  // Market price range format (e.g., "€51,000 - €156,460" or just "€51,000" if same)
+  // Market price range format (e.g., "€51,000 - €156,460" or "HKD 51,000 - HKD 156,460")
   const formatPriceRange = (min: number, max: number) => {
     if (min === max || !max || !min) {
-      return `€${(min || max).toLocaleString('de-DE')}`;
+      return `${currencyPrefix}${(min || max).toLocaleString('de-DE')}`;
     }
-    return `€${min.toLocaleString('de-DE')} - €${max.toLocaleString('de-DE')}`;
+    return `${currencyPrefix}${min.toLocaleString('de-DE')} - ${currencyPrefix}${max.toLocaleString('de-DE')}`;
   };
 
   // No +/- sign - icon and color indicate direction (per Figma)
@@ -1069,15 +1082,21 @@ export default function WatchDetailsScreen() {
                   if (selectedChartIndex !== null && filteredPriceHistory[selectedChartIndex] !== undefined) {
                     return formatPriceEurBefore(filteredPriceHistory[selectedChartIndex]);
                   }
-                  // Otherwise show latest order book price
+                  // Otherwise show latest order book price (using order's own currency)
+                  if (sellOrders.length > 0) {
+                    const o = sellOrders[0];
+                    const prefix = o.currency && o.currency !== 'EUR' ? `${o.currency} ` : '€';
+                    return `${prefix}${o.price.toLocaleString('de-DE')}`;
+                  }
+                  if (buyOrders.length > 0) {
+                    const o = buyOrders[0];
+                    const prefix = o.currency && o.currency !== 'EUR' ? `${o.currency} ` : '€';
+                    return `${prefix}${o.price.toLocaleString('de-DE')}`;
+                  }
                   return formatPriceEurBefore(
-                    sellOrders.length > 0
-                      ? sellOrders[0].price
-                      : buyOrders.length > 0
-                        ? buyOrders[0].price
-                        : filteredPriceHistory.length > 0
-                          ? filteredPriceHistory[filteredPriceHistory.length - 1]
-                          : 0
+                    filteredPriceHistory.length > 0
+                      ? filteredPriceHistory[filteredPriceHistory.length - 1]
+                      : 0
                   );
                 })()}
               </Text>
@@ -1326,7 +1345,7 @@ export default function WatchDetailsScreen() {
                 <View style={styles.offerInputSection}>
                   <Text style={styles.offerInputLabel}>Your offer</Text>
                   <View style={styles.offerInputContainer}>
-                    <Text style={styles.offerInputCurrency}>€</Text>
+                    <Text style={styles.offerInputCurrency}>{watch.currency === 'EUR' ? '€' : watch.currency}</Text>
                     <TextInput
                       style={styles.offerInput}
                       value={offerAmount}
@@ -1358,7 +1377,7 @@ export default function WatchDetailsScreen() {
                   <CheckIcon size={sp(32)} color="#4A90D9" />
                 </View>
                 <Text style={styles.offerSubmittedText}>Offer sent</Text>
-                <Text style={styles.offerSubmittedAmount}>€{submittedOfferAmount}</Text>
+                <Text style={styles.offerSubmittedAmount}>{watch.currency === 'EUR' ? '€' : watch.currency + ' '}{submittedOfferAmount}</Text>
               </View>
             )}
           </View>
