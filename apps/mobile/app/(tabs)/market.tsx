@@ -26,6 +26,7 @@ interface WatchMarketData {
   reference: string;
   ws_code?: string;
   price: number;
+  currency: string;
   priceChange: number;
   priceHistory: number[];
   trending?: boolean;
@@ -247,6 +248,7 @@ export default function MarketScreen() {
     reference: item.reference || '',
     ws_code: item.ws_code,
     price: item.display_price || 0,
+    currency: item.currency || 'EUR',
     priceChange: item.price_change || 0,
     priceHistory: item.price_history || [],
     trending: item.trending || false,
@@ -356,6 +358,7 @@ export default function MarketScreen() {
           reference: item.reference || '',
           ws_code: item.ws_code,
           price: item.price || 0,
+          currency: item.currency || 'EUR',
           priceChange: item.price_change || 0,
           priceHistory: item.price_history || [],
           trending: item.trending || true,
@@ -391,6 +394,7 @@ export default function MarketScreen() {
           reference: item.reference || '',
           ws_code: item.ws_code,
           price: item.price || 0,
+          currency: item.currency || 'EUR',
           priceChange: item.price_change || 0,
           priceHistory: item.price_history || [],
           trending: item.trending || false,
@@ -427,8 +431,9 @@ export default function MarketScreen() {
     } as any);
   };
 
-  const formatPrice = (price: number) => {
-    return `€${price.toLocaleString()}`;
+  const formatPrice = (price: number, currency?: string) => {
+    if (!currency || currency === 'EUR') return `€${price.toLocaleString()}`;
+    return `${currency} ${price.toLocaleString()}`;
   };
 
   const styles = StyleSheet.create({
@@ -946,7 +951,7 @@ export default function MarketScreen() {
                     <View style={styles.trendingCardContent}>
                       <View style={styles.trendingTopRow}>
                         <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand}</Text>
-                        <Text style={styles.trendingPrice}>{formatPrice(watch.price)}</Text>
+                        <Text style={styles.trendingPrice}>{formatPrice(watch.price, watch.currency)}</Text>
                       </View>
                       <View style={styles.trendingBottomRow}>
                         <Text style={styles.trendingReference}>{watch.ws_code || watch.reference}</Text>
@@ -988,7 +993,7 @@ export default function MarketScreen() {
                     <View style={styles.trendingCardContent}>
                       <View style={styles.trendingTopRow}>
                         <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand}</Text>
-                        <Text style={styles.trendingPrice}>{formatPrice(watch.price)}</Text>
+                        <Text style={styles.trendingPrice}>{formatPrice(watch.price, watch.currency)}</Text>
                       </View>
                       <View style={styles.trendingBottomRow}>
                         <Text style={styles.trendingReference}>{watch.ws_code || watch.reference}</Text>
