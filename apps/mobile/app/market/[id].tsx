@@ -750,15 +750,14 @@ export default function WatchDetailsScreen() {
   const loadWatchDetails = async () => {
     if (isGuideActive) { setWatch(GUIDE_MOCK_WATCH_DETAILS); setLoading(false); return; }
     try {
-      // Use reference if available (required for aggregated endpoint)
-      // The 'id' param might be a DefaultWatchlistItem ObjectId which won't work
-      const watchReference = reference || '';
+      // Use ws_code first (unique per variant), then reference, then id
+      const watchIdentifier = wsCodeParam || reference || '';
 
-      if (watchReference) {
-        // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
-        const encodedReference = encodeURIComponent(watchReference);
+      if (watchIdentifier) {
+        // Encode to handle special characters in URLs (e.g., 5711/1A-010)
+        const encodedReference = encodeURIComponent(watchIdentifier);
 
-        // Try aggregated endpoint with reference
+        // Try aggregated endpoint — backend tries ws_code first, then reference
         const response = await api.get(`/market/aggregated/${encodedReference}`);
         if (response.data) {
           const data = response.data;
@@ -1358,14 +1357,14 @@ export default function WatchDetailsScreen() {
           {/* Order Book Table */}
           {(() => {
             const currentOrders = selectedTab === 'Buy' ? v2OffFilteredBuyOrders : v2OffFilteredSellOrders;
-            const hasRemarks = !v2Enabled && currentOrders.some(o => !!o.remarks);
+            const hasRemarks = !v2Enabled;
             return (<View style={styles.orderBookTable}>
             {/* Header */}
             <View style={styles.tableHeader}>
               <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>{v2Enabled ? 'Market' : 'Location'}</Text>
               <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>Details</Text>
-              {hasRemarks && <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Remarks</Text>}
-              <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>{!v2Enabled && selectedTab === 'Buy' ? 'Target' : 'Price'}</Text>
+              {hasRemarks && <Text style={[styles.tableHeaderCell, { flex: 0.8, textAlign: 'center' }]}>Remarks</Text>}
+              <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 1, textAlign: 'center' }]}>{!v2Enabled && selectedTab === 'Buy' ? 'Target' : 'Price'}</Text>
               <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 0.7 : 0.5, textAlign: 'center' }]}>Chat</Text>
             </View>
 
@@ -1393,7 +1392,7 @@ export default function WatchDetailsScreen() {
                     <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#999999' }]}>{order.date}</Text>
                   </View>
                   {hasRemarks && (
-                    <View style={[styles.tableCell, { flex: 1, alignItems: 'center' }]}>
+                    <View style={[styles.tableCell, { flex: 0.8, alignItems: 'center' }]}>
                       {order.remarks ? (
                         <View style={{ backgroundColor: 'rgba(33,33,33,0.06)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(6) }}>
                           <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(10), color: '#555555' }]} numberOfLines={2}>
@@ -1405,7 +1404,7 @@ export default function WatchDetailsScreen() {
                       )}
                     </View>
                   )}
-                  <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>
+                  <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'center' }]}>
                     {order.currency && order.currency !== 'EUR' ? `${order.currency} ${order.price.toLocaleString('de-DE')}` : formatPriceEurBefore(order.price)}
                   </Text>
                   <View style={{ flex: v2Enabled ? 0.7 : 0.5, alignItems: 'center', justifyContent: 'center', paddingVertical: hp(6) }}>
