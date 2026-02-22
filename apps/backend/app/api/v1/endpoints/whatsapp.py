@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
+import asyncio
 import re
 import zipfile
 import csv
@@ -266,6 +267,84 @@ def extract_reference_from_ws_code(ws_code: str) -> str:
     return ws_code.strip().split()[0].upper() if ws_code.strip() else ""
 
 
+async def _trigger_alerts_for_imported_orders(orders: list):
+    """Trigger watch alerts for bulk-imported orders"""
+    try:
+        from app.models.watch_alert import WatchAlert
+        from app.services.notifications import send_push_to_user
+        from app.models.notification import Notification, NotificationType as NotifType
+
+        orders_by_ws_code: dict[str, list] = {}
+        for order in orders:
+            ws_code = getattr(order, 'ws_code', None)
+            if ws_code:
+                orders_by_ws_code.setdefault(ws_code, []).append(order)
+
+        if not orders_by_ws_code:
+            return
+
+        ws_codes = list(orders_by_ws_code.keys())
+        alerts = await WatchAlert.find(
+            {"ws_code": {"$in": ws_codes}, "is_active": True}
+        ).to_list()
+
+        for alert in alerts:
+            matching_orders = orders_by_ws_code.get(alert.ws_code, [])
+            for order in matching_orders:
+                order_type_str = "WTS" if order.order_type == OrderType.SELL else "WTB"
+
+                if order.order_type == OrderType.SELL and not alert.notify_wts:
+                    continue
+                if order.order_type == OrderType.BUY and not alert.notify_wtb:
+                    continue
+                if alert.target_year:
+                    order_year = getattr(order, 'year', None)
+                    if order_year is None:
+                        continue
+                    year_dir = getattr(alert, 'year_direction', 'exactly')
+                    if year_dir == "exactly" and order_year != alert.target_year:
+                        continue
+                    if year_dir == "newer" and order_year < alert.target_year:
+                        continue
+                    if year_dir == "older" and order_year > alert.target_year:
+                        continue
+                if alert.price_threshold and order.price:
+                    if alert.price_direction == "below" and order.price > alert.price_threshold:
+                        continue
+                    if alert.price_direction == "above" and order.price < alert.price_threshold:
+                        continue
+
+                user = await User.get(PydanticObjectId(alert.user_id))
+                if not user:
+                    continue
+
+                title = f"New {order_type_str} for {alert.ws_code}"
+                body = f"{order.price} {order.currency}" if order.price else f"New {order_type_str} order"
+
+                notification = Notification(
+                    user_id=alert.user_id,
+                    type=NotifType.WATCHLIST_ALERT,
+                    title=title,
+                    body=body,
+                    reference=order.reference,
+                    order_id=str(order.id),
+                    price=order.price,
+                    currency=order.currency or "EUR",
+                )
+                await notification.insert()
+
+                await send_push_to_user(user, title=title, body=body, data={
+                    "type": "watch_alert",
+                    "ws_code": alert.ws_code,
+                    "reference": order.reference or "",
+                })
+                break
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error triggering alerts for imported orders: {e}", exc_info=True)
+
+
 async def process_csv_import(
     csv_content: str,
     import_record: WhatsAppImport,
@@ -525,6 +604,8 @@ async def process_csv_import(
             ref_counts[o.reference] = ref_counts.get(o.reference, 0) + 1
         for ref, count in ref_counts.items():
             await Watch.find(Watch.reference == ref).update_many({"$inc": {"order_count": count}})
+
+        asyncio.create_task(_trigger_alerts_for_imported_orders(order_docs))
 
     # Build unmatched CSV content for download
     unmatched_csv_str = None

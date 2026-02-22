@@ -332,7 +332,9 @@ export default function MarketScreen() {
 
       if (response.data && response.data.length > 0) {
         const newWatchData = response.data.map(mapAggregatedItem);
-        const combined = [...allWatches, ...newWatchData];
+        const seen = new Set(allWatches.map((w: any) => (w.ws_code || w.id).toLowerCase()));
+        const unique = newWatchData.filter((w: any) => !seen.has((w.ws_code || w.id).toLowerCase()));
+        const combined = [...allWatches, ...unique];
         setAllWatches(combined);
         setWatches(applyFiltersToWatches(combined));
         setHasMore(response.data.length >= PAGE_SIZE);

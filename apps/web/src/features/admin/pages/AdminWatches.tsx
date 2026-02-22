@@ -268,19 +268,34 @@ export function AdminWatches() {
   const [oemRefInput, setOemRefInput] = useState('')
   const [aliasInput, setAliasInput] = useState('')
   const [watchDetailsOpen, setWatchDetailsOpen] = useState(false)
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(25)
+  const [totalCount, setTotalCount] = useState(0)
 
   useEffect(() => {
     fetchWatches()
-  }, [])
+    fetchTotalCount()
+  }, [page, pageSize])
 
   const fetchWatches = async () => {
     try {
-      const response = await api.get('/market/admin/all')
+      const response = await api.get('/market/admin/all', {
+        params: { skip: page * pageSize, limit: pageSize }
+      })
       setWatches(response.data)
     } catch (error) {
       console.error('Failed to fetch watches:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchTotalCount = async () => {
+    try {
+      const response = await api.get('/market/admin/count')
+      setTotalCount(response.data.total)
+    } catch (error) {
+      console.error('Failed to fetch count:', error)
     }
   }
 
@@ -411,6 +426,24 @@ export function AdminWatches() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to export CSV:', error)
+    }
+  }
+
+  const handleExportJsonl = async () => {
+    try {
+      const response = await api.get('/market/admin/export', {
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', 'watches_export.jsonl')
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export watches:', error)
     }
   }
 
@@ -683,15 +716,24 @@ export function AdminWatches() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Market (Watches)</h1>
-          <p className="text-gray-600">Manage watch listings ({watches.length} total)</p>
+          <p className="text-gray-600">Manage watch listings ({totalCount} total)</p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Watch
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportJsonl}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download size={18} />
+            Export JSONL
+          </button>
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            <Plus size={18} />
+            Add Watch
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg border shadow-sm">
@@ -831,6 +873,44 @@ export function AdminWatches() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between mt-4 mb-2 px-4 py-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-gray-600">
+              Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
+            </p>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
+              className="text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white"
+            >
+              <option value={20}>20 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+              <option value={100}>100 / page</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Prev
+            </button>
+            <span className="text-sm text-gray-600">
+              Page {page + 1} of {Math.max(1, Math.ceil(totalCount / pageSize))}
+            </span>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={(page + 1) * pageSize >= totalCount}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
 
         {filteredWatches.length === 0 && (
