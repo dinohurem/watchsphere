@@ -110,7 +110,7 @@ export default function MarketScreen() {
   const firstWatchRowRef = useRef<View>(null);
   const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
   const totalFilterCount = getTotalFilterCount();
-  const PAGE_SIZE = 8;
+  const PAGE_SIZE = 50;
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [brandTabs, setBrandTabs] = useState<{ value: string; label: string }[]>([DEFAULT_CATEGORY]);
   const [watches, setWatches] = useState<WatchMarketData[]>([]);
@@ -276,9 +276,7 @@ export default function MarketScreen() {
     setHasMore(true);
     try {
       const params: any = { limit: PAGE_SIZE, skip: 0 };
-      if (selectedCategory === 'All') {
-        params.category = 'hot';
-      } else {
+      if (selectedCategory !== 'All') {
         params.brand = selectedCategory;
       }
       const response = await api.get('/market/aggregated', { params });
@@ -323,18 +321,14 @@ export default function MarketScreen() {
     setLoadingMore(true);
     try {
       const params: any = { limit: PAGE_SIZE, skip: allWatches.length };
-      if (selectedCategory === 'All') {
-        params.category = 'hot';
-      } else {
+      if (selectedCategory !== 'All') {
         params.brand = selectedCategory;
       }
       const response = await api.get('/market/aggregated', { params });
 
       if (response.data && response.data.length > 0) {
         const newWatchData = response.data.map(mapAggregatedItem);
-        const seen = new Set(allWatches.map((w: any) => (w.ws_code || w.id).toLowerCase()));
-        const unique = newWatchData.filter((w: any) => !seen.has((w.ws_code || w.id).toLowerCase()));
-        const combined = [...allWatches, ...unique];
+        const combined = [...allWatches, ...newWatchData];
         setAllWatches(combined);
         setWatches(applyFiltersToWatches(combined));
         setHasMore(response.data.length >= PAGE_SIZE);

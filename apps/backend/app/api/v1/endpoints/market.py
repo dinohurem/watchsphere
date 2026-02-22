@@ -555,7 +555,7 @@ async def get_aggregated_market_data(
     category: str = Query(default="hot"),
     brand: Optional[str] = Query(default=None),
     skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=20, le=100),
+    limit: int = Query(default=50),
 ) -> Any:
     """
     Get aggregated market data with proper pricing logic.
@@ -575,30 +575,30 @@ async def get_aggregated_market_data(
     try:
         # Get all active watches
         base_query = Watch.status == WatchStatus.ACTIVE
-        # Fetch enough records to cover skip + limit
-        fetch_limit = skip + limit
+
+        # Fetch ALL active watches so dedup doesn't cause pagination gaps.
+        # With ~100-200 watches this is efficient; for larger catalogs consider
+        # deduplicating at the DB level with aggregation instead.
 
         # If brand filter is provided, filter by brand (case-insensitive)
         if brand:
             import re
             brand_regex = re.compile(f"^{re.escape(brand)}$", re.IGNORECASE)
-            watches = await Watch.find(base_query, {"brand": {"$regex": brand_regex}}).sort([("order_count", -1)]).limit(fetch_limit).to_list()
-        # For gainers/losers, we need to compute price_change dynamically from
-        # sell orders vs admin price, so fetch all watches first then filter.
+            watches = await Watch.find(base_query, {"brand": {"$regex": brand_regex}}).sort([("order_count", -1), ("created_at", -1)]).to_list()
         elif category == "hot":
-            watches = await Watch.find(base_query).sort([("order_count", -1)]).limit(fetch_limit).to_list()
+            watches = await Watch.find(base_query).sort([("order_count", -1), ("created_at", -1)]).to_list()
         elif category in ("gainers", "losers"):
-            # Fetch more watches than needed — we'll filter after computing price_change
+            # Fetch all watches — we'll filter after computing price_change
             watches = await Watch.find(base_query).sort([("created_at", -1)]).to_list()
         elif category == "new":
-            watches = await Watch.find(base_query).sort([("published_at", -1)]).limit(fetch_limit).to_list()
+            watches = await Watch.find(base_query).sort([("published_at", -1), ("created_at", -1)]).to_list()
         elif category == "trending":
             watches = await Watch.find(
                 base_query,
                 {"$or": [{"trending": True}, {"order_count": {"$gt": 0}}]}
-            ).sort([("trending", -1), ("order_count", -1)]).limit(fetch_limit).to_list()
+            ).sort([("trending", -1), ("order_count", -1)]).to_list()
         else:
-            watches = await Watch.find(base_query).sort([("created_at", -1)]).limit(fetch_limit).to_list()
+            watches = await Watch.find(base_query).sort([("created_at", -1)]).to_list()
 
         # Return empty list if no watches
         if not watches:
@@ -659,18 +659,11 @@ async def get_aggregated_market_data(
             except Exception:
                 pass
 
-        # Build response — unique per ws_code
+        # Build response
         result = []
-        seen_keys = set()
 
         for watch in watches:
             watch_id = str(watch.id)
-            # Deduplicate by ws_code (most unique identifier); fall back to watch id
-            dedup_key = (watch.ws_code or "").strip().lower() or (watch.reference or "").strip().lower() or watch_id
-
-            if dedup_key in seen_keys:
-                continue
-            seen_keys.add(dedup_key)
 
             lowest_order_price = lowest_prices_by_ref.get(watch.reference) if watch.reference else None
             admin_price = watch.price
