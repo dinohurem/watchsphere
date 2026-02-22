@@ -666,7 +666,7 @@ async def get_aggregated_market_data(
         for watch in watches:
             watch_id = str(watch.id)
             # Deduplicate by ws_code (most unique identifier); fall back to watch id
-            dedup_key = (watch.ws_code or "").strip().lower() or watch_id
+            dedup_key = (watch.ws_code or "").strip().lower() or (watch.reference or "").strip().lower() or watch_id
 
             if dedup_key in seen_keys:
                 continue
@@ -910,6 +910,63 @@ async def admin_list_all_watches(
         }
         for watch in watches
     ]
+
+
+@router.get("/admin/count")
+async def admin_count_watches(
+    current_admin: User = Depends(get_current_admin_user),
+    status_filter: Optional[WatchStatus] = None,
+    brand: Optional[str] = None,
+    dealer_id: Optional[str] = None,
+) -> Any:
+    """Count all watches with filters (Admin only)"""
+    query_conditions = []
+    if status_filter:
+        query_conditions.append(Watch.status == status_filter)
+    if brand:
+        query_conditions.append(Watch.brand == brand)
+    if dealer_id:
+        query_conditions.append(Watch.dealer_id == dealer_id)
+
+    if query_conditions:
+        total = await Watch.find(*query_conditions).count()
+    else:
+        total = await Watch.find_all().count()
+
+    return {"total": total}
+
+
+@router.get("/admin/export")
+async def admin_export_watches(
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Export all active watches as JSONL (Admin only)"""
+    import json
+    from fastapi.responses import StreamingResponse
+
+    watches = await Watch.find(Watch.status == WatchStatus.ACTIVE).sort([("created_at", -1)]).to_list()
+
+    async def generate():
+        for watch in watches:
+            line = json.dumps({
+                "brand": watch.brand,
+                "model": watch.model,
+                "collection": getattr(watch, 'collection', None),
+                "reference": watch.reference,
+                "oem_references": getattr(watch, 'oem_references', None) or [],
+                "ws_code": watch.ws_code,
+                "dial": getattr(watch, 'dial', None),
+                "bracelet": getattr(watch, 'bracelet', None),
+                "aliases": getattr(watch, 'aliases', None) or [],
+                "description": watch.description,
+            }, ensure_ascii=False)
+            yield line + "\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": "attachment; filename=\"watches_export.jsonl\""},
+    )
 
 
 @router.get("/admin/{watch_id}", response_model=WatchResponse)

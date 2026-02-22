@@ -491,6 +491,19 @@ export default function WatchDetailsScreen() {
   const [isInWatchlist, setIsInWatchlist] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
 
+  // Watch alert state
+  const [watchAlert, setWatchAlert] = useState<any>(null);
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertLoading, setAlertLoading] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    notify_wts: false,
+    notify_wtb: false,
+    target_year: '',
+    year_direction: 'exactly',
+    price_threshold: '',
+    price_direction: 'below',
+  });
+
   // Chart interaction state
   const [selectedChartIndex, setSelectedChartIndex] = useState<number | null>(null);
 
@@ -498,8 +511,8 @@ export default function WatchDetailsScreen() {
   const [showLocationFilter, setShowLocationFilter] = useState(false);
   const [showYearFilter, setShowYearFilter] = useState(false);
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]); // empty = worldwide (all)
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // null = all
-  const [selectedYear, setSelectedYear] = useState<number | null>(null); // null = all
+  const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [showMoreLocations, setShowMoreLocations] = useState(false);
 
   // Get order book filters from context
@@ -563,40 +576,40 @@ export default function WatchDetailsScreen() {
     if (v2Enabled) return filteredBuyOrders;
     return filteredBuyOrders.filter(order => {
       if (!matchesLocationFilter(order.country_code)) return false;
-      if (selectedYear !== null || selectedMonth !== null) {
+      if (selectedYears.length > 0 || selectedMonths.length > 0) {
         const parts = order.date?.split('/');
         if (parts && parts.length === 2) {
           const orderMonth = parseInt(parts[0], 10);
           const orderYear = 2000 + parseInt(parts[1], 10);
-          if (selectedYear !== null && orderYear !== selectedYear) return false;
-          if (selectedMonth !== null && orderMonth !== selectedMonth) return false;
-        } else if (selectedYear !== null || selectedMonth !== null) {
+          if (selectedYears.length > 0 && !selectedYears.includes(orderYear)) return false;
+          if (selectedMonths.length > 0 && !selectedMonths.includes(orderMonth)) return false;
+        } else if (selectedYears.length > 0 || selectedMonths.length > 0) {
           return false;
         }
       }
       return true;
     });
-  }, [filteredBuyOrders, v2Enabled, selectedLocations, selectedYear, selectedMonth]);
+  }, [filteredBuyOrders, v2Enabled, selectedLocations, selectedYears, selectedMonths]);
 
   const v2OffFilteredSellOrders = useMemo(() => {
     if (v2Enabled) return filteredSellOrders;
     return filteredSellOrders.filter(order => {
       if (!matchesLocationFilter(order.country_code)) return false;
-      if (selectedYear !== null || selectedMonth !== null) {
+      if (selectedYears.length > 0 || selectedMonths.length > 0) {
         const parts = order.date?.split('/');
         if (parts && parts.length === 2) {
           const orderMonth = parseInt(parts[0], 10);
           const orderYear = 2000 + parseInt(parts[1], 10);
-          if (selectedYear !== null && orderYear !== selectedYear) return false;
-          if (selectedMonth !== null && orderMonth !== selectedMonth) return false;
-        } else if (selectedYear !== null || selectedMonth !== null) {
+          if (selectedYears.length > 0 && !selectedYears.includes(orderYear)) return false;
+          if (selectedMonths.length > 0 && !selectedMonths.includes(orderMonth)) return false;
+        } else if (selectedYears.length > 0 || selectedMonths.length > 0) {
           return false;
         }
       }
       return true;
     });
-  }, [filteredSellOrders, v2Enabled, selectedLocations, selectedYear, selectedMonth]);  // Derive "other" locations from order data (not in main list)
-  const MAIN_LOCATION_CODES = ['AE', 'US', 'HK'];
+  }, [filteredSellOrders, v2Enabled, selectedLocations, selectedYears, selectedMonths]);  // Derive "other" locations from order data (not in main list)
+  const MAIN_LOCATION_CODES = ['AE', 'US', 'HK', 'GB'];
   const otherLocations = useMemo(() => {
     const allOrders = [...buyOrders, ...sellOrders];
     const locationMap = new Map<string, string>();
@@ -685,6 +698,27 @@ export default function WatchDetailsScreen() {
     checkWatchlistStatus();
   }, [id, reference, isAuthenticated]);
 
+  // Fetch watch alert config
+  useEffect(() => {
+    if (watch?.ws_code) {
+      api.get(`/watch-alerts/${encodeURIComponent(watch.ws_code)}`)
+        .then(res => {
+          if (res.data) {
+            setWatchAlert(res.data);
+            setAlertConfig({
+              notify_wts: res.data.notify_wts,
+              notify_wtb: res.data.notify_wtb,
+              target_year: res.data.target_year ? String(res.data.target_year) : '',
+              year_direction: res.data.year_direction || 'exactly',
+              price_threshold: res.data.price_threshold ? String(res.data.price_threshold) : '',
+              price_direction: res.data.price_direction || 'below',
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [watch?.ws_code]);
+
   const checkWatchlistStatus = async () => {
     if (isGuideActive) return;
     if (!isAuthenticated) return;
@@ -744,6 +778,43 @@ export default function WatchDetailsScreen() {
       console.error('Failed to update watchlist:', error);
     } finally {
       setWatchlistLoading(false);
+    }
+  };
+
+  const handleSaveAlert = async () => {
+    if (!watch?.ws_code) return;
+    setAlertLoading(true);
+    try {
+      const res = await api.post('/watch-alerts', {
+        ws_code: watch.ws_code,
+        notify_wts: alertConfig.notify_wts,
+        notify_wtb: alertConfig.notify_wtb,
+        target_year: alertConfig.target_year ? parseInt(alertConfig.target_year) : null,
+        year_direction: alertConfig.year_direction,
+        price_threshold: alertConfig.price_threshold ? parseFloat(alertConfig.price_threshold) : null,
+        price_direction: alertConfig.price_direction,
+      });
+      setWatchAlert(res.data);
+      setShowAlertModal(false);
+    } catch (error) {
+      console.error('Failed to save alert:', error);
+    } finally {
+      setAlertLoading(false);
+    }
+  };
+
+  const handleRemoveAlert = async () => {
+    if (!watch?.ws_code) return;
+    setAlertLoading(true);
+    try {
+      await api.delete(`/watch-alerts/${encodeURIComponent(watch.ws_code)}`);
+      setWatchAlert(null);
+      setAlertConfig({ notify_wts: false, notify_wtb: false, target_year: '', year_direction: 'exactly', price_threshold: '', price_direction: 'below' });
+      setShowAlertModal(false);
+    } catch (error) {
+      console.error('Failed to remove alert:', error);
+    } finally {
+      setAlertLoading(false);
     }
   };
 
@@ -1095,17 +1166,11 @@ export default function WatchDetailsScreen() {
                     <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#5B9BD5' }}>WTB {buyOrders.length}</Text>
                   </View>
                 </View>
-                <TouchableOpacity
-                  onPress={toggleWatchlist}
-                  disabled={watchlistLoading}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <StarIcon filled={isInWatchlist} />
-                </TouchableOpacity>
               </>
             )}
           </View>
         </View>
+
 
         {/* Action Buttons */}
         {v2Enabled && <View style={styles.actionButtons}>
@@ -1162,45 +1227,70 @@ export default function WatchDetailsScreen() {
         {/* V2-Off Filters (Location + Year) */}
         {!v2Enabled && (
           <View style={styles.v2OffFiltersSection}>
-            <View style={styles.v2OffFiltersRow}>
-              <TouchableOpacity
-                style={[styles.v2OffFilterButton, selectedLocations.length > 0 && styles.v2OffFilterButtonActive]}
-                onPress={() => setShowLocationFilter(true)}
-              >
-                <Text style={[styles.v2OffFilterButtonText, selectedLocations.length > 0 && styles.v2OffFilterButtonTextActive]}>
-                  {selectedLocations.length > 0 ? selectedLocations.join(', ') : 'Location'}
-                </Text>
-                {selectedLocations.length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => setSelectedLocations([])}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Svg width={14} height={14} viewBox="0 0 16 16" fill="none">
-                      <Path d="M4 4L12 12M12 4L4 12" stroke="#212121" strokeWidth={1.5} strokeLinecap="round" />
-                    </Svg>
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.v2OffFilterButton, (selectedYear !== null || selectedMonth !== null) && styles.v2OffFilterButtonActive]}
-                onPress={() => setShowYearFilter(true)}
-              >
-                <Text style={[styles.v2OffFilterButtonText, (selectedYear !== null || selectedMonth !== null) && styles.v2OffFilterButtonTextActive]}>
-                  {selectedYear !== null || selectedMonth !== null
-                    ? `${selectedMonth !== null ? String(selectedMonth).padStart(2, '0') + '/' : ''}${selectedYear !== null ? selectedYear : 'All'}`
-                    : 'Year'}
-                </Text>
-                {(selectedYear !== null || selectedMonth !== null) && (
-                  <TouchableOpacity
-                    onPress={() => { setSelectedYear(null); setSelectedMonth(null); }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Svg width={14} height={14} viewBox="0 0 16 16" fill="none">
-                      <Path d="M4 4L12 12M12 4L4 12" stroke="#212121" strokeWidth={1.5} strokeLinecap="round" />
-                    </Svg>
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={styles.v2OffFiltersRow}>
+                <TouchableOpacity
+                  style={[styles.v2OffFilterButton, selectedLocations.length > 0 && styles.v2OffFilterButtonActive]}
+                  onPress={() => setShowLocationFilter(true)}
+                >
+                  <Text style={[styles.v2OffFilterButtonText, selectedLocations.length > 0 && styles.v2OffFilterButtonTextActive]}>
+                    {selectedLocations.length > 0 ? selectedLocations.map(c => ({ EU: 'EU', AE: 'UAE', US: 'US', HK: 'HK', GB: 'UK' }[c] || c)).join(', ') : 'Location'}
+                  </Text>
+                  {selectedLocations.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setSelectedLocations([])}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Svg width={14} height={14} viewBox="0 0 16 16" fill="none">
+                        <Path d="M4 4L12 12M12 4L4 12" stroke="#212121" strokeWidth={1.5} strokeLinecap="round" />
+                      </Svg>
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.v2OffFilterButton, (selectedYears.length > 0 || selectedMonths.length > 0) && styles.v2OffFilterButtonActive]}
+                  onPress={() => setShowYearFilter(true)}
+                >
+                  <Text style={[styles.v2OffFilterButtonText, (selectedYears.length > 0 || selectedMonths.length > 0) && styles.v2OffFilterButtonTextActive]}>
+                    {selectedYears.length > 0 || selectedMonths.length > 0
+                      ? `${selectedMonths.length > 0 ? selectedMonths.map(m => String(m).padStart(2, '0')).join(',') + '/' : ''}${selectedYears.length > 0 ? selectedYears.join(',') : 'All'}`
+                      : 'Year'}
+                  </Text>
+                  {(selectedYears.length > 0 || selectedMonths.length > 0) && (
+                    <TouchableOpacity
+                      onPress={() => { setSelectedYears([]); setSelectedMonths([]); }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Svg width={14} height={14} viewBox="0 0 16 16" fill="none">
+                        <Path d="M4 4L12 12M12 4L4 12" stroke="#212121" strokeWidth={1.5} strokeLinecap="round" />
+                      </Svg>
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(12), marginLeft: wp(10) }}>
+                <TouchableOpacity
+                  onPress={() => setShowAlertModal(true)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Svg width={22} height={22} viewBox="0 0 24 24" fill={watchAlert ? '#212121' : 'none'}>
+                    <Path
+                      d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"
+                      stroke="#212121"
+                      strokeWidth={1.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={toggleWatchlist}
+                  disabled={watchlistLoading}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <StarIcon filled={isInWatchlist} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         )}
@@ -1594,9 +1684,10 @@ export default function WatchDetailsScreen() {
               {[
                 { code: '', name: 'Worldwide', icon: '🌐' },
                 { code: 'EU', name: 'EU', icon: '🇪🇺' },
-                { code: 'AE', name: 'United Arab Emirates' },
-                { code: 'US', name: 'United States' },
                 { code: 'HK', name: 'Hong Kong' },
+                { code: 'AE', name: 'United Arab Emirates' },
+                { code: 'GB', name: 'United Kingdom' },
+                { code: 'US', name: 'United States' },
               ].map((loc) => {
                 const isWorldwide = loc.code === '';
                 const isSelected = isWorldwide ? selectedLocations.length === 0 : selectedLocations.includes(loc.code);
@@ -1693,6 +1784,150 @@ export default function WatchDetailsScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Watch Alert Modal */}
+      <Modal
+        visible={showAlertModal}
+        animationType="fade"
+        transparent={true}
+        statusBarTranslucent={true}
+        onRequestClose={() => setShowAlertModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.filterModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAlertModal(false)}
+        >
+          <View style={styles.filterModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.filterModalHandle} />
+            <Text style={styles.filterModalTitle}>Price Alert</Text>
+
+            <ScrollView style={styles.filterModalScroll} showsVerticalScrollIndicator={false}>
+              {/* WTS Notifications */}
+              <TouchableOpacity
+                style={styles.filterModalOption}
+                onPress={() => setAlertConfig(c => ({ ...c, notify_wts: !c.notify_wts }))}
+              >
+                <Text style={[styles.filterModalOptionText, alertConfig.notify_wts && styles.filterModalOptionTextActive]}>WTS Notifications</Text>
+                <View style={{ width: wp(44), height: hp(24), borderRadius: sp(12), backgroundColor: alertConfig.notify_wts ? '#4AA078' : '#E5E5E5', justifyContent: 'center', paddingHorizontal: wp(2) }}>
+                  <View style={{ width: wp(20), height: wp(20), borderRadius: wp(10), backgroundColor: '#FFF', alignSelf: alertConfig.notify_wts ? 'flex-end' : 'flex-start' }} />
+                </View>
+              </TouchableOpacity>
+
+              {/* WTB Notifications */}
+              <TouchableOpacity
+                style={styles.filterModalOption}
+                onPress={() => setAlertConfig(c => ({ ...c, notify_wtb: !c.notify_wtb }))}
+              >
+                <Text style={[styles.filterModalOptionText, alertConfig.notify_wtb && styles.filterModalOptionTextActive]}>WTB Notifications</Text>
+                <View style={{ width: wp(44), height: hp(24), borderRadius: sp(12), backgroundColor: alertConfig.notify_wtb ? '#4AA078' : '#E5E5E5', justifyContent: 'center', paddingHorizontal: wp(2) }}>
+                  <View style={{ width: wp(20), height: wp(20), borderRadius: wp(10), backgroundColor: '#FFF', alignSelf: alertConfig.notify_wtb ? 'flex-end' : 'flex-start' }} />
+                </View>
+              </TouchableOpacity>
+
+              {/* Year */}
+              <View style={[styles.filterModalOption, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: hp(4) }}>
+                  <Text style={[styles.filterModalOptionText, alertConfig.target_year ? styles.filterModalOptionTextActive : undefined]}>Year</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const dirs = ['newer', 'exactly', 'older'] as const;
+                      const idx = dirs.indexOf(alertConfig.year_direction as any);
+                      setAlertConfig(c => ({ ...c, year_direction: dirs[(idx + 1) % 3] }));
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4) }}
+                  >
+                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#212121' }}>
+                      {alertConfig.year_direction === 'newer' ? '↑ Newer' : alertConfig.year_direction === 'older' ? '↓ Older' : '= Exactly'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(8) }}>
+                  {alertConfig.target_year ? alertConfig.target_year : 'Any'}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: wp(-4) }}>
+                  <View style={{ flexDirection: 'row', gap: wp(6), paddingHorizontal: wp(4) }}>
+                    <TouchableOpacity
+                      onPress={() => setAlertConfig(c => ({ ...c, target_year: '' }))}
+                      style={{ paddingHorizontal: wp(14), paddingVertical: hp(8), borderRadius: sp(99), backgroundColor: !alertConfig.target_year ? '#212121' : '#F5F5F5' }}
+                    >
+                      <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(13), color: !alertConfig.target_year ? '#FFF' : '#666' }}>Any</Text>
+                    </TouchableOpacity>
+                    {Array.from({ length: 16 }, (_, i) => String(2026 - i)).map((y) => (
+                      <TouchableOpacity
+                        key={y}
+                        onPress={() => setAlertConfig(c => ({ ...c, target_year: y }))}
+                        style={{ paddingHorizontal: wp(14), paddingVertical: hp(8), borderRadius: sp(99), backgroundColor: alertConfig.target_year === y ? '#212121' : '#F5F5F5' }}
+                      >
+                        <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(13), color: alertConfig.target_year === y ? '#FFF' : '#666' }}>{y}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Price Threshold Slider */}
+              <View style={[styles.filterModalOption, { flexDirection: 'column', alignItems: 'stretch', borderBottomWidth: 0 }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: hp(4) }}>
+                  <Text style={[styles.filterModalOptionText, alertConfig.price_threshold ? styles.filterModalOptionTextActive : undefined]}>Price Threshold</Text>
+                  <TouchableOpacity
+                    onPress={() => setAlertConfig(c => ({ ...c, price_direction: c.price_direction === 'below' ? 'above' : 'below' }))}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4) }}
+                  >
+                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#212121' }}>
+                      {alertConfig.price_direction === 'below' ? '↓ Below' : '↑ Above'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(8) }}>
+                  {alertConfig.price_threshold ? `${Number(alertConfig.price_threshold).toLocaleString()} €` : 'No limit'}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: wp(-4) }}>
+                  <View style={{ flexDirection: 'row', gap: wp(6), paddingHorizontal: wp(4) }}>
+                    <TouchableOpacity
+                      onPress={() => setAlertConfig(c => ({ ...c, price_threshold: '' }))}
+                      style={{ paddingHorizontal: wp(14), paddingVertical: hp(8), borderRadius: sp(99), backgroundColor: !alertConfig.price_threshold ? '#212121' : '#F5F5F5' }}
+                    >
+                      <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(13), color: !alertConfig.price_threshold ? '#FFF' : '#666' }}>No limit</Text>
+                    </TouchableOpacity>
+                    {['5000', '10000', '15000', '20000', '30000', '50000', '75000', '100000'].map((p) => (
+                      <TouchableOpacity
+                        key={p}
+                        onPress={() => setAlertConfig(c => ({ ...c, price_threshold: p }))}
+                        style={{ paddingHorizontal: wp(14), paddingVertical: hp(8), borderRadius: sp(99), backgroundColor: alertConfig.price_threshold === p ? '#212121' : '#F5F5F5' }}
+                      >
+                        <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(13), color: alertConfig.price_threshold === p ? '#FFF' : '#666' }}>{Number(p).toLocaleString()}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            </ScrollView>
+
+            {/* Action buttons */}
+            <View style={{ flexDirection: 'row', gap: wp(8), marginHorizontal: wp(20), marginTop: hp(16) }}>
+              {watchAlert && (
+                <TouchableOpacity
+                  onPress={handleRemoveAlert}
+                  disabled={alertLoading}
+                  style={{ flex: 1, paddingVertical: hp(14), borderRadius: sp(99), borderWidth: 1.5, borderColor: '#D35741', alignItems: 'center' }}
+                >
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#D35741' }}>Remove</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={handleSaveAlert}
+                disabled={alertLoading}
+                style={{ flex: 1, paddingVertical: hp(14), borderRadius: sp(99), backgroundColor: '#212121', alignItems: 'center' }}
+              >
+                <Text style={styles.yearFilterApplyText}>
+                  {alertLoading ? 'Saving...' : 'Save Alert'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Year Filter Modal */}
       <Modal
         visible={showYearFilter}
@@ -1716,18 +1951,18 @@ export default function WatchDetailsScreen() {
                 <Text style={styles.yearFilterColumnHeader}>Month</Text>
                 <ScrollView style={styles.yearFilterScroll} showsVerticalScrollIndicator={false}>
                   <TouchableOpacity
-                    style={[styles.yearFilterItem, selectedMonth === null && styles.yearFilterItemActive]}
-                    onPress={() => setSelectedMonth(null)}
+                    style={[styles.yearFilterItem, selectedMonths.length === 0 && styles.yearFilterItemActive]}
+                    onPress={() => setSelectedMonths([])}
                   >
-                    <Text style={[styles.yearFilterItemText, selectedMonth === null && styles.yearFilterItemTextActive]}>All</Text>
+                    <Text style={[styles.yearFilterItemText, selectedMonths.length === 0 && styles.yearFilterItemTextActive]}>All</Text>
                   </TouchableOpacity>
                   {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                     <TouchableOpacity
                       key={m}
-                      style={[styles.yearFilterItem, selectedMonth === m && styles.yearFilterItemActive]}
-                      onPress={() => setSelectedMonth(m)}
+                      style={[styles.yearFilterItem, selectedMonths.includes(m) && styles.yearFilterItemActive]}
+                      onPress={() => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])}
                     >
-                      <Text style={[styles.yearFilterItemText, selectedMonth === m && styles.yearFilterItemTextActive]}>
+                      <Text style={[styles.yearFilterItemText, selectedMonths.includes(m) && styles.yearFilterItemTextActive]}>
                         {String(m).padStart(2, '0')}
                       </Text>
                     </TouchableOpacity>
@@ -1740,18 +1975,18 @@ export default function WatchDetailsScreen() {
                 <Text style={styles.yearFilterColumnHeader}>Year</Text>
                 <ScrollView style={styles.yearFilterScroll} showsVerticalScrollIndicator={false}>
                   <TouchableOpacity
-                    style={[styles.yearFilterItem, selectedYear === null && styles.yearFilterItemActive]}
-                    onPress={() => setSelectedYear(null)}
+                    style={[styles.yearFilterItem, selectedYears.length === 0 && styles.yearFilterItemActive]}
+                    onPress={() => setSelectedYears([])}
                   >
-                    <Text style={[styles.yearFilterItemText, selectedYear === null && styles.yearFilterItemTextActive]}>All</Text>
+                    <Text style={[styles.yearFilterItemText, selectedYears.length === 0 && styles.yearFilterItemTextActive]}>All</Text>
                   </TouchableOpacity>
                   {Array.from({ length: 12 }, (_, i) => 2026 - i).map((y) => (
                     <TouchableOpacity
                       key={y}
-                      style={[styles.yearFilterItem, selectedYear === y && styles.yearFilterItemActive]}
-                      onPress={() => setSelectedYear(y)}
+                      style={[styles.yearFilterItem, selectedYears.includes(y) && styles.yearFilterItemActive]}
+                      onPress={() => setSelectedYears(prev => prev.includes(y) ? prev.filter(x => x !== y) : [...prev, y])}
                     >
-                      <Text style={[styles.yearFilterItemText, selectedYear === y && styles.yearFilterItemTextActive]}>
+                      <Text style={[styles.yearFilterItemText, selectedYears.includes(y) && styles.yearFilterItemTextActive]}>
                         {y}
                       </Text>
                     </TouchableOpacity>
@@ -2381,8 +2616,8 @@ const styles = StyleSheet.create({
   },
   v2OffFiltersRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: wp(10),
-    justifyContent: 'flex-end',
   },
   v2OffFilterButton: {
     flexDirection: 'row',

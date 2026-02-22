@@ -832,6 +832,90 @@ async def notify_sellers_of_lower_price(
         logger.error(f"Error in notify_sellers_of_lower_price: {e}", exc_info=True)
 
 
+async def trigger_watch_alerts(order: Order, creator: User):
+    """Check WatchAlerts matching this order's ws_code and send notifications"""
+    try:
+        from app.models.watch_alert import WatchAlert
+        from app.services.notifications import send_push_to_user
+
+        ws_code = getattr(order, 'ws_code', None)
+        if not ws_code and order.reference:
+            watch = await Watch.find_one(Watch.reference == order.reference)
+            if watch:
+                ws_code = watch.ws_code
+
+        if not ws_code:
+            return
+
+        alerts = await WatchAlert.find(
+            WatchAlert.ws_code == ws_code,
+            WatchAlert.is_active == True,
+        ).to_list()
+
+        order_type_str = "WTS" if order.order_type == OrderType.SELL else "WTB"
+
+        for alert in alerts:
+            if alert.user_id == str(creator.id):
+                continue
+
+            if order.order_type == OrderType.SELL and not alert.notify_wts:
+                continue
+            if order.order_type == OrderType.BUY and not alert.notify_wtb:
+                continue
+
+            if alert.target_year:
+                order_year = getattr(order, 'year', None)
+                if order_year is None:
+                    continue
+                year_dir = getattr(alert, 'year_direction', 'exactly')
+                if year_dir == "exactly" and order_year != alert.target_year:
+                    continue
+                if year_dir == "newer" and order_year < alert.target_year:
+                    continue
+                if year_dir == "older" and order_year > alert.target_year:
+                    continue
+
+            if alert.price_threshold and order.price:
+                if alert.price_direction == "below" and order.price > alert.price_threshold:
+                    continue
+                if alert.price_direction == "above" and order.price < alert.price_threshold:
+                    continue
+
+            user = await User.get(PydanticObjectId(alert.user_id))
+            if not user:
+                continue
+
+            title = f"New {order_type_str} for {ws_code}"
+            body = f"{order.price} {order.currency}" if order.price else f"New {order_type_str} order"
+
+            notification = Notification(
+                user_id=alert.user_id,
+                type=NotifType.WATCHLIST_ALERT,
+                title=title,
+                body=body,
+                reference=order.reference,
+                order_id=str(order.id),
+                price=order.price,
+                currency=order.currency or "EUR",
+            )
+            await notification.insert()
+
+            await send_push_to_user(
+                user,
+                title=title,
+                body=body,
+                data={
+                    "type": "watch_alert",
+                    "ws_code": ws_code,
+                    "reference": order.reference or "",
+                    "order_id": str(order.id),
+                },
+            )
+
+    except Exception as e:
+        logger.error(f"Error triggering watch alerts: {e}", exc_info=True)
+
+
 @router.post("", response_model=OrderResponse)
 async def create_order(
     order_data: OrderCreate,
@@ -925,6 +1009,8 @@ async def create_order(
         # Run notifications in background to not block the response
         asyncio.create_task(notify_buyers_of_sell_order(order, current_user))
         asyncio.create_task(notify_sellers_of_lower_price(order, current_user))
+
+    asyncio.create_task(trigger_watch_alerts(order, current_user))
 
     return OrderResponse(
         id=str(order.id),
