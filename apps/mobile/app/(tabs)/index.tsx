@@ -780,15 +780,13 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         {/* Profile Button */}
-        {v2Enabled && (
-          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-            {profileImageUrl ? (
-              <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
-            ) : (
-              <User size={24} color="#212121" />
-            )}
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+          {profileImageUrl ? (
+            <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
+          ) : (
+            <User size={24} color="#212121" />
+          )}
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
