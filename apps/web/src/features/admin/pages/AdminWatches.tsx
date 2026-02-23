@@ -693,10 +693,12 @@ export function AdminWatches() {
   }
 
   const filteredWatches = watches.filter(watch => {
+    const term = searchTerm.toLowerCase()
     const matchesSearch =
-      watch.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      watch.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (watch.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
+      watch.brand.toLowerCase().includes(term) ||
+      watch.model.toLowerCase().includes(term) ||
+      (watch.reference?.toLowerCase().includes(term) ?? false) ||
+      (watch.ws_code?.toLowerCase().includes(term) ?? false)
     const matchesStatus = statusFilter === 'all' || watch.status === statusFilter
     return matchesSearch && matchesStatus
   })
