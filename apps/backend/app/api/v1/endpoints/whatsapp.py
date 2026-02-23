@@ -359,17 +359,12 @@ async def process_csv_import(
     # Preserve headers for unmatched CSV output
     fieldnames = reader.fieldnames or []
 
-    # Build a cache of watches by ws_code (primary key) and reference (fallback)
+    # Build a cache of watches by ws_code (strict match only)
     all_watches = await Watch.find(Watch.status == "active").to_list()
     watch_by_ws_code: dict[str, Watch] = {}
-    watch_by_ref: dict[str, Watch] = {}
     for w in all_watches:
         if w.ws_code:
             watch_by_ws_code[w.ws_code.strip().upper()] = w
-        if w.reference:
-            watch_by_ref[w.reference.upper()] = w
-        for alias in (w.aliases or []):
-            watch_by_ref[alias.upper()] = w
 
     # Build a set of existing orders for deduplication
     # Key: (reference_upper, phone, price, order_type)
@@ -461,12 +456,16 @@ async def process_csv_import(
         # Extract reference from WS-Code
         reference = extract_reference_from_ws_code(ws_code)
 
-        # Match by ws_code first (primary connecting point), then fallback to reference
+        # Match strictly by ws_code only — skip if no ws_code match
         matched_watch = None
         if ws_code:
             matched_watch = watch_by_ws_code.get(ws_code.strip().upper())
-        if not matched_watch and reference:
-            matched_watch = watch_by_ref.get(reference)
+
+        if not matched_watch:
+            # No ws_code match found — skip this row (count as unmatched)
+            unmatched_count += 1
+            unmatched_raw_rows.append(row)
+            continue
 
         # Resolve country
         country_code = location if location else None
@@ -489,38 +488,12 @@ async def process_csv_import(
         if remarks:
             raw_text += f" - {remarks}"
 
-        # If no watch found, create a new one with the CSV data
-        if not matched_watch and ws_code and brand:
-            new_watch = Watch(
-                brand=brand,
-                model=ws_code,  # Use ws_code as model until manually corrected
-                reference=reference or None,
-                ws_code=ws_code,
-                price=0,
-                currency=currency,
-                status=WatchStatus.ACTIVE,
-                dealer_id=admin_id,
-                dealer_name=admin.name,
-                published_at=datetime.utcnow(),
-            )
-            await new_watch.insert()
-            matched_watch = new_watch
-            # Add to caches so subsequent rows with the same ws_code reuse it
-            watch_by_ws_code[ws_code.strip().upper()] = new_watch
-            if reference:
-                watch_by_ref[reference] = new_watch
+        # Use matched watch data (always present — we skip unmatched above)
+        watch_brand = matched_watch.brand
+        watch_model = matched_watch.model
+        watch_reference = matched_watch.reference
 
-        # Use matched watch data if available
-        watch_brand = matched_watch.brand if matched_watch else (brand or "Unknown")
-        watch_model = matched_watch.model if matched_watch else ws_code
-        watch_reference = matched_watch.reference if matched_watch else reference
-
-        # Track unmatched rows (no watch could be found or created)
-        if not matched_watch:
-            unmatched_count += 1
-            unmatched_raw_rows.append(row)
-
-        # 1. Create ExtractedWatchListing (social search) — always
+        # 1. Create ExtractedWatchListing (social search)
         listing_docs.append(ExtractedWatchListing(
             import_id=import_id,
             brand=watch_brand,
@@ -540,8 +513,8 @@ async def process_csv_import(
             message_timestamp=message_timestamp,
         ))
 
-        # 2. Create Order (order book) — for watches with enough data
-        if matched_watch and price and offer_type != OfferType.UNKNOWN:
+        # 2. Create Order (order book) — if we have price and offer type
+        if price and offer_type != OfferType.UNKNOWN:
             order_type = OrderType.SELL if offer_type == OfferType.WTS else OrderType.BUY
             order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
             order_reference = watch_reference or ws_code

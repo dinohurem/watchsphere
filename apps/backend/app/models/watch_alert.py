@@ -15,10 +15,14 @@ class WatchAlert(Document):
     ws_code: Indexed(str)  # the watch variant to monitor
     notify_wts: bool = True
     notify_wtb: bool = True
+    target_month: Optional[int] = None  # 1-12
     target_year: Optional[int] = None
     year_direction: str = "exactly"  # "newer", "exactly", "older"
+    condition: str = "any"  # "any", "unworn", "used"
+    locations: list[str] = Field(default_factory=list)  # country codes, empty = worldwide
     price_threshold: Optional[float] = None
     price_direction: str = "below"  # "below" or "above"
+    currency: str = "USD"  # USD, EUR, HKD, AED, GBP, CHF, CNY
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None

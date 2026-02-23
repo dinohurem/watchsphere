@@ -897,15 +897,6 @@ export default function MarketScreen() {
             </TouchableOpacity>
           ) : null}
         </View>
-        {v2Enabled && (
-          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-            {profileImageUrl ? (
-              <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
-            ) : (
-              <User size={24} color="#212121" />
-            )}
-          </TouchableOpacity>
-        )}
       </View>
     </SafeAreaView>
   );
@@ -1029,27 +1020,6 @@ export default function MarketScreen() {
         {/* Watches Section Header */}
         <View style={[styles.watchesHeader, !v2Enabled && { paddingTop: hp(16) }]}>
           <Text style={styles.watchesTitle}>{t('market.watches')}</Text>
-          <TouchableOpacity
-            ref={filtersButtonRef}
-            style={styles.filtersButton}
-            onPress={() => router.push('/market/filters' as any)}
-            activeOpacity={0.7}
-            onLayout={() => {
-              filtersButtonRef.current?.measureInWindow((x, y, width, height) => {
-                if (width > 0 && height > 0) {
-                  registerGuideMeasurement('filters', { x, y, width, height, borderRadius: 20 });
-                }
-              });
-            }}
-          >
-            <Filter size={26} color="#212121" />
-            <Text style={styles.filtersButtonText}>{t('market.filters')}</Text>
-            {totalFilterCount > 0 && (
-              <View style={styles.filterBadge}>
-                <Text style={styles.filterBadgeText}>{totalFilterCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
         </View>
 
         {/* Category Tabs with View Mode Toggle */}

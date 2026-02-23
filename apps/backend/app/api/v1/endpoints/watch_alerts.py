@@ -18,10 +18,14 @@ class WatchAlertCreate(BaseModel):
     ws_code: str
     notify_wts: bool = True
     notify_wtb: bool = True
+    target_month: Optional[int] = None
     target_year: Optional[int] = None
     year_direction: str = "exactly"
+    condition: str = "any"
+    locations: list[str] = []
     price_threshold: Optional[float] = None
     price_direction: str = "below"
+    currency: str = "USD"
 
 
 class WatchAlertResponse(BaseModel):
@@ -29,10 +33,14 @@ class WatchAlertResponse(BaseModel):
     ws_code: str
     notify_wts: bool
     notify_wtb: bool
+    target_month: Optional[int]
     target_year: Optional[int]
     year_direction: str
+    condition: str
+    locations: list[str]
     price_threshold: Optional[float]
     price_direction: str
+    currency: str
     is_active: bool
     created_at: datetime
 
@@ -54,10 +62,14 @@ async def get_watch_alert(
         ws_code=alert.ws_code,
         notify_wts=alert.notify_wts,
         notify_wtb=alert.notify_wtb,
+        target_month=alert.target_month,
         target_year=alert.target_year,
         year_direction=alert.year_direction,
+        condition=alert.condition or "any",
+        locations=alert.locations or [],
         price_threshold=alert.price_threshold,
         price_direction=alert.price_direction,
+        currency=alert.currency or "USD",
         is_active=alert.is_active,
         created_at=alert.created_at,
     )
@@ -78,10 +90,14 @@ async def create_or_update_watch_alert(
     if alert:
         alert.notify_wts = data.notify_wts
         alert.notify_wtb = data.notify_wtb
+        alert.target_month = data.target_month
         alert.target_year = data.target_year
         alert.year_direction = data.year_direction
+        alert.condition = data.condition
+        alert.locations = data.locations
         alert.price_threshold = data.price_threshold
         alert.price_direction = data.price_direction
+        alert.currency = data.currency
         alert.is_active = True
         alert.updated_at = datetime.utcnow()
         await alert.save()
@@ -91,10 +107,14 @@ async def create_or_update_watch_alert(
             ws_code=data.ws_code,
             notify_wts=data.notify_wts,
             notify_wtb=data.notify_wtb,
+            target_month=data.target_month,
             target_year=data.target_year,
             year_direction=data.year_direction,
+            condition=data.condition,
+            locations=data.locations,
             price_threshold=data.price_threshold,
             price_direction=data.price_direction,
+            currency=data.currency,
         )
         await alert.insert()
 
@@ -103,10 +123,14 @@ async def create_or_update_watch_alert(
         ws_code=alert.ws_code,
         notify_wts=alert.notify_wts,
         notify_wtb=alert.notify_wtb,
+        target_month=alert.target_month,
         target_year=alert.target_year,
         year_direction=alert.year_direction,
+        condition=alert.condition or "any",
+        locations=alert.locations or [],
         price_threshold=alert.price_threshold,
         price_direction=alert.price_direction,
+        currency=alert.currency or "USD",
         is_active=alert.is_active,
         created_at=alert.created_at,
     )
