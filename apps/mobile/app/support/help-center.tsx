@@ -143,12 +143,7 @@ export default function HelpCenterScreen() {
             icon={<BookOpenIcon />}
             onPress={() => router.push('/support/faq' as any)}
           />
-          <HelpItem
-            title={t('support.demo')}
-            description={t('support.demoSubtitle')}
-            icon={<PlayCircleIcon />}
-            onPress={handleDemo}
-          />
+          {/* Demo option hidden for now */}
         </View>
       </View>
     </SafeAreaView>

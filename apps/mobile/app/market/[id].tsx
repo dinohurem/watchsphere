@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent, Linking, Alert, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent, Linking, Alert, FlatList, Keyboard, InputAccessoryView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -508,6 +508,12 @@ export default function WatchDetailsScreen() {
     currency: 'USD',
   });
   const [alertLocationSearch, setAlertLocationSearch] = useState('');
+  const [locationSearchFocused, setLocationSearchFocused] = useState(false);
+  const [alertLocationSearchFocused, setAlertLocationSearchFocused] = useState(false);
+
+  // ScrollView refs for scrolling to inputs
+  const locationFilterScrollRef = useRef<ScrollView>(null);
+  const alertScrollRef = useRef<ScrollView>(null);
 
   // Chart interaction state
   const [selectedChartIndex, setSelectedChartIndex] = useState<number | null>(null);
@@ -1715,123 +1721,165 @@ export default function WatchDetailsScreen() {
       {/* Location Filter Modal */}
       <Modal
         visible={showLocationFilter}
-        animationType="fade"
-        transparent={true}
-        statusBarTranslucent={true}
-        onRequestClose={() => { setShowLocationFilter(false); setLocationSearchQuery(''); }}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => { setShowLocationFilter(false); setLocationSearchQuery(''); setLocationSearchFocused(false); }}
       >
-        <TouchableOpacity
-          style={styles.filterModalOverlay}
-          activeOpacity={1}
-          onPress={() => { setShowLocationFilter(false); setLocationSearchQuery(''); }}
-        >
-          <View style={styles.filterModalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.filterModalHandle} />
-            <Text style={styles.filterModalTitle}>Location</Text>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top']}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: wp(16), paddingVertical: hp(12), borderBottomWidth: 1, borderBottomColor: '#F0F0F0', position: 'relative' }}>
+            <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(18), color: '#212121' }}>Location</Text>
+            <TouchableOpacity onPress={() => { setShowLocationFilter(false); setLocationSearchQuery(''); setLocationSearchFocused(false); }} style={{ position: 'absolute', right: wp(16), padding: hp(8) }}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M18 6L6 18M6 6l12 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
 
-            <ScrollView style={styles.filterModalScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {[
-                { code: '', name: 'Worldwide', icon: '🌐' },
-                { code: 'EU', name: 'EU', icon: '🇪🇺' },
-                { code: 'HK', name: 'Hong Kong' },
-                { code: 'AE', name: 'United Arab Emirates' },
-                { code: 'GB', name: 'United Kingdom' },
-                { code: 'US', name: 'United States' },
-                { code: 'CH', name: 'Switzerland' },
-                { code: 'CN', name: 'China' },
-              ].map((loc) => {
-                const isWorldwide = loc.code === '';
-                const isSelected = isWorldwide ? selectedLocations.length === 0 : selectedLocations.includes(loc.code);
+          {/* Selected location chips */}
+          {selectedLocations.length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: wp(6), paddingHorizontal: wp(20), paddingTop: hp(12), paddingBottom: hp(4) }}>
+              {selectedLocations.map(code => {
+                const country = ALL_COUNTRIES.find(c => c.code === code);
+                const label = code === 'EU' ? 'EU' : (country?.name || code);
                 return (
                   <TouchableOpacity
-                    key={loc.code || 'worldwide'}
-                    style={styles.filterModalOption}
-                    onPress={() => {
-                      if (isWorldwide) {
-                        setSelectedLocations([]);
-                      } else {
+                    key={code}
+                    onPress={() => setSelectedLocations(prev => prev.filter(c => c !== code))}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4), backgroundColor: '#F0F0F0', borderRadius: sp(99), paddingHorizontal: wp(10), paddingVertical: hp(5) }}
+                  >
+                    {code === 'EU' ? <Text style={{ fontSize: fp(13) }}>🇪🇺</Text> : <CountryFlag countryCode={code} size={13} />}
+                    <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#212121' }}>{label}</Text>
+                    <Svg width={10} height={10} viewBox="0 0 16 16" fill="none">
+                      <Path d="M4 4L12 12M12 4L4 12" stroke="#666" strokeWidth={1.5} strokeLinecap="round" />
+                    </Svg>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Search input — pinned above list when focused */}
+          {locationSearchFocused && (
+            <View style={{ paddingHorizontal: wp(20), paddingVertical: hp(10) }}>
+              <TextInput
+                style={{ height: hp(40), borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}
+                placeholder="Search country..."
+                placeholderTextColor="#8E8E93"
+                value={locationSearchQuery}
+                onChangeText={setLocationSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+                onBlur={() => { setLocationSearchFocused(false); setLocationSearchQuery(''); }}
+              />
+            </View>
+          )}
+
+          <ScrollView ref={locationFilterScrollRef} style={{ flex: 1, paddingHorizontal: wp(20) }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {locationSearchFocused ? (
+              /* Search results */
+              ALL_COUNTRIES
+                .filter(c => locationSearchQuery.trim().length === 0 || c.name.toLowerCase().includes(locationSearchQuery.toLowerCase().trim()))
+                .map((loc) => {
+                  const isSelected = selectedLocations.includes(loc.code);
+                  return (
+                    <TouchableOpacity
+                      key={loc.code}
+                      style={styles.filterModalOption}
+                      onPress={() => {
                         setSelectedLocations(prev =>
                           prev.includes(loc.code)
                             ? prev.filter(c => c !== loc.code)
                             : [...prev, loc.code]
                         );
-                      }
-                    }}
-                  >
-                    {loc.icon ? (
-                      <Text style={styles.filterModalOptionIcon}>{loc.icon}</Text>
-                    ) : (
+                      }}
+                    >
                       <CountryFlag countryCode={loc.code} size={20} />
-                    )}
-                    <Text style={[styles.filterModalOptionText, isSelected && styles.filterModalOptionTextActive]}>{loc.name}</Text>
-                    {isSelected && (
-                      <View style={styles.filterModalCheckmark}>
-                        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                          <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                        </Svg>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-
-              {/* Separator */}
-              <View style={{ height: 1, backgroundColor: '#E5E5E5', marginVertical: hp(8), marginHorizontal: wp(16) }} />
-
-              {/* Custom country search */}
-              <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(8) }}>
-                <TextInput
-                  style={{ height: hp(40), borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}
-                  placeholder="Custom"
-                  placeholderTextColor="#8E8E93"
-                  value={locationSearchQuery}
-                  onChangeText={setLocationSearchQuery}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              {/* Search results or A-Z country list */}
-              {locationSearchQuery.trim().length > 0 && (
-                ALL_COUNTRIES
-                  .filter(c => c.name.toLowerCase().includes(locationSearchQuery.toLowerCase().trim()))
-                  .map((loc) => {
-                    const isSelected = selectedLocations.includes(loc.code);
-                    return (
-                      <TouchableOpacity
-                        key={loc.code}
-                        style={styles.filterModalOption}
-                        onPress={() => {
+                      <Text style={[styles.filterModalOptionText, isSelected && styles.filterModalOptionTextActive]}>{loc.name}</Text>
+                      {isSelected && (
+                        <View style={styles.filterModalCheckmark}>
+                          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                            <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                          </Svg>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })
+            ) : (
+              /* Default locations list + search input at bottom */
+              <>
+                {[
+                  { code: '', name: 'Worldwide', icon: '🌐' },
+                  { code: 'EU', name: 'EU', icon: '🇪🇺' },
+                  { code: 'HK', name: 'Hong Kong' },
+                  { code: 'AE', name: 'United Arab Emirates' },
+                  { code: 'GB', name: 'United Kingdom' },
+                  { code: 'US', name: 'United States' },
+                  { code: 'CH', name: 'Switzerland' },
+                  { code: 'CN', name: 'China' },
+                ].map((loc) => {
+                  const isWorldwide = loc.code === '';
+                  const isSelected = isWorldwide ? selectedLocations.length === 0 : selectedLocations.includes(loc.code);
+                  return (
+                    <TouchableOpacity
+                      key={loc.code || 'worldwide'}
+                      style={styles.filterModalOption}
+                      onPress={() => {
+                        if (isWorldwide) {
+                          setSelectedLocations([]);
+                        } else {
                           setSelectedLocations(prev =>
                             prev.includes(loc.code)
                               ? prev.filter(c => c !== loc.code)
                               : [...prev, loc.code]
                           );
-                        }}
-                      >
+                        }
+                      }}
+                    >
+                      {loc.icon ? (
+                        <Text style={styles.filterModalOptionIcon}>{loc.icon}</Text>
+                      ) : (
                         <CountryFlag countryCode={loc.code} size={20} />
-                        <Text style={[styles.filterModalOptionText, isSelected && styles.filterModalOptionTextActive]}>{loc.name}</Text>
-                        {isSelected && (
-                          <View style={styles.filterModalCheckmark}>
-                            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                              <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                            </Svg>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })
-              )}
-            </ScrollView>
+                      )}
+                      <Text style={[styles.filterModalOptionText, isSelected && styles.filterModalOptionTextActive]}>{loc.name}</Text>
+                      {isSelected && (
+                        <View style={styles.filterModalCheckmark}>
+                          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                            <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                          </Svg>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
 
-            <TouchableOpacity
-              style={styles.yearFilterApplyButton}
-              onPress={() => { setShowLocationFilter(false); setLocationSearchQuery(''); }}
-            >
-              <Text style={styles.yearFilterApplyText}>Apply</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+                {/* Separator + Search input below China */}
+                <View style={{ height: 1, backgroundColor: '#E5E5E5', marginVertical: hp(8) }} />
+                <TouchableOpacity
+                  style={{ height: hp(40), borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), justifyContent: 'center' }}
+                  onPress={() => setLocationSearchFocused(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#8E8E93' }}>Search country...</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
+
+          {/* Apply button */}
+          {!locationSearchFocused && (
+            <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
+              <TouchableOpacity
+                style={{ backgroundColor: '#212121', borderRadius: sp(99), paddingVertical: hp(14), alignItems: 'center' }}
+                onPress={() => { setShowLocationFilter(false); setLocationSearchQuery(''); setLocationSearchFocused(false); }}
+              >
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#FFFFFF' }}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </SafeAreaView>
       </Modal>
 
       {/* Watch Alert Modal */}
@@ -1839,20 +1887,20 @@ export default function WatchDetailsScreen() {
         visible={showAlertModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => { setShowAlertModal(false); setAlertLocationSearch(''); }}
+        onRequestClose={() => { setShowAlertModal(false); setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top']}>
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: wp(16), paddingVertical: hp(12), borderBottomWidth: 1, borderBottomColor: '#F0F0F0', position: 'relative' }}>
             <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(18), color: '#212121' }}>Price Alert</Text>
-            <TouchableOpacity onPress={() => { setShowAlertModal(false); setAlertLocationSearch(''); }} style={{ position: 'absolute', right: wp(16), padding: hp(8) }}>
+            <TouchableOpacity onPress={() => { setShowAlertModal(false); setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }} style={{ position: 'absolute', right: wp(16), padding: hp(8) }}>
               <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
                 <Path d="M18 6L6 18M6 6l12 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={alertScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
             {/* WTS / WTB Toggle — only one can be active */}
             <View style={{ paddingHorizontal: wp(16), paddingTop: hp(20), paddingBottom: hp(12) }}>
               <TouchableOpacity
@@ -1875,25 +1923,25 @@ export default function WatchDetailsScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Year Section — Month + Year columns with direction toggle */}
+            {/* Year Section — 3 columns: Direction | Month | Year */}
             <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: hp(12) }}>
-                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121' }}>Year</Text>
-                <View style={{ flexDirection: 'row', gap: wp(4) }}>
-                  {(['exactly', 'older', 'newer'] as const).map(dir => (
-                    <TouchableOpacity
-                      key={dir}
-                      onPress={() => setAlertConfig(c => ({ ...c, year_direction: dir }))}
-                      style={{ paddingHorizontal: wp(12), paddingVertical: hp(6), borderRadius: sp(99), backgroundColor: alertConfig.year_direction === dir ? '#212121' : '#F5F5F5' }}
-                    >
-                      <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: alertConfig.year_direction === dir ? '#FFF' : '#666' }}>
-                        {dir === 'exactly' ? '= Exactly' : dir === 'older' ? '↓ Older' : '↑ Newer'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(12) }}>Year</Text>
               <View style={{ flexDirection: 'row', gap: wp(12), height: hp(200) }}>
+                {/* Direction column */}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Direction</Text>
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {([{ key: 'exactly', label: '= Exactly' }, { key: 'older', label: '↓ Older' }, { key: 'newer', label: '↑ Newer' }] as const).map(dir => (
+                      <TouchableOpacity
+                        key={dir.key}
+                        onPress={() => setAlertConfig(c => ({ ...c, year_direction: dir.key }))}
+                        style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: alertConfig.year_direction === dir.key ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
+                      >
+                        <Text style={{ fontFamily: alertConfig.year_direction === dir.key ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{dir.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
                 {/* Month column */}
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Month</Text>
@@ -1959,67 +2007,52 @@ export default function WatchDetailsScreen() {
 
             {/* Location */}
             <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(12) }}>Location</Text>
+              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(8) }}>Location</Text>
 
-              {/* Main locations */}
-              {[
-                { code: '', name: 'Worldwide', icon: '🌐' },
-                { code: 'EU', name: 'EU', icon: '🇪🇺' },
-                { code: 'HK', name: 'Hong Kong', icon: undefined },
-                { code: 'AE', name: 'United Arab Emirates', icon: undefined },
-                { code: 'GB', name: 'United Kingdom', icon: undefined },
-                { code: 'US', name: 'United States', icon: undefined },
-                { code: 'CH', name: 'Switzerland', icon: undefined },
-                { code: 'CN', name: 'China', icon: undefined },
-              ].map(loc => {
-                const isWorldwide = loc.code === '';
-                const isSelected = isWorldwide ? alertConfig.locations.length === 0 : alertConfig.locations.includes(loc.code);
-                return (
-                  <TouchableOpacity
-                    key={loc.code || 'ww'}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: wp(10), paddingVertical: hp(10), borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' }}
-                    onPress={() => {
-                      if (isWorldwide) {
-                        setAlertConfig(c => ({ ...c, locations: [] }));
-                      } else {
-                        setAlertConfig(c => ({
-                          ...c,
-                          locations: c.locations.includes(loc.code)
-                            ? c.locations.filter(l => l !== loc.code)
-                            : [...c.locations, loc.code],
-                        }));
-                      }
-                    }}
-                  >
-                    {loc.icon ? (
-                      <Text style={{ fontSize: fp(18) }}>{loc.icon}</Text>
-                    ) : (
-                      <CountryFlag countryCode={loc.code} size={18} />
-                    )}
-                    <Text style={{ flex: 1, fontFamily: isSelected ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{loc.name}</Text>
-                    {isSelected && (
-                      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                        <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                      </Svg>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+              {/* Selected location chips */}
+              {alertConfig.locations.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: wp(6), marginBottom: hp(8) }}>
+                  {alertConfig.locations.map(code => {
+                    const country = ALL_COUNTRIES.find(c => c.code === code);
+                    const label = code === 'EU' ? 'EU' : (country?.name || code);
+                    return (
+                      <TouchableOpacity
+                        key={code}
+                        onPress={() => setAlertConfig(c => ({ ...c, locations: c.locations.filter(l => l !== code) }))}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4), backgroundColor: '#F0F0F0', borderRadius: sp(99), paddingHorizontal: wp(10), paddingVertical: hp(5) }}
+                      >
+                        {code === 'EU' ? <Text style={{ fontSize: fp(13) }}>🇪🇺</Text> : <CountryFlag countryCode={code} size={13} />}
+                        <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#212121' }}>{label}</Text>
+                        <Svg width={10} height={10} viewBox="0 0 16 16" fill="none">
+                          <Path d="M4 4L12 12M12 4L4 12" stroke="#666" strokeWidth={1.5} strokeLinecap="round" />
+                        </Svg>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
 
-              {/* Separator + Search */}
-              <View style={{ height: 1, backgroundColor: '#E5E5E5', marginVertical: hp(8) }} />
-              <TextInput
-                style={{ height: hp(40), borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121', marginBottom: hp(4) }}
-                placeholder="Custom"
-                placeholderTextColor="#8E8E93"
-                value={alertLocationSearch}
-                onChangeText={setAlertLocationSearch}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {alertLocationSearch.trim().length > 0 && (
+              {/* Search input at top when focused */}
+              {alertLocationSearchFocused && (
+                <View style={{ marginBottom: hp(8) }}>
+                  <TextInput
+                    style={{ height: hp(40), borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}
+                    placeholder="Search country..."
+                    placeholderTextColor="#8E8E93"
+                    value={alertLocationSearch}
+                    onChangeText={setAlertLocationSearch}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoFocus
+                    onBlur={() => { setAlertLocationSearchFocused(false); setAlertLocationSearch(''); }}
+                  />
+                </View>
+              )}
+
+              {alertLocationSearchFocused ? (
+                /* Search results */
                 ALL_COUNTRIES
-                  .filter(c => c.name.toLowerCase().includes(alertLocationSearch.toLowerCase().trim()))
+                  .filter(c => alertLocationSearch.trim().length === 0 || c.name.toLowerCase().includes(alertLocationSearch.toLowerCase().trim()))
                   .map(loc => {
                     const isSelected = alertConfig.locations.includes(loc.code);
                     return (
@@ -2045,52 +2078,121 @@ export default function WatchDetailsScreen() {
                       </TouchableOpacity>
                     );
                   })
+              ) : (
+                /* Main locations + search input below China */
+                <>
+                  {[
+                    { code: '', name: 'Worldwide', icon: '🌐' },
+                    { code: 'EU', name: 'EU', icon: '🇪🇺' },
+                    { code: 'HK', name: 'Hong Kong', icon: undefined },
+                    { code: 'AE', name: 'United Arab Emirates', icon: undefined },
+                    { code: 'GB', name: 'United Kingdom', icon: undefined },
+                    { code: 'US', name: 'United States', icon: undefined },
+                    { code: 'CH', name: 'Switzerland', icon: undefined },
+                    { code: 'CN', name: 'China', icon: undefined },
+                  ].map(loc => {
+                    const isWorldwide = loc.code === '';
+                    const isSelected = isWorldwide ? alertConfig.locations.length === 0 : alertConfig.locations.includes(loc.code);
+                    return (
+                      <TouchableOpacity
+                        key={loc.code || 'ww'}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: wp(10), paddingVertical: hp(10), borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' }}
+                        onPress={() => {
+                          if (isWorldwide) {
+                            setAlertConfig(c => ({ ...c, locations: [] }));
+                          } else {
+                            setAlertConfig(c => ({
+                              ...c,
+                              locations: c.locations.includes(loc.code)
+                                ? c.locations.filter(l => l !== loc.code)
+                                : [...c.locations, loc.code],
+                            }));
+                          }
+                        }}
+                      >
+                        {loc.icon ? (
+                          <Text style={{ fontSize: fp(18) }}>{loc.icon}</Text>
+                        ) : (
+                          <CountryFlag countryCode={loc.code} size={18} />
+                        )}
+                        <Text style={{ flex: 1, fontFamily: isSelected ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{loc.name}</Text>
+                        {isSelected && (
+                          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                            <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                          </Svg>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {/* Separator + Search placeholder below China */}
+                  <View style={{ height: 1, backgroundColor: '#E5E5E5', marginVertical: hp(8) }} />
+                  <TouchableOpacity
+                    style={{ height: hp(40), borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), justifyContent: 'center' }}
+                    onPress={() => setAlertLocationSearchFocused(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#8E8E93' }}>Search country...</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
 
-            {/* Price Threshold */}
+            {/* Price Threshold — 3 column layout */}
             <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
               <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(12) }}>Price Threshold</Text>
 
-              {/* Amount input */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), height: hp(44), marginBottom: hp(12) }}>
-                <TextInput
-                  style={{ flex: 1, fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(16), color: '#212121' }}
-                  value={alertConfig.price_threshold}
-                  onChangeText={(text) => setAlertConfig(c => ({ ...c, price_threshold: text.replace(/[^0-9]/g, '') }))}
-                  keyboardType="numeric"
-                  placeholder="Amount"
-                  placeholderTextColor="#8E8E93"
-                />
-              </View>
+              <View style={{ flexDirection: 'row', gap: wp(12), height: hp(200) }}>
+                {/* Direction column: Below / Above */}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Direction</Text>
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {[{ key: 'below', label: '↓ Below' }, { key: 'above', label: '↑ Above' }].map(dir => (
+                      <TouchableOpacity
+                        key={dir.key}
+                        onPress={() => setAlertConfig(c => ({ ...c, price_direction: dir.key }))}
+                        style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: alertConfig.price_direction === dir.key ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
+                      >
+                        <Text style={{ fontFamily: alertConfig.price_direction === dir.key ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{dir.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
 
-              {/* Direction: Below / Above */}
-              <View style={{ flexDirection: 'row', gap: wp(8), marginBottom: hp(12) }}>
-                <TouchableOpacity
-                  onPress={() => setAlertConfig(c => ({ ...c, price_direction: 'below' }))}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: wp(6), paddingHorizontal: wp(14), paddingVertical: hp(10), borderRadius: sp(99), backgroundColor: alertConfig.price_direction === 'below' ? '#212121' : '#F5F5F5' }}
-                >
-                  <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: alertConfig.price_direction === 'below' ? '#FFF' : '#666' }}>↓ Below</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setAlertConfig(c => ({ ...c, price_direction: 'above' }))}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: wp(6), paddingHorizontal: wp(14), paddingVertical: hp(10), borderRadius: sp(99), backgroundColor: alertConfig.price_direction === 'above' ? '#212121' : '#F5F5F5' }}
-                >
-                  <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: alertConfig.price_direction === 'above' ? '#FFF' : '#666' }}>↑ Above</Text>
-                </TouchableOpacity>
-              </View>
+                {/* Amount column */}
+                <View style={{ flex: 1, justifyContent: 'flex-start' }}>
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Amount</Text>
+                  <View style={{ borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(8), paddingHorizontal: wp(8), height: hp(36), justifyContent: 'center' }}>
+                    <TextInput
+                      style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121', textAlign: 'center', padding: 0 }}
+                      value={alertConfig.price_threshold}
+                      onChangeText={(text) => setAlertConfig(c => ({ ...c, price_threshold: text.replace(/[^0-9]/g, '') }))}
+                      keyboardType="number-pad"
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                      placeholder="0"
+                      placeholderTextColor="#8E8E93"
+                      inputAccessoryViewID="alertPriceDone"
+                      onFocus={() => { setTimeout(() => alertScrollRef.current?.scrollToEnd({ animated: true }), 300); }}
+                    />
+                  </View>
+                </View>
 
-              {/* Currency selector */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: wp(8) }}>
-                {['USD', 'EUR', 'HKD', 'AED', 'GBP', 'CHF', 'CNY'].map(cur => (
-                  <TouchableOpacity
-                    key={cur}
-                    onPress={() => setAlertConfig(c => ({ ...c, currency: cur }))}
-                    style={{ paddingHorizontal: wp(16), paddingVertical: hp(10), borderRadius: sp(99), backgroundColor: alertConfig.currency === cur ? '#212121' : '#F5F5F5' }}
-                  >
-                    <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: alertConfig.currency === cur ? '#FFF' : '#666' }}>{cur}</Text>
-                  </TouchableOpacity>
-                ))}
+                {/* Currency column */}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Currency</Text>
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {['USD', 'EUR', 'HKD', 'AED', 'GBP', 'CHF', 'CNY'].map(cur => (
+                      <TouchableOpacity
+                        key={cur}
+                        onPress={() => setAlertConfig(c => ({ ...c, currency: cur }))}
+                        style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: alertConfig.currency === cur ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
+                      >
+                        <Text style={{ fontFamily: alertConfig.currency === cur ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{cur}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
               </View>
             </View>
 
@@ -2118,6 +2220,15 @@ export default function WatchDetailsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+          {Platform.OS === 'ios' && (
+            <InputAccessoryView nativeID="alertPriceDone">
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', backgroundColor: '#F0F0F0', paddingHorizontal: wp(16), paddingVertical: hp(8), borderTopWidth: 0.5, borderTopColor: '#C8C8C8' }}>
+                <TouchableOpacity onPress={Keyboard.dismiss}>
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#007AFF' }}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </InputAccessoryView>
+          )}
         </SafeAreaView>
       </Modal>
 
