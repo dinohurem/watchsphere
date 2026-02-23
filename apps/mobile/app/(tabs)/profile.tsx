@@ -248,8 +248,10 @@ export default function ProfileScreen() {
     useCallback(() => {
       loadProfile();
       loadWatchlist();
-      loadOrders();
-    }, [])
+      if (v2Enabled) {
+        loadOrders();
+      }
+    }, [v2Enabled])
   );
 
   const loadProfile = async () => {

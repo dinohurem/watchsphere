@@ -61,18 +61,18 @@ class OrderResponse(BaseModel):
     order_type: OrderType
     brand: str
     model: str
-    reference: str
+    reference: Optional[str] = None
     watch_id: Optional[str] = None
     price: float
     currency: str
-    condition: OrderCondition
-    country_code: str
+    condition: Optional[OrderCondition] = None
+    country_code: Optional[str] = None
     country_name: Optional[str] = None
     user_id: str
     user_name: Optional[str] = None
     status: OrderStatus
-    has_box: bool
-    has_papers: bool
+    has_box: bool = False
+    has_papers: bool = False
     notes: Optional[str] = None
     remarks: Optional[str] = None
     cover_image: Optional[str] = None
@@ -1101,20 +1101,20 @@ async def get_my_orders(
         result.append(OrderResponse(
             id=str(order.id),
             order_type=order.order_type,
-            brand=order.brand,
-            model=order.model,
+            brand=order.brand or "",
+            model=order.model or "",
             reference=order.reference,
             watch_id=order.watch_id,
             price=order.price,
-            currency=order.currency,
+            currency=order.currency or "EUR",
             condition=order.condition,
-            country_code=order.country_code,
-            country_name=order.country_name,
+            country_code=getattr(order, 'country_code', None),
+            country_name=getattr(order, 'country_name', None),
             user_id=order.user_id,
             user_name=order.user_name,
             status=order.status,
-            has_box=order.has_box,
-            has_papers=order.has_papers,
+            has_box=getattr(order, 'has_box', False),
+            has_papers=getattr(order, 'has_papers', False),
             notes=order.notes,
             remarks=getattr(order, 'remarks', None),
             cover_image=order.images[0] if order.images else None,
@@ -1122,7 +1122,7 @@ async def get_my_orders(
             created_at=order.created_at,
             updated_at=order.updated_at,
             best_bid=best_bid,
-            price_change=price_changes.get(order.reference, 0.0),
+            price_change=price_changes.get(order.reference, 0.0) if order.reference else 0.0,
         ))
 
     return result
