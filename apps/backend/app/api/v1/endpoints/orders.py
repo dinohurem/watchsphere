@@ -362,21 +362,33 @@ async def get_order_book(
     if not watch:
         watch = await Watch.find_one(Watch.reference == reference)
 
-    # Use the watch's reference for order lookups (orders are keyed by reference)
-    lookup_ref = watch.reference if watch else reference
+    # If watch has a ws_code, filter orders by ws_code for exact variant matching
+    # Otherwise fall back to reference-based matching
+    if watch and watch.ws_code:
+        buy_orders = await Order.find(
+            Order.ws_code == watch.ws_code,
+            Order.order_type == OrderType.BUY,
+            Order.status == OrderStatus.ACTIVE,
+        ).sort([("price", -1)]).limit(limit).to_list()
 
-    # Get all active orders for this reference
-    buy_orders = await Order.find(
-        Order.reference == lookup_ref,
-        Order.order_type == OrderType.BUY,
-        Order.status == OrderStatus.ACTIVE,
-    ).sort([("price", -1)]).limit(limit).to_list()  # Highest bids first
+        sell_orders = await Order.find(
+            Order.ws_code == watch.ws_code,
+            Order.order_type == OrderType.SELL,
+            Order.status == OrderStatus.ACTIVE,
+        ).sort([("price", 1)]).limit(limit).to_list()
+    else:
+        lookup_ref = watch.reference if watch else reference
+        buy_orders = await Order.find(
+            Order.reference == lookup_ref,
+            Order.order_type == OrderType.BUY,
+            Order.status == OrderStatus.ACTIVE,
+        ).sort([("price", -1)]).limit(limit).to_list()
 
-    sell_orders = await Order.find(
-        Order.reference == lookup_ref,
-        Order.order_type == OrderType.SELL,
-        Order.status == OrderStatus.ACTIVE,
-    ).sort([("price", 1)]).limit(limit).to_list()  # Lowest asks first
+        sell_orders = await Order.find(
+            Order.reference == lookup_ref,
+            Order.order_type == OrderType.SELL,
+            Order.status == OrderStatus.ACTIVE,
+        ).sort([("price", 1)]).limit(limit).to_list()
     brand = watch.brand if watch else ""
     model = watch.model if watch else ""
 
@@ -1758,10 +1770,15 @@ async def admin_get_orders_by_reference(
     current_admin: User = Depends(get_current_admin_user),
     order_type: Optional[OrderType] = None,
     status_filter: Optional[OrderStatus] = None,
+    ws_code: Optional[str] = Query(default=None),
 ) -> Any:
-    """Get all orders for a specific watch reference (Admin only)"""
+    """Get all orders for a specific watch reference or ws_code (Admin only)"""
 
-    query_conditions = [Order.reference == reference]
+    # If ws_code is provided, filter by ws_code for exact watch variant matching
+    if ws_code:
+        query_conditions = [Order.ws_code == ws_code]
+    else:
+        query_conditions = [Order.reference == reference]
 
     if order_type:
         query_conditions.append(Order.order_type == order_type)

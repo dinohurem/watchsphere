@@ -239,15 +239,19 @@ def parse_csv_price(price_str: str) -> tuple[Optional[float], str]:
     if len(parts) >= 2 and parts[-1].isalpha():
         currency = parts[-1].upper()
         numeric_part = " ".join(parts[:-1])
-    # Handle European number format: 62.000 = 62000, 62.500,50 etc.
-    # If there's a dot followed by exactly 3 digits and no comma → thousands separator
     numeric_part = numeric_part.strip()
     if re.match(r'^[\d.]+$', numeric_part):
         # All dots are thousands separators (e.g., 62.000 or 1.234.567)
         numeric_part = numeric_part.replace('.', '')
     elif ',' in numeric_part:
-        # Comma is decimal separator
-        numeric_part = numeric_part.replace('.', '').replace(',', '.')
+        # Check if comma is thousands separator (e.g., "481,000") or decimal (e.g., "62.500,50")
+        # Comma followed by exactly 3 digits at end = thousands separator
+        if re.match(r'^[\d,]+$', numeric_part) and re.search(r',\d{3}$', numeric_part):
+            # All commas are thousands separators (e.g., 481,000 or 1,234,567)
+            numeric_part = numeric_part.replace(',', '')
+        else:
+            # Comma is decimal separator (European format)
+            numeric_part = numeric_part.replace('.', '').replace(',', '.')
     try:
         return float(numeric_part), currency
     except ValueError:
@@ -366,19 +370,6 @@ async def process_csv_import(
         if w.ws_code:
             watch_by_ws_code[w.ws_code.strip().upper()] = w
 
-    # Build a set of existing orders for deduplication
-    # Key: (reference_upper, phone, price, order_type)
-    existing_orders = await Order.find(Order.status == OrderStatus.ACTIVE).to_list()
-    existing_order_keys: set[tuple] = set()
-    for o in existing_orders:
-        key = (
-            o.reference.upper() if o.reference else "",
-            o.whatsapp_phone or o.user_name or "",
-            o.price,
-            o.order_type.value,
-        )
-        existing_order_keys.add(key)
-
     import_id = str(import_record.id)
     admin_id = str(admin.id)
     listing_docs = []
@@ -387,7 +378,6 @@ async def process_csv_import(
     total_rows = 0
     matched_count = 0
     unmatched_count = 0
-    skipped_dupes = 0
     group_name = None
 
     for row in reader:
@@ -519,19 +509,6 @@ async def process_csv_import(
             order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
             order_reference = watch_reference or ws_code
 
-            # Deduplication check
-            dedup_key = (
-                (order_reference or "").upper(),
-                phone,
-                price,
-                order_type.value,
-            )
-            if dedup_key in existing_order_keys:
-                skipped_dupes += 1
-                continue
-
-            # Mark as existing so future rows in this import also dedupe
-            existing_order_keys.add(dedup_key)
             matched_count += 1
 
             order_docs.append(Order(
@@ -597,7 +574,7 @@ async def process_csv_import(
     import_record.extracted_watches = len(listing_docs)
     import_record.matched_orders = matched_count
     import_record.unmatched_rows = unmatched_count
-    import_record.skipped_duplicates = skipped_dupes
+    import_record.skipped_duplicates = 0
     import_record.unmatched_csv = unmatched_csv_str
     import_record.completed_at = datetime.utcnow()
     await import_record.save()
@@ -607,7 +584,7 @@ async def process_csv_import(
         "extracted_listings": len(listing_docs),
         "matched_orders": matched_count,
         "unmatched_rows": unmatched_count,
-        "skipped_duplicates": skipped_dupes,
+        "skipped_duplicates": 0,
     }
 
 

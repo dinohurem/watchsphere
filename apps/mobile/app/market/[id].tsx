@@ -492,9 +492,11 @@ export default function WatchDetailsScreen() {
   const [watchlistLoading, setWatchlistLoading] = useState(false);
 
   // Watch alert state
-  const [watchAlert, setWatchAlert] = useState<any>(null);
+  const [watchAlerts, setWatchAlerts] = useState<any[]>([]);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertLoading, setAlertLoading] = useState(false);
+  const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
+  const [alertListMode, setAlertListMode] = useState(true);
   const [alertConfig, setAlertConfig] = useState({
     notify_wts: false,
     notify_wtb: false,
@@ -746,28 +748,25 @@ export default function WatchDetailsScreen() {
   }, [id, reference, isAuthenticated]);
 
   // Fetch watch alert config
-  useEffect(() => {
-    if (watch?.ws_code) {
-      api.get(`/watch-alerts/${encodeURIComponent(watch.ws_code)}`)
-        .then(res => {
-          if (res.data) {
-            setWatchAlert(res.data);
-            setAlertConfig({
-              notify_wts: res.data.notify_wts,
-              notify_wtb: res.data.notify_wtb,
-              target_month: res.data.target_month ? String(res.data.target_month) : '',
-              target_year: res.data.target_year ? String(res.data.target_year) : '',
-              year_direction: res.data.year_direction || 'exactly',
-              condition: res.data.condition || 'any',
-              locations: res.data.locations || [],
-              price_threshold: res.data.price_threshold ? String(res.data.price_threshold) : '',
-              price_direction: res.data.price_direction || 'below',
-              currency: res.data.currency || 'USD',
-            });
-          }
-        })
-        .catch(() => {});
+  const fetchAlerts = async () => {
+    if (!watch?.ws_code) return;
+    try {
+      const res = await api.get(`/watch-alerts/${encodeURIComponent(watch.ws_code)}`);
+      // Handle both old (single object/null) and new (array) backend response
+      if (Array.isArray(res.data)) {
+        setWatchAlerts(res.data);
+      } else if (res.data && res.data.id) {
+        setWatchAlerts([res.data]);
+      } else {
+        setWatchAlerts([]);
+      }
+    } catch {
+      setWatchAlerts([]);
     }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
   }, [watch?.ws_code]);
 
   const checkWatchlistStatus = async () => {
@@ -832,11 +831,13 @@ export default function WatchDetailsScreen() {
     }
   };
 
+  const defaultAlertConfig = { notify_wts: false, notify_wtb: false, target_month: '', target_year: '', year_direction: 'exactly', condition: 'any', locations: [] as string[], price_threshold: '', price_direction: 'below', currency: 'USD' };
+
   const handleSaveAlert = async () => {
     if (!watch?.ws_code) return;
     setAlertLoading(true);
     try {
-      const res = await api.post('/watch-alerts', {
+      const payload = {
         ws_code: watch.ws_code,
         notify_wts: alertConfig.notify_wts,
         notify_wtb: alertConfig.notify_wtb,
@@ -848,9 +849,20 @@ export default function WatchDetailsScreen() {
         price_threshold: alertConfig.price_threshold ? parseFloat(alertConfig.price_threshold) : null,
         price_direction: alertConfig.price_direction,
         currency: alertConfig.currency,
-      });
-      setWatchAlert(res.data);
-      setShowAlertModal(false);
+      };
+      if (editingAlertId) {
+        // Try new PUT endpoint; fall back to POST (old backend does upsert)
+        try {
+          await api.put(`/watch-alerts/${editingAlertId}`, payload);
+        } catch {
+          await api.post('/watch-alerts', payload);
+        }
+      } else {
+        await api.post('/watch-alerts', payload);
+      }
+      await fetchAlerts();
+      setAlertListMode(true);
+      setEditingAlertId(null);
     } catch (error) {
       console.error('Failed to save alert:', error);
     } finally {
@@ -859,18 +871,47 @@ export default function WatchDetailsScreen() {
   };
 
   const handleRemoveAlert = async () => {
-    if (!watch?.ws_code) return;
+    if (!editingAlertId || !watch?.ws_code) return;
     setAlertLoading(true);
     try {
-      await api.delete(`/watch-alerts/${encodeURIComponent(watch.ws_code)}`);
-      setWatchAlert(null);
-      setAlertConfig({ notify_wts: false, notify_wtb: false, target_month: '', target_year: '', year_direction: 'exactly', condition: 'any', locations: [], price_threshold: '', price_direction: 'below', currency: 'USD' });
-      setShowAlertModal(false);
+      // Try new endpoint (delete by ID); fall back to old (delete by ws_code)
+      try {
+        await api.delete(`/watch-alerts/${editingAlertId}`);
+      } catch {
+        await api.delete(`/watch-alerts/${encodeURIComponent(watch.ws_code)}`);
+      }
+      await fetchAlerts();
+      setEditingAlertId(null);
+      setAlertConfig(defaultAlertConfig);
+      setAlertListMode(true);
     } catch (error) {
       console.error('Failed to remove alert:', error);
     } finally {
       setAlertLoading(false);
     }
+  };
+
+  const openAlertForEdit = (alert: any) => {
+    setEditingAlertId(alert.id);
+    setAlertConfig({
+      notify_wts: alert.notify_wts,
+      notify_wtb: alert.notify_wtb,
+      target_month: alert.target_month ? String(alert.target_month) : '',
+      target_year: alert.target_year ? String(alert.target_year) : '',
+      year_direction: alert.year_direction || 'exactly',
+      condition: alert.condition || 'any',
+      locations: alert.locations || [],
+      price_threshold: alert.price_threshold ? String(alert.price_threshold) : '',
+      price_direction: alert.price_direction || 'below',
+      currency: alert.currency || 'USD',
+    });
+    setAlertListMode(false);
+  };
+
+  const openNewAlert = () => {
+    setEditingAlertId(null);
+    setAlertConfig(defaultAlertConfig);
+    setAlertListMode(false);
   };
 
   const loadWatchDetails = async () => {
@@ -1234,7 +1275,7 @@ export default function WatchDetailsScreen() {
             onPress={() => router.push({
               pathname: '/market/order-book',
               params: {
-                reference: watch.reference,
+                reference: watch.ws_code || watch.reference,
                 brand: watch.brand,
                 model: watch.model,
               },
@@ -1325,10 +1366,10 @@ export default function WatchDetailsScreen() {
               </ScrollView>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(12), marginLeft: wp(10) }}>
                 <TouchableOpacity
-                  onPress={() => setShowAlertModal(true)}
+                  onPress={() => { setAlertListMode(watchAlerts.length > 0); if (watchAlerts.length === 0) openNewAlert(); setShowAlertModal(true); }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Svg width={22} height={22} viewBox="0 0 24 24" fill={watchAlert ? '#212121' : 'none'}>
+                  <Svg width={22} height={22} viewBox="0 0 24 24" fill={watchAlerts.length > 0 ? '#212121' : 'none'}>
                     <Path
                       d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"
                       stroke="#212121"
@@ -1584,7 +1625,7 @@ export default function WatchDetailsScreen() {
               onPress={() => router.push({
                 pathname: '/market/order-book',
                 params: {
-                  reference: watch.reference,
+                  reference: watch.ws_code || watch.reference,
                   brand: watch.brand,
                   model: watch.model,
                 },
@@ -1892,7 +1933,16 @@ export default function WatchDetailsScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top']}>
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: wp(16), paddingVertical: hp(12), borderBottomWidth: 1, borderBottomColor: '#F0F0F0', position: 'relative' }}>
-            <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(18), color: '#212121' }}>Price Alert</Text>
+            {!alertListMode && (
+              <TouchableOpacity onPress={() => { if (watchAlerts.length > 0) { setAlertListMode(true); setEditingAlertId(null); } else { setShowAlertModal(false); } setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }} style={{ position: 'absolute', left: wp(16), padding: hp(8) }}>
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                  <Path d="M19 12H5M12 19l-7-7 7-7" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </TouchableOpacity>
+            )}
+            <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(18), color: '#212121' }}>
+              {alertListMode ? 'Price Alerts' : editingAlertId ? 'Edit Alert' : 'New Alert'}
+            </Text>
             <TouchableOpacity onPress={() => { setShowAlertModal(false); setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }} style={{ position: 'absolute', right: wp(16), padding: hp(8) }}>
               <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
                 <Path d="M18 6L6 18M6 6l12 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" />
@@ -1900,6 +1950,58 @@ export default function WatchDetailsScreen() {
             </TouchableOpacity>
           </View>
 
+          {alertListMode ? (
+            /* Alert List Mode */
+            <View style={{ flex: 1 }}>
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                <View style={{ paddingHorizontal: wp(16), paddingTop: hp(16), gap: hp(10) }}>
+                  {watchAlerts.map((alert) => {
+                    const typeLabel = alert.notify_wts ? 'WTS' : alert.notify_wtb ? 'WTB' : '';
+                    const priceLabel = alert.price_threshold
+                      ? `${alert.price_direction === 'below' ? 'Below' : 'Above'} ${Number(alert.price_threshold).toLocaleString()} ${alert.currency}`
+                      : 'Any price';
+                    const condLabel = alert.condition && alert.condition !== 'any' ? (alert.condition === 'unworn' ? 'Unworn' : 'Used') : '';
+                    const locCount = alert.locations?.length || 0;
+                    return (
+                      <TouchableOpacity
+                        key={alert.id}
+                        onPress={() => openAlertForEdit(alert)}
+                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F8F8', borderRadius: sp(12), paddingHorizontal: wp(14), paddingVertical: hp(14) }}
+                      >
+                        <View style={{ flex: 1, gap: hp(4) }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
+                            {typeLabel ? (
+                              <View style={{ backgroundColor: typeLabel === 'WTS' ? '#4AA078' : '#3B82F6', borderRadius: sp(6), paddingHorizontal: wp(8), paddingVertical: hp(2) }}>
+                                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(12), color: '#FFF' }}>{typeLabel}</Text>
+                              </View>
+                            ) : null}
+                            <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121', flex: 1 }}>{priceLabel}</Text>
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
+                            {condLabel ? <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#8E8E93' }}>{condLabel}</Text> : null}
+                            {locCount > 0 ? <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#8E8E93' }}>{locCount} location{locCount > 1 ? 's' : ''}</Text> : null}
+                          </View>
+                        </View>
+                        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                          <Path d="M9 18l6-6-6-6" stroke="#8E8E93" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+              <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
+                <TouchableOpacity
+                  onPress={openNewAlert}
+                  style={{ paddingVertical: hp(14), borderRadius: sp(99), backgroundColor: '#212121', alignItems: 'center' }}
+                >
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#FFFFFF' }}>Add New Alert</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+          /* Alert Form Mode */
+          <>
           <ScrollView ref={alertScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
             {/* WTS / WTB Toggle — only one can be active */}
             <View style={{ paddingHorizontal: wp(16), paddingTop: hp(20), paddingBottom: hp(12) }}>
@@ -2201,13 +2303,13 @@ export default function WatchDetailsScreen() {
 
           {/* Action buttons */}
           <View style={{ flexDirection: 'row', gap: wp(8), paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-            {watchAlert && (
+            {editingAlertId && (
               <TouchableOpacity
                 onPress={handleRemoveAlert}
                 disabled={alertLoading}
                 style={{ flex: 1, paddingVertical: hp(14), borderRadius: sp(99), borderWidth: 1.5, borderColor: '#D35741', alignItems: 'center' }}
               >
-                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#D35741' }}>Remove</Text>
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#D35741' }}>Delete</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -2220,6 +2322,8 @@ export default function WatchDetailsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+          </>
+          )}
           {Platform.OS === 'ios' && (
             <InputAccessoryView nativeID="alertPriceDone">
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', backgroundColor: '#F0F0F0', paddingHorizontal: wp(16), paddingVertical: hp(8), borderTopWidth: 0.5, borderTopColor: '#C8C8C8' }}>

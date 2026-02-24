@@ -299,10 +299,11 @@ export function AdminWatches() {
     }
   }
 
-  const fetchOrders = async (reference: string) => {
+  const fetchOrders = async (reference: string, wsCode?: string) => {
     setOrdersLoading(true)
     try {
-      const response = await api.get(`/orders/admin/by-reference/${encodeURIComponent(reference)}`)
+      const params = wsCode ? `?ws_code=${encodeURIComponent(wsCode)}` : ''
+      const response = await api.get(`/orders/admin/by-reference/${encodeURIComponent(reference)}${params}`)
       setOrders(response.data)
     } catch (error) {
       console.error('Failed to fetch orders:', error)
@@ -379,7 +380,7 @@ export function AdminWatches() {
     setOrderBookWatch(watch)
     setShowOrderBook(true)
     setOrderTab('sell')
-    fetchOrders(watch.reference)
+    fetchOrders(watch.reference, watch.ws_code || undefined)
     setActionMenuOpen(null)
   }
 
@@ -391,7 +392,7 @@ export function AdminWatches() {
     setOrderBookWatch(watch)
     setShowOrderBook(true)
     setOrderTab('sell')
-    fetchOrders(watch.reference)
+    fetchOrders(watch.reference, watch.ws_code || undefined)
     // Open the new order modal immediately
     setNewOrderFormData({
       ...emptyNewOrderForm,
@@ -522,7 +523,7 @@ export function AdminWatches() {
     try {
       await api.patch(`/orders/admin/${orderId}`, { status: 'completed' })
       if (orderBookWatch?.reference) {
-        fetchOrders(orderBookWatch.reference)
+        fetchOrders(orderBookWatch.reference, orderBookWatch.ws_code || undefined)
       }
     } catch (error) {
       console.error('Failed to cancel order:', error)
@@ -535,7 +536,7 @@ export function AdminWatches() {
     try {
       await api.delete(`/orders/admin/${orderId}`)
       if (orderBookWatch?.reference) {
-        fetchOrders(orderBookWatch.reference)
+        fetchOrders(orderBookWatch.reference, orderBookWatch.ws_code || undefined)
       }
     } catch (error) {
       console.error('Failed to delete order:', error)
@@ -591,7 +592,7 @@ export function AdminWatches() {
       })
       setShowOrderEditModal(false)
       if (orderBookWatch?.reference) {
-        fetchOrders(orderBookWatch.reference)
+        fetchOrders(orderBookWatch.reference, orderBookWatch.ws_code || undefined)
       }
     } catch (error) {
       console.error('Failed to update order:', error)
@@ -651,7 +652,7 @@ export function AdminWatches() {
         ...(createdAt && { created_at: createdAt }),
       })
       setShowNewOrderModal(false)
-      fetchOrders(orderBookWatch.reference)
+      fetchOrders(orderBookWatch.reference, orderBookWatch.ws_code || undefined)
     } catch (error) {
       console.error('Failed to create order:', error)
     } finally {
