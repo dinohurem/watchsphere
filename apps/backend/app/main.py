@@ -32,14 +32,26 @@ fastapi_app = FastAPI(
 
 # CORS Middleware
 # In development, allow all origins. In production, use settings.cors_origins
-fastapi_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if settings.DEBUG else settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+# Note: allow_origins=["*"] + allow_credentials=True is invalid per CORS spec,
+# so in debug mode we use allow_origin_regex to match any origin instead.
+if settings.DEBUG:
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+else:
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
 # GZip Middleware for response compression
 fastapi_app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -310,3 +322,24 @@ app = Starlette(
     on_startup=[connect_to_mongo],
     on_shutdown=[close_mongo_connection],
 )
+
+# Add CORS middleware to the outer Starlette app so preflight OPTIONS requests
+# are handled before routing to FastAPI or Socket.IO sub-apps
+if settings.DEBUG:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
