@@ -1923,9 +1923,86 @@ export default function WatchDetailsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Watch Alert Modal */}
+      {/* Watch Alert List Modal (compact bottom sheet) */}
       <Modal
-        visible={showAlertModal}
+        visible={showAlertModal && alertListMode}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => { setShowAlertModal(false); }}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' }}
+          activeOpacity={1}
+          onPress={() => setShowAlertModal(false)}
+        >
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <SafeAreaView style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: sp(16), borderTopRightRadius: sp(16) }} edges={['bottom']}>
+              {/* Header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: wp(16), paddingTop: hp(16), paddingBottom: hp(12), position: 'relative' }}>
+                <View style={{ width: wp(36), height: hp(4), borderRadius: sp(2), backgroundColor: '#D1D1D6', position: 'absolute', top: hp(8) }} />
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(18), color: '#212121' }}>Price Alerts</Text>
+                <TouchableOpacity onPress={() => setShowAlertModal(false)} style={{ position: 'absolute', right: wp(16), padding: hp(8) }}>
+                  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                    <Path d="M18 6L6 18M6 6l12 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" />
+                  </Svg>
+                </TouchableOpacity>
+              </View>
+
+              {/* Alert cards */}
+              <View style={{ paddingHorizontal: wp(16), paddingBottom: hp(8), gap: hp(10) }}>
+                {watchAlerts.map((alert) => {
+                  const typeLabel = alert.notify_wts ? 'WTS' : alert.notify_wtb ? 'WTB' : '';
+                  const priceLabel = alert.price_threshold
+                    ? `${alert.price_direction === 'below' ? 'Below' : 'Above'} ${Number(alert.price_threshold).toLocaleString()} ${alert.currency}`
+                    : 'Any price';
+                  const condLabel = alert.condition && alert.condition !== 'any' ? (alert.condition === 'unworn' ? 'Unworn' : 'Used') : '';
+                  const locCount = alert.locations?.length || 0;
+                  return (
+                    <TouchableOpacity
+                      key={alert.id}
+                      onPress={() => openAlertForEdit(alert)}
+                      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F8F8', borderRadius: sp(12), paddingHorizontal: wp(14), paddingVertical: hp(14) }}
+                    >
+                      <View style={{ flex: 1, gap: hp(4) }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
+                          {typeLabel ? (
+                            <View style={{ backgroundColor: typeLabel === 'WTS' ? '#4AA078' : '#3B82F6', borderRadius: sp(6), paddingHorizontal: wp(8), paddingVertical: hp(2) }}>
+                              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(12), color: '#FFF' }}>{typeLabel}</Text>
+                            </View>
+                          ) : null}
+                          <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121', flex: 1 }}>{priceLabel}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
+                          {condLabel ? <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#8E8E93' }}>{condLabel}</Text> : null}
+                          {locCount > 0 ? <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#8E8E93' }}>{locCount} location{locCount > 1 ? 's' : ''}</Text> : null}
+                        </View>
+                      </View>
+                      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                        <Path d="M9 18l6-6-6-6" stroke="#8E8E93" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                      </Svg>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Add button */}
+              <View style={{ paddingHorizontal: wp(16), paddingTop: hp(8), paddingBottom: hp(16) }}>
+                <TouchableOpacity
+                  onPress={openNewAlert}
+                  style={{ paddingVertical: hp(14), borderRadius: sp(99), backgroundColor: '#212121', alignItems: 'center' }}
+                >
+                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#FFFFFF' }}>Add New Alert</Text>
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Watch Alert Form Modal (full page sheet) */}
+      <Modal
+        visible={showAlertModal && !alertListMode}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => { setShowAlertModal(false); setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }}
@@ -1933,15 +2010,13 @@ export default function WatchDetailsScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top']}>
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: wp(16), paddingVertical: hp(12), borderBottomWidth: 1, borderBottomColor: '#F0F0F0', position: 'relative' }}>
-            {!alertListMode && (
-              <TouchableOpacity onPress={() => { if (watchAlerts.length > 0) { setAlertListMode(true); setEditingAlertId(null); } else { setShowAlertModal(false); } setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }} style={{ position: 'absolute', left: wp(16), padding: hp(8) }}>
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                  <Path d="M19 12H5M12 19l-7-7 7-7" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity onPress={() => { if (watchAlerts.length > 0) { setAlertListMode(true); setEditingAlertId(null); } else { setShowAlertModal(false); } setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }} style={{ position: 'absolute', left: wp(16), padding: hp(8) }}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M19 12H5M12 19l-7-7 7-7" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
             <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(18), color: '#212121' }}>
-              {alertListMode ? 'Price Alerts' : editingAlertId ? 'Edit Alert' : 'New Alert'}
+              {editingAlertId ? 'Edit Alert' : 'New Alert'}
             </Text>
             <TouchableOpacity onPress={() => { setShowAlertModal(false); setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }} style={{ position: 'absolute', right: wp(16), padding: hp(8) }}>
               <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -1950,58 +2025,6 @@ export default function WatchDetailsScreen() {
             </TouchableOpacity>
           </View>
 
-          {alertListMode ? (
-            /* Alert List Mode */
-            <View style={{ flex: 1 }}>
-              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-                <View style={{ paddingHorizontal: wp(16), paddingTop: hp(16), gap: hp(10) }}>
-                  {watchAlerts.map((alert) => {
-                    const typeLabel = alert.notify_wts ? 'WTS' : alert.notify_wtb ? 'WTB' : '';
-                    const priceLabel = alert.price_threshold
-                      ? `${alert.price_direction === 'below' ? 'Below' : 'Above'} ${Number(alert.price_threshold).toLocaleString()} ${alert.currency}`
-                      : 'Any price';
-                    const condLabel = alert.condition && alert.condition !== 'any' ? (alert.condition === 'unworn' ? 'Unworn' : 'Used') : '';
-                    const locCount = alert.locations?.length || 0;
-                    return (
-                      <TouchableOpacity
-                        key={alert.id}
-                        onPress={() => openAlertForEdit(alert)}
-                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F8F8', borderRadius: sp(12), paddingHorizontal: wp(14), paddingVertical: hp(14) }}
-                      >
-                        <View style={{ flex: 1, gap: hp(4) }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
-                            {typeLabel ? (
-                              <View style={{ backgroundColor: typeLabel === 'WTS' ? '#4AA078' : '#3B82F6', borderRadius: sp(6), paddingHorizontal: wp(8), paddingVertical: hp(2) }}>
-                                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(12), color: '#FFF' }}>{typeLabel}</Text>
-                              </View>
-                            ) : null}
-                            <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121', flex: 1 }}>{priceLabel}</Text>
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
-                            {condLabel ? <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#8E8E93' }}>{condLabel}</Text> : null}
-                            {locCount > 0 ? <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#8E8E93' }}>{locCount} location{locCount > 1 ? 's' : ''}</Text> : null}
-                          </View>
-                        </View>
-                        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                          <Path d="M9 18l6-6-6-6" stroke="#8E8E93" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                        </Svg>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-              <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-                <TouchableOpacity
-                  onPress={openNewAlert}
-                  style={{ paddingVertical: hp(14), borderRadius: sp(99), backgroundColor: '#212121', alignItems: 'center' }}
-                >
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#FFFFFF' }}>Add New Alert</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-          /* Alert Form Mode */
-          <>
           <ScrollView ref={alertScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
             {/* WTS / WTB Toggle — only one can be active */}
             <View style={{ paddingHorizontal: wp(16), paddingTop: hp(20), paddingBottom: hp(12) }}>
@@ -2322,8 +2345,6 @@ export default function WatchDetailsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-          </>
-          )}
           {Platform.OS === 'ios' && (
             <InputAccessoryView nativeID="alertPriceDone">
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', backgroundColor: '#F0F0F0', paddingHorizontal: wp(16), paddingVertical: hp(8), borderTopWidth: 0.5, borderTopColor: '#C8C8C8' }}>
