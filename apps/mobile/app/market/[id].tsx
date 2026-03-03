@@ -422,6 +422,8 @@ interface WatchDetails {
   bestAsk: number;
   spread: number;
   priceHistory: number[];
+  wtsCount?: number;
+  wtbCount?: number;
 }
 
 // Default empty watch state
@@ -943,6 +945,8 @@ export default function WatchDetailsScreen() {
             bestAsk: data.lowest_order_price || 0,
             spread: 0,
             priceHistory: data.price_history || [],
+            wtsCount: data.wts_count || 0,
+            wtbCount: data.wtb_count || 0,
           });
           return; // Success, exit early
         }
@@ -1256,10 +1260,10 @@ export default function WatchDetailsScreen() {
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
                   <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(12), paddingVertical: hp(6), borderRadius: sp(99) }}>
-                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#4AA078' }}>WTS {sellOrders.length}</Text>
+                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#4AA078' }}>WTS {watch.wtsCount ?? sellOrders.length}</Text>
                   </View>
                   <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(12), paddingVertical: hp(6), borderRadius: sp(99) }}>
-                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#5B9BD5' }}>WTB {buyOrders.length}</Text>
+                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#5B9BD5' }}>WTB {watch.wtbCount ?? buyOrders.length}</Text>
                   </View>
                 </View>
               </>

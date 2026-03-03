@@ -36,6 +36,9 @@ interface WatchMarketData {
   coverImage?: string;
   wtsCount?: number;
   wtbCount?: number;
+  collection?: string;
+  oem_references?: string[];
+  aliases?: string[];
 }
 
 // Mini sparkline component for price chart
@@ -147,7 +150,11 @@ export default function MarketScreen() {
           watch.brand.toLowerCase().includes(query) ||
           watch.model.toLowerCase().includes(query) ||
           watch.reference.toLowerCase().includes(query) ||
-          `${watch.brand} ${watch.model}`.toLowerCase().includes(query)
+          `${watch.brand} ${watch.model}`.toLowerCase().includes(query) ||
+          (watch.collection && watch.collection.toLowerCase().includes(query)) ||
+          (watch.ws_code && watch.ws_code.toLowerCase().includes(query)) ||
+          (watch.oem_references && watch.oem_references.some(r => r.toLowerCase().includes(query))) ||
+          (watch.aliases && watch.aliases.some(a => a.toLowerCase().includes(query)))
         );
       }
       setWatches(filtered);
@@ -260,6 +267,9 @@ export default function MarketScreen() {
     coverImage: item.cover_image || undefined,
     wtsCount: item.wts_count || 0,
     wtbCount: item.wtb_count || 0,
+    collection: item.collection || undefined,
+    oem_references: item.oem_references || [],
+    aliases: item.aliases || [],
   });
 
   const loadMarketData = async () => {
