@@ -333,6 +333,10 @@ async def list_watches(
                     {"model": {"$regex": search, "$options": "i"}},
                     {"reference": {"$regex": search, "$options": "i"}},
                     {"description": {"$regex": search, "$options": "i"}},
+                    {"collection": {"$regex": search, "$options": "i"}},
+                    {"ws_code": {"$regex": search, "$options": "i"}},
+                    {"oem_references": {"$regex": search, "$options": "i"}},
+                    {"aliases": {"$regex": search, "$options": "i"}},
                 ]
             }
         )
@@ -548,6 +552,9 @@ class AggregatedWatchResponse(BaseModel):
     wts_count: int = 0
     wtb_count: int = 0
     trending: bool = False
+    collection: Optional[str] = None
+    oem_references: List[str] = []
+    aliases: List[str] = []
 
 
 @router.get("/aggregated", response_model=List[AggregatedWatchResponse])
@@ -705,6 +712,9 @@ async def get_aggregated_market_data(
                 wts_count=wts_counts_by_ref.get(watch.reference, 0) if watch.reference else 0,
                 wtb_count=wtb_counts_by_ref.get(watch.reference, 0) if watch.reference else 0,
                 trending=watch.trending or False,
+                collection=watch.collection,
+                oem_references=watch.oem_references or [],
+                aliases=watch.aliases or [],
             ))
 
         # For gainers/losers, filter and sort by dynamically computed price_change
