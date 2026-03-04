@@ -1,4 +1,4 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Keyboard, ActivityIndicator, RefreshControl, Image, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
@@ -15,6 +15,7 @@ import { LogoIcon } from '@/components/LogoIcon';
 import { Magnifier, UserCircleFilled, TriangleUp, TriangleDown, TrendingUp, PriceAlertDown, Filter, User, Grid } from '@/components/icons';
 import { SubscriptionOverlay } from '@/components/SubscriptionOverlay';
 import Svg, { Path, Line } from 'react-native-svg';
+import { globalSearchQuery, clearGlobalSearchQuery } from '@/utils/searchState';
 
 // Default category tab (before brands are loaded)
 const DEFAULT_CATEGORY = { value: 'All', label: 'All' };
@@ -124,42 +125,36 @@ export default function MarketScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [searchQuery, setSearchQuery] = useState(searchParam || '');
+  const [searchQuery, setSearchQuery] = useState('');
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  // Update search query when param changes
+  // Pick up search query from search screen navigation param
   useEffect(() => {
-    setSearchQuery(searchParam || '');
+    if (searchParam) {
+      setSearchQuery(searchParam);
+    }
   }, [searchParam]);
 
-  // Clear search query and remove the search param from navigation state
   const clearSearch = useCallback(() => {
     setSearchQuery('');
     router.setParams({ search: '' });
   }, []);
 
-  // Apply filters and search to watches whenever they change
+  // Apply filters to watches whenever filters or data change
   useEffect(() => {
     if (allWatches.length > 0) {
-      let filtered = applyFiltersToWatches(allWatches);
-      // Apply search filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        filtered = filtered.filter(watch =>
-          watch.brand.toLowerCase().includes(query) ||
-          watch.model.toLowerCase().includes(query) ||
-          watch.reference.toLowerCase().includes(query) ||
-          `${watch.brand} ${watch.model}`.toLowerCase().includes(query) ||
-          (watch.collection && watch.collection.toLowerCase().includes(query)) ||
-          (watch.ws_code && watch.ws_code.toLowerCase().includes(query)) ||
-          (watch.oem_references && watch.oem_references.some(r => r.toLowerCase().includes(query))) ||
-          (watch.aliases && watch.aliases.some(a => a.toLowerCase().includes(query)))
-        );
-      }
-      setWatches(filtered);
+      setWatches(applyFiltersToWatches(allWatches));
     }
-  }, [filters, allWatches, searchQuery]);
+  }, [filters, allWatches]);
+
+  // Debounced server-side search: reload data when search query changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadMarketData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Filter function to apply active filters to watch list
   const applyFiltersToWatches = (watchList: WatchMarketData[]) => {
@@ -233,6 +228,10 @@ export default function MarketScreen() {
   // Refresh data when screen comes into focus (also fires on initial mount)
   useFocusEffect(
     useCallback(() => {
+      if (globalSearchQuery) {
+        setSearchQuery(globalSearchQuery);
+        clearGlobalSearchQuery();
+      }
       loadMarketData();
       loadProfile();
     }, [selectedCategory])
@@ -289,6 +288,9 @@ export default function MarketScreen() {
       if (selectedCategory !== 'All') {
         params.brand = selectedCategory;
       }
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
       const response = await api.get('/market/aggregated', { params });
 
       if (response.data && response.data.length > 0) {
@@ -333,6 +335,9 @@ export default function MarketScreen() {
       const params: any = { limit: PAGE_SIZE, skip: allWatches.length };
       if (selectedCategory !== 'All') {
         params.brand = selectedCategory;
+      }
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
       }
       const response = await api.get('/market/aggregated', { params });
 
@@ -880,7 +885,7 @@ export default function MarketScreen() {
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
             activeOpacity={0.7}
-            onPress={() => router.push('/search')}
+            onPress={() => router.push({ pathname: '/search', params: { initialQuery: searchQuery || '' } })}
           >
             <View style={styles.searchIcon}>
               <Magnifier size={18} color="#212121" />
@@ -918,6 +923,8 @@ export default function MarketScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={Keyboard.dismiss}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
         }

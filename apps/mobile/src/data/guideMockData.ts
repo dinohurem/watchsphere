@@ -269,6 +269,7 @@ export const GUIDE_MOCK_WATCH_DETAILS = {
   model: 'Submariner Date',
   reference: '126610LN',
   image: undefined,
+  currency: 'EUR',
   marketPriceMin: 11800,
   marketPriceMax: 13200,
   priceChange: 2.3,

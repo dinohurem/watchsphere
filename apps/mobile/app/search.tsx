@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Keyboard, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -9,6 +9,7 @@ import { BackArrow, Magnifier } from '@/components/icons';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path } from 'react-native-svg';
+import { setGlobalSearchQuery } from '@/utils/searchState';
 
 // Close/X icon for clearing search
 function CloseIcon({ size = 16, color = '#212121' }: { size?: number; color?: string }) {
@@ -45,7 +46,8 @@ const FALLBACK_POPULAR_SEARCHES = [
 export default function SearchScreen() {
   const { colors, fonts } = useTheme();
   const { t } = useTranslation();
-  const [searchQuery, setSearchQuery] = useState('');
+  const { initialQuery } = useLocalSearchParams<{ initialQuery?: string }>();
+  const [searchQuery, setSearchQuery] = useState(initialQuery || '');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [popularSearches, setPopularSearches] = useState<string[]>(FALLBACK_POPULAR_SEARCHES);
   const [loadingPopular, setLoadingPopular] = useState(true);
@@ -107,11 +109,11 @@ export default function SearchScreen() {
     saveRecentSearch(trimmedQuery);
     Keyboard.dismiss();
 
-    // Navigate to market with search query
-    router.push({
-      pathname: '/(tabs)/market',
-      params: { search: trimmedQuery }
-    });
+    // Set global search and go back, then navigate to market
+    setGlobalSearchQuery(trimmedQuery);
+    router.dismiss();
+    // Navigate to market tab (in case we came from home)
+    setTimeout(() => router.navigate('/(tabs)/market'), 50);
   }, [recentSearches]);
 
   const handleSearchSubmit = () => {
