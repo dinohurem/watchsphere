@@ -561,6 +561,7 @@ class AggregatedWatchResponse(BaseModel):
 async def get_aggregated_market_data(
     category: str = Query(default="hot"),
     brand: Optional[str] = Query(default=None),
+    search: Optional[str] = Query(default=None),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50),
 ) -> Any:
@@ -587,8 +588,23 @@ async def get_aggregated_market_data(
         # With ~100-200 watches this is efficient; for larger catalogs consider
         # deduplicating at the DB level with aggregation instead.
 
+        # If search is provided, filter across all searchable fields
+        if search:
+            import re as re_mod
+            search_filter = {
+                "$or": [
+                    {"brand": {"$regex": search, "$options": "i"}},
+                    {"model": {"$regex": search, "$options": "i"}},
+                    {"reference": {"$regex": search, "$options": "i"}},
+                    {"collection": {"$regex": search, "$options": "i"}},
+                    {"ws_code": {"$regex": search, "$options": "i"}},
+                    {"oem_references": {"$regex": search, "$options": "i"}},
+                    {"aliases": {"$regex": search, "$options": "i"}},
+                ]
+            }
+            watches = await Watch.find(base_query, search_filter).sort([("order_count", -1), ("created_at", -1)]).to_list()
         # If brand filter is provided, filter by brand (case-insensitive)
-        if brand:
+        elif brand:
             import re
             brand_regex = re.compile(f"^{re.escape(brand)}$", re.IGNORECASE)
             watches = await Watch.find(base_query, {"brand": {"$regex": brand_regex}}).sort([("order_count", -1), ("created_at", -1)]).to_list()
@@ -611,8 +627,9 @@ async def get_aggregated_market_data(
         if not watches:
             return []
 
-        # Get unique references (only non-empty ones)
+        # Get unique references and ws_codes
         references = list(set(w.reference for w in watches if w.reference))
+        ws_codes = list(set(w.ws_code for w in watches if w.ws_code))
 
         # Batch-fetch lowest sell order prices (with currency) and order counts
         lowest_prices_by_ref = {}
@@ -647,24 +664,25 @@ async def get_aggregated_market_data(
             except Exception:
                 pass
 
-            # Get WTS/WTB counts per reference
-            wts_counts_by_ref = {}
-            wtb_counts_by_ref = {}
-            split_count_pipeline = [
-                {"$match": {"reference": {"$in": references}, "status": OrderStatus.ACTIVE.value}},
-                {"$group": {"_id": {"reference": "$reference", "order_type": "$order_type"}, "count": {"$sum": 1}}},
-            ]
-            try:
-                split_raw = await Order.aggregate(split_count_pipeline).to_list()
-                for item in split_raw:
-                    ref = item["_id"]["reference"]
-                    ot = item["_id"]["order_type"]
-                    if ot == OrderType.SELL.value:
-                        wts_counts_by_ref[ref] = item["count"]
-                    elif ot == OrderType.BUY.value:
-                        wtb_counts_by_ref[ref] = item["count"]
-            except Exception:
-                pass
+            # Get WTS/WTB counts per ws_code (variant-level, not reference-level)
+            wts_counts_by_ws = {}
+            wtb_counts_by_ws = {}
+            if ws_codes:
+                split_count_pipeline = [
+                    {"$match": {"ws_code": {"$in": ws_codes}, "status": OrderStatus.ACTIVE.value}},
+                    {"$group": {"_id": {"ws_code": "$ws_code", "order_type": "$order_type"}, "count": {"$sum": 1}}},
+                ]
+                try:
+                    split_raw = await Order.aggregate(split_count_pipeline).to_list()
+                    for item in split_raw:
+                        ws = item["_id"]["ws_code"]
+                        ot = item["_id"]["order_type"]
+                        if ot == OrderType.SELL.value:
+                            wts_counts_by_ws[ws] = item["count"]
+                        elif ot == OrderType.BUY.value:
+                            wtb_counts_by_ws[ws] = item["count"]
+                except Exception:
+                    pass
 
         # Build response
         result = []
@@ -709,8 +727,8 @@ async def get_aggregated_market_data(
                 price_change=price_change,
                 price_history=generated_history if generated_history else (watch.price_history or []),
                 total_orders=order_counts_by_ref.get(watch.reference, 0) + (watch.order_count or 0),
-                wts_count=wts_counts_by_ref.get(watch.reference, 0) if watch.reference else 0,
-                wtb_count=wtb_counts_by_ref.get(watch.reference, 0) if watch.reference else 0,
+                wts_count=wts_counts_by_ws.get(watch.ws_code, 0) if watch.ws_code else 0,
+                wtb_count=wtb_counts_by_ws.get(watch.ws_code, 0) if watch.ws_code else 0,
                 trending=watch.trending or False,
                 collection=watch.collection,
                 oem_references=watch.oem_references or [],
@@ -795,24 +813,21 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
     # Use the currency from the lowest WTS order when available
     display_currency = lowest_order_currency if lowest_order_price and lowest_order_currency else watch.currency
 
-    # Get total order count and WTS/WTB counts
+    # Get total order count and WTS/WTB counts by ws_code (variant-level)
     order_count = 0
     wts_count = 0
     wtb_count = 0
-    if watch_ref:
+    count_field = watch.ws_code if watch.ws_code else watch_ref
+    count_key = "ws_code" if watch.ws_code else "reference"
+    if count_field:
         order_count = await Order.find(
-            Order.reference == watch_ref,
-            Order.status == OrderStatus.ACTIVE,
+            {count_key: count_field, "status": OrderStatus.ACTIVE.value},
         ).count()
         wts_count = await Order.find(
-            Order.reference == watch_ref,
-            Order.order_type == OrderType.SELL,
-            Order.status == OrderStatus.ACTIVE,
+            {count_key: count_field, "order_type": OrderType.SELL.value, "status": OrderStatus.ACTIVE.value},
         ).count()
         wtb_count = await Order.find(
-            Order.reference == watch_ref,
-            Order.order_type == OrderType.BUY,
-            Order.status == OrderStatus.ACTIVE,
+            {count_key: count_field, "order_type": OrderType.BUY.value, "status": OrderStatus.ACTIVE.value},
         ).count()
 
     # Calculate price_change based on SELL orders (lowest ask) vs admin base price
