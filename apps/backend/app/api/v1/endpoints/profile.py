@@ -257,20 +257,18 @@ async def get_my_watchlist(
 
     items = await WatchlistRecord.find(*query_conditions).sort([("created_at", -1)]).to_list()
 
-    # Build lookup for market data (price_change and image) by reference
-    references = [item.reference for item in items if item.reference]
+    # Build lookup for market data (price_change and image) by ws_code only
+    ws_codes = [item.ws_code for item in items if item.ws_code]
     market_data: Dict[str, dict] = {}
 
-    if references:
-        # Get watches by reference
+    if ws_codes:
         watches = await Watch.find(
-            In(Watch.reference, references),
+            In(Watch.ws_code, ws_codes),
             Watch.status == WatchStatus.ACTIVE,
         ).to_list()
 
         for watch in watches:
-            if watch.reference:
-                # Get lowest active sell order price for this reference
+            if watch.ws_code:
                 sell_orders = await Order.find(
                     Order.reference == watch.reference,
                     Order.order_type == OrderType.SELL,
@@ -280,11 +278,10 @@ async def get_my_watchlist(
                 lowest_order_price = sell_orders[0].price if sell_orders else None
                 display_price = lowest_order_price if lowest_order_price else watch.price
 
-                market_data[watch.reference] = {
+                market_data[watch.ws_code] = {
                     "price_change": watch.price_change or 0.0,
                     "image": watch.cover_image,
                     "display_price": display_price,
-                    "ws_code": watch.ws_code,
                 }
 
     return [
@@ -294,17 +291,16 @@ async def get_my_watchlist(
             "brand": item.brand,
             "model": item.model,
             "reference": item.reference,
-            "ws_code": item.ws_code or market_data.get(item.reference, {}).get("ws_code"),
+            "ws_code": item.ws_code,
             "target_price": item.target_price,
             "currency": item.currency,
             "price_alert_enabled": item.price_alert_enabled,
             "notes": item.notes,
             "is_active": item.is_active,
             "created_at": item.created_at,
-            # Frontend display fields - get from market data if available
-            "price": market_data.get(item.reference, {}).get("display_price") or item.target_price or 0,
-            "priceChange": market_data.get(item.reference, {}).get("price_change", 0.0),
-            "image": market_data.get(item.reference, {}).get("image"),
+            "price": market_data.get(item.ws_code, {}).get("display_price") or item.target_price or 0,
+            "priceChange": market_data.get(item.ws_code, {}).get("price_change", 0.0),
+            "image": market_data.get(item.ws_code, {}).get("image"),
         }
         for item in items
     ]
