@@ -308,6 +308,7 @@ export function MarketPage() {
       await api.post('/profile/watchlist', {
         watch_id: watchId,
         reference: watch.reference,
+        ws_code: watch.ws_code,
         brand: watch.brand,
         model: watch.model,
       });
