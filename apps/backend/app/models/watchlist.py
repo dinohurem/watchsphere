@@ -25,6 +25,7 @@ class WatchlistRecord(Document):
     brand: str
     model: str
     reference: Optional[str] = None
+    ws_code: Optional[str] = None
 
     # Price tracking
     target_price: Optional[float] = None

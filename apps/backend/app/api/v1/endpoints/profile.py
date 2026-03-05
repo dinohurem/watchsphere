@@ -40,6 +40,7 @@ class WatchlistCreateRequest(BaseModel):
     brand: str
     model: str
     reference: Optional[str] = None
+    ws_code: Optional[str] = None
     target_price: Optional[float] = None
     currency: str = "USD"
     price_alert_enabled: bool = False
@@ -293,7 +294,7 @@ async def get_my_watchlist(
             "brand": item.brand,
             "model": item.model,
             "reference": item.reference,
-            "ws_code": market_data.get(item.reference, {}).get("ws_code"),
+            "ws_code": item.ws_code or market_data.get(item.reference, {}).get("ws_code"),
             "target_price": item.target_price,
             "currency": item.currency,
             "price_alert_enabled": item.price_alert_enabled,
@@ -324,6 +325,7 @@ async def add_to_watchlist(
         brand=data.brand,
         model=data.model,
         reference=data.reference,
+        ws_code=data.ws_code,
         target_price=data.target_price,
         currency=data.currency,
         price_alert_enabled=data.price_alert_enabled,
@@ -340,6 +342,7 @@ async def add_to_watchlist(
         "brand": item.brand,
         "model": item.model,
         "reference": item.reference,
+        "ws_code": item.ws_code,
         "target_price": item.target_price,
         "currency": item.currency,
         "price_alert_enabled": item.price_alert_enabled,
@@ -379,6 +382,7 @@ async def get_watchlist_item(
         "brand": item.brand,
         "model": item.model,
         "reference": item.reference,
+        "ws_code": item.ws_code,
         "target_price": item.target_price,
         "currency": item.currency,
         "price_alert_enabled": item.price_alert_enabled,
@@ -424,6 +428,7 @@ async def update_watchlist_item(
         "brand": item.brand,
         "model": item.model,
         "reference": item.reference,
+        "ws_code": item.ws_code,
         "target_price": item.target_price,
         "currency": item.currency,
         "price_alert_enabled": item.price_alert_enabled,
@@ -452,7 +457,14 @@ async def remove_from_watchlist(
         # If not a valid ObjectId, try finding by reference
         pass
 
-    # If not found by ObjectId, try to find by reference
+    # If not found by ObjectId, try to find by ws_code first, then reference
+    if not item:
+        item = await WatchlistRecord.find_one(
+            WatchlistRecord.user_id == str(current_user.id),
+            WatchlistRecord.ws_code == item_id,
+            WatchlistRecord.is_active == True
+        )
+
     if not item:
         item = await WatchlistRecord.find_one(
             WatchlistRecord.user_id == str(current_user.id),
