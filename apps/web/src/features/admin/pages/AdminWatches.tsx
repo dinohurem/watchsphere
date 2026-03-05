@@ -723,6 +723,25 @@ export function AdminWatches() {
         </div>
         <div className="flex items-center gap-3">
           <button
+            onClick={async () => {
+              if (!confirm('Are you sure you want to delete ALL orders? This cannot be undone.')) return
+              try {
+                const res = await api.delete('/orders/admin/bulk/all')
+                alert(res.data.message || 'All orders deleted')
+                if (showOrderBook && orderBookWatch?.reference) {
+                  fetchOrders(orderBookWatch.reference, orderBookWatch.ws_code || undefined)
+                }
+              } catch (error) {
+                console.error('Failed to delete all orders:', error)
+                alert('Failed to delete all orders')
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            <Trash2 size={18} />
+            Delete All Orders
+          </button>
+          <button
             onClick={handleExportJsonl}
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >
@@ -1148,6 +1167,25 @@ export function AdminWatches() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {orderBookWatch.ws_code && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Delete all orders for ${orderBookWatch.brand} ${orderBookWatch.model}?`)) return
+                      try {
+                        const res = await api.delete(`/orders/admin/bulk/ws-code/${encodeURIComponent(orderBookWatch.ws_code!)}`)
+                        alert(res.data.message || 'Orders deleted')
+                        fetchOrders(orderBookWatch.reference!, orderBookWatch.ws_code || undefined)
+                      } catch (error) {
+                        console.error('Failed to delete orders:', error)
+                        alert('Failed to delete orders')
+                      }
+                    }}
+                    className="flex items-center px-3 py-1.5 text-sm font-medium text-red-700 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete Orders
+                  </button>
+                )}
                 <button
                   onClick={() => orderBookWatch.reference && handleExportCsv(orderBookWatch.reference)}
                   className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50 transition-colors"

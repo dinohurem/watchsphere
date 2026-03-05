@@ -1661,6 +1661,27 @@ async def admin_delete_order(
     return {"message": "Order deleted successfully"}
 
 
+@router.delete("/admin/bulk/all")
+async def admin_delete_all_orders(
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Delete ALL orders (Admin only)"""
+    result = await Order.find_all().delete()
+    count = result.deleted_count if result else 0
+    return {"message": f"Deleted {count} orders"}
+
+
+@router.delete("/admin/bulk/ws-code/{ws_code}")
+async def admin_delete_orders_by_ws_code(
+    ws_code: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Delete all orders for a specific ws_code (Admin only)"""
+    result = await Order.find(Order.ws_code == ws_code).delete()
+    count = result.deleted_count if result else 0
+    return {"message": f"Deleted {count} orders for ws_code '{ws_code}'"}
+
+
 @router.get("/admin/stats")
 async def admin_order_stats(
     current_admin: User = Depends(get_current_admin_user),
