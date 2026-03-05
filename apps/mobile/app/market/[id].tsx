@@ -785,9 +785,10 @@ export default function WatchDetailsScreen() {
     try {
       const response = await api.get('/profile/watchlist');
       if (response.data && Array.isArray(response.data)) {
+        const watchWsCode = wsCodeParam || watch.ws_code;
         const watchReference = reference || id;
         const isInList = response.data.some((item: any) =>
-          item.reference === watchReference || item.watch_id === id
+          item.ws_code === watchWsCode
         );
         setIsInWatchlist(isInList);
       }
@@ -802,10 +803,8 @@ export default function WatchDetailsScreen() {
       return;
     }
 
-    // Use the same reference for both add and remove — prefer URL param
-    // since that's what checkWatchlistStatus uses to match
+    const watchWsCode = wsCodeParam || watch.ws_code || '';
     const ref = reference || watch.reference || id || '';
-    const encodedRef = encodeURIComponent(ref);
 
     const wasInWatchlist = isInWatchlist;
     // Optimistic update — toggle immediately for responsive UI
@@ -813,14 +812,19 @@ export default function WatchDetailsScreen() {
     setWatchlistLoading(true);
     try {
       if (wasInWatchlist) {
-        // Remove from watchlist
-        await api.delete(`/profile/watchlist/${encodedRef}`);
+        // Remove from watchlist — try ws_code first, fall back to reference for old records
+        try {
+          await api.delete(`/profile/watchlist/${encodeURIComponent(watchWsCode)}`);
+        } catch {
+          await api.delete(`/profile/watchlist/${encodeURIComponent(ref)}`);
+        }
       } else {
         // Add to watchlist
         await api.post('/profile/watchlist', {
           brand: watch.brand || brand,
           model: watch.model || model,
           reference: ref,
+          ws_code: watchWsCode,
           watch_id: id,
         });
       }

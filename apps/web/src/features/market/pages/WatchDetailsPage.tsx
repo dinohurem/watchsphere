@@ -159,9 +159,7 @@ export function WatchDetailsPage() {
         const response = await api.get('/profile/watchlist');
         const watchlist = response.data || [];
         const isWatchlisted = watchlist.some((item: any) =>
-          item.watch_id === watchDetails.id ||
-          (watchDetails.ws_code && item.ws_code === watchDetails.ws_code) ||
-          item.reference === watchDetails.reference
+          item.ws_code === watchDetails.ws_code
         );
         setIsInWatchlist(isWatchlisted);
       } catch (error) {
@@ -428,10 +426,15 @@ export function WatchDetailsPage() {
     }
 
     try {
-      const identifier = watchDetails?.ws_code || watchDetails?.reference || '';
+      const wsCode = watchDetails?.ws_code || '';
+      const ref = watchDetails?.reference || '';
       if (isInWatchlist) {
-        // Remove from watchlist
-        await api.delete(`/profile/watchlist/${encodeURIComponent(identifier)}`);
+        // Remove from watchlist — try ws_code first, fall back to reference for old records
+        try {
+          await api.delete(`/profile/watchlist/${encodeURIComponent(wsCode)}`);
+        } catch {
+          await api.delete(`/profile/watchlist/${encodeURIComponent(ref)}`);
+        }
         setIsInWatchlist(false);
       } else {
         // Add to watchlist

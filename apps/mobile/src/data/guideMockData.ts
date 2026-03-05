@@ -132,6 +132,7 @@ export const GUIDE_MOCK_MARKET_WATCHES = [
     priceHistory: sparkline(12000, 300),
     trending: true,
     orderCount: 24,
+    currency: 'EUR',
   },
   {
     id: '5711/1A-010',
@@ -143,6 +144,7 @@ export const GUIDE_MOCK_MARKET_WATCHES = [
     priceHistory: sparkline(130000, 2000),
     trending: false,
     orderCount: 18,
+    currency: 'EUR',
   },
   {
     id: '310.30.42.50.01.002',
@@ -154,6 +156,7 @@ export const GUIDE_MOCK_MARKET_WATCHES = [
     priceHistory: sparkline(6100, 150),
     trending: false,
     orderCount: 31,
+    currency: 'EUR',
   },
   {
     id: '15500ST.OO.1220ST.01',
@@ -165,6 +168,7 @@ export const GUIDE_MOCK_MARKET_WATCHES = [
     priceHistory: sparkline(41000, 1000),
     trending: false,
     orderCount: 12,
+    currency: 'EUR',
   },
   {
     id: '116500LN',
@@ -176,6 +180,7 @@ export const GUIDE_MOCK_MARKET_WATCHES = [
     priceHistory: sparkline(31000, 800),
     trending: false,
     orderCount: 22,
+    currency: 'EUR',
   },
   {
     id: '326235',
@@ -187,6 +192,7 @@ export const GUIDE_MOCK_MARKET_WATCHES = [
     priceHistory: sparkline(52500, 600),
     trending: false,
     orderCount: 8,
+    currency: 'EUR',
   },
   {
     id: '5167A-001',
@@ -198,6 +204,7 @@ export const GUIDE_MOCK_MARKET_WATCHES = [
     priceHistory: sparkline(53000, 1200),
     trending: false,
     orderCount: 15,
+    currency: 'EUR',
   },
   {
     id: '210.30.42.20.03.001',
@@ -209,6 +216,7 @@ export const GUIDE_MOCK_MARKET_WATCHES = [
     priceHistory: sparkline(4900, 100),
     trending: false,
     orderCount: 27,
+    currency: 'EUR',
   },
 ];
 
@@ -225,6 +233,7 @@ export const GUIDE_MOCK_TRENDING_WATCHES = [
     priceHistory: sparkline(12000, 300),
     trending: true,
     orderCount: 24,
+    currency: 'EUR',
   },
   {
     id: '116500LN',
@@ -236,6 +245,7 @@ export const GUIDE_MOCK_TRENDING_WATCHES = [
     priceHistory: sparkline(31000, 800),
     trending: true,
     orderCount: 22,
+    currency: 'EUR',
   },
   {
     id: '5711/1A-010',
@@ -247,6 +257,7 @@ export const GUIDE_MOCK_TRENDING_WATCHES = [
     priceHistory: sparkline(130000, 2000),
     trending: true,
     orderCount: 18,
+    currency: 'EUR',
   },
   {
     id: '15500ST.OO.1220ST.01',
@@ -258,6 +269,7 @@ export const GUIDE_MOCK_TRENDING_WATCHES = [
     priceHistory: sparkline(41000, 1000),
     trending: true,
     orderCount: 12,
+    currency: 'EUR',
   },
 ];
 
