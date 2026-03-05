@@ -126,6 +126,7 @@ export default function MarketScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchQueryRef = useRef('');
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
@@ -135,6 +136,11 @@ export default function MarketScreen() {
       setSearchQuery(searchParam);
     }
   }, [searchParam]);
+
+  // Keep ref in sync so loadMarketData always reads current value
+  useEffect(() => {
+    searchQueryRef.current = searchQuery;
+  }, [searchQuery]);
 
   const clearSearch = useCallback(() => {
     setSearchQuery('');
@@ -284,12 +290,13 @@ export default function MarketScreen() {
     setLoading(true);
     setHasMore(true);
     try {
+      const currentSearch = searchQueryRef.current;
       const params: any = { limit: PAGE_SIZE, skip: 0 };
       if (selectedCategory !== 'All') {
         params.brand = selectedCategory;
       }
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
+      if (currentSearch.trim()) {
+        params.search = currentSearch.trim();
       }
       const response = await api.get('/market/aggregated', { params });
 
@@ -332,12 +339,13 @@ export default function MarketScreen() {
     if (loadingMore || !hasMore || isGuideActive) return;
     setLoadingMore(true);
     try {
+      const currentSearch = searchQueryRef.current;
       const params: any = { limit: PAGE_SIZE, skip: allWatches.length };
       if (selectedCategory !== 'All') {
         params.brand = selectedCategory;
       }
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
+      if (currentSearch.trim()) {
+        params.search = currentSearch.trim();
       }
       const response = await api.get('/market/aggregated', { params });
 

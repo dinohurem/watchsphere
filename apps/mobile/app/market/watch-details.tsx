@@ -226,6 +226,7 @@ function UserIcon() {
 interface WatchDetailsParams {
   orderId?: string;
   reference?: string;
+  ws_code?: string;
   brand?: string;
   model?: string;
   price?: string;
@@ -338,6 +339,7 @@ export default function WatchDetailsScreen() {
   const [brand, setBrand] = useState(params.brand || '');
   const [model, setModel] = useState(params.model || '');
   const [reference, setReference] = useState(params.reference || '');
+  const [wsCode, setWsCode] = useState(params.ws_code || '');
 
   // Check if this is the current user's order (either buy or sell)
   // Use fetchedUserId (from API) as fallback since params.user_id may not always be passed
@@ -363,6 +365,7 @@ export default function WatchDetailsScreen() {
         if (data.brand) setBrand(data.brand);
         if (data.model) setModel(data.model);
         if (data.reference) setReference(data.reference);
+        if (data.ws_code) setWsCode(data.ws_code);
         if (data.price != null) setPrice(data.price);
         if (data.condition) setCondition(data.condition);
         if (data.country_code) setCountryCode(data.country_code);
@@ -404,7 +407,7 @@ export default function WatchDetailsScreen() {
         const response = await api.get('/profile/watchlist');
         if (response.data && Array.isArray(response.data)) {
           const isInList = response.data.some((item: any) =>
-            item.reference === reference
+            item.ws_code === wsCode
           );
           setIsFavorite(isInList);
         }
@@ -427,15 +430,19 @@ export default function WatchDetailsScreen() {
     setWatchlistLoading(true);
     try {
       if (wasFavorite) {
-        // Remove from watchlist - encode to handle special characters in reference
-        const encodedRef = encodeURIComponent(reference);
-        await api.delete(`/profile/watchlist/${encodedRef}`);
+        // Remove from watchlist — try ws_code first, fall back to reference for old records
+        try {
+          await api.delete(`/profile/watchlist/${encodeURIComponent(wsCode)}`);
+        } catch {
+          await api.delete(`/profile/watchlist/${encodeURIComponent(reference)}`);
+        }
       } else {
         // Add to watchlist
         await api.post('/profile/watchlist', {
           brand: brand,
           model: model,
           reference: reference,
+          ws_code: wsCode || undefined,
         });
       }
     } catch (error) {
