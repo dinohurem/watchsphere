@@ -348,7 +348,7 @@ async def get_price_history(
 @router.get("/book/{reference:path}", response_model=OrderBookResponse)
 async def get_order_book(
     reference: str,
-    limit: int = Query(default=50, le=100),
+    limit: int = Query(default=1000, le=5000),
 ) -> Any:
     """
     Get order book for a specific watch reference or ws_code.

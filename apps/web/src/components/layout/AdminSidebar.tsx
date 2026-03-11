@@ -20,7 +20,8 @@ import {
   List,
   SlidersHorizontal,
   Headphones,
-  Settings
+  Settings,
+  FileOutput,
 } from 'lucide-react'
 
 interface NavItem {
@@ -67,6 +68,7 @@ const adminNavigationConfig: NavSection[] = [
   {
     titleKey: 'sidebar.dataAnalytics',
     items: [
+      { nameKey: 'sidebar.wtbWtsGenerator', to: '/admin/wtb-wts', icon: FileOutput },
       { nameKey: 'sidebar.whatsappImport', to: '/admin/whatsapp', icon: Upload },
       { nameKey: 'sidebar.activity', to: '/admin/activity', icon: Activity },
       { nameKey: 'sidebar.billing', to: '/admin/billing', icon: CreditCard },
