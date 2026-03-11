@@ -51,6 +51,7 @@ const AdminWatchlist = lazy(() => import('./features/admin/pages/AdminWatchlist'
 const AdminChatGroups = lazy(() => import('./features/admin/pages/AdminChatGroups').then(m => ({ default: m.AdminChatGroups })))
 const AdminAIInsights = lazy(() => import('./features/admin/pages/AdminAIInsights').then(m => ({ default: m.AdminAIInsights })))
 const AdminWhatsAppImport = lazy(() => import('./features/admin/pages/AdminWhatsAppImport').then(m => ({ default: m.AdminWhatsAppImport })))
+const AdminWtbWtsGenerator = lazy(() => import('./features/admin/pages/AdminWtbWtsGenerator').then(m => ({ default: m.AdminWtbWtsGenerator })))
 const AdminActivity = lazy(() => import('./features/admin/pages/AdminActivity').then(m => ({ default: m.AdminActivity })))
 const AdminBilling = lazy(() => import('./features/admin/pages/AdminBilling').then(m => ({ default: m.AdminBilling })))
 const AdminSettings = lazy(() => import('./features/admin/pages/AdminSettings').then(m => ({ default: m.AdminSettings })))
@@ -170,6 +171,7 @@ function App() {
           <Route path="chat-groups" element={<AdminChatGroups />} />
           <Route path="ai-insights" element={<AdminAIInsights />} />
           <Route path="whatsapp" element={<AdminWhatsAppImport />} />
+          <Route path="wtb-wts" element={<AdminWtbWtsGenerator />} />
           <Route path="activity" element={<AdminActivity />} />
           <Route path="billing" element={<AdminBilling />} />
           <Route path="settings" element={<AdminSettings />} />

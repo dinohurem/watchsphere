@@ -1,0 +1,61 @@
+from beanie import Document
+from pydantic import Field
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+
+
+class GenerationMode(str, Enum):
+    WTS = "wts"
+    WTB = "wtb"
+
+
+class RunStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class WtbWtsRun(Document):
+    """A single WTS/WTB file generation run"""
+    filename: str
+    group_name: str
+    mode: GenerationMode
+    reference_month: int  # 1-12
+    reference_year: int   # e.g. 2026
+
+    status: RunStatus = RunStatus.PENDING
+    error_message: Optional[str] = None
+
+    # GridFS file IDs for large text blobs
+    original_file_gridfs_id: Optional[str] = None
+    jsonl_file_gridfs_id: Optional[str] = None
+    matched_csv_gridfs_id: Optional[str] = None
+    needs_review_csv_gridfs_id: Optional[str] = None
+
+    # Stats
+    total_messages: int = 0
+    detected_posts: int = 0
+    matched_count: int = 0
+    needs_review_count: int = 0
+
+    # Admin tracking
+    imported_by: str = Field(..., index=True)
+    imported_by_name: str
+
+    # If this is a reprocess, link to the original run
+    reprocessed_from: Optional[str] = None
+
+    # Timestamps
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+
+    class Settings:
+        name = "wtb_wts_runs"
+        indexes = [
+            "imported_by",
+            "status",
+            "created_at",
+            "mode",
+        ]
