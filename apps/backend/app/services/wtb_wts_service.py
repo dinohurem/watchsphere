@@ -151,13 +151,15 @@ WTS_LOCATION_PATTERNS = {
 }
 
 WTS_CONDITIONS = {
-    "fresh": "Unworn", "new": "Unworn", "unworn": "Unworn", "brand new": "Unworn", "bnib": "Unworn",
-    "nos": "Unworn",
-    "used": "Used", "worn": "Used",
+    "brand new": "Unworn", "bnib": "Unworn", "b.n.i.b": "Unworn",
+    "fresh": "Unworn", "unworn": "Unworn", "un-worn": "Unworn",
+    "stickered": "Unworn", "sealed": "Unworn", "unsized": "Unworn",
+    "new": "Unworn", "nos": "Unworn",
     "like new": "Like New",
-    "polished": "Polished",
     "retail ready": "Retail Ready",
     "handling marks": "Handling Marks", "handling mark": "Handling Marks",
+    "polished": "Polished",
+    "used": "Used", "worn": "Used", "pre-owned": "Used", "preowned": "Used",
 }
 
 WTB_CONDITIONS = {
@@ -239,6 +241,75 @@ CSV_HEADERS = [
     "Gruppe",
     "Nachricht gepostet am",
 ]
+
+# Minimum price thresholds by brand (in USD equivalent).
+# Prices below these values are likely parsing errors (ref or year captured as price).
+BRAND_MIN_PRICES = {
+    "Rolex": 3000,
+    "Patek Philippe": 8000,
+    "Audemars Piguet": 5000,
+    "Richard Mille": 30000,
+    "F.P. Journe": 15000,
+    "A. Lange & Sohne": 8000,
+    "Vacheron Constantin": 5000,
+    "Omega": 1000,
+    "Cartier": 1000,
+    "Hublot": 2000,
+    "Jaeger-LeCoultre": 2000,
+    "IWC": 1500,
+    "Breitling": 1000,
+    "Tudor": 1000,
+    "Panerai": 1500,
+    "Tag Heuer": 500,
+    "Chopard": 2000,
+    "Girard-Perregaux": 2000,
+    "Zenith": 1500,
+    "Blancpain": 3000,
+    "MB&F": 20000,
+    "H. Moser & Cie": 5000,
+}
+DEFAULT_MIN_PRICE = 500  # Fallback for unknown brands
+
+
+def validate_price(price_str: Optional[str], brand: Optional[str] = None) -> tuple[bool, Optional[str]]:
+    """Validate that a parsed price is reasonable for the brand.
+    Returns (is_valid, reason) - if not valid, reason explains why."""
+    if not price_str:
+        return True, None
+    try:
+        numeric = float(price_str.replace(",", ""))
+    except (ValueError, TypeError):
+        return True, None
+
+    if numeric <= 0:
+        return False, "Price is zero or negative"
+
+    # Check if price looks like a year (2017-2029)
+    if 2010 <= numeric <= 2035:
+        return False, f"Price {int(numeric)} looks like a year"
+
+    # Check if price looks like a reference number (4-6 digit number matching common ref patterns)
+    price_int = int(numeric)
+    if 1000 <= price_int <= 999999 and brand:
+        # Common reference number ranges for specific brands
+        ref_ranges = {
+            "Rolex": (100000, 300000),  # e.g., 126610, 228235
+            "Patek Philippe": (3000, 8000),  # e.g., 5711, 5968
+            "Audemars Piguet": (10000, 80000),  # e.g., 15500, 26240
+        }
+        if brand in ref_ranges:
+            low, high = ref_ranges[brand]
+            if low <= price_int <= high and numeric == price_int:
+                # This could be a ref number being parsed as price
+                # Only flag if there's no k/m suffix (raw integer)
+                pass  # Will be caught by min price check below
+
+    # Check against brand minimum
+    min_price = BRAND_MIN_PRICES.get(brand, DEFAULT_MIN_PRICE) if brand else DEFAULT_MIN_PRICE
+    if numeric < min_price:
+        return False, f"Price {price_str} below minimum {min_price} for {brand or 'unknown brand'}"
+
+    return True, None
 
 
 def extract_phone_number(sender: str) -> Optional[str]:
@@ -911,6 +982,8 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
     # Look for the last numeric token on the line
     # Pattern: a number (with optional commas/dots) optionally followed by k/m, at end of line or before whitespace
     tokens = line.strip().split()
+    # Get the first token as reference (to avoid matching it as price)
+    first_token = tokens[0].strip().rstrip('.').lower() if tokens else ""
     for token in reversed(tokens):
         token_clean = token.strip().rstrip('.')
         # Skip month codes: N1, N2, N10, N12, n2/2026, etc.
@@ -922,6 +995,12 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
         # Skip non-numeric tokens
         if not re.match(r'^[\d,.]+[kKmM]?$', token_clean):
             continue
+        # Skip if this token matches the first token (likely a reference number)
+        if token_clean.lower() == first_token:
+            continue
+        # Skip if this looks like a reference number (e.g., pure digits 4-6 chars matching first token pattern)
+        if re.match(r'^\d{4,6}$', token_clean) and token == tokens[0]:
+            continue
         formatted = _format_price(token_clean)
         if formatted:
             if sender_country in HKD_DEFAULT_COUNTRIES:
@@ -932,7 +1011,8 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
 
 
 def _format_price(raw: str) -> Optional[str]:
-    """Format a raw price string: expand k/m, add commas."""
+    """Format a raw price string: expand k/m, add commas.
+    Rejects values that look like years (2010-2035) unless they have k/m suffix."""
     raw = raw.strip().replace(' ', '').replace(',', '')
 
     m = re.match(r'^([\d.]+)\s*[mM]$', raw)
@@ -955,6 +1035,9 @@ def _format_price(raw: str) -> Optional[str]:
 
         val = float(raw)
         if val < 1:
+            return None
+        # Reject values that look like years (2010-2035)
+        if 2010 <= val <= 2035 and val == int(val):
             return None
         return f"{int(val):,}"
     except ValueError:
@@ -1049,16 +1132,21 @@ def format_timestamp(ts: datetime) -> str:
 def _detect_section_condition(line: str) -> Optional[str]:
     """Detect condition from a brand section header line.
     E.g., 'Patek Used ✨✨' -> 'Used', 'RM Used Fullset' -> 'Used',
-    'New Fullset' -> 'Unworn'."""
+    'New Fullset' -> 'Unworn'.
+    Check more specific terms first (like new, unworn, brand new) before generic ones."""
     cleaned = _clean_text(line).lower().strip()
-    if 'used' in cleaned:
-        return "Used"
-    if 'new' in cleaned or 'unworn' in cleaned:
-        return "Unworn"
-    if 'nos' in cleaned:
-        return "Unworn"
+    # Check specific unworn indicators first
     if 'like new' in cleaned:
         return "Like New"
+    if 'unworn' in cleaned or 'brand new' in cleaned or 'bnib' in cleaned:
+        return "Unworn"
+    if 'nos' in cleaned or 'stickered' in cleaned or 'sealed' in cleaned:
+        return "Unworn"
+    # Check "new" but not as part of "like new" (already handled above)
+    if re.search(r'\bnew\b', cleaned):
+        return "Unworn"
+    if 'used' in cleaned or 'pre-owned' in cleaned or 'preowned' in cleaned:
+        return "Used"
     return None
 
 
@@ -1210,6 +1298,12 @@ def parse_stock_list(
 
         if mode == "WTS" and not price:
             review_reasons.append("No price found for WTS post")
+
+        # Validate price against brand minimums
+        if price:
+            price_valid, price_reason = validate_price(price, watch["brand"])
+            if not price_valid:
+                review_reasons.append(price_reason)
 
         price_str = f"{price} {currency}" if price and currency else (price or "")
 
@@ -1400,6 +1494,12 @@ async def process_generation(
 
         if mode == "WTS" and not price:
             review_reasons.append("No price found for WTS post")
+
+        # Validate price against brand minimums
+        if price:
+            price_valid, price_reason = validate_price(price, watch["brand"])
+            if not price_valid:
+                review_reasons.append(price_reason)
 
         if review_reasons:
             needs_review_rows.append(_build_row(

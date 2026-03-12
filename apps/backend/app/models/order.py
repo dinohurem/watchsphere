@@ -105,6 +105,9 @@ class Order(Document):
     clasp_type: Optional[str] = None
     clasp_material: Optional[str] = None
 
+    # USD equivalent price (for cross-currency sorting)
+    usd_price: Optional[float] = None
+
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None

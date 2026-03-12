@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X, Download, PlusCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
@@ -243,8 +243,10 @@ const COUNTRIES = [
 export function AdminWatches() {
   const [watches, setWatches] = useState<Watch[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editingWatch, setEditingWatch] = useState<Watch | null>(null)
@@ -275,13 +277,19 @@ export function AdminWatches() {
   useEffect(() => {
     fetchWatches()
     fetchTotalCount()
-  }, [page, pageSize])
+  }, [page, pageSize, searchTerm, statusFilter])
+
+  // Reset to first page when search or filter changes
+  useEffect(() => {
+    setPage(0)
+  }, [searchTerm, statusFilter])
 
   const fetchWatches = async () => {
     try {
-      const response = await api.get('/market/admin/all', {
-        params: { skip: page * pageSize, limit: pageSize }
-      })
+      const params: Record<string, any> = { skip: page * pageSize, limit: pageSize }
+      if (searchTerm) params.search = searchTerm
+      if (statusFilter !== 'all') params.status_filter = statusFilter
+      const response = await api.get('/market/admin/all', { params })
       setWatches(response.data)
     } catch (error) {
       console.error('Failed to fetch watches:', error)
@@ -292,7 +300,10 @@ export function AdminWatches() {
 
   const fetchTotalCount = async () => {
     try {
-      const response = await api.get('/market/admin/count')
+      const params: Record<string, any> = {}
+      if (searchTerm) params.search = searchTerm
+      if (statusFilter !== 'all') params.status_filter = statusFilter
+      const response = await api.get('/market/admin/count', { params })
       setTotalCount(response.data.total)
     } catch (error) {
       console.error('Failed to fetch count:', error)
@@ -693,16 +704,8 @@ export function AdminWatches() {
     }
   }
 
-  const filteredWatches = watches.filter(watch => {
-    const term = searchTerm.toLowerCase()
-    const matchesSearch =
-      watch.brand.toLowerCase().includes(term) ||
-      watch.model.toLowerCase().includes(term) ||
-      (watch.reference?.toLowerCase().includes(term) ?? false) ||
-      (watch.ws_code?.toLowerCase().includes(term) ?? false)
-    const matchesStatus = statusFilter === 'all' || watch.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  // Search and status filtering is now done server-side
+  const filteredWatches = watches
 
   const filteredOrders = orders.filter(order => order.order_type === orderTab)
 
@@ -722,6 +725,21 @@ export function AdminWatches() {
           <p className="text-gray-600">Manage watch listings ({totalCount} total)</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              if (!confirm('Populate USD prices for all orders without one? This uses the Frankfurter API for conversion.')) return
+              try {
+                const res = await api.post('/orders/admin/bulk-update-usd-prices')
+                alert(res.data.message || 'USD prices updated')
+              } catch (error) {
+                console.error('Failed to update USD prices:', error)
+                alert('Failed to update USD prices')
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            Populate USD Prices
+          </button>
           <button
             onClick={async () => {
               if (!confirm('Are you sure you want to delete ALL orders? This cannot be undone.')) return
@@ -766,8 +784,14 @@ export function AdminWatches() {
             <input
               type="text"
               placeholder="Search watches..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value)
+                if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+                searchTimerRef.current = setTimeout(() => {
+                  setSearchTerm(e.target.value)
+                }, 300)
+              }}
               className="pl-10 pr-4 py-2 border rounded-lg text-sm w-full"
             />
           </div>

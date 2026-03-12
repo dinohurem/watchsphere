@@ -109,12 +109,19 @@ const MOCK_ORDER_BOOK: OrderBookData = {
   spread: 2500,
 };
 
+const ORDER_PAGE_SIZE = 20;
+
 export default function OrderBookScreen() {
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ reference: string; brand?: string; model?: string; watchId?: string }>();
   const [selectedTab, setSelectedTab] = useState<'Buy' | 'Sell'>('Sell');
   const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreSell, setHasMoreSell] = useState(true);
+  const [hasMoreBuy, setHasMoreBuy] = useState(true);
+  const [sellPage, setSellPage] = useState(0);
+  const [buyPage, setBuyPage] = useState(0);
 
   useEffect(() => {
     loadOrderBook();
@@ -122,13 +129,17 @@ export default function OrderBookScreen() {
 
   const loadOrderBook = async () => {
     try {
-      // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
       const encodedReference = encodeURIComponent(params.reference || '');
-      const response = await api.get(`/orders/book/${encodedReference}`);
+      const response = await api.get(`/orders/book/${encodedReference}`, {
+        params: { limit: ORDER_PAGE_SIZE, skip: 0 }
+      });
       if (response.data) {
         setOrderBook(response.data);
+        setHasMoreSell((response.data.sell_orders?.length || 0) >= ORDER_PAGE_SIZE);
+        setHasMoreBuy((response.data.buy_orders?.length || 0) >= ORDER_PAGE_SIZE);
+        setSellPage(1);
+        setBuyPage(1);
       } else {
-        // Use mock data with params
         setOrderBook({
           ...MOCK_ORDER_BOOK,
           reference: params.reference || MOCK_ORDER_BOOK.reference,
@@ -137,7 +148,6 @@ export default function OrderBookScreen() {
         });
       }
     } catch (error) {
-      // Use mock data on error
       setOrderBook({
         ...MOCK_ORDER_BOOK,
         reference: params.reference || MOCK_ORDER_BOOK.reference,
@@ -146,6 +156,45 @@ export default function OrderBookScreen() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreOrders = async () => {
+    if (loadingMore || !orderBook) return;
+    const isSell = selectedTab === 'Sell';
+    const hasMore = isSell ? hasMoreSell : hasMoreBuy;
+    const currentPage = isSell ? sellPage : buyPage;
+    if (!hasMore) return;
+
+    setLoadingMore(true);
+    try {
+      const encodedReference = encodeURIComponent(params.reference || '');
+      const response = await api.get(`/orders/book/${encodedReference}`, {
+        params: { limit: ORDER_PAGE_SIZE, skip: currentPage * ORDER_PAGE_SIZE }
+      });
+      if (response.data) {
+        const newSellOrders = response.data.sell_orders || [];
+        const newBuyOrders = response.data.buy_orders || [];
+        setOrderBook(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            sell_orders: isSell ? [...prev.sell_orders, ...newSellOrders] : prev.sell_orders,
+            buy_orders: !isSell ? [...prev.buy_orders, ...newBuyOrders] : prev.buy_orders,
+          };
+        });
+        if (isSell) {
+          setHasMoreSell(newSellOrders.length >= ORDER_PAGE_SIZE);
+          setSellPage(p => p + 1);
+        } else {
+          setHasMoreBuy(newBuyOrders.length >= ORDER_PAGE_SIZE);
+          setBuyPage(p => p + 1);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load more orders:', error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -279,6 +328,20 @@ export default function OrderBookScreen() {
               <Text style={styles.emptyText}>{selectedTab === 'Buy' ? t('orderBook.noBuyOrders') : t('orderBook.noSellOrders')}</Text>
             </View>
           }
+          onEndReached={() => {
+            if (!loadingMore) {
+              loadMoreOrders();
+            }
+          }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={loadingMore ? (
+            <View style={{ paddingVertical: hp(16), alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#212121" />
+            </View>
+          ) : null}
+          removeClippedSubviews={true}
+          initialNumToRender={20}
+          maxToRenderPerBatch={10}
         />
       </View>
 

@@ -348,7 +348,8 @@ async def get_price_history(
 @router.get("/book/{reference:path}", response_model=OrderBookResponse)
 async def get_order_book(
     reference: str,
-    limit: int = Query(default=1000, le=5000),
+    limit: int = Query(default=20, le=5000),
+    skip: int = Query(default=0, ge=0),
 ) -> Any:
     """
     Get order book for a specific watch reference or ws_code.
@@ -362,6 +363,11 @@ async def get_order_book(
     if not watch:
         watch = await Watch.find_one(Watch.reference == reference)
 
+    # Sort by usd_price if available, fall back to price
+    # usd_price allows correct cross-currency sorting
+    buy_sort = [("usd_price", -1), ("price", -1)]
+    sell_sort = [("usd_price", 1), ("price", 1)]
+
     # If watch has a ws_code, filter orders by ws_code for exact variant matching
     # Otherwise fall back to reference-based matching
     if watch and watch.ws_code:
@@ -369,26 +375,26 @@ async def get_order_book(
             Order.ws_code == watch.ws_code,
             Order.order_type == OrderType.BUY,
             Order.status == OrderStatus.ACTIVE,
-        ).sort([("price", -1)]).limit(limit).to_list()
+        ).sort(buy_sort).skip(skip).limit(limit).to_list()
 
         sell_orders = await Order.find(
             Order.ws_code == watch.ws_code,
             Order.order_type == OrderType.SELL,
             Order.status == OrderStatus.ACTIVE,
-        ).sort([("price", 1)]).limit(limit).to_list()
+        ).sort(sell_sort).skip(skip).limit(limit).to_list()
     else:
         lookup_ref = watch.reference if watch else reference
         buy_orders = await Order.find(
             Order.reference == lookup_ref,
             Order.order_type == OrderType.BUY,
             Order.status == OrderStatus.ACTIVE,
-        ).sort([("price", -1)]).limit(limit).to_list()
+        ).sort(buy_sort).skip(skip).limit(limit).to_list()
 
         sell_orders = await Order.find(
             Order.reference == lookup_ref,
             Order.order_type == OrderType.SELL,
             Order.status == OrderStatus.ACTIVE,
-        ).sort([("price", 1)]).limit(limit).to_list()
+        ).sort(sell_sort).skip(skip).limit(limit).to_list()
     brand = watch.brand if watch else ""
     model = watch.model if watch else ""
 
@@ -1949,6 +1955,67 @@ async def admin_create_order(
         created_at=order.created_at,
         updated_at=order.updated_at,
     )
+
+
+@router.post("/admin/bulk-update-usd-prices")
+async def admin_bulk_update_usd_prices(
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Bulk update usd_price for all orders that don't have it set.
+    Uses Frankfurter API for currency conversion."""
+    import httpx
+
+    # Fetch all orders without usd_price
+    orders = await Order.find(
+        {"$or": [{"usd_price": None}, {"usd_price": {"$exists": False}}]}
+    ).to_list()
+
+    if not orders:
+        return {"message": "No orders need USD price update", "updated": 0}
+
+    # Collect unique currencies
+    currencies = set(o.currency for o in orders if o.currency and o.currency != "USD")
+
+    # Fetch exchange rates from Frankfurter API
+    rates = {"USD": 1.0}
+    if currencies:
+        currency_list = ",".join(currencies)
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    f"https://api.frankfurter.dev/v1/latest?base=USD&symbols={currency_list}"
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # Frankfurter returns rates FROM base, we need TO USD
+                    for cur, rate in data.get("rates", {}).items():
+                        if rate > 0:
+                            rates[cur] = rate
+        except Exception as e:
+            logger.error(f"Failed to fetch exchange rates: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to fetch exchange rates: {str(e)}"
+            )
+
+    # Update orders in batches
+    updated = 0
+    BATCH_SIZE = 500
+    for i in range(0, len(orders), BATCH_SIZE):
+        batch = orders[i:i + BATCH_SIZE]
+        for order in batch:
+            if order.currency == "USD":
+                order.usd_price = order.price
+            elif order.currency in rates and rates[order.currency] > 0:
+                # rates[CUR] = how much CUR per 1 USD, so USD = price / rate
+                order.usd_price = round(order.price / rates[order.currency], 2)
+            else:
+                # Unknown currency, use price as-is
+                order.usd_price = order.price
+            await order.save()
+            updated += 1
+
+    return {"message": f"Updated {updated} orders with USD prices", "updated": updated, "rates": rates}
 
 
 @router.patch("/admin/{order_id}", response_model=OrderResponse)
