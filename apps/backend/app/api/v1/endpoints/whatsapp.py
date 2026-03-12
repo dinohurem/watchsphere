@@ -16,6 +16,7 @@ from app.models.order import Order, OrderType, OrderCondition, OrderStatus
 from app.models.whatsapp_import import (
     WhatsAppImport, WhatsAppMessage, ExtractedWatchListing, ImportStatus, OfferType
 )
+from app.services.wtb_wts_service import validate_price, BRAND_MIN_PRICES, DEFAULT_MIN_PRICE
 
 router = APIRouter()
 
@@ -378,7 +379,22 @@ async def process_csv_import(
     total_rows = 0
     matched_count = 0
     unmatched_count = 0
+    skipped_duplicates = 0
+    flagged_price_count = 0
     group_name = None
+
+    # Build a set of existing orders for duplicate detection:
+    # key = (ws_code_upper, phone, order_type)
+    existing_orders = await Order.find(
+        Order.status == OrderStatus.ACTIVE,
+    ).to_list()
+    existing_order_keys: set[tuple] = set()
+    for eo in existing_orders:
+        eo_ws = (eo.ws_code or "").strip().upper()
+        eo_phone = (eo.whatsapp_phone or eo.user_name or "").strip()
+        eo_type = eo.order_type.value
+        if eo_ws and eo_phone:
+            existing_order_keys.add((eo_ws, eo_phone, eo_type))
 
     for row in reader:
         total_rows += 1
@@ -464,12 +480,22 @@ async def process_csv_import(
         # Resolve condition — store raw text for non-standard conditions
         condition = None
         condition_raw = None
-        if condition_str.lower() in ("unworn", "new", "brand new", "nos"):
+        cond_lower = condition_str.lower().strip()
+        # Check for Unworn indicators first (more specific matches first)
+        unworn_keywords = (
+            "unworn", "new", "brand new", "nos", "bnib", "fresh",
+            "stickered", "sealed", "unsized", "un-worn",
+            "like new", "retail ready",
+        )
+        used_keywords = ("used", "pre-owned", "preowned", "worn", "polished")
+        if any(kw in cond_lower for kw in unworn_keywords):
             condition = "Unworn"
-        elif condition_str.lower() in ("used", "good", "excellent", "mint"):
+            if cond_lower not in ("unworn", "new", "brand new", "nos", "bnib"):
+                condition_raw = condition_str
+        elif any(kw in cond_lower for kw in used_keywords):
             condition = "Used"
         elif condition_str:
-            # Non-standard condition text (e.g., "Unworn only") — default to Unworn, store raw
+            # Non-standard condition text — default to Unworn, store raw
             condition = "Unworn"
             condition_raw = condition_str
 
@@ -508,6 +534,28 @@ async def process_csv_import(
             order_type = OrderType.SELL if offer_type == OfferType.WTS else OrderType.BUY
             order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
             order_reference = watch_reference or ws_code
+
+            # Check for duplicate orders (same ws_code + phone + order type)
+            dup_ws = (matched_watch.ws_code or ws_code or "").strip().upper()
+            dup_phone = phone.strip() if phone else ""
+            dup_type = order_type.value
+            dup_key = (dup_ws, dup_phone, dup_type)
+            if dup_ws and dup_phone and dup_key in existing_order_keys:
+                skipped_duplicates += 1
+                continue
+            # Add to seen set for intra-batch dedup
+            if dup_ws and dup_phone:
+                existing_order_keys.add(dup_key)
+
+            # Validate price against brand minimums
+            price_valid, price_reason = validate_price(str(int(price)), watch_brand)
+            if not price_valid:
+                flagged_price_count += 1
+                # Still import but flag with a remark
+                if remarks:
+                    remarks = f"{remarks} | PRICE FLAG: {price_reason}"
+                else:
+                    remarks = f"PRICE FLAG: {price_reason}"
 
             matched_count += 1
 
@@ -574,7 +622,7 @@ async def process_csv_import(
     import_record.extracted_watches = len(listing_docs)
     import_record.matched_orders = matched_count
     import_record.unmatched_rows = unmatched_count
-    import_record.skipped_duplicates = 0
+    import_record.skipped_duplicates = skipped_duplicates
     import_record.unmatched_csv = unmatched_csv_str
     import_record.completed_at = datetime.utcnow()
     await import_record.save()
@@ -584,7 +632,8 @@ async def process_csv_import(
         "extracted_listings": len(listing_docs),
         "matched_orders": matched_count,
         "unmatched_rows": unmatched_count,
-        "skipped_duplicates": 0,
+        "skipped_duplicates": skipped_duplicates,
+        "flagged_prices": flagged_price_count,
     }
 
 

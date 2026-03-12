@@ -114,7 +114,7 @@ export default function MarketScreen() {
   const firstWatchRowRef = useRef<View>(null);
   const { search: searchParam } = useLocalSearchParams<{ search?: string }>();
   const totalFilterCount = getTotalFilterCount();
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 20;
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [brandTabs, setBrandTabs] = useState<{ value: string; label: string }[]>([DEFAULT_CATEGORY]);
   const [watches, setWatches] = useState<WatchMarketData[]>([]);
@@ -791,6 +791,9 @@ export default function MarketScreen() {
       textAlign: 'center',
     },
     // Grid view styles
+    gridRow: {
+      gap: wp(12),
+    },
     gridContainer: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -924,317 +927,358 @@ export default function MarketScreen() {
     </SafeAreaView>
   );
 
-  return (
-    <SubscriptionOverlay feature="market" header={headerComponent}>
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        onScrollBeginDrag={Keyboard.dismiss}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
-        }
-        onScroll={({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
-          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-          const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-          if (distanceFromBottom < 300 && !loadingMore && hasMore && !loading) {
-            loadMoreWatches();
-          }
-        }}
-        scrollEventThrottle={400}
+  // Render a single list-mode watch item
+  const renderListItem = useCallback(({ item: watch, index }: { item: WatchMarketData; index: number }) => {
+    const isPositive = watch.priceChange >= 0;
+    return (
+      <TouchableOpacity
+        key={`${watch.id}-list-${index}`}
+        ref={index === 0 ? firstWatchRowRef : undefined}
+        style={styles.watchItem}
+        onPress={() => handleWatchPress(watch)}
+        activeOpacity={0.7}
+        onLayout={index === 0 ? () => {
+          firstWatchRowRef.current?.measureInWindow((x, y, width, height) => {
+            if (width > 0 && height > 0) {
+              registerGuideMeasurement('watch-details', { x, y, width, height, borderRadius: 8 });
+            }
+          });
+        } : undefined}
       >
-        {/* Trending / Featured Watches Section */}
-        {v2Enabled && <View style={styles.trendingSection}>
-          <Text style={styles.sectionTitle}>
-            {trendingWatches.length > 0 ? t('market.trendingWatches') : t('market.featuredWatches')}
-          </Text>
-          {/* Show trending watches if available */}
-          {trendingWatches.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.trendingScrollContent}
-            >
-              {trendingWatches.map((watch, index) => {
-                const isPositive = watch.priceChange >= 0;
-                return (
-                  <TouchableOpacity
-                    key={`${watch.id}-${index}`}
-                    style={styles.trendingCard}
-                    onPress={() => handleWatchPress(watch)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.trendingCardContent}>
-                      <View style={styles.trendingTopRow}>
-                        <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand}</Text>
-                        <Text style={styles.trendingPrice}>{formatPrice(watch.price, watch.currency)}</Text>
-                      </View>
-                      <View style={styles.trendingBottomRow}>
-                        <Text style={styles.trendingReference}>{watch.ws_code || watch.reference}</Text>
-                        <View style={styles.trendingChange}>
-                          {isPositive ? (
-                            <TriangleUp size={12} color="#4AA078" />
-                          ) : (
-                            <TriangleDown size={12} color="#D90429" />
-                          )}
-                          <Text style={[
-                            styles.trendingChangeText,
-                            isPositive ? styles.trendingChangePositive : styles.trendingChangeNegative
-                          ]}>
-                            {Math.abs(watch.priceChange).toFixed(1)}%
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : featuredWatches.length > 0 ? (
-            /* Show featured watches as fallback */
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.trendingScrollContent}
-            >
-              {featuredWatches.map((watch, index) => {
-                const isPositive = watch.priceChange >= 0;
-                return (
-                  <TouchableOpacity
-                    key={`featured-${watch.id}-${index}`}
-                    style={styles.trendingCard}
-                    onPress={() => handleWatchPress(watch)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.trendingCardContent}>
-                      <View style={styles.trendingTopRow}>
-                        <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand}</Text>
-                        <Text style={styles.trendingPrice}>{formatPrice(watch.price, watch.currency)}</Text>
-                      </View>
-                      <View style={styles.trendingBottomRow}>
-                        <Text style={styles.trendingReference}>{watch.ws_code || watch.reference}</Text>
-                        <View style={styles.trendingChange}>
-                          {isPositive ? (
-                            <TriangleUp size={12} color="#4AA078" />
-                          ) : (
-                            <TriangleDown size={12} color="#D90429" />
-                          )}
-                          <Text style={[
-                            styles.trendingChangeText,
-                            isPositive ? styles.trendingChangePositive : styles.trendingChangeNegative
-                          ]}>
-                            {Math.abs(watch.priceChange).toFixed(1)}%
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : !loading && (
-            /* Centered empty state when no trending or featured watches */
-            <View style={styles.trendingEmptyContainer}>
-              <Text style={styles.emptyText}>{t('market.noWatchesAvailable')}</Text>
+        <View style={styles.watchInfo}>
+          <Text style={styles.watchName} numberOfLines={1}>{watch.brand}</Text>
+          <Text style={styles.watchModel} numberOfLines={1}>{watch.model}</Text>
+          <Text style={styles.watchReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
+        </View>
+        <View style={styles.watchPriceSection}>
+          {v2Enabled ? (
+            <>
+              <View style={styles.chartContainer}>
+                <MiniSparkline
+                  data={watch.priceHistory}
+                  width={40}
+                  height={16}
+                  isPositive={isPositive}
+                />
+              </View>
+              <View style={styles.watchPriceInfo}>
+                <View style={styles.watchChange}>
+                  {isPositive ? (
+                    <TrendingUp size={12} color="#4AA078" />
+                  ) : (
+                    <PriceAlertDown size={12} color="#C93927" />
+                  )}
+                  <Text style={[
+                    styles.watchChangeText,
+                    isPositive ? styles.watchChangePositive : styles.watchChangeNegative
+                  ]}>
+                    {Math.abs(watch.priceChange).toFixed(1)}%
+                  </Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(6) }}>
+              <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(8), paddingVertical: hp(3), borderRadius: sp(99) }}>
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(11), color: '#4AA078' }}>WTS {watch.wtsCount || 0}</Text>
+              </View>
+              <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(8), paddingVertical: hp(3), borderRadius: sp(99) }}>
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(11), color: '#5B9BD5' }}>WTB {watch.wtbCount || 0}</Text>
+              </View>
             </View>
           )}
-        </View>}
-
-        {/* Watches Section Header */}
-        <View style={[styles.watchesHeader, !v2Enabled && { paddingTop: hp(16) }]}>
-          <Text style={styles.watchesTitle}>{t('market.watches')}</Text>
         </View>
+      </TouchableOpacity>
+    );
+  }, [v2Enabled, fonts]);
 
-        {/* Category Tabs with View Mode Toggle */}
-        <View style={styles.categoryTabsRow}>
+  // Render a single grid-mode watch item
+  const renderGridItem = useCallback(({ item: watch, index }: { item: WatchMarketData; index: number }) => {
+    const isPositive = watch.priceChange >= 0;
+    return (
+      <TouchableOpacity
+        key={`${watch.id}-grid-${index}`}
+        ref={index === 0 ? firstWatchRowRef : undefined}
+        style={styles.gridCard}
+        onPress={() => handleWatchPress(watch)}
+        activeOpacity={0.7}
+        onLayout={index === 0 ? () => {
+          firstWatchRowRef.current?.measureInWindow((x, y, width, height) => {
+            if (width > 0 && height > 0) {
+              registerGuideMeasurement('watch-details', { x, y, width, height, borderRadius: 8 });
+            }
+          });
+        } : undefined}
+      >
+        <View style={styles.gridImageContainer}>
+          {watch.coverImage ? (
+            <Image source={{ uri: watch.coverImage, cache: 'force-cache' }} style={styles.gridImage} resizeMode="contain" />
+          ) : (
+            <LogoIcon size={sp(40)} color="rgba(33, 33, 33, 0.12)" />
+          )}
+        </View>
+        <View style={styles.gridCardContent}>
+          <Text style={styles.gridBrand} numberOfLines={1}>{watch.brand}</Text>
+          <Text style={styles.gridModel} numberOfLines={1}>{watch.model}</Text>
+          <Text style={styles.gridReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
+          <View style={[styles.gridPriceRow]}>
+            {v2Enabled ? (
+              <View style={[
+                styles.gridChangeBadge,
+                isPositive ? styles.gridChangeBadgeUp : styles.gridChangeBadgeDown,
+              ]}>
+                {isPositive ? (
+                  <TrendingUp size={10} color="#4AA078" />
+                ) : (
+                  <PriceAlertDown size={10} color="#C93927" />
+                )}
+                <Text style={[
+                  styles.gridChangeText,
+                  isPositive ? styles.watchChangePositive : styles.watchChangeNegative
+                ]}>
+                  {Math.abs(watch.priceChange).toFixed(1)}%
+                </Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4) }}>
+                <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
+                  <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(10), color: '#4AA078' }}>WTS {watch.wtsCount || 0}</Text>
+                </View>
+                <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
+                  <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(10), color: '#5B9BD5' }}>WTB {watch.wtbCount || 0}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [v2Enabled, fonts]);
+
+  // FlatList header component containing trending, section title, and category tabs
+  const ListHeaderContent = useCallback(() => (
+    <>
+      {/* Trending / Featured Watches Section */}
+      {v2Enabled && <View style={styles.trendingSection}>
+        <Text style={styles.sectionTitle}>
+          {trendingWatches.length > 0 ? t('market.trendingWatches') : t('market.featuredWatches')}
+        </Text>
+        {trendingWatches.length > 0 ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryTabs}
-            style={{ flex: 1 }}
+            contentContainerStyle={styles.trendingScrollContent}
           >
-            {brandTabs.map((tab) => (
-              <TouchableOpacity
-                key={tab.value}
-                style={[
-                  styles.categoryTab,
-                  selectedCategory === tab.value && styles.categoryTabActive
-                ]}
-                onPress={() => setSelectedCategory(tab.value)}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.categoryTabText,
-                  selectedCategory === tab.value && styles.categoryTabTextActive
-                ]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          <TouchableOpacity
-            style={styles.viewModeToggle}
-            onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-            activeOpacity={0.7}
-          >
-            {viewMode === 'grid' ? (
-              <ListIcon size={20} color="#212121" />
-            ) : (
-              <Grid size={20} color="#212121" />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Watch List / Grid */}
-        <View style={styles.watchList}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#212121" />
-            </View>
-          ) : watches.length > 0 ? (
-            viewMode === 'list' ? (
-              watches.map((watch, index) => {
-                const isPositive = watch.priceChange >= 0;
-                return (
-                  <TouchableOpacity
-                    key={`${watch.id}-list-${index}`}
-                    ref={index === 0 ? firstWatchRowRef : undefined}
-                    style={styles.watchItem}
-                    onPress={() => handleWatchPress(watch)}
-                    activeOpacity={0.7}
-                    onLayout={index === 0 ? () => {
-                      firstWatchRowRef.current?.measureInWindow((x, y, width, height) => {
-                        if (width > 0 && height > 0) {
-                          registerGuideMeasurement('watch-details', { x, y, width, height, borderRadius: 8 });
-                        }
-                      });
-                    } : undefined}
-                  >
-                    <View style={styles.watchInfo}>
-                      <Text style={styles.watchName} numberOfLines={1}>{watch.brand}</Text>
-                      <Text style={styles.watchModel} numberOfLines={1}>{watch.model}</Text>
-                      <Text style={styles.watchReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
+            {trendingWatches.map((watch, index) => {
+              const isPositive = watch.priceChange >= 0;
+              return (
+                <TouchableOpacity
+                  key={`${watch.id}-${index}`}
+                  style={styles.trendingCard}
+                  onPress={() => handleWatchPress(watch)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.trendingCardContent}>
+                    <View style={styles.trendingTopRow}>
+                      <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand}</Text>
+                      <Text style={styles.trendingPrice}>{formatPrice(watch.price, watch.currency)}</Text>
                     </View>
-                    <View style={styles.watchPriceSection}>
-                      {v2Enabled ? (
-                        <>
-                          <View style={styles.chartContainer}>
-                            <MiniSparkline
-                              data={watch.priceHistory}
-                              width={40}
-                              height={16}
-                              isPositive={isPositive}
-                            />
-                          </View>
-                          <View style={styles.watchPriceInfo}>
-                            <View style={styles.watchChange}>
-                              {isPositive ? (
-                                <TrendingUp size={12} color="#4AA078" />
-                              ) : (
-                                <PriceAlertDown size={12} color="#C93927" />
-                              )}
-                              <Text style={[
-                                styles.watchChangeText,
-                                isPositive ? styles.watchChangePositive : styles.watchChangeNegative
-                              ]}>
-                                {Math.abs(watch.priceChange).toFixed(1)}%
-                              </Text>
-                            </View>
-                          </View>
-                        </>
-                      ) : (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(6) }}>
-                          <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(8), paddingVertical: hp(3), borderRadius: sp(99) }}>
-                            <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(11), color: '#4AA078' }}>WTS {watch.wtsCount || 0}</Text>
-                          </View>
-                          <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(8), paddingVertical: hp(3), borderRadius: sp(99) }}>
-                            <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(11), color: '#5B9BD5' }}>WTB {watch.wtbCount || 0}</Text>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              <View style={styles.gridContainer}>
-                {watches.map((watch, index) => {
-                  const isPositive = watch.priceChange >= 0;
-                  return (
-                    <TouchableOpacity
-                      key={`${watch.id}-grid-${index}`}
-                      ref={index === 0 ? firstWatchRowRef : undefined}
-                      style={styles.gridCard}
-                      onPress={() => handleWatchPress(watch)}
-                      activeOpacity={0.7}
-                      onLayout={index === 0 ? () => {
-                        firstWatchRowRef.current?.measureInWindow((x, y, width, height) => {
-                          if (width > 0 && height > 0) {
-                            registerGuideMeasurement('watch-details', { x, y, width, height, borderRadius: 8 });
-                          }
-                        });
-                      } : undefined}
-                    >
-                      <View style={styles.gridImageContainer}>
-                        {watch.coverImage ? (
-                          <Image source={{ uri: watch.coverImage }} style={styles.gridImage} resizeMode="contain" />
+                    <View style={styles.trendingBottomRow}>
+                      <Text style={styles.trendingReference}>{watch.ws_code || watch.reference}</Text>
+                      <View style={styles.trendingChange}>
+                        {isPositive ? (
+                          <TriangleUp size={12} color="#4AA078" />
                         ) : (
-                          <LogoIcon size={sp(40)} color="rgba(33, 33, 33, 0.12)" />
+                          <TriangleDown size={12} color="#D90429" />
                         )}
+                        <Text style={[
+                          styles.trendingChangeText,
+                          isPositive ? styles.trendingChangePositive : styles.trendingChangeNegative
+                        ]}>
+                          {Math.abs(watch.priceChange).toFixed(1)}%
+                        </Text>
                       </View>
-                      <View style={styles.gridCardContent}>
-                        <Text style={styles.gridBrand} numberOfLines={1}>{watch.brand}</Text>
-                        <Text style={styles.gridModel} numberOfLines={1}>{watch.model}</Text>
-                        <Text style={styles.gridReference} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
-                        <View style={[styles.gridPriceRow]}>
-                          {v2Enabled ? (
-                            <View style={[
-                              styles.gridChangeBadge,
-                              isPositive ? styles.gridChangeBadgeUp : styles.gridChangeBadgeDown,
-                            ]}>
-                              {isPositive ? (
-                                <TrendingUp size={10} color="#4AA078" />
-                              ) : (
-                                <PriceAlertDown size={10} color="#C93927" />
-                              )}
-                              <Text style={[
-                                styles.gridChangeText,
-                                isPositive ? styles.watchChangePositive : styles.watchChangeNegative
-                              ]}>
-                                {Math.abs(watch.priceChange).toFixed(1)}%
-                              </Text>
-                            </View>
-                          ) : (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4) }}>
-                              <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
-                                <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(10), color: '#4AA078' }}>WTS {watch.wtsCount || 0}</Text>
-                              </View>
-                              <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
-                                <Text style={{ fontFamily: fonts.semiBold, fontSize: fp(10), color: '#5B9BD5' }}>WTB {watch.wtbCount || 0}</Text>
-                              </View>
-                            </View>
-                          )}
-                        </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : featuredWatches.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.trendingScrollContent}
+          >
+            {featuredWatches.map((watch, index) => {
+              const isPositive = watch.priceChange >= 0;
+              return (
+                <TouchableOpacity
+                  key={`featured-${watch.id}-${index}`}
+                  style={styles.trendingCard}
+                  onPress={() => handleWatchPress(watch)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.trendingCardContent}>
+                    <View style={styles.trendingTopRow}>
+                      <Text style={styles.trendingName} numberOfLines={1} ellipsizeMode="tail">{watch.brand}</Text>
+                      <Text style={styles.trendingPrice}>{formatPrice(watch.price, watch.currency)}</Text>
+                    </View>
+                    <View style={styles.trendingBottomRow}>
+                      <Text style={styles.trendingReference}>{watch.ws_code || watch.reference}</Text>
+                      <View style={styles.trendingChange}>
+                        {isPositive ? (
+                          <TriangleUp size={12} color="#4AA078" />
+                        ) : (
+                          <TriangleDown size={12} color="#D90429" />
+                        )}
+                        <Text style={[
+                          styles.trendingChangeText,
+                          isPositive ? styles.trendingChangePositive : styles.trendingChangeNegative
+                        ]}>
+                          {Math.abs(watch.priceChange).toFixed(1)}%
+                        </Text>
                       </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : !loading && (
+          <View style={styles.trendingEmptyContainer}>
+            <Text style={styles.emptyText}>{t('market.noWatchesAvailable')}</Text>
+          </View>
+        )}
+      </View>}
+
+      {/* Watches Section Header */}
+      <View style={[styles.watchesHeader, !v2Enabled && { paddingTop: hp(16) }]}>
+        <Text style={styles.watchesTitle}>{t('market.watches')}</Text>
+      </View>
+
+      {/* Category Tabs with View Mode Toggle */}
+      <View style={styles.categoryTabsRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryTabs}
+          style={{ flex: 1 }}
+        >
+          {brandTabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.value}
+              style={[
+                styles.categoryTab,
+                selectedCategory === tab.value && styles.categoryTabActive
+              ]}
+              onPress={() => setSelectedCategory(tab.value)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.categoryTabText,
+                selectedCategory === tab.value && styles.categoryTabTextActive
+              ]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <TouchableOpacity
+          style={styles.viewModeToggle}
+          onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+          activeOpacity={0.7}
+        >
+          {viewMode === 'grid' ? (
+            <ListIcon size={20} color="#212121" />
           ) : (
+            <Grid size={20} color="#212121" />
+          )}
+        </TouchableOpacity>
+      </View>
+    </>
+  ), [v2Enabled, trendingWatches, featuredWatches, brandTabs, selectedCategory, viewMode, loading, t]);
+
+  const keyExtractor = useCallback((item: WatchMarketData, index: number) => `${item.id}-${viewMode}-${index}`, [viewMode]);
+
+  return (
+    <SubscriptionOverlay feature="market" header={headerComponent}>
+    <View style={styles.container}>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#212121" />
+        </View>
+      ) : viewMode === 'grid' ? (
+        <FlatList
+          data={watches}
+          renderItem={renderGridItem}
+          keyExtractor={keyExtractor}
+          numColumns={2}
+          columnWrapperStyle={styles.gridRow}
+          ListHeaderComponent={ListHeaderContent}
+          ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>{t('market.noWatchesFound')}</Text>
             </View>
-          )}
-          {loadingMore && (
+          }
+          ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: hp(20), alignItems: 'center' }}>
               <ActivityIndicator size="small" color="#212121" />
             </View>
-          )}
-        </View>
-      </ScrollView>
+          ) : null}
+          onEndReached={() => {
+            if (!loadingMore && hasMore && !loading) {
+              loadMoreWatches();
+            }
+          }}
+          onEndReachedThreshold={0.3}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          onScrollBeginDrag={Keyboard.dismiss}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
+          }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={10}
+          contentContainerStyle={styles.scrollContent}
+        />
+      ) : (
+        <FlatList
+          data={watches}
+          renderItem={renderListItem}
+          keyExtractor={keyExtractor}
+          ListHeaderComponent={ListHeaderContent}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>{t('market.noWatchesFound')}</Text>
+            </View>
+          }
+          ListFooterComponent={loadingMore ? (
+            <View style={{ paddingVertical: hp(20), alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#212121" />
+            </View>
+          ) : null}
+          onEndReached={() => {
+            if (!loadingMore && hasMore && !loading) {
+              loadMoreWatches();
+            }
+          }}
+          onEndReachedThreshold={0.3}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          onScrollBeginDrag={Keyboard.dismiss}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#212121" />
+          }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={10}
+          contentContainerStyle={styles.scrollContent}
+        />
+      )}
     </View>
     </SubscriptionOverlay>
   );

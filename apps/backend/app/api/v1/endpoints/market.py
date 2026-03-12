@@ -879,6 +879,7 @@ async def admin_list_all_watches(
     status_filter: Optional[WatchStatus] = None,
     brand: Optional[str] = None,
     dealer_id: Optional[str] = None,
+    search: Optional[str] = None,
 ) -> Any:
     """List all watches including drafts (Admin only)"""
 
@@ -890,6 +891,14 @@ async def admin_list_all_watches(
         query_conditions.append(Watch.brand == brand)
     if dealer_id:
         query_conditions.append(Watch.dealer_id == dealer_id)
+    if search:
+        search_regex = {"$regex": search, "$options": "i"}
+        query_conditions.append({"$or": [
+            {"brand": search_regex},
+            {"model": search_regex},
+            {"reference": search_regex},
+            {"ws_code": search_regex},
+        ]})
 
     if query_conditions:
         watches = await Watch.find(*query_conditions).sort([("created_at", -1)]).skip(skip).limit(limit).to_list()
@@ -936,6 +945,7 @@ async def admin_count_watches(
     status_filter: Optional[WatchStatus] = None,
     brand: Optional[str] = None,
     dealer_id: Optional[str] = None,
+    search: Optional[str] = None,
 ) -> Any:
     """Count all watches with filters (Admin only)"""
     query_conditions = []
@@ -945,6 +955,14 @@ async def admin_count_watches(
         query_conditions.append(Watch.brand == brand)
     if dealer_id:
         query_conditions.append(Watch.dealer_id == dealer_id)
+    if search:
+        search_regex = {"$regex": search, "$options": "i"}
+        query_conditions.append({"$or": [
+            {"brand": search_regex},
+            {"model": search_regex},
+            {"reference": search_regex},
+            {"ws_code": search_regex},
+        ]})
 
     if query_conditions:
         total = await Watch.find(*query_conditions).count()
