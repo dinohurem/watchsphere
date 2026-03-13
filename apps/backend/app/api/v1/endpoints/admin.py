@@ -4,11 +4,15 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime
 import secrets
 import string
+import logging
+import httpx
 
 from app.core.deps import get_current_admin_user
 from app.core.security import get_password_hash
 from app.models.user import User, UserRole, AuthProvider
+from app.models.watch import Watch
 from app.services.email import email_service
+from app.services.storage import create_thumbnail, upload_image
 
 router = APIRouter()
 
@@ -447,4 +451,59 @@ async def reinvite_admin(
             "email": user.email,
             "name": user.name,
         }
+    }
+
+
+@router.post("/watches/generate-thumbnails")
+async def generate_missing_thumbnails(
+    current_admin: User = Depends(get_current_admin_user)
+) -> Any:
+    """Generate thumbnails for watches that have a cover_image but no cover_image_thumbnail."""
+    watches = await Watch.find(
+        {"cover_image": {"$ne": None, "$ne": ""}},
+        {"$or": [
+            {"cover_image_thumbnail": None},
+            {"cover_image_thumbnail": ""},
+        ]},
+    ).to_list()
+
+    processed = 0
+    failed = 0
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for watch in watches:
+            try:
+                # Download the full-size image
+                response = await client.get(watch.cover_image)
+                if response.status_code != 200:
+                    failed += 1
+                    continue
+
+                image_data = response.content
+
+                # Upload with thumbnail generation
+                watch_id = str(watch.id)
+                result = await upload_image(
+                    image_data,
+                    folder="watches",
+                    filename=f"watch_{watch_id}_thumb",
+                    optimize=False,
+                    create_thumb=True,
+                )
+
+                if result.get("thumbnail_url"):
+                    watch.cover_image_thumbnail = result["thumbnail_url"]
+                    await watch.save()
+                    processed += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                logging.error(f"Failed to generate thumbnail for watch {watch.id}: {e}")
+                failed += 1
+
+    return {
+        "message": f"Thumbnail generation complete",
+        "total_missing": len(watches),
+        "processed": processed,
+        "failed": failed,
     }

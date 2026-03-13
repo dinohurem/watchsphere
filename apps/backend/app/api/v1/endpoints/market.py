@@ -71,6 +71,7 @@ class WatchResponse(BaseModel):
     description: Optional[str] = None
     images: List[str] = []
     cover_image: Optional[str] = None
+    cover_image_thumbnail: Optional[str] = None
     status: WatchStatus
     featured: bool
     is_popular_search: bool = False
@@ -105,6 +106,7 @@ class MarketWatchResponse(BaseModel):
     price: float
     currency: str
     cover_image: Optional[str] = None
+    cover_image_thumbnail: Optional[str] = None
     trending: bool = False
     order_count: int = 0
     price_change: float = 0.0
@@ -120,6 +122,7 @@ class WatchListResponse(BaseModel):
     currency: str = "EUR"
     condition: Optional[WatchCondition] = None
     cover_image: Optional[str] = None
+    cover_image_thumbnail: Optional[str] = None
     status: WatchStatus
     featured: bool
     dealer_name: Optional[str] = None
@@ -539,6 +542,7 @@ class AggregatedWatchResponse(BaseModel):
     model: str
     ws_code: Optional[str] = None
     cover_image: Optional[str] = None
+    cover_image_thumbnail: Optional[str] = None
     # Price is the lowest from active sell orders, or admin price if no orders
     display_price: float
     lowest_order_price: Optional[float] = None
@@ -720,6 +724,7 @@ async def get_aggregated_market_data(
                 model=watch.model,
                 ws_code=watch.ws_code,
                 cover_image=watch.cover_image,
+                cover_image_thumbnail=watch.cover_image_thumbnail,
                 display_price=display_price,
                 lowest_order_price=lowest_order_price,
                 admin_price=admin_price,
@@ -854,6 +859,7 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
         model=watch.model,
         ws_code=watch.ws_code,
         cover_image=watch.cover_image,
+        cover_image_thumbnail=watch.cover_image_thumbnail,
         display_price=display_price,
         lowest_order_price=lowest_order_price,
         admin_price=watch.price,

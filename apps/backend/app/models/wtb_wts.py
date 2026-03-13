@@ -39,6 +39,8 @@ class WtbWtsRun(Document):
     detected_posts: int = 0
     matched_count: int = 0
     needs_review_count: int = 0
+    fuzzy_matched_count: int = 0
+    ai_matched_count: int = 0
 
     # Admin tracking
     imported_by: str = Field(..., index=True)

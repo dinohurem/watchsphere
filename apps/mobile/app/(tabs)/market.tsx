@@ -269,7 +269,7 @@ export default function MarketScreen() {
     orderCount: item.total_orders || 0,
     lowestOrderPrice: item.lowest_order_price,
     adminPrice: item.admin_price,
-    coverImage: item.cover_image || undefined,
+    coverImage: item.cover_image_thumbnail || item.cover_image || undefined,
     wtsCount: item.wts_count || 0,
     wtbCount: item.wtb_count || 0,
     collection: item.collection || undefined,
@@ -386,7 +386,7 @@ export default function MarketScreen() {
           priceHistory: item.price_history || [],
           trending: item.trending || true,
           orderCount: item.order_count || 0,
-          coverImage: item.cover_image || undefined,
+          coverImage: item.cover_image_thumbnail || item.cover_image || undefined,
         }));
         setTrendingWatches(trending);
         return trending.length > 0;
@@ -422,7 +422,7 @@ export default function MarketScreen() {
           priceHistory: item.price_history || [],
           trending: item.trending || false,
           orderCount: item.order_count || 0,
-          coverImage: item.cover_image || undefined,
+          coverImage: item.cover_image_thumbnail || item.cover_image || undefined,
         }));
         setFeaturedWatches(featured);
       } else {
@@ -1210,6 +1210,7 @@ export default function MarketScreen() {
         </View>
       ) : viewMode === 'grid' ? (
         <FlatList
+          key="grid"
           data={watches}
           renderItem={renderGridItem}
           keyExtractor={keyExtractor}
@@ -1246,6 +1247,7 @@ export default function MarketScreen() {
         />
       ) : (
         <FlatList
+          key="list"
           data={watches}
           renderItem={renderListItem}
           keyExtractor={keyExtractor}

@@ -202,7 +202,7 @@ export function HomePage() {
           ws_code: item.ws_code,
           price: item.price || item.target_price || 0,
           priceChange: item.priceChange || item.price_change || 0,
-          image: item.image || item.cover_image,
+          image: item.cover_image_thumbnail || item.image || item.cover_image,
         })));
       } else {
         // If user has no watchlist, try to load default watchlist
@@ -217,7 +217,7 @@ export function HomePage() {
               ws_code: item.ws_code,
               price: item.price || item.target_price || 0,
               priceChange: item.priceChange || item.price_change || 0,
-              image: item.image || item.cover_image,
+              image: item.cover_image_thumbnail || item.image || item.cover_image,
             })));
           } else {
             setWatchlist([]);
@@ -241,7 +241,7 @@ export function HomePage() {
             ws_code: item.ws_code,
             price: item.price || item.target_price || 0,
             priceChange: item.priceChange || item.price_change || 0,
-            image: item.image || item.cover_image,
+            image: item.cover_image_thumbnail || item.image || item.cover_image,
           })));
         } else {
           setWatchlist([]);
@@ -348,7 +348,7 @@ export function HomePage() {
           priceChange: item.price_change || 0,
           isPositive: (item.price_change || 0) >= 0,
           priceHistory: item.price_history || [],
-          image: item.image_url || item.cover_image,
+          image: item.cover_image_thumbnail || item.image_url || item.cover_image,
         })));
       } else {
         // Fallback to regular market endpoint
@@ -364,7 +364,7 @@ export function HomePage() {
             priceChange: item.price_change || 0,
             isPositive: (item.price_change || 0) >= 0,
             priceHistory: item.price_history || [],
-            image: item.image_url || item.cover_image,
+            image: item.cover_image_thumbnail || item.image_url || item.cover_image,
           })));
         } else {
           setMarketItems([]);

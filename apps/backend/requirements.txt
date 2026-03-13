@@ -20,6 +20,7 @@ PyJWT==2.8.0
 
 # AI & ML
 openai==1.10.0
+rapidfuzz>=3.0.0
 
 # Utilities
 python-dotenv==1.0.0
