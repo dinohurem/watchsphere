@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X, Download, PlusCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
@@ -725,6 +725,21 @@ export function AdminWatches() {
           <p className="text-gray-600">Manage watch listings ({totalCount} total)</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              if (!confirm('Generate missing thumbnails for all watches? This may take a moment.')) return
+              try {
+                const res = await api.post('/admin/watches/generate-thumbnails')
+                alert(`Thumbnails: ${res.data.processed} generated, ${res.data.failed} failed (${res.data.total_missing} missing)`)
+              } catch (error) {
+                console.error('Failed to generate thumbnails:', error)
+                alert('Failed to generate thumbnails')
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors"
+          >
+            Generate Thumbnails
+          </button>
           <button
             onClick={async () => {
               if (!confirm('Populate USD prices for all orders without one? This uses the Frankfurter API for conversion.')) return

@@ -2,9 +2,13 @@ import re
 import csv
 import io
 import json
+import logging
 from datetime import datetime
 from typing import Optional
 from app.models.watch import Watch
+from rapidfuzz import fuzz, process
+
+logger = logging.getLogger(__name__)
 
 
 # Phone prefix to country code mapping
@@ -504,6 +508,14 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
             "Chopard", "Girard-Perregaux", "Zenith", "Blancpain",
         }
 
+    # Build flat list of (searchable_string, watch_dict) for fuzzy matching
+    fuzzy_candidates = []
+    for w in watches:
+        for s in [w["ws_code"], w["reference"]] + w["oem_references"] + w["aliases"]:
+            s = s.strip()
+            if s:
+                fuzzy_candidates.append((s.lower(), w))
+
     return {
         "by_ws_code": by_ws_code,
         "by_oem_ref": by_oem_ref,
@@ -511,42 +523,65 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
         "by_reference": by_reference,
         "by_brand": by_brand,
         "brands": sorted(brands_set),
+        "fuzzy_candidates": fuzzy_candidates,
     }
 
 
+_EMOJI_RE = re.compile(
+    r'[\U0001F300-\U0001FAFF'   # Misc Symbols, Emoticons, Dingbats, Transport, etc.
+    r'\U00002702-\U000027B0'    # Dingbats
+    r'\U0000FE00-\U0000FE0F'    # Variation selectors
+    r'\U0000200D'               # Zero-width joiner
+    r'\U0001F1E0-\U0001F1FF'    # Regional indicator (flags)
+    r'\U00002600-\U000026FF'    # Misc symbols
+    r'\U00002300-\U000023FF'    # Misc technical
+    r'\U0000200B-\U0000200F'    # Zero-width spaces
+    r']+'
+)
+
+# LRU cache for _clean_text to avoid re-cleaning the same lines
+_clean_text_cache: dict[str, str] = {}
+
+
 def _clean_text(text: str) -> str:
-    """Remove emoji and special decorative chars from text."""
-    # Remove broad unicode emoji/symbol ranges
-    cleaned = re.sub(
-        r'[\U0001F300-\U0001FAFF'   # Misc Symbols, Emoticons, Dingbats, Transport, etc.
-        r'\U00002702-\U000027B0'    # Dingbats
-        r'\U0000FE00-\U0000FE0F'    # Variation selectors
-        r'\U0000200D'               # Zero-width joiner
-        r'\U0001F1E0-\U0001F1FF'    # Regional indicator (flags)
-        r'\U00002600-\U000026FF'    # Misc symbols
-        r'\U00002300-\U000023FF'    # Misc technical
-        r'\U0000200B-\U0000200F'    # Zero-width spaces
-        r'\U0000FE0F'               # Variation selector-16
-        r']+', '', text)
-    return cleaned.strip()
+    """Remove emoji and special decorative chars from text. Results are cached."""
+    cached = _clean_text_cache.get(text)
+    if cached is not None:
+        return cached
+    cleaned = _EMOJI_RE.sub('', text).strip()
+    # Limit cache size to prevent memory issues
+    if len(_clean_text_cache) < 50000:
+        _clean_text_cache[text] = cleaned
+    return cleaned
 
 
 def detect_brand_header(line: str) -> Optional[str]:
     """Detect if a line is a brand section header.
     Returns the canonical brand name or None.
     Handles lines like: '🟥🟥Patek Philippe🟥🟥', 'Ap Used ✨✨', 'RM Used Fullset✨✨',
-    '🟥 🟥 Rolex 🟥 🟥', 'Patek Used ✨ ✨'"""
+    '🟥 🟥 Rolex 🟥 🟥', 'Patek Used ✨ ✨', 'PP stock🍰🍰', 'Ap Stock 🍰',
+    'RM stock🍰🍰', 'All Brand new', 'BRAND NEW Rolex'"""
     cleaned = _clean_text(line).strip()
     if not cleaned:
         return None
 
+    # Also strip asterisks (WhatsApp bold markers)
+    cleaned = cleaned.replace('*', '').strip()
     cleaned_lower = cleaned.lower().strip()
 
-    # Remove trailing condition/status words to isolate brand
-    # e.g. "Ap Used" -> "Ap", "RM Used Fullset" -> "RM", "Patek Used" -> "Patek"
-    cleaned_lower = re.sub(r'\s+(used|new|unworn|fullset|full set|nos)\b.*$', '', cleaned_lower, flags=re.IGNORECASE).strip()
+    # Remove trailing condition/status words and "stock" to isolate brand
+    # e.g. "Ap Used" -> "Ap", "PP stock" -> "PP", "RM Used Fullset" -> "RM"
+    cleaned_lower = re.sub(
+        r'\s+(used|new|unworn|fullset|full set|nos|stock|list|update|price)\b.*$',
+        '', cleaned_lower, flags=re.IGNORECASE
+    ).strip()
 
-    # Remove decorative dashes/underscores
+    # Remove leading "brand new" / "all brand new" / "all new" etc.
+    cleaned_lower = re.sub(
+        r'^(all\s+)?(brand\s+)?new\s+', '', cleaned_lower, flags=re.IGNORECASE
+    ).strip()
+
+    # Remove decorative dashes/underscores/asterisks
     cleaned_lower = re.sub(r'^[\-_=*\s]+|[\-_=*\s]+$', '', cleaned_lower)
 
     if not cleaned_lower:
@@ -556,9 +591,10 @@ def detect_brand_header(line: str) -> Optional[str]:
     if cleaned_lower in BRAND_ALIASES:
         return BRAND_ALIASES[cleaned_lower]
 
-    # Check partial matches for multi-word brands
+    # Also try: "PP stock" -> after stripping "stock", "pp" matches
+    # Already handled above. Check partial starts for cases like "rolex watches"
     for alias, brand in sorted(BRAND_ALIASES.items(), key=lambda x: len(x[0]), reverse=True):
-        if cleaned_lower == alias:
+        if cleaned_lower == alias or cleaned_lower.startswith(alias + " "):
             return brand
 
     return None
@@ -591,10 +627,19 @@ def _is_section_header(line: str) -> bool:
 
 
 def _extract_ref_from_line(line: str) -> Optional[str]:
-    """Extract the reference/model number from the start of a watch line.
-    Strips emoji first. Handles formats like: '5968A', 'RM037RG', '126334G',
-    '5712/1A', '5139G-010', '7118/1200A', '5160/500R', '278273VI', '15720ST'"""
+    """Extract the reference/model number from a watch line.
+    Strips emoji and leading condition/status words first.
+    Handles formats like: '5968A', 'RM037RG', '126334G', 'Used 5167A-001',
+    'New 124200 Pistachio', '5712/1A', '5139G-010', '7118/1200A'"""
     cleaned = _clean_text(line).strip()
+    if not cleaned:
+        return None
+    # Strip leading condition/status words and asterisks
+    cleaned = re.sub(r'^[*\s]*', '', cleaned)
+    cleaned = re.sub(
+        r'^(?:used|new|unworn|like\s*new|brand\s*new|bnib|nos|fresh|polished)\s+',
+        '', cleaned, flags=re.IGNORECASE
+    ).strip()
     if not cleaned:
         return None
     # Match reference patterns at start: alphanumeric with optional /- separators
@@ -682,6 +727,174 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
     return matches
 
 
+# Cache for fuzzy match results to avoid redundant computation
+_fuzzy_match_cache: dict[tuple[str, Optional[str]], list[dict]] = {}
+# Counter for fuzzy matches in current run (reset per process_generation call)
+_fuzzy_match_count = 0
+
+FUZZY_SCORE_THRESHOLD = 78
+
+
+def fuzzy_match_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = None) -> list[dict]:
+    """Fuzzy-match a reference string against the watch index using rapidfuzz.
+    Called as a fallback when exact/substring matching fails.
+    Returns list of matched watches (empty if no good match)."""
+    ref_lower = ref.lower().strip()
+    if len(ref_lower) < 3:
+        return []
+
+    cache_key = (ref_lower, brand_hint.lower() if brand_hint else None)
+    if cache_key in _fuzzy_match_cache:
+        return _fuzzy_match_cache[cache_key]
+
+    candidates = watch_index.get("fuzzy_candidates", [])
+    if not candidates:
+        _fuzzy_match_cache[cache_key] = []
+        return []
+
+    # Filter candidates by brand if hint is available
+    if brand_hint:
+        brand_lower = brand_hint.lower()
+        filtered = [(s, w) for s, w in candidates if w["brand"].lower() == brand_lower]
+        if filtered:
+            candidates = filtered
+
+    # Extract just the searchable strings for rapidfuzz
+    choices = [s for s, _ in candidates]
+
+    results = process.extract(
+        ref_lower,
+        choices,
+        scorer=fuzz.WRatio,
+        limit=5,
+    )
+
+    if not results:
+        _fuzzy_match_cache[cache_key] = []
+        return []
+
+    # Filter by threshold
+    good_matches = [(match_str, score, idx) for match_str, score, idx in results if score >= FUZZY_SCORE_THRESHOLD]
+
+    if not good_matches:
+        _fuzzy_match_cache[cache_key] = []
+        return []
+
+    # Deduplicate by ws_code
+    seen_ws = set()
+    matched_watches = []
+    for _, _, idx in good_matches:
+        _, watch = candidates[idx]
+        ws = watch["ws_code"].lower()
+        if ws and ws not in seen_ws:
+            matched_watches.append(watch)
+            seen_ws.add(ws)
+
+    # Limit cache size
+    if len(_fuzzy_match_cache) < 10000:
+        _fuzzy_match_cache[cache_key] = matched_watches
+
+    return matched_watches
+
+
+async def batch_ai_match(
+    unmatched_lines: list[dict],
+    watch_index: dict,
+) -> list[dict]:
+    """Use OpenAI gpt-4o-mini to match unmatched lines against the watch catalog.
+    Called once per run with all collected unmatched lines.
+
+    Each item in unmatched_lines: {"index": int, "content": str}
+    Returns list of {"index": int, "ws_code": str, "watch": dict} for successful matches.
+    """
+    from openai import AsyncOpenAI
+    from app.core.config import settings
+
+    if not settings.OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY not set, skipping AI matching")
+        return []
+
+    if not unmatched_lines:
+        return []
+
+    # Build compact catalog for the prompt
+    catalog_entries = []
+    ws_code_to_watch = {}
+    for ws_code, watch in watch_index["by_ws_code"].items():
+        refs = [watch["reference"]] + watch.get("oem_references", []) + watch.get("aliases", [])
+        refs = [r for r in refs if r]
+        entry = f"{watch['ws_code']} | {watch['brand']} {watch['model']} | refs: {', '.join(refs)}"
+        catalog_entries.append(entry)
+        ws_code_to_watch[watch["ws_code"].lower()] = watch
+
+    if not catalog_entries:
+        return []
+
+    catalog_text = "\n".join(catalog_entries)
+    logger.info(f"batch_ai_match: catalog has {len(catalog_entries)} entries, "
+                f"processing {min(len(unmatched_lines), 100)} of {len(unmatched_lines)} unmatched lines")
+
+    lines_text = "\n".join(
+        f"[{item['index']}] {item['content'][:300]}"
+        for item in unmatched_lines[:100]  # Cap at 100 lines per batch
+    )
+
+    prompt = f"""You are a watch reference matcher. Match each line to the correct watch from the catalog.
+
+CATALOG:
+{catalog_text}
+
+UNMATCHED LINES:
+{lines_text}
+
+For each line, respond with a JSON array. Each element: {{"index": <line_index>, "ws_code": "<matched_ws_code_or_null>"}}.
+Only include matches you are confident about (>80% sure). Use null for uncertain matches.
+Respond with ONLY the JSON array, no other text."""
+
+    prompt_len = len(prompt)
+    logger.info(f"batch_ai_match: sending prompt ({prompt_len} chars) to gpt-4o-mini...")
+
+    try:
+        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=60.0)
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=4096,
+        )
+        logger.info("batch_ai_match: OpenAI response received")
+
+        content = response.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+
+        ai_results = json.loads(content)
+
+        matched = []
+        for item in ai_results:
+            ws_code = item.get("ws_code")
+            idx = item.get("index")
+            if ws_code and idx is not None:
+                ws_lower = ws_code.lower()
+                if ws_lower in ws_code_to_watch:
+                    matched.append({
+                        "index": idx,
+                        "ws_code": ws_code,
+                        "watch": ws_code_to_watch[ws_lower],
+                    })
+
+        logger.info(f"AI matching: {len(matched)}/{len(unmatched_lines)} lines matched")
+        return matched
+
+    except Exception as e:
+        logger.error(f"AI matching failed: {e}")
+        return []
+
+
 def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = None,
                        line_tokens: Optional[list[str]] = None) -> list[dict]:
     """Match a reference string against the watch index.
@@ -767,6 +980,19 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
 
     if len(matches) > 1 and line_tokens:
         matches = _disambiguate_matches(matches, line_tokens)
+
+    if matches:
+        return matches
+
+    # 6. Fuzzy matching fallback (rapidfuzz)
+    global _fuzzy_match_count
+    fuzzy_results = fuzzy_match_ref(ref, watch_index, brand_hint)
+    if fuzzy_results:
+        if len(fuzzy_results) > 1 and line_tokens:
+            fuzzy_results = _disambiguate_matches(fuzzy_results, line_tokens)
+        if len(fuzzy_results) == 1:
+            _fuzzy_match_count += 1
+        return fuzzy_results
 
     return matches
 
@@ -1045,7 +1271,8 @@ def _format_price(raw: str) -> Optional[str]:
 
 
 def extract_condition(content: str, mode: str, month_year: Optional[str] = None, ref_month: int = 1, ref_year: int = 2026) -> Optional[str]:
-    """Extract and normalize condition from message text."""
+    """Extract and normalize condition from message text.
+    For WTS: defaults to 'Unworn' when no explicit condition keyword is found."""
     content_lower = content.lower()
     conditions = WTS_CONDITIONS if mode == "WTS" else WTB_CONDITIONS
 
@@ -1053,32 +1280,25 @@ def extract_condition(content: str, mode: str, month_year: Optional[str] = None,
         if keyword in content_lower:
             return conditions[keyword]
 
-    if mode == "WTS" and month_year:
-        try:
-            normalized = normalize_month_year(month_year, ref_month, ref_year, mode)
-            if '/' in normalized:
-                parts = normalized.replace('+', '').split('/')
-                watch_month = int(parts[0])
-                watch_year = 2000 + int(parts[1]) if int(parts[1]) < 100 else int(parts[1])
-                months_diff = (ref_year * 12 + ref_month) - (watch_year * 12 + watch_month)
-                if 0 <= months_diff < 4:
-                    return "Unworn"
-        except (ValueError, IndexError):
-            pass
+    # WTS posts default to Unworn when no explicit condition is stated
+    if mode == "WTS":
+        return "Unworn"
 
     return None
 
 
 def extract_condition_from_line(line: str, section_condition: Optional[str] = None) -> Optional[str]:
     """Extract condition from a single watch line, falling back to section condition.
-    section_condition comes from the brand header (e.g., 'Patek Used' -> 'Used')."""
+    section_condition comes from the brand header (e.g., 'Patek Used' -> 'Used').
+    Defaults to 'Unworn' when no condition is found (stock list items are typically unworn)."""
     line_lower = line.lower()
 
     for keyword in sorted(WTS_CONDITIONS.keys(), key=len, reverse=True):
         if keyword in line_lower:
             return WTS_CONDITIONS[keyword]
 
-    return section_condition
+    # Fall back to section condition, then default to Unworn
+    return section_condition or "Unworn"
 
 
 def extract_location(content: str, sender_country: Optional[str], mode: str) -> Optional[str]:
@@ -1151,26 +1371,42 @@ def _detect_section_condition(line: str) -> Optional[str]:
 
 
 def _is_stock_list_message(content: str) -> bool:
-    """Detect if a message is a structured stock list (multi-line with brand sections).
-    Stock lists have brand headers followed by watch reference lines."""
+    """Detect if a message is a structured stock list (multi-line with watch reference lines).
+    A stock list has either: brand headers + ref lines, OR enough ref lines (5+) without headers.
+    Uses early termination for performance on large messages."""
     lines = content.split('\n')
     if len(lines) < 3:
         return False
 
-    # Look for brand headers
+    # Sample first 40 non-empty lines for quick detection
     brand_header_count = 0
     ref_line_count = 0
+    sampled = 0
     for line in lines:
         stripped = line.strip()
         if not stripped:
             continue
+        sampled += 1
         if detect_brand_header(stripped) is not None:
             brand_header_count += 1
         elif _extract_ref_from_line(stripped):
             ref_line_count += 1
+        # Early success: brand header + refs
+        if brand_header_count >= 1 and ref_line_count >= 3:
+            return True
+        # Early success: enough ref lines even without brand header (e.g. flat price lists)
+        if ref_line_count >= 5:
+            return True
+        # Only check first 40 non-empty lines
+        if sampled >= 40:
+            break
 
-    # A stock list has at least 1 brand header and several ref lines
-    return brand_header_count >= 1 and ref_line_count >= 3
+    # With brand header: 3+ refs. Without: 5+ refs needed.
+    if brand_header_count >= 1 and ref_line_count >= 3:
+        return True
+    if ref_line_count >= 5:
+        return True
+    return False
 
 
 def parse_stock_list(
@@ -1249,11 +1485,13 @@ def parse_stock_list(
             line_condition = extract_condition_from_line(stripped, section_condition)
             raw_month_year = extract_month_year_from_text(stripped)
             year_str = extract_year_from_line(stripped)
-            month_year = ""
+            default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
             if raw_month_year:
                 month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode)
             elif year_str:
                 month_year = year_str
+            else:
+                month_year = default_month_year
 
             price, currency = extract_price_from_line(stripped, sender_country)
             remarks = normalize_remarks(stripped)
@@ -1274,6 +1512,8 @@ def parse_stock_list(
                 "Review Reason": "; ".join(review_reasons),
                 "Original Text": stripped[:500],
                 "Extracted Ref": ref,
+                "_review_reason": "; ".join(review_reasons),
+                "_original_content": stripped,
             }
             needs_review_rows.append(row)
             continue
@@ -1287,11 +1527,13 @@ def parse_stock_list(
         line_condition = extract_condition_from_line(stripped, section_condition)
         raw_month_year = extract_month_year_from_text(stripped)
         year_str = extract_year_from_line(stripped)
-        month_year = ""
+        default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
         if raw_month_year:
             month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode)
         elif year_str:
             month_year = year_str
+        else:
+            month_year = default_month_year
 
         price, currency = extract_price_from_line(stripped, sender_country)
         remarks = normalize_remarks(stripped)
@@ -1357,7 +1599,8 @@ def _build_row(
 ) -> dict:
     """Build a CSV row dict (used for needs_review entries)."""
     raw_month_year = extract_month_year_from_text(content)
-    month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode) if raw_month_year else ""
+    default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
+    month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode) if raw_month_year else default_month_year
     location = extract_location(content, sender_country, mode)
     condition = extract_condition(content, mode, raw_month_year, ref_month, ref_year)
     price, currency = extract_price(content, sender_country)
@@ -1384,6 +1627,9 @@ def _build_row(
     }
     row["Review Reason"] = reason
     row["Original Text"] = content[:500]
+    # Internal fields for AI matching pass (removed before CSV output)
+    row["_review_reason"] = reason
+    row["_original_content"] = content
     return row
 
 
@@ -1413,9 +1659,21 @@ async def process_generation(
     jsonl_content: Optional[str] = None,
 ) -> dict:
     """Main processing function. Returns matched_csv, needs_review_csv, and stats."""
+    import time
+    t_start = time.time()
+
+    global _fuzzy_match_count
+    _fuzzy_match_count = 0
+    _fuzzy_match_cache.clear()
+
+    logger.info("process_generation: building watch index...")
     watch_index = await build_watch_index(jsonl_content)
+    logger.info(f"process_generation: watch index built ({len(watch_index.get('by_ws_code', {}))} ws_codes, "
+                f"{len(watch_index.get('fuzzy_candidates', []))} fuzzy candidates) in {time.time()-t_start:.1f}s")
+
     messages = parse_whatsapp_txt(txt_content)
     total_messages = len(messages)
+    logger.info(f"process_generation: parsed {total_messages} messages from txt")
 
     matched_rows = []
     needs_review_rows = []
@@ -1451,6 +1709,10 @@ async def process_generation(
                 phone=phone,
                 sender_country=sender_country,
             )
+            line_count = len(content.split('\n'))
+            if len(m_rows) + len(nr_rows) > 100:
+                logger.info(f"process_generation: large stock list from {sender[:20]} — "
+                            f"{line_count} lines -> {len(m_rows)} matched + {len(nr_rows)} needs_review")
             matched_rows.extend(m_rows)
             needs_review_rows.extend(nr_rows)
             continue
@@ -1486,7 +1748,8 @@ async def process_generation(
         watch = watch_matches[0]
 
         raw_month_year = extract_month_year_from_text(content)
-        month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode) if raw_month_year else ""
+        default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
+        month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode) if raw_month_year else default_month_year
 
         location = extract_location(content, sender_country, mode)
         condition = extract_condition(content, mode, raw_month_year, ref_month, ref_year)
@@ -1532,14 +1795,101 @@ async def process_generation(
             "Nachricht gepostet am": format_timestamp(timestamp),
         })
 
+    t_main_loop = time.time()
+    logger.info(f"process_generation: main loop done in {t_main_loop-t_start:.1f}s — "
+                f"{detected_posts} posts detected, {len(matched_rows)} matched, "
+                f"{len(needs_review_rows)} needs_review, {_fuzzy_match_count} fuzzy matches")
+
+    # --- AI matching pass: attempt to match remaining "no match" items ---
+    ai_matched_count = 0
+    no_match_reason = "No matching watch found"
+    unmatched_for_ai = []
+    unmatched_indices = []
+
+    for i, row in enumerate(needs_review_rows):
+        reason = row.get("_review_reason", "")
+        if no_match_reason in reason:
+            unmatched_for_ai.append({
+                "index": len(unmatched_for_ai),
+                "content": row.get("_original_content", ""),
+            })
+            unmatched_indices.append(i)
+
+    if unmatched_for_ai:
+        logger.info(f"process_generation: starting AI matching for {len(unmatched_for_ai)} unmatched lines...")
+        t_ai_start = time.time()
+        ai_results = await batch_ai_match(unmatched_for_ai, watch_index)
+        logger.info(f"process_generation: AI matching done in {time.time()-t_ai_start:.1f}s — {len(ai_results)} matches")
+
+        # Build lookup: ai line index -> match result
+        ai_lookup = {r["index"]: r for r in ai_results}
+
+        # Process in reverse order to safely remove from needs_review
+        indices_to_remove = []
+        for ai_idx, nr_idx in enumerate(unmatched_indices):
+            if ai_idx in ai_lookup:
+                result = ai_lookup[ai_idx]
+                watch = result["watch"]
+                row = needs_review_rows[nr_idx]
+                original_content = row.get("_original_content", "")
+
+                # Re-extract fields for the matched row
+                raw_month_year = extract_month_year_from_text(original_content)
+                default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
+                month_year_val = normalize_month_year(raw_month_year, ref_month, ref_year, mode) if raw_month_year else default_month_year
+                phone_val = row.get("Nummer", "")
+                sender_country_val = get_country_from_phone(phone_val) if phone_val.startswith("+") else None
+                location_val = extract_location(original_content, sender_country_val, mode)
+                condition_val = extract_condition(original_content, mode, raw_month_year, ref_month, ref_year)
+                price_val, currency_val = extract_price(original_content, sender_country_val)
+                remarks_val = normalize_remarks(original_content)
+                if mode == "WTB":
+                    loc_remarks = extract_wtb_location_remarks(original_content)
+                    if loc_remarks:
+                        remarks_val = f"{remarks_val}; {loc_remarks}" if remarks_val else loc_remarks
+                price_str_val = f"{price_val} {currency_val}" if price_val and currency_val else (price_val or "")
+
+                matched_rows.append({
+                    "Nachrichten Art": mode,
+                    "Marke": watch["brand"],
+                    "WS-Code": watch["ws_code"],
+                    "Monat/Jahr": month_year_val,
+                    "Standort": location_val or "",
+                    "Zustand": condition_val or "",
+                    "Bemerkungen": remarks_val,
+                    "Preis": price_str_val,
+                    "Nummer": phone_val,
+                    "Gruppe": group_name,
+                    "Nachricht gepostet am": row.get("Nachricht gepostet am", ""),
+                })
+                indices_to_remove.append(nr_idx)
+                ai_matched_count += 1
+
+        # Remove AI-matched items from needs_review (reverse order)
+        for idx in sorted(indices_to_remove, reverse=True):
+            needs_review_rows.pop(idx)
+
+    # Clean internal fields before CSV generation
+    for row in needs_review_rows:
+        row.pop("_review_reason", None)
+        row.pop("_original_content", None)
+
     matched_csv = _rows_to_csv(matched_rows)
     needs_review_csv = _rows_to_csv(needs_review_rows)
+
+    logger.info(f"process_generation: COMPLETE in {time.time()-t_start:.1f}s — "
+                f"{len(matched_rows)} matched, {len(needs_review_rows)} needs_review, "
+                f"{_fuzzy_match_count} fuzzy, {ai_matched_count} AI")
+
+    total_rows = len(matched_rows) + len(needs_review_rows)
 
     return {
         "matched_csv": matched_csv,
         "needs_review_csv": needs_review_csv,
-        "total_messages": total_messages,
-        "detected_posts": detected_posts,
+        "total_messages": total_rows,
+        "detected_posts": total_rows,
         "matched_count": len(matched_rows),
         "needs_review_count": len(needs_review_rows),
+        "fuzzy_matched_count": _fuzzy_match_count,
+        "ai_matched_count": ai_matched_count,
     }

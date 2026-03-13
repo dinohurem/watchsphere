@@ -65,6 +65,8 @@ class RunResponse(BaseModel):
     detected_posts: int = 0
     matched_count: int = 0
     needs_review_count: int = 0
+    fuzzy_matched_count: int = 0
+    ai_matched_count: int = 0
     has_matched_csv: bool = False
     has_needs_review_csv: bool = False
     reprocessed_from: Optional[str] = None
@@ -89,6 +91,8 @@ def _run_to_response(run: WtbWtsRun) -> RunResponse:
         detected_posts=run.detected_posts,
         matched_count=run.matched_count,
         needs_review_count=run.needs_review_count,
+        fuzzy_matched_count=run.fuzzy_matched_count,
+        ai_matched_count=run.ai_matched_count,
         has_matched_csv=bool(run.matched_csv_gridfs_id),
         has_needs_review_csv=bool(run.needs_review_csv_gridfs_id),
         reprocessed_from=run.reprocessed_from,
@@ -112,6 +116,8 @@ async def generate_wtb_wts(
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
     """Generate WTB/WTS CSV from a WhatsApp .txt export (Admin only)"""
+    import logging
+    logger = logging.getLogger(__name__)
 
     if not file.filename.endswith('.txt'):
         raise HTTPException(
@@ -135,10 +141,13 @@ async def generate_wtb_wts(
 
     # Read file contents
     txt_content = (await file.read()).decode('utf-8', errors='ignore')
+    logger.info(f"generate_wtb_wts: file={file.filename}, size={len(txt_content)} chars, "
+                f"mode={mode}, group={group_name}, month={reference_month}/{reference_year}")
 
     jsonl_content = None
     if jsonl_file and jsonl_file.filename:
         jsonl_content = (await jsonl_file.read()).decode('utf-8', errors='ignore')
+        logger.info(f"generate_wtb_wts: jsonl file={jsonl_file.filename}, size={len(jsonl_content)} chars")
 
     admin_name = current_admin.name or str(current_admin.id)
 
@@ -172,6 +181,9 @@ async def generate_wtb_wts(
             group_name=group_name,
             jsonl_content=jsonl_content,
         )
+        logger.info(f"generate_wtb_wts: processing done — matched={result['matched_count']}, "
+                     f"needs_review={result['needs_review_count']}, fuzzy={result.get('fuzzy_matched_count', 0)}, "
+                     f"ai={result.get('ai_matched_count', 0)}")
 
         # Store output CSVs in GridFS
         matched_gridfs_id = None
@@ -196,6 +208,8 @@ async def generate_wtb_wts(
             "detected_posts": result["detected_posts"],
             "matched_count": result["matched_count"],
             "needs_review_count": result["needs_review_count"],
+            "fuzzy_matched_count": result.get("fuzzy_matched_count", 0),
+            "ai_matched_count": result.get("ai_matched_count", 0),
             "status": RunStatus.COMPLETED,
             "completed_at": completed_at,
         }})
@@ -206,6 +220,8 @@ async def generate_wtb_wts(
         run.detected_posts = result["detected_posts"]
         run.matched_count = result["matched_count"]
         run.needs_review_count = result["needs_review_count"]
+        run.fuzzy_matched_count = result.get("fuzzy_matched_count", 0)
+        run.ai_matched_count = result.get("ai_matched_count", 0)
         run.status = RunStatus.COMPLETED
         run.completed_at = completed_at
 
@@ -442,6 +458,8 @@ async def reprocess_run(
             "detected_posts": result["detected_posts"],
             "matched_count": result["matched_count"],
             "needs_review_count": result["needs_review_count"],
+            "fuzzy_matched_count": result.get("fuzzy_matched_count", 0),
+            "ai_matched_count": result.get("ai_matched_count", 0),
             "status": RunStatus.COMPLETED,
             "completed_at": completed_at,
         }})
@@ -451,6 +469,8 @@ async def reprocess_run(
         new_run.detected_posts = result["detected_posts"]
         new_run.matched_count = result["matched_count"]
         new_run.needs_review_count = result["needs_review_count"]
+        new_run.fuzzy_matched_count = result.get("fuzzy_matched_count", 0)
+        new_run.ai_matched_count = result.get("ai_matched_count", 0)
         new_run.status = RunStatus.COMPLETED
         new_run.completed_at = completed_at
 

@@ -218,7 +218,7 @@ export function MarketPage() {
           price: item.price || 0,
           priceChange: item.price_change || 0,
           priceHistory: item.price_history || [],
-          image_url: item.cover_image,
+          image_url: item.cover_image_thumbnail || item.cover_image,
           condition: item.condition,
         }));
         setTrendingWatches(featured);
@@ -249,7 +249,7 @@ export function MarketPage() {
           price: item.display_price || 0,
           priceChange: item.price_change || 0,
           priceHistory: item.price_history || [],
-          image_url: item.image_url,
+          image_url: item.cover_image_thumbnail || item.image_url,
           condition: item.condition,
           wtsCount: item.wts_count || 0,
           wtbCount: item.wtb_count || 0,
@@ -266,7 +266,7 @@ export function MarketPage() {
           price: item.price || item.display_price || 0,
           priceChange: item.price_change || 0,
           priceHistory: item.price_history || [],
-          image_url: item.image_url || item.cover_image,
+          image_url: item.cover_image_thumbnail || item.image_url || item.cover_image,
           condition: item.condition,
           wtsCount: item.wts_count || 0,
           wtbCount: item.wtb_count || 0,
