@@ -1240,6 +1240,9 @@ def _format_price(raw: str) -> Optional[str]:
     """Format a raw price string: expand k/m, add commas.
     Rejects values that look like years (2010-2035) unless they have k/m suffix."""
     raw = raw.strip().replace(' ', '').replace(',', '')
+    # Double dots like "144..5" are likely reference numbers, not prices
+    if '..' in raw:
+        return None
 
     m = re.match(r'^([\d.]+)\s*[mM]$', raw)
     if m:
