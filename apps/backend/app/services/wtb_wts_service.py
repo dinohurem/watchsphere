@@ -159,7 +159,7 @@ WTS_CONDITIONS = {
     "fresh": "Unworn", "unworn": "Unworn", "un-worn": "Unworn",
     "stickered": "Unworn", "sealed": "Unworn", "unsized": "Unworn",
     "new": "Unworn", "nos": "Unworn",
-    "like new": "Like New",
+    "like new": "Used",
     "retail ready": "Retail Ready",
     "handling marks": "Handling Marks", "handling mark": "Handling Marks",
     "polished": "Polished",
@@ -1429,7 +1429,33 @@ def parse_stock_list(
     current_brand = None
     section_condition = None
 
-    lines = content.split('\n')
+    # Pre-process: merge split lines where reference is on one line and price/year
+    # on the next (common in AP/PP stock lists). Pattern: line with ref but no price,
+    # followed by line with price/year but no ref.
+    raw_lines = content.split('\n')
+    lines = []
+    i = 0
+    while i < len(raw_lines):
+        stripped_cur = raw_lines[i].strip()
+        if stripped_cur and i + 1 < len(raw_lines):
+            stripped_next = raw_lines[i + 1].strip()
+            ref_cur = _extract_ref_from_line(stripped_cur)
+            if ref_cur and stripped_next:
+                # Current line has a ref — check if it lacks price
+                price_cur, _ = extract_price_from_line(stripped_cur, sender_country)
+                ref_next = _extract_ref_from_line(stripped_next)
+                # Next line has no ref but has price or year info
+                if not price_cur and not ref_next and not detect_brand_header(stripped_next):
+                    price_next, _ = extract_price_from_line(stripped_next, sender_country)
+                    year_next = extract_year_from_line(stripped_next)
+                    if price_next or year_next:
+                        # Merge the two lines
+                        lines.append(stripped_cur + " " + stripped_next)
+                        i += 2
+                        continue
+        lines.append(raw_lines[i])
+        i += 1
+
     for line in lines:
         stripped = line.strip()
         if not stripped:
