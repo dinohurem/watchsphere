@@ -287,7 +287,10 @@ export default function MarketScreen() {
       setHasMore(false);
       return;
     }
-    setLoading(true);
+    // Only show full loading spinner on initial load (no existing data)
+    if (allWatches.length === 0) {
+      setLoading(true);
+    }
     setHasMore(true);
     try {
       const currentSearch = searchQueryRef.current;
@@ -653,7 +656,7 @@ export default function MarketScreen() {
     // Category tabs
     categoryTabs: {
       flexDirection: 'row',
-      paddingHorizontal: wp(16),
+      paddingLeft: wp(16),
       gap: wp(8),
     },
     categoryTab: {
@@ -696,6 +699,7 @@ export default function MarketScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
+      paddingHorizontal: wp(16),
       paddingVertical: hp(10),
     },
     watchInfo: {
@@ -792,7 +796,9 @@ export default function MarketScreen() {
     },
     // Grid view styles
     gridRow: {
+      paddingHorizontal: wp(16),
       gap: wp(12),
+      marginBottom: hp(12),
     },
     gridContainer: {
       flexDirection: 'row',
