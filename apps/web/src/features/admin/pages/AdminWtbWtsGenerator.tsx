@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   FileText,
   X,
-  RotateCcw,
   FileOutput,
 } from 'lucide-react'
 import { api } from '@/services/api'
@@ -29,7 +28,7 @@ interface WtbWtsRun {
   needs_review_count: number
   has_matched_csv: boolean
   has_needs_review_csv: boolean
-  reprocessed_from?: string
+  files_expire_at?: string
   imported_by: string
   imported_by_name: string
   created_at: string
@@ -65,6 +64,19 @@ const STATUS_COLORS = {
   failed: 'bg-red-100 text-red-800',
 }
 
+function isFilesExpired(run: WtbWtsRun): boolean {
+  if (!run.files_expire_at) return !run.has_matched_csv && !run.has_needs_review_csv
+  return new Date(run.files_expire_at) < new Date()
+}
+
+function getTimeRemaining(run: WtbWtsRun): string | null {
+  if (!run.files_expire_at) return null
+  const diff = new Date(run.files_expire_at).getTime() - Date.now()
+  if (diff <= 0) return null
+  const mins = Math.ceil(diff / 60000)
+  return `${mins} min left`
+}
+
 export function AdminWtbWtsGenerator() {
   const [runs, setRuns] = useState<WtbWtsRun[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,14 +97,6 @@ export function AdminWtbWtsGenerator() {
   const [jsonlFile, setJsonlFile] = useState<File | null>(null)
   const txtInputRef = useRef<HTMLInputElement>(null)
   const jsonlInputRef = useRef<HTMLInputElement>(null)
-
-  // Reprocess modal state
-  const [reprocessRun, setReprocessRun] = useState<WtbWtsRun | null>(null)
-  const [reprocessMode, setReprocessMode] = useState<'wts' | 'wtb'>('wts')
-  const [reprocessGroup, setReprocessGroup] = useState('')
-  const [reprocessMonth, setReprocessMonth] = useState(1)
-  const [reprocessYear, setReprocessYear] = useState(new Date().getFullYear())
-  const [reprocessing, setReprocessing] = useState(false)
 
   useEffect(() => {
     fetchRuns()
@@ -228,7 +232,7 @@ export function AdminWtbWtsGenerator() {
 
   const handleDownload = async (
     runId: string,
-    type: 'matched-csv' | 'needs-review-csv' | 'original-file',
+    type: 'matched-csv' | 'needs-review-csv',
     filename: string
   ) => {
     try {
@@ -240,59 +244,17 @@ export function AdminWtbWtsGenerator() {
       const a = document.createElement('a')
       a.href = url
       const csvFilename = filename.replace(/\.txt$/i, '.csv')
-      const prefix = type === 'matched-csv' ? 'matched-' : type === 'needs-review-csv' ? 'needs-review-' : ''
-      a.download = type === 'original-file' ? filename : `${prefix}${csvFilename}`
+      const prefix = type === 'matched-csv' ? 'matched-' : 'needs-review-'
+      a.download = `${prefix}${csvFilename}`
       a.click()
       window.URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error(`Failed to download ${type}:`, error)
-    }
-  }
-
-  const openReprocessModal = (run: WtbWtsRun) => {
-    setReprocessRun(run)
-    setReprocessMode(run.mode)
-    setReprocessGroup(run.group_name)
-    setReprocessMonth(run.reference_month)
-    setReprocessYear(run.reference_year)
-  }
-
-  const handleReprocess = async () => {
-    if (!reprocessRun) return
-
-    setReprocessing(true)
-
-    const formData = new FormData()
-    formData.append('mode', reprocessMode)
-    formData.append('group_name', reprocessGroup.trim())
-    formData.append('reference_month', String(reprocessMonth))
-    formData.append('reference_year', String(reprocessYear))
-
-    try {
-      const response = await api.post(
-        `/wtb-wts/admin/wtb-wts/runs/${reprocessRun.id}/reprocess`,
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 60000,
-        }
-      )
-      const run = response.data
-      setRuns((prev) => [run, ...prev])
-      setReprocessRun(null)
-
-      // Poll for reprocess completion
-      setGenerating(true)
-      setDisplayPercent(2)
-      targetPercentRef.current = 2
-      setProgress({ percent: 2, stage: 'started', detail: 'Re-processing started...' })
-      startCreep()
-      startPolling(run.id)
     } catch (error: any) {
-      console.error('Reprocess failed:', error)
-      alert(error.response?.data?.detail || 'Reprocess failed')
-    } finally {
-      setReprocessing(false)
+      if (error.response?.status === 410) {
+        alert('Files have expired. Generated files are only available for 30 minutes.')
+        fetchRuns() // Refresh to update UI
+      } else {
+        console.error(`Failed to download ${type}:`, error)
+      }
     }
   }
 
@@ -541,6 +503,11 @@ export function AdminWtbWtsGenerator() {
                 ? 'Generation completed with items needing review'
                 : 'Generation completed successfully'}
             </span>
+            {result.files_expire_at && !isFilesExpired(result) && (
+              <span className="ml-auto text-xs text-gray-400">
+                Download available for {getTimeRemaining(result)}
+              </span>
+            )}
           </div>
 
           {/* Stats */}
@@ -577,26 +544,32 @@ export function AdminWtbWtsGenerator() {
             </div>
 
             {/* Download Buttons */}
-            <div className="flex gap-3">
-              {result.has_matched_csv && (
-                <button
-                  onClick={() => handleDownload(result.id, 'matched-csv', result.filename)}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-800 bg-green-100 border border-green-300 rounded-lg hover:bg-green-200 transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  Download Matched CSV
-                </button>
-              )}
-              {result.has_needs_review_csv && (
-                <button
-                  onClick={() => handleDownload(result.id, 'needs-review-csv', result.filename)}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded-lg hover:bg-amber-200 transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  Download Needs Review CSV
-                </button>
-              )}
-            </div>
+            {isFilesExpired(result) ? (
+              <p className="text-sm text-gray-400 italic">
+                Files expired. Re-upload the chat export to generate again.
+              </p>
+            ) : (
+              <div className="flex gap-3">
+                {result.has_matched_csv && (
+                  <button
+                    onClick={() => handleDownload(result.id, 'matched-csv', result.filename)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-800 bg-green-100 border border-green-300 rounded-lg hover:bg-green-200 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Matched CSV
+                  </button>
+                )}
+                {result.has_needs_review_csv && (
+                  <button
+                    onClick={() => handleDownload(result.id, 'needs-review-csv', result.filename)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded-lg hover:bg-amber-200 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Needs Review CSV
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -612,6 +585,8 @@ export function AdminWtbWtsGenerator() {
         <div className="divide-y">
           {runs.map((run) => {
             const StatusIcon = STATUS_ICONS[run.status]
+            const expired = isFilesExpired(run)
+            const timeLeft = getTimeRemaining(run)
             return (
               <div key={run.id} className="p-4 hover:bg-gray-50">
                 <div className="flex items-center justify-between">
@@ -631,11 +606,6 @@ export function AdminWtbWtsGenerator() {
                         >
                           {run.mode.toUpperCase()}
                         </span>
-                        {run.reprocessed_from && (
-                          <span className="px-2 py-0.5 text-xs font-medium rounded bg-orange-100 text-orange-800">
-                            Re-processed
-                          </span>
-                        )}
                       </div>
                       <p className="text-sm text-gray-500">{run.filename}</p>
                     </div>
@@ -658,40 +628,31 @@ export function AdminWtbWtsGenerator() {
                       <StatusIcon className="w-3 h-3" />
                       {run.status}
                     </span>
-                    {/* Download buttons */}
-                    {run.has_matched_csv && (
-                      <button
-                        onClick={() => handleDownload(run.id, 'matched-csv', run.filename)}
-                        className="p-2 hover:bg-green-100 rounded-lg text-green-600"
-                        title="Download matched CSV"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
+                    {/* Download buttons — only if files haven't expired */}
+                    {run.status === 'completed' && !expired && (
+                      <>
+                        {run.has_matched_csv && (
+                          <button
+                            onClick={() => handleDownload(run.id, 'matched-csv', run.filename)}
+                            className="p-2 hover:bg-green-100 rounded-lg text-green-600"
+                            title="Download matched CSV"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        )}
+                        {run.has_needs_review_csv && (
+                          <button
+                            onClick={() => handleDownload(run.id, 'needs-review-csv', run.filename)}
+                            className="p-2 hover:bg-amber-100 rounded-lg text-amber-600"
+                            title="Download needs review CSV"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                          </button>
+                        )}
+                      </>
                     )}
-                    {run.has_needs_review_csv && (
-                      <button
-                        onClick={() => handleDownload(run.id, 'needs-review-csv', run.filename)}
-                        className="p-2 hover:bg-amber-100 rounded-lg text-amber-600"
-                        title="Download needs review CSV"
-                      >
-                        <AlertTriangle className="w-4 h-4" />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDownload(run.id, 'original-file', run.filename)}
-                      className="p-2 hover:bg-gray-200 rounded-lg text-gray-500"
-                      title="Download original file"
-                    >
-                      <FileText className="w-4 h-4" />
-                    </button>
-                    {run.status === 'completed' && (
-                      <button
-                        onClick={() => openReprocessModal(run)}
-                        className="p-2 hover:bg-blue-100 rounded-lg text-blue-600"
-                        title="Reprocess"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
+                    {run.status === 'completed' && expired && (
+                      <span className="text-xs text-gray-400 italic">expired</span>
                     )}
                   </div>
                 </div>
@@ -706,6 +667,9 @@ export function AdminWtbWtsGenerator() {
                       {run.total_messages} messages, {run.detected_posts}{' '}
                       {run.mode.toUpperCase()} posts detected
                     </span>
+                  )}
+                  {run.status === 'completed' && !expired && timeLeft && (
+                    <span className="text-blue-500">{timeLeft}</span>
                   )}
                   {run.error_message && (
                     <span className="text-red-500">Error: {run.error_message}</span>
@@ -722,116 +686,6 @@ export function AdminWtbWtsGenerator() {
           )}
         </div>
       </div>
-
-      {/* Reprocess Modal */}
-      {reprocessRun && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between p-4 border-b">
-              <div>
-                <h2 className="text-lg font-semibold">Reprocess Run</h2>
-                <p className="text-sm text-gray-500">{reprocessRun.filename}</p>
-              </div>
-              <button
-                onClick={() => setReprocessRun(null)}
-                className="p-1 hover:bg-gray-100 rounded"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-4">
-              {/* Mode Toggle */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Mode</label>
-                <div className="flex gap-0">
-                  <button
-                    type="button"
-                    onClick={() => setReprocessMode('wts')}
-                    className={`px-5 py-2 text-sm font-medium rounded-l-lg border transition-colors ${
-                      reprocessMode === 'wts'
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    WTS
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReprocessMode('wtb')}
-                    className={`px-5 py-2 text-sm font-medium rounded-r-lg border-t border-r border-b transition-colors ${
-                      reprocessMode === 'wtb'
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    WTB
-                  </button>
-                </div>
-              </div>
-
-              {/* Group Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
-                <input
-                  type="text"
-                  value={reprocessGroup}
-                  onChange={(e) => setReprocessGroup(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-
-              {/* Reference Month/Year */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
-                  <select
-                    value={reprocessMonth}
-                    onChange={(e) => setReprocessMonth(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                  >
-                    {MONTHS.map((name, idx) => (
-                      <option key={idx} value={idx + 1}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                  <input
-                    type="number"
-                    value={reprocessYear}
-                    onChange={(e) => setReprocessYear(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 p-4 border-t">
-              <button
-                onClick={() => setReprocessRun(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReprocess}
-                disabled={reprocessing || !reprocessGroup.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
-              >
-                {reprocessing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Re-processing...
-                  </>
-                ) : (
-                  'Re-process'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -28,11 +28,10 @@ class WtbWtsRun(Document):
     status: RunStatus = RunStatus.PENDING
     error_message: Optional[str] = None
 
-    # GridFS file IDs for large text blobs
-    original_file_gridfs_id: Optional[str] = None
-    jsonl_file_gridfs_id: Optional[str] = None
+    # GridFS file IDs for generated CSVs (expire after 30 min)
     matched_csv_gridfs_id: Optional[str] = None
     needs_review_csv_gridfs_id: Optional[str] = None
+    files_expire_at: Optional[datetime] = None
 
     # Stats
     total_messages: int = 0
