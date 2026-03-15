@@ -316,11 +316,13 @@ from starlette.applications import Starlette
 # FastAPI handles everything else including /ws for native WebSocket
 async def startup():
     await connect_to_mongo()
-    # Clean up any expired WTB/WTS GridFS files from previous runs
+    # Clean up any expired GridFS files from previous runs
     try:
         from app.api.v1.endpoints.wtb_wts import _cleanup_all_expired
         await _cleanup_all_expired()
-        logger.info("Startup: cleaned up expired WTB/WTS files")
+        from app.api.v1.endpoints.whatsapp import cleanup_expired_whatsapp_files
+        await cleanup_expired_whatsapp_files()
+        logger.info("Startup: cleaned up expired files")
     except Exception as e:
         logger.warning(f"Startup: failed to clean up expired files: {e}")
 

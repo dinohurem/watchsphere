@@ -1,9 +1,12 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from beanie import PydanticObjectId
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+from bson import ObjectId
 import asyncio
+import logging
 import re
 import zipfile
 import csv
@@ -17,6 +20,58 @@ from app.models.whatsapp_import import (
     WhatsAppImport, WhatsAppMessage, ExtractedWatchListing, ImportStatus, OfferType
 )
 from app.services.wtb_wts_service import validate_price, BRAND_MIN_PRICES, DEFAULT_MIN_PRICE
+
+logger = logging.getLogger(__name__)
+
+FILES_TTL_MINUTES = 30
+
+
+async def cleanup_expired_whatsapp_files() -> None:
+    """Clean up expired GridFS files from WhatsApp imports."""
+    now = datetime.utcnow()
+    expired = await WhatsAppImport.find(
+        WhatsAppImport.files_expire_at != None,  # noqa: E711
+        WhatsAppImport.files_expire_at <= now,
+    ).to_list()
+    for imp in expired:
+        try:
+            if imp.unmatched_csv_gridfs_id:
+                await _whatsapp_gridfs_delete(imp.unmatched_csv_gridfs_id)
+            await WhatsAppImport.find_one(WhatsAppImport.id == imp.id).update({"$set": {
+                "unmatched_csv_gridfs_id": None,
+                "files_expire_at": None,
+            }})
+            logger.info(f"Cleaned up expired WhatsApp import files for {imp.id}")
+        except Exception as e:
+            logger.error(f"Failed to clean up WhatsApp import {imp.id}: {e}")
+
+
+def _get_whatsapp_gridfs_bucket() -> AsyncIOMotorGridFSBucket:
+    db = WhatsAppImport.get_motor_collection().database
+    return AsyncIOMotorGridFSBucket(db, bucket_name="whatsapp_import_files")
+
+
+async def _whatsapp_gridfs_put(content: str, filename: str) -> str:
+    bucket = _get_whatsapp_gridfs_bucket()
+    file_id = await bucket.upload_from_stream(filename, content.encode("utf-8"))
+    return str(file_id)
+
+
+async def _whatsapp_gridfs_get(file_id: str) -> str:
+    bucket = _get_whatsapp_gridfs_bucket()
+    stream = await bucket.open_download_stream(ObjectId(file_id))
+    data = await stream.read()
+    return data.decode("utf-8")
+
+
+async def _whatsapp_gridfs_delete(file_id: str) -> None:
+    bucket = _get_whatsapp_gridfs_bucket()
+    try:
+        await bucket.delete(ObjectId(file_id))
+    except Exception:
+        pass
+
+
 
 router = APIRouter()
 
@@ -605,8 +660,9 @@ async def process_csv_import(
 
         asyncio.create_task(_trigger_alerts_for_imported_orders(order_docs))
 
-    # Build unmatched CSV content for download
-    unmatched_csv_str = None
+    # Build unmatched CSV and store in GridFS (expires after 30 min)
+    unmatched_gridfs_id = None
+    files_expire_at = None
     if unmatched_raw_rows and fieldnames:
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -614,6 +670,10 @@ async def process_csv_import(
         for urow in unmatched_raw_rows:
             writer.writerow(urow)
         unmatched_csv_str = output.getvalue()
+        unmatched_gridfs_id = await _whatsapp_gridfs_put(
+            unmatched_csv_str, f"unmatched-{import_record.filename}"
+        )
+        files_expire_at = datetime.utcnow() + timedelta(minutes=FILES_TTL_MINUTES)
 
     # Update import record
     import_record.group_name = group_name or "CSV Import"
@@ -623,7 +683,8 @@ async def process_csv_import(
     import_record.matched_orders = matched_count
     import_record.unmatched_rows = unmatched_count
     import_record.skipped_duplicates = skipped_duplicates
-    import_record.unmatched_csv = unmatched_csv_str
+    import_record.unmatched_csv_gridfs_id = unmatched_gridfs_id
+    import_record.files_expire_at = files_expire_at
     import_record.completed_at = datetime.utcnow()
     await import_record.save()
 
@@ -681,7 +742,7 @@ async def admin_import_whatsapp(
                 "matched_orders": import_record.matched_orders,
                 "unmatched_rows": import_record.unmatched_rows,
                 "skipped_duplicates": import_record.skipped_duplicates,
-                "has_unmatched_csv": import_record.unmatched_csv is not None,
+                "has_unmatched_csv": import_record.unmatched_csv_gridfs_id is not None,
             }
 
         # ZIP branch
@@ -824,7 +885,7 @@ async def admin_list_imports(
             "matched_orders": imp.matched_orders,
             "unmatched_rows": imp.unmatched_rows,
             "skipped_duplicates": imp.skipped_duplicates,
-            "has_unmatched_csv": imp.unmatched_csv is not None,
+            "has_unmatched_csv": imp.unmatched_csv_gridfs_id is not None,
         }
         for imp in imports
     ]
@@ -860,7 +921,7 @@ async def admin_get_import(
         "matched_orders": imp.matched_orders,
         "unmatched_rows": imp.unmatched_rows,
         "skipped_duplicates": imp.skipped_duplicates,
-        "has_unmatched_csv": imp.unmatched_csv is not None,
+        "has_unmatched_csv": imp.unmatched_csv_gridfs_id is not None,
     }
 
 
@@ -879,14 +940,22 @@ async def admin_download_unmatched_csv(
             detail="Import not found"
         )
 
-    if not imp.unmatched_csv:
+    if not imp.unmatched_csv_gridfs_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No unmatched rows for this import"
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after import."
+        )
+
+    try:
+        content = await _whatsapp_gridfs_get(imp.unmatched_csv_gridfs_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after import."
         )
 
     return Response(
-        content=imp.unmatched_csv,
+        content=content,
         media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="unmatched-{imp.filename}"'
@@ -894,37 +963,60 @@ async def admin_download_unmatched_csv(
     )
 
 
-@router.get("/admin/whatsapp/imports/{import_id}/listings", response_model=List[ExtractedListingResponse])
+@router.get("/admin/whatsapp/imports/{import_id}/listings")
 async def admin_get_import_listings(
     import_id: str,
     current_admin: User = Depends(get_current_admin_user),
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 50,
+    search: Optional[str] = None,
 ) -> Any:
     """Get extracted watch listings from an import (Admin only)"""
 
+    query_conditions = [ExtractedWatchListing.import_id == import_id]
+
+    if search and search.strip():
+        s = search.strip()
+        query_conditions.append({
+            "$or": [
+                {"brand": {"$regex": s, "$options": "i"}},
+                {"reference": {"$regex": s, "$options": "i"}},
+                {"ws_code": {"$regex": s, "$options": "i"}},
+                {"model": {"$regex": s, "$options": "i"}},
+                {"seller_name": {"$regex": s, "$options": "i"}},
+                {"raw_text": {"$regex": s, "$options": "i"}},
+            ]
+        })
+
+    total = await ExtractedWatchListing.find(*query_conditions).count()
+
     listings = await ExtractedWatchListing.find(
-        ExtractedWatchListing.import_id == import_id
+        *query_conditions
     ).sort([("message_timestamp", -1)]).skip(skip).limit(limit).to_list()
 
-    return [
-        {
-            "id": str(lst.id),
-            "import_id": lst.import_id,
-            "brand": lst.brand,
-            "reference": lst.reference,
-            "ws_code": lst.ws_code,
-            "model": lst.model,
-            "price": lst.price,
-            "currency": lst.currency,
-            "condition": lst.condition,
-            "seller_name": lst.seller_name,
-            "raw_text": lst.raw_text,
-            "month_year": lst.month_year,
-            "message_timestamp": lst.message_timestamp,
-        }
-        for lst in listings
-    ]
+    return {
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "results": [
+            {
+                "id": str(lst.id),
+                "import_id": lst.import_id,
+                "brand": lst.brand,
+                "reference": lst.reference,
+                "ws_code": lst.ws_code,
+                "model": lst.model,
+                "price": lst.price,
+                "currency": lst.currency,
+                "condition": lst.condition,
+                "seller_name": lst.seller_name,
+                "raw_text": lst.raw_text,
+                "month_year": lst.month_year,
+                "message_timestamp": lst.message_timestamp,
+            }
+            for lst in listings
+        ],
+    }
 
 
 @router.get("/admin/whatsapp/search")

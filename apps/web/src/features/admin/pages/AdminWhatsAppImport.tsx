@@ -61,11 +61,16 @@ export function AdminWhatsAppImport() {
   const [selectedImport, setSelectedImport] = useState<WhatsAppImport | null>(null)
   const [listings, setListings] = useState<ExtractedListing[]>([])
   const [listingsLoading, setListingsLoading] = useState(false)
+  const [listingsTotal, setListingsTotal] = useState(0)
+  const [listingsPage, setListingsPage] = useState(0)
+  const [listingsSearch, setListingsSearch] = useState('')
+  const listingsPerPage = 50
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState<ExtractedListing[]>([])
   const [searching, setSearching] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const listingsSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     fetchImports()
@@ -145,18 +150,31 @@ export function AdminWhatsAppImport() {
     }
   }
 
-  const handleViewListings = async (imp: WhatsAppImport) => {
-    setSelectedImport(imp)
+  const fetchListings = async (importId: string, page: number, search: string) => {
     setListingsLoading(true)
-
     try {
-      const response = await api.get(`/whatsapp/admin/whatsapp/imports/${imp.id}/listings`)
-      setListings(response.data)
+      const params = new URLSearchParams()
+      params.append('skip', String(page * listingsPerPage))
+      params.append('limit', String(listingsPerPage))
+      if (search.trim()) params.append('search', search.trim())
+
+      const response = await api.get(
+        `/whatsapp/admin/whatsapp/imports/${importId}/listings?${params.toString()}`
+      )
+      setListings(response.data.results)
+      setListingsTotal(response.data.total)
     } catch (error) {
       console.error('Failed to fetch listings:', error)
     } finally {
       setListingsLoading(false)
     }
+  }
+
+  const handleViewListings = async (imp: WhatsAppImport) => {
+    setSelectedImport(imp)
+    setListingsPage(0)
+    setListingsSearch('')
+    await fetchListings(imp.id, 0, '')
   }
 
   const handleSearch = async () => {
@@ -503,6 +521,29 @@ export function AdminWhatsAppImport() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Search */}
+            <div className="px-4 pt-3 pb-2 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search by brand, reference, seller, text..."
+                  value={listingsSearch}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setListingsSearch(val)
+                    setListingsPage(0)
+                    if (listingsSearchTimer.current) clearTimeout(listingsSearchTimer.current)
+                    listingsSearchTimer.current = setTimeout(() => {
+                      fetchListings(selectedImport.id, 0, val)
+                    }, 300)
+                  }}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                />
+              </div>
+            </div>
+
             <div className="flex-1 overflow-y-auto p-4">
               {listingsLoading ? (
                 <div className="flex items-center justify-center h-32">
@@ -550,20 +591,55 @@ export function AdminWhatsAppImport() {
 
                   {listings.length === 0 && (
                     <div className="text-center py-8 text-gray-500">
-                      No watch listings extracted from this import
+                      {listingsSearch.trim()
+                        ? 'No listings match your search'
+                        : 'No watch listings extracted from this import'}
                     </div>
                   )}
                 </div>
               )}
             </div>
+
+            {/* Footer with pagination */}
             <div className="flex justify-between items-center p-4 border-t">
-              <p className="text-sm text-gray-500">{listings.length} listings</p>
-              <button
-                onClick={() => setSelectedImport(null)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-              >
-                Close
-              </button>
+              <p className="text-sm text-gray-500">
+                {listingsTotal > 0
+                  ? `${listingsPage * listingsPerPage + 1}–${Math.min((listingsPage + 1) * listingsPerPage, listingsTotal)} of ${listingsTotal.toLocaleString()} listings`
+                  : '0 listings'}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const prev = listingsPage - 1
+                    setListingsPage(prev)
+                    fetchListings(selectedImport.id, prev, listingsSearch)
+                  }}
+                  disabled={listingsPage === 0 || listingsLoading}
+                  className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-gray-500">
+                  Page {listingsPage + 1} of {Math.max(1, Math.ceil(listingsTotal / listingsPerPage))}
+                </span>
+                <button
+                  onClick={() => {
+                    const next = listingsPage + 1
+                    setListingsPage(next)
+                    fetchListings(selectedImport.id, next, listingsSearch)
+                  }}
+                  disabled={(listingsPage + 1) * listingsPerPage >= listingsTotal || listingsLoading}
+                  className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => setSelectedImport(null)}
+                  className="ml-2 px-4 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
