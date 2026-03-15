@@ -5,7 +5,7 @@ from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import Response
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from beanie import PydanticObjectId
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from bson import ObjectId
@@ -18,6 +18,8 @@ from app.services.wtb_wts_service import process_generation
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+FILES_TTL_MINUTES = 30
 
 
 # --- GridFS helpers ---
@@ -55,6 +57,48 @@ async def _gridfs_delete(file_id: str) -> None:
         pass
 
 
+async def _cleanup_expired_files(run: WtbWtsRun) -> None:
+    """Delete GridFS files for a run and clear references."""
+    for field in ("matched_csv_gridfs_id", "needs_review_csv_gridfs_id"):
+        file_id = getattr(run, field, None)
+        if file_id:
+            await _gridfs_delete(file_id)
+
+    await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
+        "matched_csv_gridfs_id": None,
+        "needs_review_csv_gridfs_id": None,
+        "files_expire_at": None,
+    }})
+
+
+async def _cleanup_all_expired() -> None:
+    """Find and clean up all runs with expired files."""
+    now = datetime.utcnow()
+    expired_runs = await WtbWtsRun.find(
+        WtbWtsRun.files_expire_at != None,  # noqa: E711
+        WtbWtsRun.files_expire_at <= now,
+    ).to_list()
+
+    for run in expired_runs:
+        try:
+            await _cleanup_expired_files(run)
+            logger.info(f"Cleaned up expired files for run {run.id}")
+        except Exception as e:
+            logger.error(f"Failed to clean up run {run.id}: {e}")
+
+
+async def _schedule_cleanup(run_id: PydanticObjectId, delay_minutes: int = FILES_TTL_MINUTES) -> None:
+    """Schedule file cleanup after delay."""
+    await asyncio.sleep(delay_minutes * 60)
+    try:
+        run = await WtbWtsRun.get(run_id)
+        if run and run.files_expire_at:
+            await _cleanup_expired_files(run)
+            logger.info(f"Scheduled cleanup completed for run {run_id}")
+    except Exception as e:
+        logger.error(f"Scheduled cleanup failed for run {run_id}: {e}")
+
+
 # --- Response Models ---
 
 class RunResponse(BaseModel):
@@ -74,7 +118,7 @@ class RunResponse(BaseModel):
     ai_matched_count: int = 0
     has_matched_csv: bool = False
     has_needs_review_csv: bool = False
-    reprocessed_from: Optional[str] = None
+    files_expire_at: Optional[datetime] = None
     imported_by: str
     imported_by_name: str
     created_at: datetime
@@ -100,7 +144,7 @@ def _run_to_response(run: WtbWtsRun) -> RunResponse:
         ai_matched_count=run.ai_matched_count,
         has_matched_csv=bool(run.matched_csv_gridfs_id),
         has_needs_review_csv=bool(run.needs_review_csv_gridfs_id),
-        reprocessed_from=run.reprocessed_from,
+        files_expire_at=getattr(run, "files_expire_at", None),
         imported_by=run.imported_by,
         imported_by_name=run.imported_by_name,
         created_at=run.created_at,
@@ -160,6 +204,8 @@ async def _run_processing(
             )
 
         completed_at = datetime.utcnow()
+        files_expire_at = completed_at + timedelta(minutes=FILES_TTL_MINUTES)
+
         await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
             "matched_csv_gridfs_id": matched_gridfs_id,
             "needs_review_csv_gridfs_id": needs_review_gridfs_id,
@@ -171,10 +217,14 @@ async def _run_processing(
             "ai_matched_count": result.get("ai_matched_count", 0),
             "status": RunStatus.COMPLETED,
             "completed_at": completed_at,
+            "files_expire_at": files_expire_at,
             "progress_percent": 100,
             "progress_stage": "completed",
             "progress_detail": "Done",
         }})
+
+        # Schedule cleanup after TTL
+        asyncio.create_task(_schedule_cleanup(run.id))
 
     except Exception as e:
         logger.error(f"generate_wtb_wts FAILED: {type(e).__name__}: {e}")
@@ -221,7 +271,7 @@ async def generate_wtb_wts(
             detail="reference_month must be between 1 and 12"
         )
 
-    # Read file contents
+    # Read file contents — not stored, only used for processing
     txt_content = (await file.read()).decode('utf-8', errors='ignore')
     logger.info(f"generate_wtb_wts: file={file.filename}, size={len(txt_content)} chars, "
                 f"mode={mode}, group={group_name}, month={reference_month}/{reference_year}")
@@ -233,13 +283,10 @@ async def generate_wtb_wts(
 
     admin_name = current_admin.name or str(current_admin.id)
 
-    # Store input files in GridFS
-    original_gridfs_id = await _gridfs_put(txt_content, file.filename)
-    jsonl_gridfs_id = None
-    if jsonl_content:
-        jsonl_gridfs_id = await _gridfs_put(jsonl_content, f"jsonl-{file.filename}")
+    # Clean up any previously expired files before creating new run
+    asyncio.create_task(_cleanup_all_expired())
 
-    # Create run record (lightweight — no large text blobs)
+    # Create run record (no original files stored)
     run = WtbWtsRun(
         filename=file.filename,
         group_name=group_name,
@@ -247,8 +294,6 @@ async def generate_wtb_wts(
         reference_month=reference_month,
         reference_year=reference_year,
         status=RunStatus.PROCESSING,
-        original_file_gridfs_id=original_gridfs_id,
-        jsonl_file_gridfs_id=jsonl_gridfs_id,
         imported_by=str(current_admin.id),
         imported_by_name=admin_name,
     )
@@ -268,6 +313,9 @@ async def list_runs(
     limit: int = 50,
 ) -> Any:
     """List all WTB/WTS generation runs (Admin only)"""
+
+    # Clean up expired files on list fetch
+    asyncio.create_task(_cleanup_all_expired())
 
     runs = await WtbWtsRun.find_all().sort([("created_at", -1)]).skip(skip).limit(limit).to_list()
 
@@ -324,11 +372,18 @@ async def download_matched_csv(
 
     if not run.matched_csv_gridfs_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No matched CSV available for this run"
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
         )
 
-    content = await _gridfs_get(run.matched_csv_gridfs_id)
+    try:
+        content = await _gridfs_get(run.matched_csv_gridfs_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
+        )
+
     return Response(
         content=content,
         media_type="text/csv",
@@ -354,11 +409,18 @@ async def download_needs_review_csv(
 
     if not run.needs_review_csv_gridfs_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No needs-review CSV available for this run"
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
         )
 
-    content = await _gridfs_get(run.needs_review_csv_gridfs_id)
+    try:
+        content = await _gridfs_get(run.needs_review_csv_gridfs_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
+        )
+
     return Response(
         content=content,
         media_type="text/csv",
@@ -368,12 +430,12 @@ async def download_needs_review_csv(
     )
 
 
-@router.get("/admin/wtb-wts/runs/{run_id}/original-file")
-async def download_original_file(
+@router.delete("/admin/wtb-wts/runs/{run_id}")
+async def delete_run(
     run_id: str,
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Download the original .txt file from a run (Admin only)"""
+    """Delete a WTB/WTS run and its files (Admin only)"""
 
     run = await WtbWtsRun.get(PydanticObjectId(run_id))
     if not run:
@@ -382,92 +444,8 @@ async def download_original_file(
             detail="Run not found"
         )
 
-    if not run.original_file_gridfs_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Original file not available"
-        )
+    # Clean up GridFS files
+    await _cleanup_expired_files(run)
+    await run.delete()
 
-    content = await _gridfs_get(run.original_file_gridfs_id)
-    return Response(
-        content=content,
-        media_type="text/plain",
-        headers={
-            "Content-Disposition": f'attachment; filename="{run.filename}"'
-        },
-    )
-
-
-@router.post("/admin/wtb-wts/runs/{run_id}/reprocess", response_model=RunResponse)
-async def reprocess_run(
-    run_id: str,
-    mode: str = Form(...),
-    group_name: str = Form(...),
-    reference_month: int = Form(...),
-    reference_year: int = Form(...),
-    current_admin: User = Depends(get_current_admin_user),
-) -> Any:
-    """Re-process a previous run with different settings (Admin only).
-    Creates a new WtbWtsRun linked to the original via reprocessed_from."""
-
-    original_run = await WtbWtsRun.get(PydanticObjectId(run_id))
-    if not original_run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Original run not found"
-        )
-
-    try:
-        gen_mode = GenerationMode(mode.lower())
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mode must be 'wts' or 'wtb'"
-        )
-
-    if not (1 <= reference_month <= 12):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="reference_month must be between 1 and 12"
-        )
-
-    admin_name = current_admin.name or str(current_admin.id)
-
-    # Load original file content from GridFS for processing
-    if not original_run.original_file_gridfs_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Original file content not available for reprocessing"
-        )
-    txt_content = await _gridfs_get(original_run.original_file_gridfs_id)
-
-    jsonl_content = None
-    if original_run.jsonl_file_gridfs_id:
-        jsonl_content = await _gridfs_get(original_run.jsonl_file_gridfs_id)
-
-    # Store copies in GridFS for the new run
-    new_original_gridfs_id = await _gridfs_put(txt_content, original_run.filename)
-    new_jsonl_gridfs_id = None
-    if jsonl_content:
-        new_jsonl_gridfs_id = await _gridfs_put(jsonl_content, f"jsonl-{original_run.filename}")
-
-    new_run = WtbWtsRun(
-        filename=original_run.filename,
-        group_name=group_name,
-        mode=gen_mode,
-        reference_month=reference_month,
-        reference_year=reference_year,
-        status=RunStatus.PROCESSING,
-        original_file_gridfs_id=new_original_gridfs_id,
-        jsonl_file_gridfs_id=new_jsonl_gridfs_id,
-        imported_by=str(current_admin.id),
-        imported_by_name=admin_name,
-        reprocessed_from=str(original_run.id),
-    )
-    await new_run.insert()
-
-    # Launch processing in background
-    asyncio.create_task(_run_processing(new_run, txt_content, gen_mode, reference_month,
-                                        reference_year, group_name, jsonl_content, original_run.filename))
-
-    return _run_to_response(new_run)
+    return {"message": "Run deleted"}

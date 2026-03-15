@@ -314,12 +314,22 @@ from starlette.applications import Starlette
 # The main 'app' that uvicorn will run
 # Socket.IO will be available at /socket.io/ path
 # FastAPI handles everything else including /ws for native WebSocket
+async def startup():
+    await connect_to_mongo()
+    # Clean up any expired WTB/WTS GridFS files from previous runs
+    try:
+        from app.api.v1.endpoints.wtb_wts import _cleanup_all_expired
+        await _cleanup_all_expired()
+        logger.info("Startup: cleaned up expired WTB/WTS files")
+    except Exception as e:
+        logger.warning(f"Startup: failed to clean up expired files: {e}")
+
 app = Starlette(
     routes=[
         Mount('/socket.io', app=socket_app),
         Mount('/', app=fastapi_app),
     ],
-    on_startup=[connect_to_mongo],
+    on_startup=[startup],
     on_shutdown=[close_mongo_connection],
 )
 
