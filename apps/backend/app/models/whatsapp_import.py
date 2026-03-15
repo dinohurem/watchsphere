@@ -29,7 +29,8 @@ class WhatsAppImport(Document):
     matched_orders: int = 0
     unmatched_rows: int = 0
     skipped_duplicates: int = 0
-    unmatched_csv: Optional[str] = None  # CSV content of unmatched rows for download
+    unmatched_csv_gridfs_id: Optional[str] = None  # GridFS ID for unmatched CSV
+    files_expire_at: Optional[datetime] = None
 
     # Admin who imported
     imported_by: str = Field(..., index=True)
