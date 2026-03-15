@@ -1957,13 +1957,62 @@ async def admin_create_order(
     )
 
 
+# Fallback exchange rates (updated periodically)
+FALLBACK_EXCHANGE_RATES = {
+    "USD": 1.0,
+    "USDT": 1.0,  # Stablecoin, always ~1 USD
+    "HKD": 7.8,
+    "EUR": 0.92,
+    "GBP": 0.79,
+    "CHF": 0.88,
+    "SGD": 1.34,
+    "JPY": 150.0,
+    "AED": 3.67,
+    "CAD": 1.36,
+    "AUD": 1.55,
+    "CNY": 7.25,
+}
+
+
+async def _fetch_exchange_rates(currencies: set[str]) -> dict[str, float]:
+    """Fetch exchange rates with fallback to hardcoded values.
+    Returns dict of currency -> rate (units per 1 USD)."""
+    import httpx
+
+    rates = {"USD": 1.0, "USDT": 1.0}
+
+    # Remove currencies we already know
+    to_fetch = {c for c in currencies if c not in rates}
+    if not to_fetch:
+        return rates
+
+    # Try exchangerate-api.com (supports HKD)
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get("https://open.er-api.com/v6/latest/USD")
+            if resp.status_code == 200:
+                data = resp.json()
+                for cur in to_fetch:
+                    rate = data.get("rates", {}).get(cur)
+                    if rate and rate > 0:
+                        rates[cur] = rate
+                return rates
+    except Exception as e:
+        logger.warning(f"Exchange rate API failed, using fallbacks: {e}")
+
+    # Fallback to hardcoded rates
+    for cur in to_fetch:
+        if cur in FALLBACK_EXCHANGE_RATES:
+            rates[cur] = FALLBACK_EXCHANGE_RATES[cur]
+
+    return rates
+
+
 @router.post("/admin/bulk-update-usd-prices")
 async def admin_bulk_update_usd_prices(
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Bulk update usd_price for all orders that don't have it set.
-    Uses Frankfurter API for currency conversion."""
-    import httpx
+    """Bulk update usd_price for all orders that don't have it set."""
 
     # Fetch all orders without usd_price
     orders = await Order.find(
@@ -1974,48 +2023,36 @@ async def admin_bulk_update_usd_prices(
         return {"message": "No orders need USD price update", "updated": 0}
 
     # Collect unique currencies
-    currencies = set(o.currency for o in orders if o.currency and o.currency != "USD")
+    currencies = set(o.currency for o in orders if o.currency and o.currency not in ("USD", "USDT"))
 
-    # Fetch exchange rates from Frankfurter API
-    rates = {"USD": 1.0}
-    if currencies:
-        currency_list = ",".join(currencies)
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(
-                    f"https://api.frankfurter.dev/v1/latest?base=USD&symbols={currency_list}"
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    # Frankfurter returns rates FROM base, we need TO USD
-                    for cur, rate in data.get("rates", {}).items():
-                        if rate > 0:
-                            rates[cur] = rate
-        except Exception as e:
-            logger.error(f"Failed to fetch exchange rates: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Failed to fetch exchange rates: {str(e)}"
-            )
+    # Fetch rates (with fallback)
+    rates = await _fetch_exchange_rates(currencies)
 
     # Update orders in batches
     updated = 0
+    failed = 0
     BATCH_SIZE = 500
     for i in range(0, len(orders), BATCH_SIZE):
         batch = orders[i:i + BATCH_SIZE]
         for order in batch:
-            if order.currency == "USD":
+            cur = order.currency or "USD"
+            if cur in ("USD", "USDT"):
                 order.usd_price = order.price
-            elif order.currency in rates and rates[order.currency] > 0:
-                # rates[CUR] = how much CUR per 1 USD, so USD = price / rate
-                order.usd_price = round(order.price / rates[order.currency], 2)
+            elif cur in rates and rates[cur] > 0:
+                order.usd_price = round(order.price / rates[cur], 2)
             else:
-                # Unknown currency, use price as-is
-                order.usd_price = order.price
+                # Unknown currency — skip (don't set bad data)
+                failed += 1
+                continue
             await order.save()
             updated += 1
 
-    return {"message": f"Updated {updated} orders with USD prices", "updated": updated, "rates": rates}
+    return {
+        "message": f"Updated {updated} orders with USD prices ({failed} skipped - unknown currency)",
+        "updated": updated,
+        "failed": failed,
+        "rates": rates,
+    }
 
 
 @router.patch("/admin/{order_id}", response_model=OrderResponse)

@@ -438,18 +438,27 @@ async def process_csv_import(
     flagged_price_count = 0
     group_name = None
 
-    # Build a set of existing orders for duplicate detection:
-    # key = (ws_code_upper, phone, order_type)
+    refreshed_count = 0
+
+    # Build a map of existing orders for dedup + freshness update:
+    # key = (ws_code_upper, phone, price, currency, month_year)
     existing_orders = await Order.find(
         Order.status == OrderStatus.ACTIVE,
     ).to_list()
-    existing_order_keys: set[tuple] = set()
+    existing_order_map: dict[tuple, Order] = {}
     for eo in existing_orders:
         eo_ws = (eo.ws_code or "").strip().upper()
         eo_phone = (eo.whatsapp_phone or eo.user_name or "").strip()
-        eo_type = eo.order_type.value
+        eo_price = str(int(eo.price)) if eo.price else ""
+        eo_currency = (eo.currency or "").strip().upper()
+        # Build month_year from order fields
+        eo_month_year = ""
+        if eo.watch_month and eo.year:
+            eo_month_year = f"{eo.watch_month:02d}/{eo.year % 100:02d}"
+        elif eo.year_raw:
+            eo_month_year = eo.year_raw.strip().lower()
         if eo_ws and eo_phone:
-            existing_order_keys.add((eo_ws, eo_phone, eo_type))
+            existing_order_map[(eo_ws, eo_phone, eo_price, eo_currency, eo_month_year)] = eo
 
     for row in reader:
         total_rows += 1
@@ -590,17 +599,34 @@ async def process_csv_import(
             order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
             order_reference = watch_reference or ws_code
 
-            # Check for duplicate orders (same ws_code + phone + order type)
+            # Check for duplicate orders (5-field dedup key)
             dup_ws = (matched_watch.ws_code or ws_code or "").strip().upper()
             dup_phone = phone.strip() if phone else ""
-            dup_type = order_type.value
-            dup_key = (dup_ws, dup_phone, dup_type)
-            if dup_ws and dup_phone and dup_key in existing_order_keys:
+            dup_price = str(int(price)) if price else ""
+            dup_currency = (currency or "").strip().upper()
+            dup_month_year = ""
+            if watch_month and watch_year:
+                dup_month_year = f"{watch_month:02d}/{watch_year % 100:02d}"
+            elif year_raw:
+                dup_month_year = year_raw.strip().lower()
+            dup_key = (dup_ws, dup_phone, dup_price, dup_currency, dup_month_year)
+
+            existing_order = existing_order_map.get(dup_key)
+            if existing_order is not None:
+                # Existing DB order — freshness update: update timestamp so "28d" becomes "1d"
+                existing_order.created_at = message_timestamp or datetime.utcnow()
+                existing_order.updated_at = datetime.utcnow()
+                await existing_order.save()
+                refreshed_count += 1
+                continue
+            elif dup_key in existing_order_map:
+                # Intra-batch duplicate (key exists but value is None)
                 skipped_duplicates += 1
                 continue
-            # Add to seen set for intra-batch dedup
+
+            # Mark as seen for intra-batch dedup
             if dup_ws and dup_phone:
-                existing_order_keys.add(dup_key)
+                existing_order_map[dup_key] = None
 
             # Validate price against brand minimums
             price_valid, price_reason = validate_price(str(int(price)), watch_brand)
@@ -614,6 +640,22 @@ async def process_csv_import(
 
             matched_count += 1
 
+            # Calculate usd_price at import time
+            usd_price = None
+            if price:
+                if currency in ("USD", "USDT"):
+                    usd_price = price
+                elif currency == "HKD":
+                    usd_price = round(price / 7.8, 2)
+                elif currency == "EUR":
+                    usd_price = round(price / 0.92, 2)
+                elif currency == "GBP":
+                    usd_price = round(price / 0.79, 2)
+                elif currency == "CHF":
+                    usd_price = round(price / 0.88, 2)
+                else:
+                    usd_price = price  # Default: assume USD
+
             order_docs.append(Order(
                 order_type=order_type,
                 brand=watch_brand,
@@ -622,6 +664,7 @@ async def process_csv_import(
                 watch_id=str(matched_watch.id),
                 price=price,
                 currency=currency,
+                usd_price=usd_price,
                 condition=order_condition,
                 country_code=country_code or "CH",
                 country_name=country_name,
@@ -694,6 +737,7 @@ async def process_csv_import(
         "matched_orders": matched_count,
         "unmatched_rows": unmatched_count,
         "skipped_duplicates": skipped_duplicates,
+        "refreshed_orders": refreshed_count,
         "flagged_prices": flagged_price_count,
     }
 

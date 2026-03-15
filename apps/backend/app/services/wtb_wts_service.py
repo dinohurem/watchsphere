@@ -174,6 +174,28 @@ WTB_CONDITIONS = {
 WTS_KEYWORDS = ["wts", "want to sell", "for sale", "selling", "fs", "stock list", "stocklist", "price list", "pricelist"]
 WTB_KEYWORDS = ["wtb", "want to buy", "looking for", "looking", "need", "lf"]
 
+# Messages to skip entirely — no output produced
+SKIP_PATTERNS = [
+    r'\bsold\b',
+    r'\b-\s*sold\b',
+    r'diese nachricht wurde gel[öo]scht',
+    r'this message was deleted',
+    r'you deleted this message',
+    r'bild weggelassen',
+    r'video weggelassen',
+    r'<media omitted>',
+    r'media omitted',
+    r'sticker weggelassen',
+    r'audio weggelassen',
+    r'dokument weggelassen',
+    r'gif weggelassen',
+    r'kontaktkarte weggelassen',
+    r'standort weggelassen',
+]
+
+# Compiled regex for skip detection (case-insensitive)
+_SKIP_RE = re.compile('|'.join(SKIP_PATTERNS), re.IGNORECASE)
+
 REMARKS_MAP = {
     "both tag": "Both Tag",
     "export only": "Export only",
@@ -230,6 +252,38 @@ BRAND_ALIASES = {
     "mbf": "MB&F",
     "moser": "H. Moser & Cie",
     "h. moser": "H. Moser & Cie",
+}
+
+# Common dealer abbreviations for watch descriptors
+WATCH_DESCRIPTOR_ALIASES = {
+    "jub": "Jubilee",
+    "jubilee": "Jubilee",
+    "oys": "Oyster",
+    "oyster": "Oyster",
+    "wim": "Wimbledon",
+    "wimbledon": "Wimbledon",
+    "gnrn": "Green/Black",  # Sprite GMT
+    "blnr": "Blue/Black",   # Batman GMT
+    "blro": "Blue/Red",     # Pepsi GMT
+    "vtnr": "Green/Black",  # Destro GMT
+    "rom": "Roman",
+    "roman": "Roman",
+    "choc": "Chocolate",
+    "choco": "Chocolate",
+    "chocolate": "Chocolate",
+    "yml": "YML",            # Yellow dial
+    "pn": "Paul Newman",
+    "paul newman": "Paul Newman",
+    "tbr": "Tiger",          # Tiger bracelet
+    "sundust": "Sundust",
+    "sun": "Sundust",
+    "tiff": "Tiffany",
+    "tiffany": "Tiffany",
+    "sodalite": "Sodalite",
+    "turqoise": "Turquoise",
+    "turquoise": "Turquoise",
+    "pistachio": "Pistachio",
+    "ice blue": "Ice Blue",
 }
 
 CSV_HEADERS = [
@@ -407,12 +461,52 @@ def _parse_timestamp(date_str: str, time_str: str) -> datetime:
     return datetime.utcnow()
 
 
-def detect_post_type(content: str) -> Optional[str]:
-    """Detect if a message is WTS, WTB, or neither. Returns 'WTS', 'WTB', or None."""
-    content_lower = content.lower()
+def should_skip_message(content: str) -> bool:
+    """Check if a message should be skipped entirely (SOLD, deleted, media)."""
+    if _SKIP_RE.search(content):
+        return True
+    # Pure emoji/decorative lines (no alphanumeric content)
+    cleaned = _clean_text(content).strip()
+    if not cleaned:
+        return True
+    # System messages (encryption notices, group changes)
+    system_patterns = [
+        r'end-to-end.*encrypted',
+        r'ende-zu-ende.*verschl[üu]sselt',
+        r'nachrichtendauer wurde',
+        r'messages? and calls? are',
+        r'die sicherheitsnummer',
+        r'hat die gruppe',
+        r'wurde hinzugef[üu]gt',
+    ]
+    for pattern in system_patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            return True
+    return False
 
-    if any(x in content_lower for x in ["bild weggelassen", "video weggelassen", "media omitted", "<media omitted>"]):
+
+def detect_brand_from_content(content: str) -> Optional[str]:
+    """Detect brand mentioned in a message for brand-scoped matching.
+    Returns canonical brand name or None."""
+    content_lower = content.lower()
+    # Check for brand names/aliases in the content
+    # Sort by length (longest first) to match "patek philippe" before "patek"
+    for alias, brand in sorted(BRAND_ALIASES.items(), key=lambda x: len(x[0]), reverse=True):
+        # Word boundary check to avoid partial matches
+        pattern = r'(?<![a-zA-Z])' + re.escape(alias) + r'(?![a-zA-Z])'
+        if re.search(pattern, content_lower):
+            return brand
+    return None
+
+
+def detect_post_type(content: str) -> Optional[str]:
+    """Detect if a message is WTS, WTB, or neither. Returns 'WTS', 'WTB', or None.
+    Returns None for SOLD, deleted, media, and system messages."""
+    # Skip SOLD, deleted, media, system messages entirely
+    if should_skip_message(content):
         return None
+
+    content_lower = content.lower()
 
     for kw in WTS_KEYWORDS:
         if kw in content_lower:
@@ -422,7 +516,10 @@ def detect_post_type(content: str) -> Optional[str]:
         if kw in content_lower:
             return "WTB"
 
-    has_price = bool(re.search(r'(?:\$|€|£|HKD|USD|EUR|GBP|CHF|AED|USDT)\s*[\d,]+|[\d,]+\s*(?:HKD|USD|EUR|GBP|CHF|AED|USDT|k\b)', content, re.IGNORECASE))
+    has_price = bool(re.search(
+        r'(?:\$|€|£|HKD|USD|EUR|GBP|CHF|AED|USDT)\s*[\d,]+|[\d,]+\s*(?:HKD|USD|EUR|GBP|CHF|AED|USDT|k\b)',
+        content, re.IGNORECASE
+    ))
     if has_price:
         return "WTS"
 
@@ -732,7 +829,7 @@ _fuzzy_match_cache: dict[tuple[str, Optional[str]], list[dict]] = {}
 # Counter for fuzzy matches in current run (reset per process_generation call)
 _fuzzy_match_count = 0
 
-FUZZY_SCORE_THRESHOLD = 78
+FUZZY_SCORE_THRESHOLD = 85
 
 
 def fuzzy_match_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = None) -> list[dict]:
@@ -801,14 +898,17 @@ async def batch_ai_match(
     unmatched_lines: list[dict],
     watch_index: dict,
 ) -> list[dict]:
-    """Use OpenAI gpt-4o-mini to match unmatched lines against the watch catalog.
-    Called once per run with all collected unmatched lines.
+    """Use OpenAI GPT-5.2 to match unmatched lines against the watch catalog.
+    Processes ALL unmatched lines in batches (no cap).
 
-    Each item in unmatched_lines: {"index": int, "content": str}
-    Returns list of {"index": int, "ws_code": str, "watch": dict} for successful matches.
+    Each item in unmatched_lines: {"index": int, "content": str, "brand_hint": str|None}
+    Returns list of {"index": int, "ws_code": str, "watch": dict|None,
+                      "ai_brand": str, "ai_model": str, "ai_ws_code": str,
+                      "confidence": int, "in_catalog": bool}
     """
     from openai import AsyncOpenAI
     from app.core.config import settings
+    import asyncio
 
     if not settings.OPENAI_API_KEY:
         logger.warning("OPENAI_API_KEY not set, skipping AI matching")
@@ -827,72 +927,125 @@ async def batch_ai_match(
         catalog_entries.append(entry)
         ws_code_to_watch[watch["ws_code"].lower()] = watch
 
-    if not catalog_entries:
-        return []
+    catalog_text = "\n".join(catalog_entries) if catalog_entries else "CATALOG IS EMPTY - identify watches by your knowledge"
 
-    catalog_text = "\n".join(catalog_entries)
-    logger.info(f"batch_ai_match: catalog has {len(catalog_entries)} entries, "
-                f"processing {min(len(unmatched_lines), 100)} of {len(unmatched_lines)} unmatched lines")
+    # Process in batches
+    BATCH_SIZE = 1500
+    MAX_CONCURRENT = 5
+    all_results = []
 
-    lines_text = "\n".join(
-        f"[{item['index']}] {item['content'][:300]}"
-        for item in unmatched_lines[:100]  # Cap at 100 lines per batch
-    )
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=120.0)
 
-    prompt = f"""You are a watch reference matcher. Match each line to the correct watch from the catalog.
+    async def process_batch(batch_lines: list[dict]) -> list[dict]:
+        lines_text = "\n".join(
+            f"[{item['index']}] {item['content'][:400]}"
+            for item in batch_lines
+        )
 
-CATALOG:
+        prompt = f"""You are an expert luxury watch dealer reference matcher. Match each line to the correct watch.
+
+WATCH CATALOG (match against these if possible):
 {catalog_text}
+
+DEALER ABBREVIATIONS:
+jub=Jubilee bracelet, oys=Oyster bracelet, wim=Wimbledon dial, gnrn=Sprite GMT (green/black),
+blnr=Batman GMT (blue/black), blro=Pepsi GMT (blue/red), vtnr=Destro GMT (green/black),
+rom=Roman numeral dial, choc/choco=Chocolate dial, yml=Yellow dial,
+pn=Paul Newman dial, tbr=Tiger bracelet, sun=Sundust dial, tiff=Tiffany dial,
+JD.CAR=Jade dial (Cartier), N1/N2/N3/N12=month codes (Jan/Feb/Mar/Dec),
+pp=Patek Philippe, ap=Audemars Piguet, rm=Richard Mille, jlc=Jaeger-LeCoultre,
+vc=Vacheron Constantin, fpj=F.P. Journe
+
+RULES:
+1. NEVER match across brands — a Tudor reference must stay Tudor, never become Rolex
+2. If no catalog match exists but you can confidently identify the watch, provide your best ws_code suggestion
+3. A ws_code is typically: reference + key descriptor (e.g., "126710BLNR Jub", "5711/1A White", "15500ST Blue")
+4. Confidence must be 0-100. Only matches >80 are considered reliable.
+5. For lines you truly cannot identify, set confidence to 0
 
 UNMATCHED LINES:
 {lines_text}
 
-For each line, respond with a JSON array. Each element: {{"index": <line_index>, "ws_code": "<matched_ws_code_or_null>"}}.
-Only include matches you are confident about (>80% sure). Use null for uncertain matches.
-Respond with ONLY the JSON array, no other text."""
+Respond with ONLY a JSON array. Each element:
+{{"index": <line_index>, "ws_code": "<catalog_ws_code_or_null>", "brand": "<brand>", "model": "<model_name>", "suggested_ws_code": "<your_best_ws_code>", "confidence": <0-100>, "in_catalog": <true_if_ws_code_matched>}}
 
-    prompt_len = len(prompt)
-    logger.info(f"batch_ai_match: sending prompt ({prompt_len} chars) to gpt-4o-mini...")
+JSON array:"""
 
-    try:
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=60.0)
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=4096,
-        )
-        logger.info("batch_ai_match: OpenAI response received")
+        try:
+            response = await client.chat.completions.create(
+                model="gpt-5.2",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=16384,
+            )
 
-        content = response.choices[0].message.content.strip()
-        # Strip markdown code fences if present
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
+            content = response.choices[0].message.content.strip()
+            # Strip markdown code fences if present
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                content = content.strip()
 
-        ai_results = json.loads(content)
+            ai_results = json.loads(content)
+            batch_matched = []
 
-        matched = []
-        for item in ai_results:
-            ws_code = item.get("ws_code")
-            idx = item.get("index")
-            if ws_code and idx is not None:
-                ws_lower = ws_code.lower()
-                if ws_lower in ws_code_to_watch:
-                    matched.append({
-                        "index": idx,
-                        "ws_code": ws_code,
-                        "watch": ws_code_to_watch[ws_lower],
-                    })
+            for item in ai_results:
+                ws_code = item.get("ws_code")
+                idx = item.get("index")
+                confidence = item.get("confidence", 0)
+                ai_brand = item.get("brand", "")
+                ai_model = item.get("model", "")
+                suggested_ws_code = item.get("suggested_ws_code", "")
+                in_catalog = item.get("in_catalog", False)
 
-        logger.info(f"AI matching: {len(matched)}/{len(unmatched_lines)} lines matched")
-        return matched
+                if idx is None or confidence < 1:
+                    continue
 
-    except Exception as e:
-        logger.error(f"AI matching failed: {e}")
-        return []
+                watch = None
+                if ws_code:
+                    ws_lower = ws_code.lower()
+                    watch = ws_code_to_watch.get(ws_lower)
+                    if watch:
+                        in_catalog = True
+
+                batch_matched.append({
+                    "index": idx,
+                    "ws_code": ws_code,
+                    "watch": watch,
+                    "ai_brand": ai_brand,
+                    "ai_model": ai_model,
+                    "ai_ws_code": suggested_ws_code or ws_code or "",
+                    "confidence": confidence,
+                    "in_catalog": in_catalog,
+                })
+
+            return batch_matched
+
+        except Exception as e:
+            logger.error(f"AI matching batch failed: {e}")
+            return []
+
+    # Split into batches and process with concurrency limit
+    batches = []
+    for i in range(0, len(unmatched_lines), BATCH_SIZE):
+        batches.append(unmatched_lines[i:i + BATCH_SIZE])
+
+    logger.info(f"batch_ai_match: processing {len(unmatched_lines)} lines in {len(batches)} batches "
+                f"(max {MAX_CONCURRENT} concurrent)")
+
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+
+    async def limited_batch(batch):
+        async with semaphore:
+            return await process_batch(batch)
+
+    batch_results = await asyncio.gather(*[limited_batch(b) for b in batches])
+    for result in batch_results:
+        all_results.extend(result)
+
+    logger.info(f"AI matching: {len(all_results)}/{len(unmatched_lines)} lines matched")
+    return all_results
 
 
 def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = None,
@@ -925,18 +1078,18 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
     if ref_lower in watch_index["by_ws_code"]:
         return [watch_index["by_ws_code"][ref_lower]]
 
-    # 2. Try reference exact match
-    if ref_lower in watch_index["by_reference"]:
-        candidates = _brand_filter(watch_index["by_reference"][ref_lower])
+    # 2. Try oem_references exact match (more specific than plain reference)
+    if ref_lower in watch_index["by_oem_ref"]:
+        candidates = _brand_filter(watch_index["by_oem_ref"][ref_lower])
         matches = _collect(candidates)
         if matches:
             if len(matches) > 1 and line_tokens:
                 matches = _disambiguate_matches(matches, line_tokens)
             return matches
 
-    # 3. Try oem_references exact match
-    if ref_lower in watch_index["by_oem_ref"]:
-        candidates = _brand_filter(watch_index["by_oem_ref"][ref_lower])
+    # 3. Try reference exact match
+    if ref_lower in watch_index["by_reference"]:
+        candidates = _brand_filter(watch_index["by_reference"][ref_lower])
         matches = _collect(candidates)
         if matches:
             if len(matches) > 1 and line_tokens:
@@ -952,39 +1105,8 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
                 matches = _disambiguate_matches(matches, line_tokens)
             return matches
 
-    # 5. Substring search: check if ref appears in any oem_reference or alias
-    for key, watch_list in watch_index["by_oem_ref"].items():
-        if ref_lower in key or key in ref_lower:
-            for w in watch_list:
-                if brand_hint and w["brand"].lower() != brand_hint.lower():
-                    continue
-                ws = w["ws_code"].lower()
-                if ws not in seen_ws:
-                    matches.append(w)
-                    seen_ws.add(ws)
-
-    if matches:
-        if len(matches) > 1 and line_tokens:
-            matches = _disambiguate_matches(matches, line_tokens)
-        return matches
-
-    for key, watch_list in watch_index["by_alias"].items():
-        if ref_lower in key or key in ref_lower:
-            for w in watch_list:
-                if brand_hint and w["brand"].lower() != brand_hint.lower():
-                    continue
-                ws = w["ws_code"].lower()
-                if ws not in seen_ws:
-                    matches.append(w)
-                    seen_ws.add(ws)
-
-    if len(matches) > 1 and line_tokens:
-        matches = _disambiguate_matches(matches, line_tokens)
-
-    if matches:
-        return matches
-
-    # 6. Fuzzy matching fallback (rapidfuzz)
+    # 5. Fuzzy matching fallback (brand-filtered only)
+    # (Substring matching removed — it causes cross-brand contamination)
     global _fuzzy_match_count
     fuzzy_results = fuzzy_match_ref(ref, watch_index, brand_hint)
     if fuzzy_results:
@@ -994,59 +1116,71 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
             _fuzzy_match_count += 1
         return fuzzy_results
 
-    return matches
+    return []
 
 
-def match_watch(content: str, watch_index: dict) -> list[dict]:
+def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = None) -> list[dict]:
     """Match a single-line or full message content against the watch index.
-    Tries reference extraction first, then falls back to substring search.
-    All comparisons are case-insensitive."""
+    Uses word-boundary matching to prevent cross-brand contamination.
+    brand_hint restricts matching to a specific brand when available."""
     content_lower = content.lower()
     matches = []
     seen_ws_codes = set()
 
-    # Try ws_code substring match
+    def _add_match(watch: dict):
+        ws = watch["ws_code"].lower()
+        if ws not in seen_ws_codes:
+            matches.append(watch)
+            seen_ws_codes.add(ws)
+
+    def _brand_ok(watch: dict) -> bool:
+        if not brand_hint:
+            return True
+        return watch["brand"].lower() == brand_hint.lower()
+
+    # Try ws_code word-boundary match (most specific)
     for ws_code, watch in watch_index["by_ws_code"].items():
-        if ws_code and ws_code in content_lower:
-            if ws_code not in seen_ws_codes:
-                matches.append(watch)
-                seen_ws_codes.add(ws_code)
+        if ws_code and _brand_ok(watch):
+            # Use word boundary: ws_code must not be a substring of a larger token
+            pattern = r'(?<![a-zA-Z0-9])' + re.escape(ws_code) + r'(?![a-zA-Z0-9])'
+            if re.search(pattern, content_lower):
+                _add_match(watch)
 
     if matches:
         return matches
 
-    # Try oem_ref substring match
-    for oem_ref, watch_list in watch_index["by_oem_ref"].items():
-        if oem_ref and oem_ref in content_lower:
-            for w in watch_list:
-                ws = w["ws_code"].lower()
-                if ws not in seen_ws_codes:
-                    matches.append(w)
-                    seen_ws_codes.add(ws)
-
-    if matches:
-        return matches
-
-    # Try reference substring match
+    # Try reference exact token match
     for ref, watch_list in watch_index["by_reference"].items():
-        if ref and ref in content_lower:
-            for w in watch_list:
-                ws = w["ws_code"].lower()
-                if ws not in seen_ws_codes:
-                    matches.append(w)
-                    seen_ws_codes.add(ws)
+        if ref:
+            pattern = r'(?<![a-zA-Z0-9])' + re.escape(ref) + r'(?![a-zA-Z0-9/\-])'
+            if re.search(pattern, content_lower):
+                for w in watch_list:
+                    if _brand_ok(w):
+                        _add_match(w)
 
     if matches:
         return matches
 
-    # Try alias substring match
+    # Try OEM reference exact token match
+    for oem_ref, watch_list in watch_index["by_oem_ref"].items():
+        if oem_ref:
+            pattern = r'(?<![a-zA-Z0-9])' + re.escape(oem_ref) + r'(?![a-zA-Z0-9])'
+            if re.search(pattern, content_lower):
+                for w in watch_list:
+                    if _brand_ok(w):
+                        _add_match(w)
+
+    if matches:
+        return matches
+
+    # Try alias exact token match
     for alias, watch_list in watch_index["by_alias"].items():
-        if alias and alias in content_lower:
-            for w in watch_list:
-                ws = w["ws_code"].lower()
-                if ws not in seen_ws_codes:
-                    matches.append(w)
-                    seen_ws_codes.add(ws)
+        if alias:
+            pattern = r'(?<![a-zA-Z0-9])' + re.escape(alias) + r'(?![a-zA-Z0-9])'
+            if re.search(pattern, content_lower):
+                for w in watch_list:
+                    if _brand_ok(w):
+                        _add_match(w)
 
     return matches
 
@@ -1150,6 +1284,10 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
     Currency can precede: HK$387k, $300k, €5,000
     If $ is used by HK/CN/MO/SG sender without USD/USDT qualifier -> HKD.
     """
+    # Remove serial code prefixes that can interfere with price parsing
+    # SC = Serial Code, SN = Serial Number, Ref = Reference
+    content = re.sub(r'\b(?:SC|SN|REF|ser\.?)\s*[\d,]+', '', content, flags=re.IGNORECASE)
+
     # Currency-prefixed patterns (HK$, HKD, $, €, £)
     prefix_patterns = [
         (r'(?:HK\$|hk\$)\s*([\d,.]+[kKmM]?)', "HKD"),
@@ -1203,6 +1341,18 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
     if price:
         return price, currency
 
+    # Try concatenated format: 345000hkd, 142000hkd, 450000hkd
+    concat_pattern = r'(\d{3,9})\s*(hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy)'
+    m = re.search(concat_pattern, line, re.IGNORECASE)
+    if m:
+        raw_price = m.group(1)
+        currency = m.group(2).upper()
+        if currency == "USDT":
+            currency = "USD"  # Treat USDT as USD
+        formatted = _format_price(raw_price)
+        if formatted:
+            return formatted, currency
+
     # Try bare price at end of line (no currency specified)
     # Match a number+k/m that is NOT preceded by 'n' (which would be a month code like N12)
     # Look for the last numeric token on the line
@@ -1234,6 +1384,46 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
             return formatted, "USD"
 
     return None, None
+
+
+def extract_all_prices(content: str, sender_country: Optional[str] = None) -> list[tuple[str, str]]:
+    """Extract all price+currency pairs from a message.
+    Returns list of (formatted_price, currency) tuples, ordered by preference:
+    USDT/USD > EUR/GBP/CHF > HKD > other."""
+    prices = []
+
+    # Find all currency-tagged prices
+    all_patterns = [
+        (r'(?:USDT|usdt)\s*([\d,.]+[kKmM]?)', "USDT"),
+        (r'(?:USD|usd)\s*([\d,.]+[kKmM]?)', "USD"),
+        (r'([\d,.]+[kKmM]?)\s*(?:usdt|USDT)', "USDT"),
+        (r'([\d,.]+[kKmM]?)\s*(?:usd|USD)', "USD"),
+        (r'(?:HKD|hkd)\s*([\d,.]+[kKmM]?)', "HKD"),
+        (r'([\d,.]+[kKmM]?)\s*(?:hkd|HKD)', "HKD"),
+        (r'(\d{3,9})\s*(?:hkd|HKD)', "HKD"),
+        (r'(\d{3,9})\s*(?:usdt|USDT)', "USDT"),
+        (r'(?:EUR|eur|€)\s*([\d,.]+[kKmM]?)', "EUR"),
+        (r'(?:GBP|gbp|£)\s*([\d,.]+[kKmM]?)', "GBP"),
+    ]
+
+    seen_positions = set()
+    for pattern, currency in all_patterns:
+        for m in re.finditer(pattern, content):
+            pos = m.start()
+            # Avoid double-counting overlapping matches
+            if any(abs(pos - sp) < 5 for sp in seen_positions):
+                continue
+            raw = m.group(1).strip()
+            formatted = _format_price(raw)
+            if formatted:
+                prices.append((formatted, currency))
+                seen_positions.add(pos)
+
+    # Sort by currency preference
+    currency_priority = {"USDT": 0, "USD": 1, "EUR": 2, "GBP": 3, "CHF": 4, "HKD": 5}
+    prices.sort(key=lambda x: currency_priority.get(x[1], 99))
+
+    return prices
 
 
 def _format_price(raw: str) -> Optional[str]:
@@ -1490,6 +1680,10 @@ def parse_stock_list(
         if not ref:
             continue
 
+        # Skip SOLD lines within stock lists
+        if re.search(r'\bsold\b', stripped, re.IGNORECASE):
+            continue
+
         # This is a watch line — try to match it
         review_reasons = []
         if not phone:
@@ -1510,7 +1704,7 @@ def parse_stock_list(
 
         if len(watch_matches) == 0:
             # Also try full-line matching
-            watch_matches = match_watch(stripped, watch_index)
+            watch_matches = match_watch(stripped, watch_index, brand_hint=current_brand)
             if len(watch_matches) > 1 and line_tokens:
                 watch_matches = _disambiguate_matches(watch_matches, line_tokens)
 
@@ -1685,6 +1879,18 @@ def _rows_to_csv(rows: list[dict]) -> str:
     return output.getvalue()
 
 
+def _make_dedup_key(ws_code: str, phone: str, price: str, currency: str, month_year: str) -> str:
+    """Generate a dedup key from order fields.
+    Key: ws_code|phone|price_numeric|currency|month_year (all normalized)."""
+    ws = ws_code.strip().lower() if ws_code else ""
+    ph = re.sub(r'[\s\-\(\)]', '', phone).strip() if phone else ""
+    # Extract numeric price only
+    pr = re.sub(r'[^\d]', '', price.split()[0]) if price else ""
+    cur = currency.strip().upper() if currency else ""
+    my = month_year.strip().lower() if month_year else ""
+    return f"{ws}|{ph}|{pr}|{cur}|{my}"
+
+
 async def process_generation(
     txt_content: str,
     mode: str,
@@ -1773,7 +1979,8 @@ async def process_generation(
         if not phone:
             review_reasons.append("No phone number (contact name used)")
 
-        watch_matches = match_watch(content, watch_index)
+        msg_brand_hint = detect_brand_from_content(content)
+        watch_matches = match_watch(content, watch_index, brand_hint=msg_brand_hint)
 
         if len(watch_matches) == 0:
             review_reasons.append("No matching watch found in database")
@@ -1853,8 +2060,9 @@ async def process_generation(
 
     await _report("processing", 75, f"Main processing done — {len(matched_rows):,} matched, {len(needs_review_rows):,} needs review")
 
-    # --- AI matching pass: attempt to match remaining "no match" items ---
+    # --- AI matching pass: attempt to match ALL remaining "no match" items ---
     ai_matched_count = 0
+    ai_suggested_additions = []  # Watches not in catalog but identified by AI
     no_match_reason = "No matching watch found"
     unmatched_for_ai = []
     unmatched_indices = []
@@ -1865,15 +2073,17 @@ async def process_generation(
             unmatched_for_ai.append({
                 "index": len(unmatched_for_ai),
                 "content": row.get("_original_content", ""),
+                "brand_hint": row.get("Marke", None),
             })
             unmatched_indices.append(i)
 
     if unmatched_for_ai:
-        await _report("ai_matching", 80, f"AI matching {len(unmatched_for_ai):,} unmatched items...")
-        logger.info(f"process_generation: starting AI matching for {len(unmatched_for_ai)} unmatched lines...")
+        total_unmatched = len(unmatched_for_ai)
+        await _report("ai_matching", 80, f"AI matching {total_unmatched:,} unmatched items with GPT-5.2...")
+        logger.info(f"process_generation: starting AI matching for {total_unmatched} unmatched lines (ALL, no cap)...")
         t_ai_start = time.time()
         ai_results = await batch_ai_match(unmatched_for_ai, watch_index)
-        logger.info(f"process_generation: AI matching done in {time.time()-t_ai_start:.1f}s — {len(ai_results)} matches")
+        logger.info(f"process_generation: AI matching done in {time.time()-t_ai_start:.1f}s — {len(ai_results)} results")
 
         # Build lookup: ai line index -> match result
         ai_lookup = {r["index"]: r for r in ai_results}
@@ -1883,7 +2093,17 @@ async def process_generation(
         for ai_idx, nr_idx in enumerate(unmatched_indices):
             if ai_idx in ai_lookup:
                 result = ai_lookup[ai_idx]
-                watch = result["watch"]
+                confidence = result.get("confidence", 0)
+
+                if confidence < 80:
+                    # Low confidence — keep in needs-review but add AI info
+                    row = needs_review_rows[nr_idx]
+                    ai_info = f"AI suggestion ({confidence}%): {result.get('ai_ws_code', '?')}"
+                    row["Review Reason"] = f"{row.get('Review Reason', '')}; {ai_info}"
+                    continue
+
+                watch = result.get("watch")
+                in_catalog = result.get("in_catalog", False)
                 row = needs_review_rows[nr_idx]
                 original_content = row.get("_original_content", "")
 
@@ -1896,6 +2116,8 @@ async def process_generation(
                 location_val = extract_location(original_content, sender_country_val, mode)
                 condition_val = extract_condition(original_content, mode, raw_month_year, ref_month, ref_year)
                 price_val, currency_val = extract_price(original_content, sender_country_val)
+                if not price_val:
+                    price_val, currency_val = extract_price_from_line(original_content, sender_country_val)
                 remarks_val = normalize_remarks(original_content)
                 if mode == "WTB":
                     loc_remarks = extract_wtb_location_remarks(original_content)
@@ -1903,10 +2125,14 @@ async def process_generation(
                         remarks_val = f"{remarks_val}; {loc_remarks}" if remarks_val else loc_remarks
                 price_str_val = f"{price_val} {currency_val}" if price_val and currency_val else (price_val or "")
 
+                # Use catalog watch data if available, otherwise AI-determined data
+                ws_code_val = watch["ws_code"] if watch else result.get("ai_ws_code", "")
+                brand_val = watch["brand"] if watch else result.get("ai_brand", "")
+
                 matched_rows.append({
                     "Nachrichten Art": mode,
-                    "Marke": watch["brand"],
-                    "WS-Code": watch["ws_code"],
+                    "Marke": brand_val,
+                    "WS-Code": ws_code_val,
                     "Monat/Jahr": month_year_val,
                     "Standort": location_val or "",
                     "Zustand": condition_val or "",
@@ -1919,9 +2145,105 @@ async def process_generation(
                 indices_to_remove.append(nr_idx)
                 ai_matched_count += 1
 
+                # Track suggested catalog additions (watches not in catalog)
+                if not in_catalog and ws_code_val and brand_val:
+                    ai_suggested_additions.append({
+                        "brand": brand_val,
+                        "suggested_ws_code": ws_code_val,
+                        "model": result.get("ai_model", ""),
+                        "reference": result.get("ai_ws_code", "").split()[0] if result.get("ai_ws_code") else "",
+                        "confidence": confidence,
+                        "example_line": original_content[:200],
+                    })
+
         # Remove AI-matched items from needs_review (reverse order)
         for idx in sorted(indices_to_remove, reverse=True):
             needs_review_rows.pop(idx)
+
+    # Generate suggested-additions CSV (watches identified by AI but not in catalog)
+    suggested_csv = ""
+    unique_suggestions = []
+    if ai_suggested_additions:
+        # Deduplicate suggestions by suggested_ws_code
+        seen_suggestions = set()
+        for s in ai_suggested_additions:
+            key = s["suggested_ws_code"].lower()
+            if key not in seen_suggestions:
+                unique_suggestions.append(s)
+                seen_suggestions.add(key)
+
+        sug_output = io.StringIO()
+        sug_headers = ["brand", "suggested_ws_code", "model", "reference", "confidence", "example_line"]
+        sug_writer = csv.DictWriter(sug_output, fieldnames=sug_headers)
+        sug_writer.writeheader()
+        for s in sorted(unique_suggestions, key=lambda x: x["confidence"], reverse=True):
+            sug_writer.writerow(s)
+        suggested_csv = sug_output.getvalue()
+
+    await _report("dedup", 88, "Deduplicating rows...")
+
+    # --- Dedup matched rows: (ws_code, phone, price, currency, month_year) ---
+    # Keep most recent per dedup key
+    await _report("dedup", 90, "Deduplicating matched rows...")
+
+    dedup_map = {}
+    for row in matched_rows:
+        price_parts = row["Preis"].split() if row["Preis"] else ["", ""]
+        price_num = price_parts[0] if price_parts else ""
+        currency = price_parts[1] if len(price_parts) > 1 else ""
+        key = _make_dedup_key(
+            row["WS-Code"],
+            row["Nummer"],
+            price_num,
+            currency,
+            row["Monat/Jahr"],
+        )
+        existing = dedup_map.get(key)
+        if existing is None:
+            dedup_map[key] = row
+        else:
+            # Keep the one with the later timestamp
+            existing_ts = existing.get("Nachricht gepostet am", "")
+            new_ts = row.get("Nachricht gepostet am", "")
+            if new_ts > existing_ts:
+                dedup_map[key] = row
+
+    deduped_count = len(matched_rows) - len(dedup_map)
+    matched_rows = list(dedup_map.values())
+    if deduped_count > 0:
+        logger.info(f"process_generation: deduped {deduped_count} matched rows")
+
+    # Dedup needs-review rows similarly
+    nr_dedup_map = {}
+    for row in needs_review_rows:
+        price_parts = row.get("Preis", "").split() if row.get("Preis") else ["", ""]
+        price_num = price_parts[0] if price_parts else ""
+        currency = price_parts[1] if len(price_parts) > 1 else ""
+        key = _make_dedup_key(
+            row.get("WS-Code", ""),
+            row.get("Nummer", ""),
+            price_num,
+            currency,
+            row.get("Monat/Jahr", ""),
+        )
+        # For needs-review, also include extracted ref in key to avoid merging different watches
+        extracted_ref = row.get("Extracted Ref", "")
+        if extracted_ref and not row.get("WS-Code"):
+            key = f"{key}|{extracted_ref.lower()}"
+
+        existing = nr_dedup_map.get(key)
+        if existing is None:
+            nr_dedup_map[key] = row
+        else:
+            existing_ts = existing.get("Nachricht gepostet am", "")
+            new_ts = row.get("Nachricht gepostet am", "")
+            if new_ts > existing_ts:
+                nr_dedup_map[key] = row
+
+    nr_deduped = len(needs_review_rows) - len(nr_dedup_map)
+    needs_review_rows = list(nr_dedup_map.values())
+    if nr_deduped > 0:
+        logger.info(f"process_generation: deduped {nr_deduped} needs-review rows")
 
     await _report("generating_csv", 95, "Generating CSV files...")
 
@@ -1942,10 +2264,12 @@ async def process_generation(
     return {
         "matched_csv": matched_csv,
         "needs_review_csv": needs_review_csv,
+        "suggested_additions_csv": suggested_csv,
         "total_messages": total_rows,
         "detected_posts": total_rows,
         "matched_count": len(matched_rows),
         "needs_review_count": len(needs_review_rows),
         "fuzzy_matched_count": _fuzzy_match_count,
         "ai_matched_count": ai_matched_count,
+        "suggested_additions_count": len(unique_suggestions) if ai_suggested_additions else 0,
     }

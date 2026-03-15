@@ -28,6 +28,8 @@ interface WtbWtsRun {
   needs_review_count: number
   has_matched_csv: boolean
   has_needs_review_csv: boolean
+  has_suggested_csv: boolean
+  suggested_additions_count: number
   files_expire_at?: string
   imported_by: string
   imported_by_name: string
@@ -67,7 +69,7 @@ const STATUS_COLORS = {
 function isFilesExpired(run: WtbWtsRun): boolean {
   if (run.status !== 'completed') return false
   // Files are expired when neither CSV is available
-  return !run.has_matched_csv && !run.has_needs_review_csv
+  return !run.has_matched_csv && !run.has_needs_review_csv && !run.has_suggested_csv
 }
 
 function getTimeRemaining(run: WtbWtsRun): string | null {
@@ -235,7 +237,7 @@ export function AdminWtbWtsGenerator() {
 
   const handleDownload = async (
     runId: string,
-    type: 'matched-csv' | 'needs-review-csv',
+    type: 'matched-csv' | 'needs-review-csv' | 'suggested-csv',
     filename: string
   ) => {
     try {
@@ -247,7 +249,7 @@ export function AdminWtbWtsGenerator() {
       const a = document.createElement('a')
       a.href = url
       const csvFilename = filename.replace(/\.txt$/i, '.csv')
-      const prefix = type === 'matched-csv' ? 'matched-' : 'needs-review-'
+      const prefix = type === 'matched-csv' ? 'matched-' : type === 'suggested-csv' ? 'suggested-' : 'needs-review-'
       a.download = `${prefix}${csvFilename}`
       a.click()
       window.URL.revokeObjectURL(url)
@@ -544,6 +546,14 @@ export function AdminWtbWtsGenerator() {
                 </p>
                 <p className="text-xs text-gray-500">Needs Review</p>
               </div>
+              {(result.suggested_additions_count || 0) > 0 && (
+                <div className="text-center p-2 bg-indigo-50 rounded">
+                  <p className="text-lg font-bold text-indigo-700">
+                    {result.suggested_additions_count}
+                  </p>
+                  <p className="text-xs text-gray-500">Suggested Additions</p>
+                </div>
+              )}
             </div>
 
             {/* Download Buttons */}
@@ -569,6 +579,15 @@ export function AdminWtbWtsGenerator() {
                   >
                     <Download className="w-4 h-4" />
                     Download Needs Review CSV
+                  </button>
+                )}
+                {result.has_suggested_csv && (
+                  <button
+                    onClick={() => handleDownload(result.id, 'suggested-csv', result.filename)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-indigo-800 bg-indigo-100 border border-indigo-300 rounded-lg hover:bg-indigo-200 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Suggested Additions ({result.suggested_additions_count || 0})
                   </button>
                 )}
               </div>
@@ -623,6 +642,12 @@ export function AdminWtbWtsGenerator() {
                             / {run.needs_review_count} review
                           </span>
                         )}
+                        {(run.suggested_additions_count || 0) > 0 && (
+                          <span className="text-indigo-600">
+                            {' '}
+                            / {run.suggested_additions_count} suggested
+                          </span>
+                        )}
                       </p>
                     </div>
                     <span
@@ -650,6 +675,15 @@ export function AdminWtbWtsGenerator() {
                             title="Download needs review CSV"
                           >
                             <AlertTriangle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {run.has_suggested_csv && (
+                          <button
+                            onClick={() => handleDownload(run.id, 'suggested-csv', run.filename)}
+                            className="p-2 hover:bg-indigo-100 rounded-lg text-indigo-600"
+                            title={`Download suggested additions (${run.suggested_additions_count || 0})`}
+                          >
+                            <FileOutput className="w-4 h-4" />
                           </button>
                         )}
                       </>
