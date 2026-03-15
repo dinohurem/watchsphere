@@ -1246,13 +1246,19 @@ def _format_price(raw: str) -> Optional[str]:
 
     m = re.match(r'^([\d.]+)\s*[mM]$', raw)
     if m:
-        val = float(m.group(1)) * 1000000
-        return f"{int(val):,}"
+        try:
+            val = float(m.group(1)) * 1000000
+            return f"{int(val):,}"
+        except ValueError:
+            return None
 
     m = re.match(r'^([\d.]+)\s*[kK]$', raw)
     if m:
-        val = float(m.group(1)) * 1000
-        return f"{int(val):,}"
+        try:
+            val = float(m.group(1)) * 1000
+            return f"{int(val):,}"
+        except ValueError:
+            return None
 
     try:
         if '.' in raw and raw.count('.') > 1:
@@ -1686,20 +1692,28 @@ async def process_generation(
     ref_year: int,
     group_name: str,
     jsonl_content: Optional[str] = None,
+    progress_callback=None,
 ) -> dict:
-    """Main processing function. Returns matched_csv, needs_review_csv, and stats."""
+    """Main processing function. Returns matched_csv, needs_review_csv, and stats.
+    progress_callback: optional async callable(stage, percent, detail) for progress updates."""
     import time
     t_start = time.time()
+
+    async def _report(stage: str, percent: int, detail: str = ""):
+        if progress_callback:
+            await progress_callback(stage, percent, detail)
 
     global _fuzzy_match_count
     _fuzzy_match_count = 0
     _fuzzy_match_cache.clear()
 
+    await _report("building_index", 5, "Building watch index...")
     logger.info("process_generation: building watch index...")
     watch_index = await build_watch_index(jsonl_content)
     logger.info(f"process_generation: watch index built ({len(watch_index.get('by_ws_code', {}))} ws_codes, "
                 f"{len(watch_index.get('fuzzy_candidates', []))} fuzzy candidates) in {time.time()-t_start:.1f}s")
 
+    await _report("parsing", 10, "Parsing messages...")
     messages = parse_whatsapp_txt(txt_content)
     total_messages = len(messages)
     logger.info(f"process_generation: parsed {total_messages} messages from txt")
@@ -1707,11 +1721,19 @@ async def process_generation(
     matched_rows = []
     needs_review_rows = []
     detected_posts = 0
+    last_pct = 10
 
-    for msg in messages:
+    for idx, msg in enumerate(messages):
         content = msg["content"]
         sender = msg["sender"]
         timestamp = msg["timestamp"]
+
+        # Report progress every ~2% (main loop spans 10-75%)
+        if total_messages > 0:
+            pct = 10 + int((idx / total_messages) * 65)
+            if pct >= last_pct + 2:
+                last_pct = pct
+                await _report("processing", pct, f"Processing messages... {idx:,}/{total_messages:,}")
 
         post_type = detect_post_type(content)
         if post_type is None:
@@ -1829,6 +1851,8 @@ async def process_generation(
                 f"{detected_posts} posts detected, {len(matched_rows)} matched, "
                 f"{len(needs_review_rows)} needs_review, {_fuzzy_match_count} fuzzy matches")
 
+    await _report("processing", 75, f"Main processing done — {len(matched_rows):,} matched, {len(needs_review_rows):,} needs review")
+
     # --- AI matching pass: attempt to match remaining "no match" items ---
     ai_matched_count = 0
     no_match_reason = "No matching watch found"
@@ -1845,6 +1869,7 @@ async def process_generation(
             unmatched_indices.append(i)
 
     if unmatched_for_ai:
+        await _report("ai_matching", 80, f"AI matching {len(unmatched_for_ai):,} unmatched items...")
         logger.info(f"process_generation: starting AI matching for {len(unmatched_for_ai)} unmatched lines...")
         t_ai_start = time.time()
         ai_results = await batch_ai_match(unmatched_for_ai, watch_index)
@@ -1897,6 +1922,8 @@ async def process_generation(
         # Remove AI-matched items from needs_review (reverse order)
         for idx in sorted(indices_to_remove, reverse=True):
             needs_review_rows.pop(idx)
+
+    await _report("generating_csv", 95, "Generating CSV files...")
 
     # Clean internal fields before CSV generation
     for row in needs_review_rows:

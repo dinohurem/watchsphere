@@ -1,3 +1,6 @@
+import asyncio
+import logging
+import traceback
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import Response
@@ -11,6 +14,8 @@ from app.core.deps import get_current_admin_user
 from app.models.user import User
 from app.models.wtb_wts import WtbWtsRun, GenerationMode, RunStatus
 from app.services.wtb_wts_service import process_generation
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -103,6 +108,86 @@ def _run_to_response(run: WtbWtsRun) -> RunResponse:
     )
 
 
+# --- Background processing ---
+
+async def _run_processing(
+    run: WtbWtsRun,
+    txt_content: str,
+    gen_mode: GenerationMode,
+    ref_month: int,
+    ref_year: int,
+    group_name: str,
+    jsonl_content: Optional[str],
+    filename: str,
+):
+    """Run WTB/WTS processing in background with progress updates."""
+    async def update_progress(stage: str, percent: int, detail: str = ""):
+        try:
+            await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
+                "progress_percent": percent,
+                "progress_stage": stage,
+                "progress_detail": detail,
+            }})
+        except Exception:
+            pass
+
+    try:
+        result = await process_generation(
+            txt_content=txt_content,
+            mode=gen_mode.value.upper(),
+            ref_month=ref_month,
+            ref_year=ref_year,
+            group_name=group_name,
+            jsonl_content=jsonl_content,
+            progress_callback=update_progress,
+        )
+        logger.info(f"generate_wtb_wts: processing done — matched={result['matched_count']}, "
+                     f"needs_review={result['needs_review_count']}, fuzzy={result.get('fuzzy_matched_count', 0)}, "
+                     f"ai={result.get('ai_matched_count', 0)}")
+
+        matched_gridfs_id = None
+        if result["matched_csv"]:
+            matched_gridfs_id = await _gridfs_put(
+                result["matched_csv"],
+                f"matched-{filename.replace('.txt', '.csv')}",
+            )
+
+        needs_review_gridfs_id = None
+        if result["needs_review_csv"]:
+            needs_review_gridfs_id = await _gridfs_put(
+                result["needs_review_csv"],
+                f"needs-review-{filename.replace('.txt', '.csv')}",
+            )
+
+        completed_at = datetime.utcnow()
+        await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
+            "matched_csv_gridfs_id": matched_gridfs_id,
+            "needs_review_csv_gridfs_id": needs_review_gridfs_id,
+            "total_messages": result["total_messages"],
+            "detected_posts": result["detected_posts"],
+            "matched_count": result["matched_count"],
+            "needs_review_count": result["needs_review_count"],
+            "fuzzy_matched_count": result.get("fuzzy_matched_count", 0),
+            "ai_matched_count": result.get("ai_matched_count", 0),
+            "status": RunStatus.COMPLETED,
+            "completed_at": completed_at,
+            "progress_percent": 100,
+            "progress_stage": "completed",
+            "progress_detail": "Done",
+        }})
+
+    except Exception as e:
+        logger.error(f"generate_wtb_wts FAILED: {type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
+            "status": RunStatus.FAILED,
+            "error_message": str(e),
+            "progress_percent": 0,
+            "progress_stage": "failed",
+            "progress_detail": str(e),
+        }})
+
+
 # --- Endpoints ---
 
 @router.post("/admin/wtb-wts/generate", response_model=RunResponse)
@@ -116,9 +201,6 @@ async def generate_wtb_wts(
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
     """Generate WTB/WTS CSV from a WhatsApp .txt export (Admin only)"""
-    import logging
-    logger = logging.getLogger(__name__)
-
     if not file.filename.endswith('.txt'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -172,68 +254,9 @@ async def generate_wtb_wts(
     )
     await run.insert()
 
-    try:
-        result = await process_generation(
-            txt_content=txt_content,
-            mode=gen_mode.value.upper(),
-            ref_month=reference_month,
-            ref_year=reference_year,
-            group_name=group_name,
-            jsonl_content=jsonl_content,
-        )
-        logger.info(f"generate_wtb_wts: processing done — matched={result['matched_count']}, "
-                     f"needs_review={result['needs_review_count']}, fuzzy={result.get('fuzzy_matched_count', 0)}, "
-                     f"ai={result.get('ai_matched_count', 0)}")
-
-        # Store output CSVs in GridFS
-        matched_gridfs_id = None
-        if result["matched_csv"]:
-            matched_gridfs_id = await _gridfs_put(
-                result["matched_csv"],
-                f"matched-{file.filename.replace('.txt', '.csv')}",
-            )
-
-        needs_review_gridfs_id = None
-        if result["needs_review_csv"]:
-            needs_review_gridfs_id = await _gridfs_put(
-                result["needs_review_csv"],
-                f"needs-review-{file.filename.replace('.txt', '.csv')}",
-            )
-
-        completed_at = datetime.utcnow()
-        await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
-            "matched_csv_gridfs_id": matched_gridfs_id,
-            "needs_review_csv_gridfs_id": needs_review_gridfs_id,
-            "total_messages": result["total_messages"],
-            "detected_posts": result["detected_posts"],
-            "matched_count": result["matched_count"],
-            "needs_review_count": result["needs_review_count"],
-            "fuzzy_matched_count": result.get("fuzzy_matched_count", 0),
-            "ai_matched_count": result.get("ai_matched_count", 0),
-            "status": RunStatus.COMPLETED,
-            "completed_at": completed_at,
-        }})
-        # Update local object for response
-        run.matched_csv_gridfs_id = matched_gridfs_id
-        run.needs_review_csv_gridfs_id = needs_review_gridfs_id
-        run.total_messages = result["total_messages"]
-        run.detected_posts = result["detected_posts"]
-        run.matched_count = result["matched_count"]
-        run.needs_review_count = result["needs_review_count"]
-        run.fuzzy_matched_count = result.get("fuzzy_matched_count", 0)
-        run.ai_matched_count = result.get("ai_matched_count", 0)
-        run.status = RunStatus.COMPLETED
-        run.completed_at = completed_at
-
-    except Exception as e:
-        await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
-            "status": RunStatus.FAILED,
-            "error_message": str(e),
-        }})
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Processing failed: {str(e)}"
-        )
+    # Launch processing in background — return run immediately
+    asyncio.create_task(_run_processing(run, txt_content, gen_mode, reference_month,
+                                        reference_year, group_name, jsonl_content, file.filename))
 
     return _run_to_response(run)
 
@@ -249,6 +272,23 @@ async def list_runs(
     runs = await WtbWtsRun.find_all().sort([("created_at", -1)]).skip(skip).limit(limit).to_list()
 
     return [_run_to_response(run) for run in runs]
+
+
+@router.get("/admin/wtb-wts/runs/{run_id}/progress")
+async def get_run_progress(
+    run_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Get progress of a processing run (Admin only)"""
+    run = await WtbWtsRun.get(PydanticObjectId(run_id))
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    return {
+        "status": run.status.value,
+        "progress_percent": getattr(run, "progress_percent", 0),
+        "progress_stage": getattr(run, "progress_stage", ""),
+        "progress_detail": getattr(run, "progress_detail", ""),
+    }
 
 
 @router.get("/admin/wtb-wts/runs/{run_id}", response_model=RunResponse)
@@ -426,62 +466,8 @@ async def reprocess_run(
     )
     await new_run.insert()
 
-    try:
-        result = await process_generation(
-            txt_content=txt_content,
-            mode=gen_mode.value.upper(),
-            ref_month=reference_month,
-            ref_year=reference_year,
-            group_name=group_name,
-            jsonl_content=jsonl_content,
-        )
-
-        matched_gridfs_id = None
-        if result["matched_csv"]:
-            matched_gridfs_id = await _gridfs_put(
-                result["matched_csv"],
-                f"matched-{original_run.filename.replace('.txt', '.csv')}",
-            )
-
-        needs_review_gridfs_id = None
-        if result["needs_review_csv"]:
-            needs_review_gridfs_id = await _gridfs_put(
-                result["needs_review_csv"],
-                f"needs-review-{original_run.filename.replace('.txt', '.csv')}",
-            )
-
-        completed_at = datetime.utcnow()
-        await WtbWtsRun.find_one(WtbWtsRun.id == new_run.id).update({"$set": {
-            "matched_csv_gridfs_id": matched_gridfs_id,
-            "needs_review_csv_gridfs_id": needs_review_gridfs_id,
-            "total_messages": result["total_messages"],
-            "detected_posts": result["detected_posts"],
-            "matched_count": result["matched_count"],
-            "needs_review_count": result["needs_review_count"],
-            "fuzzy_matched_count": result.get("fuzzy_matched_count", 0),
-            "ai_matched_count": result.get("ai_matched_count", 0),
-            "status": RunStatus.COMPLETED,
-            "completed_at": completed_at,
-        }})
-        new_run.matched_csv_gridfs_id = matched_gridfs_id
-        new_run.needs_review_csv_gridfs_id = needs_review_gridfs_id
-        new_run.total_messages = result["total_messages"]
-        new_run.detected_posts = result["detected_posts"]
-        new_run.matched_count = result["matched_count"]
-        new_run.needs_review_count = result["needs_review_count"]
-        new_run.fuzzy_matched_count = result.get("fuzzy_matched_count", 0)
-        new_run.ai_matched_count = result.get("ai_matched_count", 0)
-        new_run.status = RunStatus.COMPLETED
-        new_run.completed_at = completed_at
-
-    except Exception as e:
-        await WtbWtsRun.find_one(WtbWtsRun.id == new_run.id).update({"$set": {
-            "status": RunStatus.FAILED,
-            "error_message": str(e),
-        }})
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Reprocessing failed: {str(e)}"
-        )
+    # Launch processing in background
+    asyncio.create_task(_run_processing(new_run, txt_content, gen_mode, reference_month,
+                                        reference_year, group_name, jsonl_content, original_run.filename))
 
     return _run_to_response(new_run)

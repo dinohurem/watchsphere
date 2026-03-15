@@ -70,6 +70,11 @@ export function AdminWtbWtsGenerator() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [result, setResult] = useState<WtbWtsRun | null>(null)
+  const [progress, setProgress] = useState({ percent: 0, stage: '', detail: '' })
+  const [displayPercent, setDisplayPercent] = useState(0)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const creepRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const targetPercentRef = useRef(0)
 
   // Form state
   const [mode, setMode] = useState<'wts' | 'wtb'>('wts')
@@ -104,11 +109,85 @@ export function AdminWtbWtsGenerator() {
     }
   }
 
+  const stopCreep = () => {
+    if (creepRef.current) {
+      clearInterval(creepRef.current)
+      creepRef.current = null
+    }
+  }
+
+  const startCreep = () => {
+    stopCreep()
+    creepRef.current = setInterval(() => {
+      setDisplayPercent((prev) => {
+        const target = targetPercentRef.current
+        if (prev >= target) {
+          // Slowly creep toward next milestone (never exceed target + 8)
+          const ceiling = Math.min(target + 8, 99)
+          if (prev >= ceiling) return prev
+          return prev + 0.2
+        }
+        // Catch up to actual target quickly
+        const gap = target - prev
+        return prev + Math.max(gap * 0.15, 0.3)
+      })
+    }, 200)
+  }
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+    stopCreep()
+  }
+
+  const startPolling = (runId: string) => {
+    stopPolling()
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get(`/wtb-wts/admin/wtb-wts/runs/${runId}/progress`)
+        const { status: runStatus, progress_percent, progress_stage, progress_detail } = res.data
+        targetPercentRef.current = progress_percent
+        setProgress({ percent: progress_percent, stage: progress_stage, detail: progress_detail })
+
+        if (runStatus === 'completed' || runStatus === 'failed') {
+          stopPolling()
+          setDisplayPercent(runStatus === 'completed' ? 100 : 0)
+          // Fetch the final run data
+          const runRes = await api.get(`/wtb-wts/admin/wtb-wts/runs/${runId}`)
+          if (runStatus === 'completed') {
+            setResult(runRes.data)
+            setRuns((prev) => prev.map((r) => (r.id === runId ? runRes.data : r)))
+          } else {
+            alert(`Processing failed: ${runRes.data.error_message || 'Unknown error'}`)
+            setRuns((prev) => prev.map((r) => (r.id === runId ? runRes.data : r)))
+          }
+          setGenerating(false)
+          setTxtFile(null)
+          setJsonlFile(null)
+          if (txtInputRef.current) txtInputRef.current.value = ''
+          if (jsonlInputRef.current) jsonlInputRef.current.value = ''
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    }, 1500)
+  }
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => stopPolling()
+  }, [])
+
   const handleGenerate = async () => {
     if (!txtFile || !groupName.trim()) return
 
     setGenerating(true)
     setResult(null)
+    setDisplayPercent(0)
+    targetPercentRef.current = 0
+    setProgress({ percent: 0, stage: 'uploading', detail: 'Uploading file...' })
 
     const formData = new FormData()
     formData.append('file', txtFile)
@@ -123,19 +202,26 @@ export function AdminWtbWtsGenerator() {
     try {
       const response = await api.post('/wtb-wts/admin/wtb-wts/generate', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300000,
+        timeout: 60000,
       })
-      setResult(response.data)
-      setRuns((prev) => [response.data, ...prev])
-      // Reset form
-      setTxtFile(null)
-      setJsonlFile(null)
-      if (txtInputRef.current) txtInputRef.current.value = ''
-      if (jsonlInputRef.current) jsonlInputRef.current.value = ''
+      // Run created — start polling for progress
+      const run = response.data
+      setRuns((prev) => [run, ...prev])
+      setDisplayPercent(2)
+      targetPercentRef.current = 2
+      setProgress({ percent: 2, stage: 'started', detail: 'Processing started...' })
+      startCreep()
+      startPolling(run.id)
     } catch (error: any) {
       console.error('Generation failed:', error)
-      alert(error.response?.data?.detail || 'Generation failed')
-    } finally {
+      const detail = error.response?.data?.detail
+      const errStatus = error.response?.status
+      const message = detail
+        ? `Processing failed (${errStatus}): ${detail}`
+        : error.code === 'ECONNABORTED'
+          ? 'Request timed out — file may be too large'
+          : `Generation failed: ${error.message || 'Network error'}`
+      alert(message)
       setGenerating(false)
     }
   }
@@ -188,11 +274,20 @@ export function AdminWtbWtsGenerator() {
         formData,
         {
           headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 300000,
+          timeout: 60000,
         }
       )
-      setRuns((prev) => [response.data, ...prev])
+      const run = response.data
+      setRuns((prev) => [run, ...prev])
       setReprocessRun(null)
+
+      // Poll for reprocess completion
+      setGenerating(true)
+      setDisplayPercent(2)
+      targetPercentRef.current = 2
+      setProgress({ percent: 2, stage: 'started', detail: 'Re-processing started...' })
+      startCreep()
+      startPolling(run.id)
     } catch (error: any) {
       console.error('Reprocess failed:', error)
       alert(error.response?.data?.detail || 'Reprocess failed')
@@ -402,6 +497,22 @@ export function AdminWtbWtsGenerator() {
               'Generate'
             )}
           </button>
+
+          {/* Progress Bar */}
+          {generating && (
+            <div className="space-y-2">
+              <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-primary h-2.5 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${Math.round(displayPercent)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <span>{progress.detail || 'Starting...'}</span>
+                <span>{Math.round(displayPercent)}%</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
