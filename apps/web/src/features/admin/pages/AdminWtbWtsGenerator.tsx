@@ -65,13 +65,16 @@ const STATUS_COLORS = {
 }
 
 function isFilesExpired(run: WtbWtsRun): boolean {
-  if (!run.files_expire_at) return !run.has_matched_csv && !run.has_needs_review_csv
-  return new Date(run.files_expire_at) < new Date()
+  if (run.status !== 'completed') return false
+  // Files are expired when neither CSV is available
+  return !run.has_matched_csv && !run.has_needs_review_csv
 }
 
 function getTimeRemaining(run: WtbWtsRun): string | null {
-  if (!run.files_expire_at) return null
-  const diff = new Date(run.files_expire_at).getTime() - Date.now()
+  if (!run.files_expire_at || isFilesExpired(run)) return null
+  // Append Z if missing to ensure UTC parsing
+  const expireStr = run.files_expire_at.endsWith('Z') ? run.files_expire_at : run.files_expire_at + 'Z'
+  const diff = new Date(expireStr).getTime() - Date.now()
   if (diff <= 0) return null
   const mins = Math.ceil(diff / 60000)
   return `${mins} min left`
