@@ -31,6 +31,7 @@ class WtbWtsRun(Document):
     # GridFS file IDs for generated CSVs (expire after 30 min)
     matched_csv_gridfs_id: Optional[str] = None
     needs_review_csv_gridfs_id: Optional[str] = None
+    suggested_csv_gridfs_id: Optional[str] = None
     files_expire_at: Optional[datetime] = None
 
     # Stats
@@ -40,6 +41,7 @@ class WtbWtsRun(Document):
     needs_review_count: int = 0
     fuzzy_matched_count: int = 0
     ai_matched_count: int = 0
+    suggested_additions_count: int = 0
 
     # Progress tracking
     progress_percent: int = 0

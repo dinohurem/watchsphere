@@ -1,9 +1,10 @@
 import asyncio
+import io
 import logging
 import traceback
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from beanie import PydanticObjectId
@@ -59,7 +60,7 @@ async def _gridfs_delete(file_id: str) -> None:
 
 async def _cleanup_expired_files(run: WtbWtsRun) -> None:
     """Delete GridFS files for a run and clear references."""
-    for field in ("matched_csv_gridfs_id", "needs_review_csv_gridfs_id"):
+    for field in ("matched_csv_gridfs_id", "needs_review_csv_gridfs_id", "suggested_csv_gridfs_id"):
         file_id = getattr(run, field, None)
         if file_id:
             await _gridfs_delete(file_id)
@@ -67,6 +68,7 @@ async def _cleanup_expired_files(run: WtbWtsRun) -> None:
     await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
         "matched_csv_gridfs_id": None,
         "needs_review_csv_gridfs_id": None,
+        "suggested_csv_gridfs_id": None,
         "files_expire_at": None,
     }})
 
@@ -118,6 +120,8 @@ class RunResponse(BaseModel):
     ai_matched_count: int = 0
     has_matched_csv: bool = False
     has_needs_review_csv: bool = False
+    has_suggested_csv: bool = False
+    suggested_additions_count: int = 0
     files_expire_at: Optional[datetime] = None
     imported_by: str
     imported_by_name: str
@@ -144,6 +148,8 @@ def _run_to_response(run: WtbWtsRun) -> RunResponse:
         ai_matched_count=run.ai_matched_count,
         has_matched_csv=bool(run.matched_csv_gridfs_id),
         has_needs_review_csv=bool(run.needs_review_csv_gridfs_id),
+        has_suggested_csv=bool(getattr(run, "suggested_csv_gridfs_id", None)),
+        suggested_additions_count=getattr(run, "suggested_additions_count", 0),
         files_expire_at=getattr(run, "files_expire_at", None),
         imported_by=run.imported_by,
         imported_by_name=run.imported_by_name,
@@ -203,18 +209,29 @@ async def _run_processing(
                 f"needs-review-{filename.replace('.txt', '.csv')}",
             )
 
+        # Store suggested-additions CSV
+        suggested_csv = result.get("suggested_additions_csv", "")
+        suggested_gridfs_id = None
+        if suggested_csv:
+            suggested_gridfs_id = await _gridfs_put(
+                suggested_csv,
+                f"suggested-{filename.replace('.txt', '.csv')}",
+            )
+
         completed_at = datetime.utcnow()
         files_expire_at = completed_at + timedelta(minutes=FILES_TTL_MINUTES)
 
         await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
             "matched_csv_gridfs_id": matched_gridfs_id,
             "needs_review_csv_gridfs_id": needs_review_gridfs_id,
+            "suggested_csv_gridfs_id": suggested_gridfs_id,
             "total_messages": result["total_messages"],
             "detected_posts": result["detected_posts"],
             "matched_count": result["matched_count"],
             "needs_review_count": result["needs_review_count"],
             "fuzzy_matched_count": result.get("fuzzy_matched_count", 0),
             "ai_matched_count": result.get("ai_matched_count", 0),
+            "suggested_additions_count": result.get("suggested_additions_count", 0),
             "status": RunStatus.COMPLETED,
             "completed_at": completed_at,
             "files_expire_at": files_expire_at,
@@ -427,6 +444,42 @@ async def download_needs_review_csv(
         headers={
             "Content-Disposition": f'attachment; filename="needs-review-{run.filename.replace(".txt", ".csv")}"'
         },
+    )
+
+
+@router.get("/admin/wtb-wts/runs/{run_id}/suggested-csv")
+async def download_suggested_csv(
+    run_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Download suggested additions CSV for a run (Admin only)"""
+
+    run = await WtbWtsRun.get(PydanticObjectId(run_id))
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Run not found"
+        )
+
+    if not getattr(run, "suggested_csv_gridfs_id", None):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No suggested additions CSV available"
+        )
+
+    try:
+        content = await _gridfs_get(run.suggested_csv_gridfs_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
+        )
+
+    filename = f"suggested-{run.filename.replace('.txt', '.csv')}"
+    return StreamingResponse(
+        io.BytesIO(content.encode("utf-8") if isinstance(content, str) else content),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
