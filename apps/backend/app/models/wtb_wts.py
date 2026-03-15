@@ -42,6 +42,11 @@ class WtbWtsRun(Document):
     fuzzy_matched_count: int = 0
     ai_matched_count: int = 0
 
+    # Progress tracking
+    progress_percent: int = 0
+    progress_stage: str = ""
+    progress_detail: str = ""
+
     # Admin tracking
     imported_by: str = Field(..., index=True)
     imported_by_name: str
