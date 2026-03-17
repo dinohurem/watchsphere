@@ -1,3 +1,4 @@
+import asyncio
 import re
 import csv
 import io
@@ -613,6 +614,33 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
             if s:
                 fuzzy_candidates.append((s.lower(), w))
 
+    # Pre-compile combined regex patterns for fast match_watch() lookups.
+    # Instead of iterating every key and running re.search() per key,
+    # we build ONE alternation regex per dict that matches any key at word boundaries.
+    def _build_combined_pattern(keys):
+        """Build a single compiled regex that matches any of the given keys at word boundaries."""
+        valid = [k for k in keys if k]
+        if not valid:
+            return None
+        # Sort by length descending so longer keys match first (e.g., "126710blnr jub" before "126710blnr")
+        valid.sort(key=len, reverse=True)
+        alternation = "|".join(re.escape(k) for k in valid)
+        return re.compile(r'(?<![a-zA-Z0-9])(?:' + alternation + r')(?![a-zA-Z0-9])')
+
+    def _build_combined_pattern_ref(keys):
+        """Like _build_combined_pattern but with /- allowed after match (for references)."""
+        valid = [k for k in keys if k]
+        if not valid:
+            return None
+        valid.sort(key=len, reverse=True)
+        alternation = "|".join(re.escape(k) for k in valid)
+        return re.compile(r'(?<![a-zA-Z0-9])(?:' + alternation + r')(?![a-zA-Z0-9/\-])')
+
+    ws_code_pattern = _build_combined_pattern(by_ws_code.keys())
+    reference_pattern = _build_combined_pattern_ref(by_reference.keys())
+    oem_ref_pattern = _build_combined_pattern(by_oem_ref.keys())
+    alias_pattern = _build_combined_pattern(by_alias.keys())
+
     return {
         "by_ws_code": by_ws_code,
         "by_oem_ref": by_oem_ref,
@@ -621,6 +649,11 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
         "by_brand": by_brand,
         "brands": sorted(brands_set),
         "fuzzy_candidates": fuzzy_candidates,
+        # Pre-compiled combined patterns for match_watch()
+        "_ws_code_pattern": ws_code_pattern,
+        "_reference_pattern": reference_pattern,
+        "_oem_ref_pattern": oem_ref_pattern,
+        "_alias_pattern": alias_pattern,
     }
 
 
@@ -1121,66 +1154,65 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
 
 def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = None) -> list[dict]:
     """Match a single-line or full message content against the watch index.
-    Uses word-boundary matching to prevent cross-brand contamination.
-    brand_hint restricts matching to a specific brand when available."""
+    Uses pre-compiled combined regex patterns for fast matching instead of
+    iterating every key individually. brand_hint restricts matching to a specific brand."""
     content_lower = content.lower()
     matches = []
     seen_ws_codes = set()
+    brand_hint_lower = brand_hint.lower() if brand_hint else None
 
     def _add_match(watch: dict):
         ws = watch["ws_code"].lower()
         if ws not in seen_ws_codes:
+            if brand_hint_lower and watch["brand"].lower() != brand_hint_lower:
+                return
             matches.append(watch)
             seen_ws_codes.add(ws)
 
-    def _brand_ok(watch: dict) -> bool:
-        if not brand_hint:
-            return True
-        return watch["brand"].lower() == brand_hint.lower()
-
-    # Try ws_code word-boundary match (most specific)
-    for ws_code, watch in watch_index["by_ws_code"].items():
-        if ws_code and _brand_ok(watch):
-            # Use word boundary: ws_code must not be a substring of a larger token
-            pattern = r'(?<![a-zA-Z0-9])' + re.escape(ws_code) + r'(?![a-zA-Z0-9])'
-            if re.search(pattern, content_lower):
+    # Try ws_code word-boundary match (most specific) — single regex scan
+    pattern = watch_index.get("_ws_code_pattern")
+    if pattern:
+        for m in pattern.finditer(content_lower):
+            matched_key = m.group(0)
+            watch = watch_index["by_ws_code"].get(matched_key)
+            if watch:
                 _add_match(watch)
 
     if matches:
         return matches
 
-    # Try reference exact token match
-    for ref, watch_list in watch_index["by_reference"].items():
-        if ref:
-            pattern = r'(?<![a-zA-Z0-9])' + re.escape(ref) + r'(?![a-zA-Z0-9/\-])'
-            if re.search(pattern, content_lower):
-                for w in watch_list:
-                    if _brand_ok(w):
-                        _add_match(w)
+    # Try reference exact token match — single regex scan
+    pattern = watch_index.get("_reference_pattern")
+    if pattern:
+        for m in pattern.finditer(content_lower):
+            matched_key = m.group(0)
+            watch_list = watch_index["by_reference"].get(matched_key, [])
+            for w in watch_list:
+                _add_match(w)
 
     if matches:
         return matches
 
-    # Try OEM reference exact token match
-    for oem_ref, watch_list in watch_index["by_oem_ref"].items():
-        if oem_ref:
-            pattern = r'(?<![a-zA-Z0-9])' + re.escape(oem_ref) + r'(?![a-zA-Z0-9])'
-            if re.search(pattern, content_lower):
-                for w in watch_list:
-                    if _brand_ok(w):
-                        _add_match(w)
+    # Try OEM reference exact token match — single regex scan
+    pattern = watch_index.get("_oem_ref_pattern")
+    if pattern:
+        for m in pattern.finditer(content_lower):
+            matched_key = m.group(0)
+            watch_list = watch_index["by_oem_ref"].get(matched_key, [])
+            for w in watch_list:
+                _add_match(w)
 
     if matches:
         return matches
 
-    # Try alias exact token match
-    for alias, watch_list in watch_index["by_alias"].items():
-        if alias:
-            pattern = r'(?<![a-zA-Z0-9])' + re.escape(alias) + r'(?![a-zA-Z0-9])'
-            if re.search(pattern, content_lower):
-                for w in watch_list:
-                    if _brand_ok(w):
-                        _add_match(w)
+    # Try alias exact token match — single regex scan
+    pattern = watch_index.get("_alias_pattern")
+    if pattern:
+        for m in pattern.finditer(content_lower):
+            matched_key = m.group(0)
+            watch_list = watch_index["by_alias"].get(matched_key, [])
+            for w in watch_list:
+                _add_match(w)
 
     return matches
 
@@ -1891,55 +1923,38 @@ def _make_dedup_key(ws_code: str, phone: str, price: str, currency: str, month_y
     return f"{ws}|{ph}|{pr}|{cur}|{my}"
 
 
-async def process_generation(
-    txt_content: str,
+def _process_messages_sync(
+    messages: list[dict],
     mode: str,
+    watch_index: dict,
+    group_name: str,
     ref_month: int,
     ref_year: int,
-    group_name: str,
-    jsonl_content: Optional[str] = None,
-    progress_callback=None,
+    progress_state: Optional[dict] = None,
 ) -> dict:
-    """Main processing function. Returns matched_csv, needs_review_csv, and stats.
-    progress_callback: optional async callable(stage, percent, detail) for progress updates."""
-    import time
-    t_start = time.time()
+    """CPU-bound main processing loop. Runs in a thread pool so it doesn't
+    block the async event loop (which serves progress polling, /auth/me, etc.).
 
-    async def _report(stage: str, percent: int, detail: str = ""):
-        if progress_callback:
-            await progress_callback(stage, percent, detail)
+    progress_state: optional shared dict for thread-safe progress reporting.
+    The async caller reads this dict periodically to push updates to MongoDB.
 
+    Returns dict with matched_rows, needs_review_rows, detected_posts, fuzzy_match_count."""
     global _fuzzy_match_count
-    _fuzzy_match_count = 0
-    _fuzzy_match_cache.clear()
-
-    await _report("building_index", 5, "Building watch index...")
-    logger.info("process_generation: building watch index...")
-    watch_index = await build_watch_index(jsonl_content)
-    logger.info(f"process_generation: watch index built ({len(watch_index.get('by_ws_code', {}))} ws_codes, "
-                f"{len(watch_index.get('fuzzy_candidates', []))} fuzzy candidates) in {time.time()-t_start:.1f}s")
-
-    await _report("parsing", 10, "Parsing messages...")
-    messages = parse_whatsapp_txt(txt_content)
-    total_messages = len(messages)
-    logger.info(f"process_generation: parsed {total_messages} messages from txt")
 
     matched_rows = []
     needs_review_rows = []
     detected_posts = 0
-    last_pct = 10
+    total_messages = len(messages)
 
     for idx, msg in enumerate(messages):
+        # Update shared progress state (read by async poller on the event loop)
+        if progress_state is not None and total_messages > 0 and idx % 20 == 0:
+            pct = 15 + int((idx / total_messages) * 60)  # 15% to 75%
+            progress_state["percent"] = pct
+            progress_state["detail"] = f"Processing messages... {idx:,}/{total_messages:,}"
         content = msg["content"]
         sender = msg["sender"]
         timestamp = msg["timestamp"]
-
-        # Report progress every ~2% (main loop spans 10-75%)
-        if total_messages > 0:
-            pct = 10 + int((idx / total_messages) * 65)
-            if pct >= last_pct + 2:
-                last_pct = pct
-                await _report("processing", pct, f"Processing messages... {idx:,}/{total_messages:,}")
 
         post_type = detect_post_type(content)
         if post_type is None:
@@ -1966,15 +1981,11 @@ async def process_generation(
                 phone=phone,
                 sender_country=sender_country,
             )
-            line_count = len(content.split('\n'))
-            if len(m_rows) + len(nr_rows) > 100:
-                logger.info(f"process_generation: large stock list from {sender[:20]} — "
-                            f"{line_count} lines -> {len(m_rows)} matched + {len(nr_rows)} needs_review")
             matched_rows.extend(m_rows)
             needs_review_rows.extend(nr_rows)
             continue
 
-        # Non-stock-list: single post processing (original logic)
+        # Non-stock-list: single post processing
         review_reasons = []
         if not phone:
             review_reasons.append("No phone number (contact name used)")
@@ -2053,14 +2064,103 @@ async def process_generation(
             "Nachricht gepostet am": format_timestamp(timestamp),
         })
 
+    return {
+        "matched_rows": matched_rows,
+        "needs_review_rows": needs_review_rows,
+        "detected_posts": detected_posts,
+        "fuzzy_match_count": _fuzzy_match_count,
+    }
+
+
+async def process_generation(
+    txt_content: str,
+    mode: str,
+    ref_month: int,
+    ref_year: int,
+    group_name: str,
+    jsonl_content: Optional[str] = None,
+    progress_callback=None,
+) -> dict:
+    """Main processing function. Returns matched_csv, needs_review_csv, and stats.
+    progress_callback: optional async callable(stage, percent, detail) for progress updates.
+
+    The CPU-heavy matching loop runs in a thread pool so the event loop stays
+    responsive for progress polling, /auth/me, and other HTTP requests."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    t_start = time.time()
+
+    async def _report(stage: str, percent: int, detail: str = ""):
+        if progress_callback:
+            await progress_callback(stage, percent, detail)
+
+    global _fuzzy_match_count
+    _fuzzy_match_count = 0
+    _fuzzy_match_cache.clear()
+
+    await _report("building_index", 5, "Building watch index...")
+    logger.info("process_generation: building watch index...")
+    watch_index = await build_watch_index(jsonl_content)
+    logger.info(f"process_generation: watch index built ({len(watch_index.get('by_ws_code', {}))} ws_codes, "
+                f"{len(watch_index.get('fuzzy_candidates', []))} fuzzy candidates) in {time.time()-t_start:.1f}s")
+
+    await _report("parsing", 10, "Parsing messages...")
+    messages = parse_whatsapp_txt(txt_content)
+    total_messages = len(messages)
+    logger.info(f"process_generation: parsed {total_messages} messages from txt")
+
+    await _report("processing", 15, f"Processing {total_messages:,} messages...")
+
+    # Shared dict for thread-safe progress updates from the sync worker.
+    # The sync function writes to it; we poll it here on the event loop and
+    # push updates to MongoDB so the frontend sees real-time progress.
+    progress_state = {"percent": 15, "detail": "Starting..."}
+
+    # Run CPU-bound matching in a thread pool so the event loop stays free
+    loop = asyncio.get_event_loop()
+    logger.info("process_generation: launching thread pool for message processing...")
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = loop.run_in_executor(
+            pool,
+            _process_messages_sync,
+            messages, mode, watch_index, group_name, ref_month, ref_year,
+            progress_state,
+        )
+
+        # Poll the shared progress state while the thread works and push
+        # updates to MongoDB so the frontend progress endpoint returns fresh data.
+        last_reported_pct = 15
+        poll_count = 0
+        while not future.done():
+            await asyncio.sleep(1.0)
+            poll_count += 1
+            pct = progress_state.get("percent", last_reported_pct)
+            detail = progress_state.get("detail", "")
+            if pct > last_reported_pct:
+                last_reported_pct = pct
+                logger.info(f"process_generation: thread progress {pct}% — {detail}")
+                await _report("processing", pct, detail)
+
+        logger.info(f"process_generation: thread finished after {poll_count} polls")
+        sync_result = future.result()
+
+    matched_rows = sync_result["matched_rows"]
+    needs_review_rows = sync_result["needs_review_rows"]
+    detected_posts = sync_result["detected_posts"]
+
     t_main_loop = time.time()
     logger.info(f"process_generation: main loop done in {t_main_loop-t_start:.1f}s — "
                 f"{detected_posts} posts detected, {len(matched_rows)} matched, "
-                f"{len(needs_review_rows)} needs_review, {_fuzzy_match_count} fuzzy matches")
+                f"{len(needs_review_rows)} needs_review, {sync_result['fuzzy_match_count']} fuzzy matches")
 
     await _report("processing", 75, f"Main processing done — {len(matched_rows):,} matched, {len(needs_review_rows):,} needs review")
 
-    # --- AI matching pass: attempt to match ALL remaining "no match" items ---
+    # --- AI matching pass: attempt to match remaining "no match" items ---
+    # Cap at 3000 items to avoid excessive OpenAI costs and timeouts.
+    # 3000 items = 2 batches × 1500 ≈ 2 API calls, ~$0.10-0.20 total.
+    AI_MATCHING_CAP = 3000
+    AI_MATCHING_TIMEOUT = 180  # seconds
+
     ai_matched_count = 0
     ai_suggested_additions = []  # Watches not in catalog but identified by AI
     no_match_reason = "No matching watch found"
@@ -2079,10 +2179,27 @@ async def process_generation(
 
     if unmatched_for_ai:
         total_unmatched = len(unmatched_for_ai)
-        await _report("ai_matching", 80, f"AI matching {total_unmatched:,} unmatched items with GPT-5.2...")
-        logger.info(f"process_generation: starting AI matching for {total_unmatched} unmatched lines (ALL, no cap)...")
+        if total_unmatched > AI_MATCHING_CAP:
+            logger.info(f"process_generation: capping AI matching from {total_unmatched} to {AI_MATCHING_CAP} items")
+            # Keep the first N items (most recent messages first in the processing order)
+            unmatched_for_ai = unmatched_for_ai[:AI_MATCHING_CAP]
+            unmatched_indices = unmatched_indices[:AI_MATCHING_CAP]
+
+        ai_count = len(unmatched_for_ai)
+        skipped = total_unmatched - ai_count
+        skip_msg = f" ({total_unmatched - ai_count:,} skipped)" if skipped else ""
+        await _report("ai_matching", 80, f"AI matching {ai_count:,} unmatched items with GPT-5.2...{skip_msg}")
+        logger.info(f"process_generation: starting AI matching for {ai_count} lines (timeout={AI_MATCHING_TIMEOUT}s)...")
         t_ai_start = time.time()
-        ai_results = await batch_ai_match(unmatched_for_ai, watch_index)
+        try:
+            ai_results = await asyncio.wait_for(
+                batch_ai_match(unmatched_for_ai, watch_index),
+                timeout=AI_MATCHING_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            ai_results = []
+            logger.warning(f"process_generation: AI matching timed out after {AI_MATCHING_TIMEOUT}s — skipping")
+            await _report("ai_matching", 85, f"AI matching timed out after {AI_MATCHING_TIMEOUT}s — continuing without AI results")
         logger.info(f"process_generation: AI matching done in {time.time()-t_ai_start:.1f}s — {len(ai_results)} results")
 
         # Build lookup: ai line index -> match result
