@@ -159,6 +159,10 @@ export function AdminWtbWtsGenerator() {
         const { status: runStatus, progress_percent, progress_stage, progress_detail } = res.data
         targetPercentRef.current = progress_percent
         setProgress({ percent: progress_percent, stage: progress_stage, detail: progress_detail })
+        // Drive the progress bar directly from the backend value
+        if (progress_percent > 0) {
+          setDisplayPercent((prev) => Math.max(prev, progress_percent))
+        }
 
         if (runStatus === 'completed' || runStatus === 'failed') {
           stopPolling()

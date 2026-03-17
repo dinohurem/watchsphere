@@ -348,12 +348,14 @@ async def get_run_progress(
     run = await WtbWtsRun.get(PydanticObjectId(run_id))
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-    return {
+    result = {
         "status": run.status.value,
         "progress_percent": getattr(run, "progress_percent", 0),
         "progress_stage": getattr(run, "progress_stage", ""),
         "progress_detail": getattr(run, "progress_detail", ""),
     }
+    logger.debug(f"progress poll: {run_id} -> {result['progress_percent']}% [{result['progress_stage']}]")
+    return result
 
 
 @router.get("/admin/wtb-wts/runs/{run_id}", response_model=RunResponse)
