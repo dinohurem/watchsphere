@@ -81,6 +81,14 @@ class Watch(Document):
             "serial_number",
             "status",
             "reference",
+            "order_count",
+            "trending",
+            "featured",
+            [("status", 1), ("order_count", -1)],
+            [("status", 1), ("trending", -1), ("order_count", -1)],
+            [("status", 1), ("featured", -1), ("order_count", -1)],
+            [("status", 1), ("views", -1)],
+            [("status", 1), ("created_at", -1)],
         ]
 
     class Config:

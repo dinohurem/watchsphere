@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
@@ -350,7 +351,7 @@ export default function AccountDetailsScreen() {
           <Text style={styles.headerTitle}>{t('account.accountDetails')}</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.text} />
+          <LoadingAnimation />
         </View>
       </SafeAreaView>
     );
@@ -421,7 +422,7 @@ export default function AccountDetailsScreen() {
             activeOpacity={0.7}
           >
             {deletingAccount ? (
-              <ActivityIndicator size="small" color="#C93927" />
+              <LoadingAnimation size="small" />
             ) : (
               <Text style={styles.deleteButtonText}>{t('account.deleteAccount')}</Text>
             )}
@@ -514,7 +515,7 @@ export default function AccountDetailsScreen() {
                 onPress={handleChangePassword}
                 disabled={changingPassword}
               >
-                {changingPassword && <ActivityIndicator size="small" color={colors.background} />}
+                {changingPassword && <LoadingAnimation size="small" />}
                 <Text style={styles.modalSaveButtonText}>
                   {changingPassword ? t('common.saving') : t('common.save')}
                 </Text>

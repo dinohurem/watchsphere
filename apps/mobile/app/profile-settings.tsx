@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Platform } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
@@ -271,7 +272,7 @@ export default function ProfileSettingsScreen() {
           <Text style={styles.headerTitle}>{t('profileSettings.title')}</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.text} />
+          <LoadingAnimation />
         </View>
       </SafeAreaView>
     );
@@ -303,7 +304,7 @@ export default function ProfileSettingsScreen() {
         <View style={styles.profileImageSection}>
           <View style={styles.profileImage}>
             {uploading ? (
-              <ActivityIndicator size="small" color={colors.textSecondary} />
+              <LoadingAnimation size="small" />
             ) : profile?.profile_image_url ? (
               <Image
                 source={{ uri: profile.profile_image_url }}

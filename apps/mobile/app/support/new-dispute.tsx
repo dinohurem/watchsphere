@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -179,7 +180,7 @@ export default function NewDisputeScreen() {
             activeOpacity={0.7}
           >
             {submitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <LoadingAnimation size="small" />
             ) : (
               <Text style={styles.submitButtonText}>{t('support.submitDispute')}</Text>
             )}

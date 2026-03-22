@@ -1,4 +1,5 @@
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Platform, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Platform, RefreshControl } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
@@ -814,7 +815,7 @@ export default function HomeScreen() {
 
           {loadingActivity ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#212121" />
+              <LoadingAnimation size="small" />
             </View>
           ) : activityItems.length === 0 ? (
             <View style={styles.activityEmptyState}>
@@ -889,7 +890,7 @@ export default function HomeScreen() {
 
           {loadingWatchlist ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#212121" />
+              <LoadingAnimation size="small" />
             </View>
           ) : watchlistItems.length === 0 ? (
             <View style={styles.emptyState}>
@@ -1041,7 +1042,7 @@ export default function HomeScreen() {
 
           {loadingNews ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#212121" />
+              <LoadingAnimation size="small" />
             </View>
           ) : newsItems.length === 0 ? (
             <View style={styles.emptyState}>

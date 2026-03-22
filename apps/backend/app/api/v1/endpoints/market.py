@@ -391,31 +391,13 @@ async def get_trending_watches(
 ) -> Any:
     """
     Get trending watches for market display.
-
-    Trending logic:
-    1. Watches with trending=True (admin-flagged) are prioritized
-    2. Then sorted by order_count (total sell/buy orders)
-    3. Maximum of 5 trending watches
+    Single query: trending=True first, then by order_count.
     """
-
-    # First, get admin-flagged trending watches
+    # Single query with sort priority: trending first, then order_count
     trending_watches = await Watch.find(
         Watch.status == WatchStatus.ACTIVE,
-        Watch.trending == True
-    ).sort([("order_count", -1)]).limit(limit).to_list()
-
-    # If we don't have enough trending watches, fill with most active by order count
-    if len(trending_watches) < limit:
-        remaining = limit - len(trending_watches)
-        trending_ids = [w.id for w in trending_watches]
-
-        # Get watches with highest order counts that aren't already in trending
-        additional_watches = await Watch.find(
-            Watch.status == WatchStatus.ACTIVE,
-            {"_id": {"$nin": trending_ids}}
-        ).sort([("order_count", -1)]).limit(remaining).to_list()
-
-        trending_watches.extend(additional_watches)
+        {"$or": [{"trending": True}, {"order_count": {"$gt": 0}}]}
+    ).sort([("trending", -1), ("order_count", -1)]).limit(limit).to_list()
 
     return [
         {
@@ -442,69 +424,35 @@ async def get_featured_watches(
 ) -> Any:
     """
     Get featured watches for market display.
-
-    Priority logic:
-    1. Admin-assigned featured watches (featured=True) are prioritized
-    2. If not enough, fill with watches sorted by order_count (most orders first)
-    3. If still not enough, fill with watches sorted by views (most views first)
-    4. Maximum of 5 watches returned
+    Single query: featured first, then order_count, then views.
     """
-    featured_watches = []
-    seen_ids = set()
-
-    # Step 1: Get admin-assigned featured watches
-    admin_featured = await Watch.find(
-        Watch.status == WatchStatus.ACTIVE,
-        Watch.featured == True
-    ).sort([("order_count", -1)]).limit(limit).to_list()
-
-    for watch in admin_featured:
-        if watch.id not in seen_ids:
-            featured_watches.append(watch)
-            seen_ids.add(watch.id)
-
-    # Step 2: If not enough, fill with watches by order_count
-    if len(featured_watches) < limit:
-        remaining = limit - len(featured_watches)
-        by_orders = await Watch.find(
-            Watch.status == WatchStatus.ACTIVE,
-            {"_id": {"$nin": list(seen_ids)}}
-        ).sort([("order_count", -1)]).limit(remaining).to_list()
-
-        for watch in by_orders:
-            if watch.id not in seen_ids:
-                featured_watches.append(watch)
-                seen_ids.add(watch.id)
-
-    # Step 3: If still not enough, fill with watches by views
-    if len(featured_watches) < limit:
-        remaining = limit - len(featured_watches)
-        by_views = await Watch.find(
-            Watch.status == WatchStatus.ACTIVE,
-            {"_id": {"$nin": list(seen_ids)}}
-        ).sort([("views", -1)]).limit(remaining).to_list()
-
-        for watch in by_views:
-            if watch.id not in seen_ids:
-                featured_watches.append(watch)
-                seen_ids.add(watch.id)
+    # Single aggregation instead of 3 sequential queries
+    pipeline = [
+        {"$match": {"status": WatchStatus.ACTIVE.value}},
+        {"$addFields": {
+            "_priority": {"$cond": [{"$eq": ["$featured", True]}, 0, 1]}
+        }},
+        {"$sort": {"_priority": 1, "order_count": -1, "views": -1}},
+        {"$limit": limit},
+    ]
+    featured_raw = await Watch.aggregate(pipeline).to_list()
 
     return [
         {
-            "id": str(watch.id),
-            "brand": watch.brand,
-            "model": watch.model,
-            "reference": watch.reference,
-            "ws_code": watch.ws_code,
-            "price": watch.price,
-            "currency": watch.currency,
-            "cover_image": watch.cover_image,
-            "trending": watch.trending,
-            "order_count": watch.order_count,
-            "price_change": watch.price_change,
-            "price_history": watch.price_history,
+            "id": str(w["_id"]),
+            "brand": w.get("brand"),
+            "model": w.get("model"),
+            "reference": w.get("reference"),
+            "ws_code": w.get("ws_code"),
+            "price": w.get("price"),
+            "currency": w.get("currency"),
+            "cover_image": w.get("cover_image"),
+            "trending": w.get("trending"),
+            "order_count": w.get("order_count"),
+            "price_change": w.get("price_change"),
+            "price_history": w.get("price_history"),
         }
-        for watch in featured_watches
+        for w in featured_raw
     ]
 
 
@@ -585,16 +533,15 @@ async def get_aggregated_market_data(
     """
 
     try:
-        # Get all active watches
+        import asyncio as _asyncio
+
+        # Get active watches — paginate at DB level when possible
         base_query = Watch.status == WatchStatus.ACTIVE
 
-        # Fetch ALL active watches so dedup doesn't cause pagination gaps.
-        # With ~100-200 watches this is efficient; for larger catalogs consider
-        # deduplicating at the DB level with aggregation instead.
+        # Categories that need post-processing (can't paginate at DB level)
+        needs_post_filter = category in ("gainers", "losers")
 
-        # If search is provided, filter across all searchable fields
         if search:
-            import re as re_mod
             search_filter = {
                 "$or": [
                     {"brand": {"$regex": search, "$options": "i"}},
@@ -606,87 +553,97 @@ async def get_aggregated_market_data(
                     {"aliases": {"$regex": search, "$options": "i"}},
                 ]
             }
-            watches = await Watch.find(base_query, search_filter).sort([("order_count", -1), ("created_at", -1)]).to_list()
-        # If brand filter is provided, filter by brand (case-insensitive)
+            q = Watch.find(base_query, search_filter).sort([("order_count", -1), ("created_at", -1)])
         elif brand:
             import re
             brand_regex = re.compile(f"^{re.escape(brand)}$", re.IGNORECASE)
-            watches = await Watch.find(base_query, {"brand": {"$regex": brand_regex}}).sort([("order_count", -1), ("created_at", -1)]).to_list()
+            q = Watch.find(base_query, {"brand": {"$regex": brand_regex}}).sort([("order_count", -1), ("created_at", -1)])
         elif category == "hot":
-            watches = await Watch.find(base_query).sort([("order_count", -1), ("created_at", -1)]).to_list()
-        elif category in ("gainers", "losers"):
-            # Fetch all watches — we'll filter after computing price_change
-            watches = await Watch.find(base_query).sort([("created_at", -1)]).to_list()
+            q = Watch.find(base_query).sort([("order_count", -1), ("created_at", -1)])
+        elif needs_post_filter:
+            q = Watch.find(base_query).sort([("created_at", -1)])
         elif category == "new":
-            watches = await Watch.find(base_query).sort([("published_at", -1), ("created_at", -1)]).to_list()
+            q = Watch.find(base_query).sort([("published_at", -1), ("created_at", -1)])
         elif category == "trending":
-            watches = await Watch.find(
+            q = Watch.find(
                 base_query,
                 {"$or": [{"trending": True}, {"order_count": {"$gt": 0}}]}
-            ).sort([("trending", -1), ("order_count", -1)]).to_list()
+            ).sort([("trending", -1), ("order_count", -1)])
         else:
-            watches = await Watch.find(base_query).sort([("created_at", -1)]).to_list()
+            q = Watch.find(base_query).sort([("created_at", -1)])
 
-        # Return empty list if no watches
+        # Apply DB-level pagination for categories that don't need post-filtering
+        if not needs_post_filter:
+            q = q.skip(skip).limit(limit)
+
+        watches = await q.to_list()
+
         if not watches:
             return []
 
-        # Get unique references and ws_codes
+        # Get unique references and ws_codes for this page only
         references = list(set(w.reference for w in watches if w.reference))
         ws_codes = list(set(w.ws_code for w in watches if w.ws_code))
 
-        # Batch-fetch lowest sell order prices (with currency) and order counts
+        # Run all order aggregation pipelines IN PARALLEL
         lowest_prices_by_ref = {}
         lowest_currency_by_ref = {}
         order_counts_by_ref = {}
+        wts_counts_by_ws = {}
+        wtb_counts_by_ws = {}
 
-        if references:
-            # Get lowest sell price + its currency per reference
-            # Sort first so $first in $group picks the cheapest order's currency
-            sell_price_pipeline = [
+        async def _fetch_sell_prices():
+            if not references:
+                return
+            pipeline = [
                 {"$match": {"reference": {"$in": references}, "order_type": OrderType.SELL.value, "status": OrderStatus.ACTIVE.value}},
                 {"$sort": {"price": 1}},
                 {"$group": {"_id": "$reference", "min_price": {"$first": "$price"}, "currency": {"$first": "$currency"}}},
             ]
             try:
-                sell_price_raw = await Order.aggregate(sell_price_pipeline).to_list()
-                for item in sell_price_raw:
+                for item in await Order.aggregate(pipeline).to_list():
                     lowest_prices_by_ref[item["_id"]] = item["min_price"]
                     lowest_currency_by_ref[item["_id"]] = item.get("currency", "EUR")
             except Exception:
                 pass
 
-            # Get total active order count per reference in one query
-            count_pipeline = [
+        async def _fetch_order_counts():
+            if not references:
+                return
+            pipeline = [
                 {"$match": {"reference": {"$in": references}, "status": OrderStatus.ACTIVE.value}},
                 {"$group": {"_id": "$reference", "count": {"$sum": 1}}},
             ]
             try:
-                count_raw = await Order.aggregate(count_pipeline).to_list()
-                for item in count_raw:
+                for item in await Order.aggregate(pipeline).to_list():
                     order_counts_by_ref[item["_id"]] = item["count"]
             except Exception:
                 pass
 
-            # Get WTS/WTB counts per ws_code (variant-level, not reference-level)
-            wts_counts_by_ws = {}
-            wtb_counts_by_ws = {}
-            if ws_codes:
-                split_count_pipeline = [
-                    {"$match": {"ws_code": {"$in": ws_codes}, "status": OrderStatus.ACTIVE.value}},
-                    {"$group": {"_id": {"ws_code": "$ws_code", "order_type": "$order_type"}, "count": {"$sum": 1}}},
-                ]
-                try:
-                    split_raw = await Order.aggregate(split_count_pipeline).to_list()
-                    for item in split_raw:
-                        ws = item["_id"]["ws_code"]
-                        ot = item["_id"]["order_type"]
-                        if ot == OrderType.SELL.value:
-                            wts_counts_by_ws[ws] = item["count"]
-                        elif ot == OrderType.BUY.value:
-                            wtb_counts_by_ws[ws] = item["count"]
-                except Exception:
-                    pass
+        async def _fetch_wts_wtb_counts():
+            if not ws_codes:
+                return
+            pipeline = [
+                {"$match": {"ws_code": {"$in": ws_codes}, "status": OrderStatus.ACTIVE.value}},
+                {"$group": {"_id": {"ws_code": "$ws_code", "order_type": "$order_type"}, "count": {"$sum": 1}}},
+            ]
+            try:
+                for item in await Order.aggregate(pipeline).to_list():
+                    ws = item["_id"]["ws_code"]
+                    ot = item["_id"]["order_type"]
+                    if ot == OrderType.SELL.value:
+                        wts_counts_by_ws[ws] = item["count"]
+                    elif ot == OrderType.BUY.value:
+                        wtb_counts_by_ws[ws] = item["count"]
+            except Exception:
+                pass
+
+        # Fire all 3 aggregations at once
+        await _asyncio.gather(
+            _fetch_sell_prices(),
+            _fetch_order_counts(),
+            _fetch_wts_wtb_counts(),
+        )
 
         # Build response
         result = []

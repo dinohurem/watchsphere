@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, GestureResponderEvent, Linking, Alert, FlatList, Keyboard, InputAccessoryView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, FlatList, Keyboard, InputAccessoryView } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -1747,7 +1748,7 @@ export default function WatchDetailsScreen() {
                   disabled={!offerAmount || submitting}
                 >
                   {submitting ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <LoadingAnimation size="small" />
                   ) : (
                     <Text style={styles.offerSubmitButtonText}>Make an offer</Text>
                   )}

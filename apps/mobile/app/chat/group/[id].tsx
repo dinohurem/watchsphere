@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, ScrollView, Linking, Alert, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal, ScrollView, Linking, Alert, Pressable } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -964,7 +965,7 @@ export default function GroupChatScreen() {
         >
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
+              <LoadingAnimation />
             </View>
           ) : groupedMessages.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -1049,7 +1050,7 @@ export default function GroupChatScreen() {
                         <Text style={styles.memberRole}>{member.role}{isCurrentUser ? ' (You)' : ''}</Text>
                       </View>
                       {loadingProfile && (
-                        <ActivityIndicator size="small" color={colors.text} />
+                        <LoadingAnimation size="small" />
                       )}
                     </TouchableOpacity>
                   );

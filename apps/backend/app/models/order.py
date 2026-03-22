@@ -122,6 +122,11 @@ class Order(Document):
             "user_id",
             "order_type",
             "status",
+            "ws_code",
+            [("status", 1), ("order_type", 1)],
+            [("reference", 1), ("order_type", 1), ("status", 1)],
+            [("ws_code", 1), ("status", 1)],
+            [("status", 1), ("order_type", 1), ("price", 1)],
         ]
 
     class Config:
