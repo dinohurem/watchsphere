@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal, Pressable, Linking, Alert } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -859,7 +860,7 @@ export default function ChatDetailScreen() {
               </View>
             )}
             <Text style={styles.headerName}>{conversation?.name || name || 'Chat'}</Text>
-            {loadingProfile && <ActivityIndicator size="small" color={colors.text} />}
+            {loadingProfile && <LoadingAnimation size="small" />}
           </TouchableOpacity>
 
           <View style={styles.headerRight} />
@@ -903,7 +904,7 @@ export default function ChatDetailScreen() {
         >
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
+              <LoadingAnimation />
             </View>
           ) : messages.length === 0 ? (
             <View style={styles.emptyContainer}>

@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, TextInput, Modal, Platform } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -624,7 +625,7 @@ export default function SocialSearchScreen() {
             <Text style={styles.headerTitle}>{t('socialSearch.title')}</Text>
           </View>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#212121" />
+            <LoadingAnimation />
             <Text style={{ marginTop: hp(16), fontFamily: fonts.medium, color: '#212121' }}>
               {t('socialSearch.loadingFilters')}
             </Text>
@@ -768,7 +769,7 @@ export default function SocialSearchScreen() {
         >
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#212121" />
+              <LoadingAnimation />
             </View>
           ) : messages.length === 0 ? (
             <View style={styles.emptyState}>

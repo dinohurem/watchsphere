@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert, ActivityIndicator, Keyboard, InputAccessoryView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert, Keyboard, InputAccessoryView } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -1022,7 +1023,7 @@ export default function CreateListingScreen() {
           <Text style={styles.headerTitle}>{isEditMode ? t('listing.editListing') : t('listing.createNewListing')}</Text>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#212121" />
+          <LoadingAnimation />
           <Text style={{ marginTop: hp(16), fontFamily: fonts.medium, color: '#212121' }}>
             {t('common.loadingConfiguration')}
           </Text>

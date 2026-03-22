@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal, Alert, Platform, ActivityIndicator, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal, Alert, Platform, FlatList, Dimensions } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -990,7 +991,7 @@ export default function WatchDetailsScreen() {
                 disabled={markingAsSold}
               >
                 {markingAsSold ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <LoadingAnimation size="small" />
                 ) : (
                   <Text style={styles.confirmModalButtonText}>Confirm Sale</Text>
                 )}
@@ -1033,7 +1034,7 @@ export default function WatchDetailsScreen() {
                 disabled={markingAsCompleted}
               >
                 {markingAsCompleted ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <LoadingAnimation size="small" />
                 ) : (
                   <Text style={styles.confirmModalButtonText}>Confirm Completion</Text>
                 )}

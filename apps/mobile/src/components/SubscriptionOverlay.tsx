@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, AppState, AppStateStatus } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { router } from 'expo-router';
 import { Crown, ExternalLink, ChevronLeft } from './icons';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -264,7 +265,7 @@ export function SubscriptionLoadingScreen() {
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
-      <ActivityIndicator size="large" color="#212121" />
+      <LoadingAnimation />
       <Text style={{ marginTop: hp(16), fontFamily: fonts.medium, color: '#212121' }}>
         Checking subscription...
       </Text>

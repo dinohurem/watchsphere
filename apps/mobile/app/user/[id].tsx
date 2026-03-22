@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
@@ -530,7 +531,7 @@ export default function UserProfileScreen() {
           <View style={styles.headerButton} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.text} />
+          <LoadingAnimation />
         </View>
       </SafeAreaView>
     );

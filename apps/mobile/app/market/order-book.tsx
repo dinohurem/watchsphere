@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Image, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Linking, Alert } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -263,7 +264,7 @@ export default function OrderBookScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#212121" />
+          <LoadingAnimation />
         </View>
       </SafeAreaView>
     );
@@ -336,7 +337,7 @@ export default function OrderBookScreen() {
           onEndReachedThreshold={0.3}
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: hp(16), alignItems: 'center' }}>
-              <ActivityIndicator size="small" color="#212121" />
+              <LoadingAnimation size="small" />
             </View>
           ) : null}
           removeClippedSubviews={true}

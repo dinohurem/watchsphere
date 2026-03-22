@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -165,7 +166,7 @@ export default function MarkCompletedScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <LoadingAnimation size="small" />
           ) : (
             <Text style={styles.primaryButtonText}>Confirm Completion</Text>
           )}

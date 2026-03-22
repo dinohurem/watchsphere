@@ -5,8 +5,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router, Stack, useFocusEffect } from 'expo-router';
@@ -228,7 +228,7 @@ export default function AskAIScreen() {
         >
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#9747FF" />
+              <LoadingAnimation />
             </View>
           ) : chats.length === 0 ? (
             <View style={styles.emptyContainer}>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -420,7 +421,7 @@ export default function NotificationsScreen() {
           <Text style={styles.headerTitle}>{t('notifications.notifications')}</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#212121" />
+          <LoadingAnimation />
         </View>
       </SafeAreaView>
     );

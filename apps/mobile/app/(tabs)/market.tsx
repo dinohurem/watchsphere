@@ -1,4 +1,5 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Keyboard, ActivityIndicator, RefreshControl, Image, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Keyboard, RefreshControl, Image, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
@@ -301,38 +302,33 @@ export default function MarketScreen() {
       if (currentSearch.trim()) {
         params.search = currentSearch.trim();
       }
-      const response = await api.get('/market/aggregated', { params });
+      // Fetch all data in parallel to avoid sequential delays
+      const [response, hasTrending] = await Promise.all([
+        api.get('/market/aggregated', { params }),
+        loadTrendingWatches(),
+      ]);
 
       if (response.data && response.data.length > 0) {
         const watchData = response.data.map(mapAggregatedItem);
         setAllWatches(watchData);
         setWatches(applyFiltersToWatches(watchData));
         setHasMore(response.data.length >= PAGE_SIZE);
-
-        const hasTrending = await loadTrendingWatches();
-        if (!hasTrending) {
-          await loadFeaturedWatches();
-        } else {
-          setFeaturedWatches([]);
-        }
       } else {
         setAllWatches([]);
         setWatches([]);
         setHasMore(false);
-        const hasTrending = await loadTrendingWatches();
-        if (!hasTrending) {
-          await loadFeaturedWatches();
-        }
+      }
+
+      if (!hasTrending) {
+        await loadFeaturedWatches();
+      } else {
+        setFeaturedWatches([]);
       }
     } catch (error) {
       console.error('Failed to load market data:', error);
       setAllWatches([]);
       setWatches([]);
       setHasMore(false);
-      const hasTrending = await loadTrendingWatches();
-      if (!hasTrending) {
-        await loadFeaturedWatches();
-      }
     } finally {
       setLoading(false);
     }
@@ -1212,7 +1208,7 @@ export default function MarketScreen() {
     <View style={styles.container}>
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#212121" />
+          <LoadingAnimation />
         </View>
       ) : viewMode === 'grid' ? (
         <FlatList
@@ -1230,7 +1226,7 @@ export default function MarketScreen() {
           }
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: hp(20), alignItems: 'center' }}>
-              <ActivityIndicator size="small" color="#212121" />
+              <LoadingAnimation size="small" />
             </View>
           ) : null}
           onEndReached={() => {
@@ -1265,7 +1261,7 @@ export default function MarketScreen() {
           }
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: hp(20), alignItems: 'center' }}>
-              <ActivityIndicator size="small" color="#212121" />
+              <LoadingAnimation size="small" />
             </View>
           ) : null}
           onEndReached={() => {

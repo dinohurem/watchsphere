@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, RefreshControl } from 'react-native';
+import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
@@ -191,7 +192,7 @@ export default function NewsListScreen() {
           <Text style={styles.headerTitle}>{t('news.news')}</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#212121" />
+          <LoadingAnimation />
         </View>
       </SafeAreaView>
     );
