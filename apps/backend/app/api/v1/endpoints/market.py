@@ -720,8 +720,11 @@ async def get_aggregated_market_data(
                 filtered = sorted(result, key=lambda r: r.display_price)
             result = filtered
 
-        # Apply pagination (skip/limit)
-        return result[skip:skip + limit]
+        # For categories that were paginated at DB level, result is already sliced.
+        # For post-filter categories (gainers/losers), apply pagination here.
+        if needs_post_filter:
+            return result[skip:skip + limit]
+        return result
     except Exception as e:
         # Log the error for debugging
         import logging

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Plus, Search, Edit2, Trash2, Eye, Send } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
+import { ImageUpload } from '@/components/ui/ImageUpload'
 
 interface NewsArticle {
   id: string
@@ -356,16 +357,12 @@ export function AdminNews() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.news.articleModal.imageLabel')}</label>
-                <input
-                  type="url"
-                  value={formData.cover_image}
-                  onChange={(e) => setFormData({ ...formData, cover_image: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="https://..."
-                />
-              </div>
+              <ImageUpload
+                label={t('admin.news.articleModal.imageLabel')}
+                value={formData.cover_image || undefined}
+                onChange={(url) => setFormData({ ...formData, cover_image: url || '' })}
+                uploadEndpoint="/upload/news"
+              />
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.news.articleModal.contentLabel')} *</label>
