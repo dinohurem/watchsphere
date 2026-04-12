@@ -81,6 +81,8 @@ interface OrderBookData {
   model: string;
   buy_orders: OrderBookEntry[];
   sell_orders: OrderBookEntry[];
+  total_buy_count?: number;
+  total_sell_count?: number;
   lowest_ask?: number;
   highest_bid?: number;
   spread?: number;
@@ -136,8 +138,12 @@ export default function OrderBookScreen() {
       });
       if (response.data) {
         setOrderBook(response.data);
-        setHasMoreSell((response.data.sell_orders?.length || 0) >= ORDER_PAGE_SIZE);
-        setHasMoreBuy((response.data.buy_orders?.length || 0) >= ORDER_PAGE_SIZE);
+        const sellLoaded = response.data.sell_orders?.length || 0;
+        const buyLoaded = response.data.buy_orders?.length || 0;
+        const totalSell = response.data.total_sell_count ?? sellLoaded;
+        const totalBuy = response.data.total_buy_count ?? buyLoaded;
+        setHasMoreSell(sellLoaded < totalSell);
+        setHasMoreBuy(buyLoaded < totalBuy);
         setSellPage(1);
         setBuyPage(1);
       } else {
@@ -176,19 +182,25 @@ export default function OrderBookScreen() {
       if (response.data) {
         const newSellOrders = response.data.sell_orders || [];
         const newBuyOrders = response.data.buy_orders || [];
+        const totalSell = response.data.total_sell_count;
+        const totalBuy = response.data.total_buy_count;
         setOrderBook(prev => {
           if (!prev) return prev;
+          const updatedSell = isSell ? [...prev.sell_orders, ...newSellOrders] : prev.sell_orders;
+          const updatedBuy = !isSell ? [...prev.buy_orders, ...newBuyOrders] : prev.buy_orders;
           return {
             ...prev,
-            sell_orders: isSell ? [...prev.sell_orders, ...newSellOrders] : prev.sell_orders,
-            buy_orders: !isSell ? [...prev.buy_orders, ...newBuyOrders] : prev.buy_orders,
+            sell_orders: updatedSell,
+            buy_orders: updatedBuy,
           };
         });
         if (isSell) {
-          setHasMoreSell(newSellOrders.length >= ORDER_PAGE_SIZE);
+          const loadedSoFar = (orderBook?.sell_orders.length || 0) + newSellOrders.length;
+          setHasMoreSell(totalSell != null ? loadedSoFar < totalSell : newSellOrders.length >= ORDER_PAGE_SIZE);
           setSellPage(p => p + 1);
         } else {
-          setHasMoreBuy(newBuyOrders.length >= ORDER_PAGE_SIZE);
+          const loadedSoFar = (orderBook?.buy_orders.length || 0) + newBuyOrders.length;
+          setHasMoreBuy(totalBuy != null ? loadedSoFar < totalBuy : newBuyOrders.length >= ORDER_PAGE_SIZE);
           setBuyPage(p => p + 1);
         }
       }

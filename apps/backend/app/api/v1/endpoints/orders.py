@@ -110,6 +110,8 @@ class OrderBookResponse(BaseModel):
     model: str
     buy_orders: List[OrderBookEntry]
     sell_orders: List[OrderBookEntry]
+    total_buy_count: int = 0
+    total_sell_count: int = 0
     lowest_ask: Optional[float] = None
     highest_bid: Optional[float] = None
     spread: Optional[float] = None
@@ -371,30 +373,33 @@ async def get_order_book(
     # If watch has a ws_code, filter orders by ws_code for exact variant matching
     # Otherwise fall back to reference-based matching
     if watch and watch.ws_code:
-        buy_orders = await Order.find(
+        buy_query = Order.find(
             Order.ws_code == watch.ws_code,
             Order.order_type == OrderType.BUY,
             Order.status == OrderStatus.ACTIVE,
-        ).sort(buy_sort).skip(skip).limit(limit).to_list()
-
-        sell_orders = await Order.find(
+        )
+        sell_query = Order.find(
             Order.ws_code == watch.ws_code,
             Order.order_type == OrderType.SELL,
             Order.status == OrderStatus.ACTIVE,
-        ).sort(sell_sort).skip(skip).limit(limit).to_list()
+        )
     else:
         lookup_ref = watch.reference if watch else reference
-        buy_orders = await Order.find(
+        buy_query = Order.find(
             Order.reference == lookup_ref,
             Order.order_type == OrderType.BUY,
             Order.status == OrderStatus.ACTIVE,
-        ).sort(buy_sort).skip(skip).limit(limit).to_list()
-
-        sell_orders = await Order.find(
+        )
+        sell_query = Order.find(
             Order.reference == lookup_ref,
             Order.order_type == OrderType.SELL,
             Order.status == OrderStatus.ACTIVE,
-        ).sort(sell_sort).skip(skip).limit(limit).to_list()
+        )
+
+    total_buy_count = await buy_query.count()
+    total_sell_count = await sell_query.count()
+    buy_orders = await buy_query.sort(buy_sort).skip(skip).limit(limit).to_list()
+    sell_orders = await sell_query.sort(sell_sort).skip(skip).limit(limit).to_list()
     brand = watch.brand if watch else ""
     model = watch.model if watch else ""
 
@@ -471,6 +476,8 @@ async def get_order_book(
         model=model,
         buy_orders=formatted_buy,
         sell_orders=formatted_sell,
+        total_buy_count=total_buy_count,
+        total_sell_count=total_sell_count,
         lowest_ask=lowest_ask,
         highest_bid=highest_bid,
         spread=spread,

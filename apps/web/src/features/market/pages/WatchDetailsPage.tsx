@@ -239,7 +239,9 @@ export function WatchDetailsPage() {
       const orderBookLookup = watch.ws_code || watch.reference;
       if (orderBookLookup) {
         try {
-          const orderBookResponse = await api.get(`/orders/book/${encodeURIComponent(orderBookLookup)}`);
+          const orderBookResponse = await api.get(`/orders/book/${encodeURIComponent(orderBookLookup)}`, {
+            params: { limit: 5000 }
+          });
           const orderBookData = orderBookResponse.data;
 
           buyOrders = (orderBookData.buy_orders || []).map((o: any) => {
