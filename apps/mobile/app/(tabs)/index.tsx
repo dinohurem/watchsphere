@@ -161,9 +161,33 @@ export default function HomeScreen() {
   const loadWatchlist = async () => {
     if (isGuideActive) { setWatchlistItems(GUIDE_MOCK_WATCHLIST); setLoadingWatchlist(false); return; }
     try {
-      const response = await api.get('/profile/watchlist');
-      if (response.data && response.data.length > 0) {
-        setWatchlistItems(response.data.slice(0, 4).map((item: any) => ({
+      // Fetch watchlist and market aggregated counts in parallel so we can
+      // merge WTS/WTB counts into the items before setting state. This avoids
+      // a flicker where the pills briefly render as 0 before the counts load.
+      const [watchlistResponse, marketResponse] = await Promise.all([
+        api.get('/profile/watchlist'),
+        !v2Enabled ? api.get('/market/aggregated').catch(() => null) : Promise.resolve(null),
+      ]);
+
+      // Build a lookup map keyed by ws_code / reference → counts
+      const countMap = new Map<string, { wts: number; wtb: number }>();
+      if (marketResponse?.data) {
+        marketResponse.data.forEach((item: any) => {
+          const counts = { wts: item.wts_count || 0, wtb: item.wtb_count || 0 };
+          if (item.ws_code) countMap.set(item.ws_code.toUpperCase(), counts);
+          if (item.reference) countMap.set(item.reference.toUpperCase(), counts);
+        });
+      }
+
+      const withCounts = (item: WatchlistItem): WatchlistItem => {
+        if (v2Enabled) return item;
+        const key = (item.ws_code || item.reference || '').toUpperCase();
+        const counts = countMap.get(key);
+        return { ...item, wtsCount: counts?.wts ?? 0, wtbCount: counts?.wtb ?? 0 };
+      };
+
+      if (watchlistResponse.data && watchlistResponse.data.length > 0) {
+        setWatchlistItems(watchlistResponse.data.slice(0, 4).map((item: any) => withCounts({
           id: item.id,
           brand: item.brand,
           model: item.model,
@@ -180,7 +204,7 @@ export default function HomeScreen() {
           const defaultResponse = await api.get('/default-watchlist/public');
           if (defaultResponse.data && defaultResponse.data.length > 0) {
             // Map to watchlist format (items are already filtered by is_active on backend)
-            setWatchlistItems(defaultResponse.data.slice(0, 4).map((item: any) => ({
+            setWatchlistItems(defaultResponse.data.slice(0, 4).map((item: any) => withCounts({
               id: item.id,
               brand: item.brand,
               model: item.model,
@@ -287,45 +311,15 @@ export default function HomeScreen() {
     }
   };
 
-  const enrichWatchlistWithCounts = async (items: WatchlistItem[]) => {
-    if (items.length === 0 || v2Enabled) return;
-    try {
-      const response = await api.get('/market/aggregated');
-      if (response.data) {
-        const countMap = new Map<string, { wts: number; wtb: number }>();
-        response.data.forEach((item: any) => {
-          if (item.ws_code) countMap.set(item.ws_code.toUpperCase(), { wts: item.wts_count || 0, wtb: item.wtb_count || 0 });
-          if (item.reference) countMap.set(item.reference.toUpperCase(), { wts: item.wts_count || 0, wtb: item.wtb_count || 0 });
-        });
-        setWatchlistItems(prev => prev.map(w => {
-          const key = (w.ws_code || w.reference || '').toUpperCase();
-          const counts = countMap.get(key);
-          return counts ? { ...w, wtsCount: counts.wts, wtbCount: counts.wtb } : w;
-        }));
-      }
-    } catch (error) {
-      // Counts are optional — keep items without them
-    }
-  };
-
   const loadAllData = useCallback(async () => {
     await Promise.all([loadWatchlist(), loadActivity(), loadNews(), loadProfile()]);
-  }, [isGuideActive]);
+  }, [isGuideActive, v2Enabled]);
 
   // Refresh data when screen comes into focus (also fires on initial mount)
   useFocusEffect(
     useCallback(() => {
       loadAllData();
     }, [loadAllData])
-  );
-
-  // Enrich watchlist items with WTS/WTB counts when v2 is off
-  useFocusEffect(
-    useCallback(() => {
-      if (!v2Enabled && watchlistItems.length > 0 && watchlistItems[0].wtsCount === undefined) {
-        enrichWatchlistWithCounts(watchlistItems);
-      }
-    }, [watchlistItems, v2Enabled])
   );
 
   const onRefresh = useCallback(async () => {
