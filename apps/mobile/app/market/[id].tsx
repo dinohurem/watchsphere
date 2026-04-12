@@ -1015,7 +1015,9 @@ export default function WatchDetailsScreen() {
       const watchReference = wsCodeParam || reference || id;
       // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
       const encodedReference = encodeURIComponent(watchReference || '');
-      const response = await api.get(`/orders/book/${encodedReference}`);
+      const response = await api.get(`/orders/book/${encodedReference}`, {
+        params: { limit: 5000 }
+      });
       if (response.data) {
         const { buy_orders, sell_orders } = response.data;
 
