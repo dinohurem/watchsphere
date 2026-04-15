@@ -37,7 +37,7 @@ class Order(Document):
     watch_id: Optional[str] = None
 
     # Order details
-    price: float  # User's asking/offering price
+    price: Optional[float] = None  # User's asking/offering price (optional for WTB)
     currency: str = "EUR"
     condition: OrderCondition = OrderCondition.UNWORN
 

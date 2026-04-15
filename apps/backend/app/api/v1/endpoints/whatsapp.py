@@ -419,12 +419,16 @@ async def process_csv_import(
     # Preserve headers for unmatched CSV output
     fieldnames = reader.fieldnames or []
 
-    # Build a cache of watches by ws_code (strict match only)
+    # Build caches for watch matching: ws_code exact, reference, and ws_code prefix
     all_watches = await Watch.find(Watch.status == "active").to_list()
     watch_by_ws_code: dict[str, Watch] = {}
+    watch_by_reference: dict[str, list[Watch]] = {}
     for w in all_watches:
         if w.ws_code:
             watch_by_ws_code[w.ws_code.strip().upper()] = w
+        if w.reference:
+            ref_upper = w.reference.strip().upper()
+            watch_by_reference.setdefault(ref_upper, []).append(w)
 
     import_id = str(import_record.id)
     admin_id = str(admin.id)
@@ -526,13 +530,42 @@ async def process_csv_import(
         # Extract reference from WS-Code
         reference = extract_reference_from_ws_code(ws_code)
 
-        # Match strictly by ws_code only — skip if no ws_code match
+        # Match by ws_code — try exact match first, then reference fallback
         matched_watch = None
         if ws_code:
+            # 1. Exact ws_code match
             matched_watch = watch_by_ws_code.get(ws_code.strip().upper())
 
+            if not matched_watch:
+                # 2. Try matching by extracted reference (e.g., "5396R" from "5396R Blue")
+                ref_upper = reference.strip().upper() if reference else ws_code.strip().upper()
+                ref_candidates = watch_by_reference.get(ref_upper, [])
+                # Filter by brand if available
+                if ref_candidates and brand:
+                    brand_filtered = [w for w in ref_candidates if w.brand and w.brand.lower() == brand.lower()]
+                    if brand_filtered:
+                        ref_candidates = brand_filtered
+                if len(ref_candidates) == 1:
+                    matched_watch = ref_candidates[0]
+                elif len(ref_candidates) > 1:
+                    # Multiple ref matches — try to disambiguate using ws_code descriptor
+                    ws_upper = ws_code.strip().upper()
+                    for w in ref_candidates:
+                        if w.ws_code and w.ws_code.strip().upper() == ws_upper:
+                            matched_watch = w
+                            break
+                    if not matched_watch:
+                        # Try ws_code as prefix match (e.g., "5396R" matches "5396R Blue")
+                        for w in ref_candidates:
+                            if w.ws_code and w.ws_code.strip().upper().startswith(ws_upper):
+                                matched_watch = w
+                                break
+                    if not matched_watch:
+                        # Take first candidate as best guess
+                        matched_watch = ref_candidates[0]
+
         if not matched_watch:
-            # No ws_code match found — skip this row (count as unmatched)
+            # No match found — skip this row (count as unmatched)
             unmatched_count += 1
             unmatched_raw_rows.append(row)
             continue
@@ -593,8 +626,17 @@ async def process_csv_import(
             message_timestamp=message_timestamp,
         ))
 
-        # 2. Create Order (order book) — if we have price and offer type
-        if price and offer_type != OfferType.UNKNOWN:
+        # 2. Create Order (order book)
+        # WTS requires a price; WTB orders are allowed without a price (buyers often
+        # don't publish budgets). Also allow orders when offer_type is UNKNOWN only
+        # if we have a price — otherwise we can't classify reliably.
+        create_order = False
+        if offer_type == OfferType.WTS and price:
+            create_order = True
+        elif offer_type == OfferType.WTB:
+            create_order = True  # WTB works without price
+
+        if create_order:
             order_type = OrderType.SELL if offer_type == OfferType.WTS else OrderType.BUY
             order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
             order_reference = watch_reference or ws_code
@@ -628,19 +670,19 @@ async def process_csv_import(
             if dup_ws and dup_phone:
                 existing_order_map[dup_key] = None
 
-            # Validate price against brand minimums
-            price_valid, price_reason = validate_price(str(int(price)), watch_brand)
-            if not price_valid:
-                flagged_price_count += 1
-                # Still import but flag with a remark
-                if remarks:
-                    remarks = f"{remarks} | PRICE FLAG: {price_reason}"
-                else:
-                    remarks = f"PRICE FLAG: {price_reason}"
+            # Validate price against brand minimums (only when we have a price)
+            if price:
+                price_valid, price_reason = validate_price(str(int(price)), watch_brand)
+                if not price_valid:
+                    flagged_price_count += 1
+                    if remarks:
+                        remarks = f"{remarks} | PRICE FLAG: {price_reason}"
+                    else:
+                        remarks = f"PRICE FLAG: {price_reason}"
 
             matched_count += 1
 
-            # Calculate usd_price at import time
+            # Calculate usd_price at import time (None if no price — valid for WTB)
             usd_price = None
             if price:
                 if currency in ("USD", "USDT"):
