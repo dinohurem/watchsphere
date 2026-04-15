@@ -173,15 +173,19 @@ WTB_CONDITIONS = {
 }
 
 WTS_KEYWORDS = ["wts", "want to sell", "for sale", "selling", "fs", "stock list", "stocklist", "price list", "pricelist"]
-WTB_KEYWORDS = ["wtb", "want to buy", "looking for", "looking", "need", "lf"]
+WTB_KEYWORDS = ["wtb", "want to buy", "looking for", "lf"]
 
-# Messages to skip entirely — no output produced
+# Patterns that skip the ENTIRE message (structural markers — deleted, system).
 SKIP_PATTERNS = [
-    r'\bsold\b',
-    r'\b-\s*sold\b',
     r'diese nachricht wurde gel[öo]scht',
     r'this message was deleted',
     r'you deleted this message',
+]
+
+# Media markers — only cause skip when they make up the ENTIRE message
+# (i.e. a media-only message with no listing content). If these appear
+# alongside watch data they should be stripped, not skipped.
+MEDIA_MARKERS = [
     r'bild weggelassen',
     r'video weggelassen',
     r'<media omitted>',
@@ -192,9 +196,17 @@ SKIP_PATTERNS = [
     r'gif weggelassen',
     r'kontaktkarte weggelassen',
     r'standort weggelassen',
+    r'image omitted',
 ]
+_MEDIA_RE = re.compile('|'.join(MEDIA_MARKERS), re.IGNORECASE)
 
-# Compiled regex for skip detection (case-insensitive)
+# Whole-message SOLD markers: messages that are purely a SOLD notification.
+# A single-line message ending with "SOLD" / "- SOLD" is a status change.
+# But "SOLD" appearing on one line inside a stock list shouldn't skip the
+# whole list — that line is handled separately in parse_stock_list.
+_SOLD_ONLY_RE = re.compile(r'^\s*[\w/\-\s\u0080-\uffff\*🏷️]*\s*-?\s*sold\s*$', re.IGNORECASE)
+
+# Compiled regex for structural skip detection (case-insensitive)
 _SKIP_RE = re.compile('|'.join(SKIP_PATTERNS), re.IGNORECASE)
 
 REMARKS_MAP = {
@@ -253,9 +265,14 @@ BRAND_ALIASES = {
     "mbf": "MB&F",
     "moser": "H. Moser & Cie",
     "h. moser": "H. Moser & Cie",
+    "breguet": "Breguet",
+    "piaget": "Piaget",
+    "franck muller": "Franck Muller",
+    "fm": "Franck Muller",
 }
 
 # Common dealer abbreviations for watch descriptors
+# Maps abbreviation -> canonical name used in ws_codes
 WATCH_DESCRIPTOR_ALIASES = {
     "jub": "Jubilee",
     "jubilee": "Jubilee",
@@ -264,13 +281,17 @@ WATCH_DESCRIPTOR_ALIASES = {
     "wim": "Wimbledon",
     "wimbledon": "Wimbledon",
     "gnrn": "Green/Black",  # Sprite GMT
+    "grnr": "Green/Black",  # Sprite GMT (alt spelling)
     "blnr": "Blue/Black",   # Batman GMT
     "blro": "Blue/Red",     # Pepsi GMT
     "vtnr": "Green/Black",  # Destro GMT
+    "chnr": "Chocolate/Black",  # Root Beer GMT
     "rom": "Roman",
+    "roma": "Roman",
     "roman": "Roman",
     "choc": "Chocolate",
     "choco": "Chocolate",
+    "cho": "Chocolate",
     "chocolate": "Chocolate",
     "yml": "YML",            # Yellow dial
     "pn": "Paul Newman",
@@ -285,6 +306,32 @@ WATCH_DESCRIPTOR_ALIASES = {
     "turquoise": "Turquoise",
     "pistachio": "Pistachio",
     "ice blue": "Ice Blue",
+    # Color abbreviations commonly used in stock lists
+    "blk": "Black",
+    "black": "Black",
+    "wht": "White",
+    "white": "White",
+    "blu": "Blue",
+    "blue": "Blue",
+    "grn": "Green",
+    "green": "Green",
+    "grey": "Grey",
+    "gray": "Grey",
+    "red": "Red",
+    "pink": "Pink",
+    "purple": "Purple",
+    "champ": "Champagne",
+    "champagne": "Champagne",
+    "gold": "Gold",
+    "silver": "Silver",
+    "slate": "Slate",
+    "brown": "Brown",
+    "lavender": "Lavender",
+    "mete": "Meteorite",
+    "meteorite": "Meteorite",
+    "onyx": "Onyx",
+    "pave": "Paved",
+    "paved": "Paved",
 }
 
 CSV_HEADERS = [
@@ -326,6 +373,9 @@ BRAND_MIN_PRICES = {
     "Blancpain": 3000,
     "MB&F": 20000,
     "H. Moser & Cie": 5000,
+    "Breguet": 3000,
+    "Piaget": 2000,
+    "Franck Muller": 2000,
 }
 DEFAULT_MIN_PRICE = 500  # Fallback for unknown brands
 
@@ -402,9 +452,28 @@ def get_country_from_phone(phone: str) -> Optional[str]:
     return None
 
 
+# Invisible Unicode characters WhatsApp exports sometimes prefix to lines
+# (LRM, RLM, LTR/RTL embedding, zero-width joiners, BOM, etc.). These must
+# be stripped before regex matching or lines get mis-classified as
+# continuations and messages get merged together.
+_INVISIBLE_CHARS_RE = re.compile(
+    r'[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\u2060-\u2064\ufeff\xa0]'
+)
+
+
+def _strip_invisible(s: str) -> str:
+    """Replace invisible Unicode marks with nothing (and \xa0 with space)."""
+    # Replace non-breaking space with regular space, then strip other invisibles
+    s = s.replace('\xa0', ' ')
+    return _INVISIBLE_CHARS_RE.sub('', s)
+
+
 def parse_whatsapp_txt(content: str) -> list[dict]:
     """Parse a WhatsApp .txt export into messages.
-    Handles multi-line messages by joining continuation lines."""
+    Handles multi-line messages by joining continuation lines.
+    Strips invisible Unicode marks (LRM/RLM/LTR/RTL embedding, BOM, \xa0)
+    that WhatsApp iOS exports prepend to messages — otherwise the header
+    regex fails and lines get merged into the previous message."""
     messages = []
     patterns = [
         r'\[(\d{1,2}\.\d{1,2}\.\d{2,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([^:]+):\s*(.*)',
@@ -414,8 +483,8 @@ def parse_whatsapp_txt(content: str) -> list[dict]:
 
     current_msg = None
 
-    for line in content.split('\n'):
-        line = line.strip()
+    for raw_line in content.split('\n'):
+        line = _strip_invisible(raw_line).strip()
         if not line:
             continue
 
@@ -462,8 +531,19 @@ def _parse_timestamp(date_str: str, time_str: str) -> datetime:
     return datetime.utcnow()
 
 
+def _strip_media_markers(content: str) -> str:
+    """Remove 'Bild weggelassen' / 'image omitted' markers from a message so the
+    underlying watch listing text can still be parsed."""
+    return _MEDIA_RE.sub('', content)
+
+
 def should_skip_message(content: str) -> bool:
-    """Check if a message should be skipped entirely (SOLD, deleted, media)."""
+    """Check if a message should be skipped entirely.
+    Skips: deleted messages, pure SOLD notifications, system messages, pure
+    media-only messages. Messages that contain BOTH media markers and actual
+    watch listing content are NOT skipped — the media markers are stripped
+    during parsing so the listing survives."""
+    # Structural skip: deleted messages
     if _SKIP_RE.search(content):
         return True
     # Pure emoji/decorative lines (no alphanumeric content)
@@ -483,6 +563,19 @@ def should_skip_message(content: str) -> bool:
     for pattern in system_patterns:
         if re.search(pattern, content, re.IGNORECASE):
             return True
+
+    # Pure SOLD: a single-line message that is just a SOLD status update.
+    # Multi-line messages with SOLD inside are handled at line level in parse_stock_list.
+    lines = [l.strip() for l in content.split('\n') if l.strip()]
+    if len(lines) == 1 and _SOLD_ONLY_RE.match(lines[0]):
+        return True
+
+    # Pure media-only: after stripping media markers, nothing remains
+    without_media = _strip_media_markers(content)
+    without_media_clean = _clean_text(without_media).strip()
+    if not without_media_clean:
+        return True
+
     return False
 
 
@@ -500,28 +593,71 @@ def detect_brand_from_content(content: str) -> Optional[str]:
     return None
 
 
+def _find_keyword_pos(content_lower: str, keywords: list[str]) -> Optional[int]:
+    """Find the earliest position of any keyword in content, using word-boundary
+    matching so 'looking for' doesn't match inside 'looking forward'."""
+    earliest = None
+    for kw in keywords:
+        # Word boundaries on both sides for multi-word keywords too
+        pattern = r'(?<![a-zA-Z])' + re.escape(kw) + r'(?![a-zA-Z])'
+        m = re.search(pattern, content_lower)
+        if m:
+            pos = m.start()
+            if earliest is None or pos < earliest:
+                earliest = pos
+    return earliest
+
+
 def detect_post_type(content: str) -> Optional[str]:
     """Detect if a message is WTS, WTB, or neither. Returns 'WTS', 'WTB', or None.
-    Returns None for SOLD, deleted, media, and system messages."""
+    Returns None for SOLD, deleted, media, and system messages.
+
+    Both WTS and WTB keywords are checked; if BOTH are present the first one
+    found (by position) wins.  This prevents cross-contamination where a long
+    stock list has e.g. a WTB sub-section inside a WTS post.
+
+    Uses word-boundary matching so 'looking for' doesn't match inside 'looking
+    forward' and 'fs' doesn't match inside 'ofs'."""
     # Skip SOLD, deleted, media, system messages entirely
     if should_skip_message(content):
         return None
 
     content_lower = content.lower()
 
-    for kw in WTS_KEYWORDS:
-        if kw in content_lower:
-            return "WTS"
+    wts_pos = _find_keyword_pos(content_lower, WTS_KEYWORDS)
+    wtb_pos = _find_keyword_pos(content_lower, WTB_KEYWORDS)
 
-    for kw in WTB_KEYWORDS:
-        if kw in content_lower:
-            return "WTB"
+    # If both found, whichever appears first wins
+    if wts_pos is not None and wtb_pos is not None:
+        return "WTS" if wts_pos <= wtb_pos else "WTB"
+    if wts_pos is not None:
+        return "WTS"
+    if wtb_pos is not None:
+        return "WTB"
 
-    has_price = bool(re.search(
-        r'(?:\$|€|£|HKD|USD|EUR|GBP|CHF|AED|USDT)\s*[\d,]+|[\d,]+\s*(?:HKD|USD|EUR|GBP|CHF|AED|USDT|k\b)',
+    # Currency-tagged price → clear WTS signal
+    has_currency_price = bool(re.search(
+        r'(?:\$|€|£|HKD|USD|EUR|GBP|CHF|AED|USDT)\s*[\d,.]+|[\d,.]+\s*(?:HKD|USD|EUR|GBP|CHF|AED|USDT|k\b)',
         content, re.IGNORECASE
     ))
-    if has_price:
+    if has_currency_price:
+        return "WTS"
+
+    # Stock-list style message: ref-shaped token + large number (no currency).
+    # Watch dealers often omit currency in their stock lists because context
+    # makes it obvious. "5167R N2 790,000" or "126518LN Black N1 397,000"
+    # are clearly WTS even without HKD/USD tag.
+    # Require: a ref-like token AND a 4+ digit number (typical watch price).
+    # Ref pattern: optional letter prefix, 4-6 digits, optional letter/number suffix
+    has_ref_like = bool(re.search(
+        r'\b[A-Za-z]{0,4}\d{4,6}[A-Za-z]{0,6}(?:[/\-][A-Za-z0-9]+)?\b',
+        content,
+    ))
+    has_big_number = bool(re.search(
+        r'\d{3}[,.]\d{3}|\b\d{1,3}[kK]\b|\b\d\.\d+[mM]\b',
+        content,
+    ))
+    if has_ref_like and has_big_number:
         return "WTS"
 
     return None
@@ -741,9 +877,9 @@ def _is_section_header(line: str) -> bool:
     if detect_brand_header(line) is not None:
         return True
 
-    # Lines that are just condition labels like "New Fullset", "Used Fullset✨✨"
+    # Lines that are just condition labels like "New Fullset", "Used Fullset✨✨", "Like"
     condition_only = re.match(
-        r'^(new|used|unworn|nos|like new)\s*(fullset|full set)?\s*$',
+        r'^(new|used|unworn|nos|like new|like|all brand new|all new|all used)\s*(fullset|full set)?\s*$',
         cleaned, re.IGNORECASE
     )
     if condition_only:
@@ -760,7 +896,9 @@ def _extract_ref_from_line(line: str) -> Optional[str]:
     """Extract the reference/model number from a watch line.
     Strips emoji and leading condition/status words first.
     Handles formats like: '5968A', 'RM037RG', '126334G', 'Used 5167A-001',
-    'New 124200 Pistachio', '5712/1A', '5139G-010', '7118/1200A'"""
+    'New 124200 Pistachio', '5712/1A', '5139G-010', '7118/1200A',
+    'RM 11-03', 'RM07-01', 'V41 FR 2'.
+    Rejects year-only tokens like '2022y', '2019year', '2025'."""
     cleaned = _clean_text(line).strip()
     if not cleaned:
         return None
@@ -772,11 +910,52 @@ def _extract_ref_from_line(line: str) -> Optional[str]:
     ).strip()
     if not cleaned:
         return None
+
+    # Reject lines that start with a year-like token (e.g., "2022y HKD 570K" is a
+    # continuation line from a stock list — no reference here). Also handles
+    # condition words concatenated directly to the year: "2025used 180K",
+    # "2022new fullset", "2019full set", "2024year", "19y HKD 100k".
+    if re.match(
+        r'^20[1-3]\d(?:y|year|used|new|unworn|full|brand|mint|like|fresh|polished)?\b',
+        cleaned, re.IGNORECASE,
+    ):
+        return None
+    if re.match(r'^\d{2}y\b', cleaned, re.IGNORECASE):
+        return None
+
+    # Special handling for RM (Richard Mille) references with space: "RM 11-03", "RM 07-01"
+    rm_match = re.match(r'^(RM\s*\d{2,4}(?:[/\-][A-Za-z0-9]+)*)\b', cleaned, re.IGNORECASE)
+    if rm_match:
+        # Normalize: "RM 11-03" -> "RM11-03" (remove space for consistent matching)
+        ref = rm_match.group(1)
+        ref = re.sub(r'^(RM)\s+', r'\1', ref, flags=re.IGNORECASE)
+        return ref
+
     # Match reference patterns at start: alphanumeric with optional /- separators
     m = re.match(r'^([A-Za-z]{0,4}\d{2,6}(?:[/\-][A-Za-z0-9]+)*[A-Za-z]{0,4})\b', cleaned)
     if m:
-        return m.group(1)
+        candidate = m.group(1)
+        # Reject year-shaped candidates: 2022, 2022y, 2025used, 2019full, etc.
+        if re.match(r'^20[1-3]\d[a-zA-Z]{0,8}$', candidate):
+            suffix = re.sub(r'^20[1-3]\d', '', candidate).lower()
+            if suffix in ('', 'y', 'year', 'years', 'used', 'new', 'unworn',
+                          'full', 'brand', 'bnib', 'nos', 'mint', 'like',
+                          'fresh', 'polished', 'worn'):
+                return None
+        return candidate
     return None
+
+
+def _resolve_descriptor(token: str) -> list[str]:
+    """Resolve a token to its canonical descriptor(s).
+    Returns a list: [canonical_name] if the token is a known alias, else [token].
+    E.g., 'blk' -> ['black'], 'jub' -> ['jubilee'], 'rom' -> ['roman']."""
+    t = token.lower()
+    canonical = WATCH_DESCRIPTOR_ALIASES.get(t)
+    if canonical:
+        # Return both the original and canonical in lowercase for matching
+        return [t, canonical.lower()]
+    return [t]
 
 
 def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[dict]:
@@ -786,14 +965,37 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
     E.g., line '126710blnr jub n1 145.5k' with candidates [126710BLNR Jub, 126710BLNR Oys]
     -> tokens ['jub', 'n1', '145.5k'] -> 'jub' appears in ws_code '126710BLNR Jub' -> pick that one.
 
+    Resolves descriptor abbreviations: 'blk' matches 'Black', 'cho' matches 'Chocolate'.
     Checks tokens against: ws_code, aliases, model name.
     Also checks multi-word combinations like 'paul newman' -> 'Paul Newman'.
     """
     if len(matches) <= 1:
         return matches
 
-    # Build a single string of all remaining tokens for multi-word matching
-    tokens_str = " ".join(line_tokens).lower()
+    # Build resolved tokens: expand abbreviations to canonical names
+    resolved_tokens = []
+    for token in line_tokens:
+        t = token.lower()
+        # Skip month codes, prices, years
+        if re.match(r'^[nN]\d', t):
+            continue
+        if re.match(r'^[\d,.]+[kKmM]?$', t):
+            continue
+        if re.match(r'^20[1-2]\d', t):
+            continue
+        if re.match(r'^\d{2}y$', t):
+            continue
+        if t in ('used', 'new', 'unworn', 'nos', 'like', 'fullset', 'full', 'set',
+                 'hkd', 'usd', 'usdt', 'eur', 'gbp', 'chf', 'both', 'tag', 'sticker',
+                 'brand', 'sell', 'buy'):
+            continue
+        resolved_tokens.append(_resolve_descriptor(t))
+
+    # Build a single string of all remaining tokens (resolved) for multi-word matching
+    all_resolved = []
+    for variants in resolved_tokens:
+        all_resolved.extend(variants)
+    tokens_str = " ".join(all_resolved)
 
     scored = []
     for w in matches:
@@ -802,29 +1004,22 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
         model_lower = w.get("model", "").lower()
         aliases_lower = [a.lower() for a in w.get("aliases", [])]
 
-        # Check each token against ws_code
-        for token in line_tokens:
-            t = token.lower()
-            # Skip month codes, prices, years
-            if re.match(r'^[nN]\d', t):
-                continue
-            if re.match(r'^[\d,.]+[kKmM]?$', t):
-                continue
-            if re.match(r'^20[1-2]\d', t):
-                continue
-            if t in ('used', 'new', 'unworn', 'nos', 'like', 'fullset', 'full', 'set'):
-                continue
-
-            # Check if token appears in ws_code (e.g., 'jub' in '126710BLNR Jub')
-            if t in ws_lower:
-                score += 10
-            # Check if token appears in model
-            if t in model_lower:
-                score += 5
-            # Check against aliases
-            for alias in aliases_lower:
-                if t in alias or alias in t:
-                    score += 8
+        # Check each resolved token against ws_code
+        for variants in resolved_tokens:
+            for t in variants:
+                # Check if token appears in ws_code (e.g., 'jub' in '126710BLNR Jub')
+                if t in ws_lower:
+                    score += 10
+                    break
+                # Check if token appears in model
+                if t in model_lower:
+                    score += 5
+                    break
+                # Check against aliases
+                for alias in aliases_lower:
+                    if t in alias or alias in t:
+                        score += 8
+                        break
 
         # Multi-word check: does the combined tokens_str contain part of ws_code
         # that distinguishes this variant? E.g., 'paul newman' in ws_code
@@ -1218,7 +1413,9 @@ def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = Non
 
 
 def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) -> str:
-    """Normalize month/year strings to MM/YY format (+ suffix for WTB)."""
+    """Normalize month/year strings to MM/YY format (+ suffix for WTB).
+    When only a year is available (no month), returns the year as-is (e.g. '2025')
+    instead of fabricating a month like '01/25'."""
     if not text:
         return ""
 
@@ -1233,20 +1430,26 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
         "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
     }
 
-    m = re.match(r'^n(\d{1,2})$', text)
+    # Strip trailing 'y' suffix (common in dealer messages: N2/26y, N9/2025y)
+    text_clean = re.sub(r'y$', '', text).strip()
+
+    # N-month only: n1, n2, n12
+    m = re.match(r'^n(\d{1,2})$', text_clean)
     if m:
         month = int(m.group(1))
         year = ref_year if month <= ref_month else ref_year - 1
         return f"{month:02d}/{year % 100:02d}{suffix}"
 
-    m = re.match(r'^n(\d{1,2})[/\-](\d{2,4})$', text)
+    # N-month/year: n2/26, n9/2025
+    m = re.match(r'^n(\d{1,2})[/\-](\d{2,4})$', text_clean)
     if m:
         month = int(m.group(1))
         yr = int(m.group(2))
         year = yr if yr > 99 else 2000 + yr
         return f"{month:02d}/{year % 100:02d}{suffix}"
 
-    m = re.match(r'^(\d{1,2})[/\-](\d{2,4})$', text)
+    # MM/YY or MM/YYYY: 09/25, 02/26, 02/2026
+    m = re.match(r'^(\d{1,2})[/\-](\d{2,4})$', text_clean)
     if m:
         month = int(m.group(1))
         yr = int(m.group(2))
@@ -1254,9 +1457,9 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
         return f"{month:02d}/{year % 100:02d}{suffix}"
 
     for name, num in month_names.items():
-        if name in text:
+        if name in text_clean:
             month = num
-            yr_match = re.search(r'(\d{2,4})', text.replace(name, ''))
+            yr_match = re.search(r'(\d{2,4})', text_clean.replace(name, ''))
             if yr_match:
                 yr = int(yr_match.group(1))
                 year = yr if yr > 99 else 2000 + yr
@@ -1264,12 +1467,14 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
                 year = ref_year if month <= ref_month else ref_year - 1
             return f"{month:02d}/{year % 100:02d}{suffix}"
 
-    m = re.match(r'^(\d{4})$', text)
+    # Pure 4-digit year: 2024, 2025 — return as year only, not MM/YY
+    m = re.match(r'^(\d{4})$', text_clean)
     if m:
         year = int(m.group(1))
         return f"{year}{suffix}"
 
-    m = re.match(r'^(\d{2})$', text)
+    # Pure 2-digit number: could be a year (19=2019, 25=2025)
+    m = re.match(r'^(\d{2})$', text_clean)
     if m:
         year = 2000 + int(m.group(1))
         return f"{year}{suffix}"
@@ -1278,32 +1483,93 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
 
 
 def extract_month_year_from_text(content: str) -> Optional[str]:
-    """Try to find month/year references in message text."""
-    patterns = [
-        r'\b[nN](\d{1,2}(?:[/\-]\d{2,4})?)\b',
-        r'\b(\d{1,2}[/\-]\d{2,4})\b',
-        r'\b((?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s*\d{2,4})\b',
-    ]
+    """Try to find month/year references in message text.
+    Handles: N2/26y, N9/2025y, N3/2026, 09/25, 2024, 19y (=2019), 2025-6 (=06/2025).
+    Scans ALL occurrences for each pattern before falling through to the next one."""
     content_lower = content.lower()
 
-    for pattern in patterns:
-        m = re.search(pattern, content_lower)
-        if m:
-            result = m.group(0)
+    # 1. N-month/year with 'y' suffix (most specific): N2/26y, N9/2025y, N3/2026y
+    for m in re.finditer(r'\b[nN](\d{1,2})[/\-](\d{2,4})\s*y\b', content_lower):
+        start = m.start()
+        if start > 0 and content[start - 1] in ('$', '€', '£'):
+            continue
+        month = m.group(1)
+        year = m.group(2)
+        return f"n{month}/{year}"
+
+    # 2. N-month/year without y: N2/26, N3/2026
+    for m in re.finditer(r'\b[nN](\d{1,2})[/\-](\d{2,4})\b', content_lower):
+        start = m.start()
+        if start > 0 and content[start - 1] in ('$', '€', '£'):
+            continue
+        month_val = int(m.group(1))
+        year_str = m.group(2)
+        # Validate: month 1-12, year looks like a year (not a model suffix like /1G)
+        if 1 <= month_val <= 12 and len(year_str) >= 2:
+            return f"n{m.group(1)}/{year_str}"
+
+    # 3. N-month+year concatenated with y (N32026y, missing /): first 1-2 digits as month, rest as year
+    m = re.search(r'\b[nN](\d{1,2})(\d{4})\s*y\b', content_lower)
+    if m:
+        month = m.group(1)
+        year = m.group(2)
+        return f"n{month}/{year}"
+
+    # 4. YYYY/MM or YYYY-MM format: 2025/11, 2025-6
+    for m in re.finditer(r'\b(\d{4})[/\-](\d{1,2})\b', content_lower):
+        year = int(m.group(1))
+        month = int(m.group(2))
+        # Verify it's a valid year (not a reference like 5980/60)
+        if 2010 <= year <= 2035 and 1 <= month <= 12:
+            yr_short = year % 100
+            return f"{month:02d}/{yr_short:02d}"
+
+    # 5. N-month only: N1, N2, N10, N12 (check ALL occurrences, skip model suffixes)
+    for m in re.finditer(r'\b[nN](\d{1,2})\b', content_lower):
+        month_val = int(m.group(1))
+        if 1 <= month_val <= 12:
+            # Make sure this isn't part of a model ref (preceded by /)
             start = m.start()
-            if start > 0 and content[start - 1] in ('$', '€', '£'):
+            if start > 0 and content[start - 1] == '/':
                 continue
-            return result
+            return m.group(0)
+
+    # 6. MM/YY or MM/YYYY format: 09/25, 02/26
+    for m in re.finditer(r'\b(\d{1,2})[/\-](\d{2,4})\b', content_lower):
+        start = m.start()
+        if start > 0 and content[start - 1] in ('$', '€', '£'):
+            continue
+        month_val = int(m.group(1))
+        if 1 <= month_val <= 12:
+            return m.group(0)
+
+    # 7. Month name with year: January 2024, Jan 2024
+    m = re.search(
+        r'\b((?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s*\d{2,4})\b',
+        content_lower,
+    )
+    if m:
+        start = m.start()
+        if not (start > 0 and content[start - 1] in ('$', '€', '£')):
+            return m.group(0)
 
     return None
 
 
 def extract_year_from_line(content: str) -> Optional[str]:
-    """Extract a standalone year (2017-2029) from a watch line.
-    Distinct from month/year — catches '2024', '2022year', '2025year'."""
-    m = re.search(r'\b(20[1-2]\d)\s*(?:year)?\b', content, re.IGNORECASE)
+    """Extract a standalone year from a watch line.
+    Handles: '2024', '2022year', '2025year', '19y' (=2019), '20y' (=2020), '21y' (=2021)."""
+    # Full 4-digit year: 2024, 2022year
+    m = re.search(r'\b(20[1-2]\d)\s*(?:year|y)?\b', content, re.IGNORECASE)
     if m:
         return m.group(1)
+    # Short 2-digit year with 'y' suffix: 19y=2019, 20y=2020, 25y=2025
+    # Must NOT be preceded by N (which is month code like N2/26y) or / (which is month/year)
+    m = re.search(r'(?<![nN/\-])(?:^|\s)(\d{2})y\b', content, re.IGNORECASE)
+    if m:
+        yr = int(m.group(1))
+        if 10 <= yr <= 35:  # 2010-2035 range
+            return str(2000 + yr)
     return None
 
 
@@ -1362,12 +1628,45 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
     return None, None
 
 
+def _apply_discount(price_val: float, discount_pct: float) -> str:
+    """Apply a discount percentage to a price and return formatted string."""
+    discounted = price_val * (1 - discount_pct / 100)
+    return f"{int(discounted):,}"
+
+
 def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
     """Extract price from a single watch line.
     Handles stock list formats: '5968A N2 1.17m hkd', '126334G Black Jub N12 138,000'
     N1, N2, N10, N12 etc. are month codes — NOT prices. Price is the numeric token
     (optionally with k/m suffix) that is NOT preceded by N.
+    Also handles discount formats: '$565000-25%', '134000-35%'.
     """
+    # Handle discount formats: $565000-25%, 134000-35%, $83000-35%
+    discount_match = re.search(
+        r'(?:[\$€£]|HK\$)?\s*([\d,.]+[kKmM]?)\s*-\s*(\d{1,2})%',
+        line, re.IGNORECASE
+    )
+    if discount_match:
+        raw_price = discount_match.group(1).strip()
+        discount_pct = float(discount_match.group(2))
+        formatted = _format_price(raw_price)
+        if formatted:
+            price_val = float(formatted.replace(',', ''))
+            discounted = _apply_discount(price_val, discount_pct)
+            # Determine currency from prefix or context
+            prefix = line[:discount_match.start()].strip()
+            if '$' in line[:discount_match.end()] or 'hk$' in line[:discount_match.end()].lower():
+                cur = "HKD" if sender_country in HKD_DEFAULT_COUNTRIES else "USD"
+            elif '€' in prefix:
+                cur = "EUR"
+            elif '£' in prefix:
+                cur = "GBP"
+            elif sender_country in HKD_DEFAULT_COUNTRIES:
+                cur = "HKD"
+            else:
+                cur = "USD"
+            return discounted, cur
+
     # Try standard extraction first (handles currency prefix/suffix)
     price, currency = extract_price(line, sender_country)
     if price:
@@ -1386,19 +1685,17 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
             return formatted, currency
 
     # Try bare price at end of line (no currency specified)
-    # Match a number+k/m that is NOT preceded by 'n' (which would be a month code like N12)
-    # Look for the last numeric token on the line
-    # Pattern: a number (with optional commas/dots) optionally followed by k/m, at end of line or before whitespace
     tokens = line.strip().split()
-    # Get the first token as reference (to avoid matching it as price)
     first_token = tokens[0].strip().rstrip('.').lower() if tokens else ""
     for token in reversed(tokens):
         token_clean = token.strip().rstrip('.')
         # Skip month codes: N1, N2, N10, N12, n2/2026, etc.
         if re.match(r'^[nN]\d', token_clean):
             continue
-        # Skip year tokens like 2024, 2022year
-        if re.match(r'^20[1-2]\d(?:year)?$', token_clean, re.IGNORECASE):
+        # Skip year tokens like 2024, 2022year, 19y, 20y
+        if re.match(r'^20[1-2]\d(?:year|y)?$', token_clean, re.IGNORECASE):
+            continue
+        if re.match(r'^\d{2}y$', token_clean, re.IGNORECASE):
             continue
         # Skip non-numeric tokens
         if not re.match(r'^[\d,.]+[kKmM]?$', token_clean):
@@ -1583,12 +1880,15 @@ def format_timestamp(ts: datetime) -> str:
 def _detect_section_condition(line: str) -> Optional[str]:
     """Detect condition from a brand section header line.
     E.g., 'Patek Used ✨✨' -> 'Used', 'RM Used Fullset' -> 'Used',
-    'New Fullset' -> 'Unworn'.
+    'New Fullset' -> 'Unworn', 'Like' -> 'Used' (short for Like New).
     Check more specific terms first (like new, unworn, brand new) before generic ones."""
     cleaned = _clean_text(line).lower().strip()
     # Check specific unworn indicators first
     if 'like new' in cleaned:
-        return "Like New"
+        return "Used"  # Like New is closer to Used than Unworn
+    # Bare "like" (short for "like new") — common in stock lists
+    if re.match(r'^like\s*$', cleaned):
+        return "Used"
     if 'unworn' in cleaned or 'brand new' in cleaned or 'bnib' in cleaned:
         return "Unworn"
     if 'nos' in cleaned or 'stickered' in cleaned or 'sealed' in cleaned:
@@ -1662,28 +1962,43 @@ def parse_stock_list(
 
     # Pre-process: merge split lines where reference is on one line and price/year
     # on the next (common in AP/PP stock lists). Pattern: line with ref but no price,
-    # followed by line with price/year but no ref.
+    # followed by 1-2 lines with price/year but no ref.
     raw_lines = content.split('\n')
     lines = []
     i = 0
     while i < len(raw_lines):
         stripped_cur = raw_lines[i].strip()
-        if stripped_cur and i + 1 < len(raw_lines):
-            stripped_next = raw_lines[i + 1].strip()
+        if stripped_cur:
             ref_cur = _extract_ref_from_line(stripped_cur)
-            if ref_cur and stripped_next:
-                # Current line has a ref — check if it lacks price
-                price_cur, _ = extract_price_from_line(stripped_cur, sender_country)
-                ref_next = _extract_ref_from_line(stripped_next)
-                # Next line has no ref but has price or year info
-                if not price_cur and not ref_next and not detect_brand_header(stripped_next):
-                    price_next, _ = extract_price_from_line(stripped_next, sender_country)
-                    year_next = extract_year_from_line(stripped_next)
-                    if price_next or year_next:
-                        # Merge the two lines
-                        lines.append(stripped_cur + " " + stripped_next)
-                        i += 2
+            price_cur, _ = extract_price_from_line(stripped_cur, sender_country) if ref_cur else (None, None)
+
+            if ref_cur and not price_cur:
+                # Look ahead up to 3 lines for price/year continuation
+                merged = stripped_cur
+                consumed = 0
+                for look in range(1, 4):
+                    if i + look >= len(raw_lines):
+                        break
+                    nxt = raw_lines[i + look].strip()
+                    if not nxt:
                         continue
+                    # Stop if next line has its own ref or is a brand header
+                    if _extract_ref_from_line(nxt) or detect_brand_header(nxt):
+                        break
+                    price_nxt, _ = extract_price_from_line(nxt, sender_country)
+                    year_nxt = extract_year_from_line(nxt)
+                    merged += " " + nxt
+                    consumed = look
+                    # Stop once we've gathered a price (no need to pull in more)
+                    if price_nxt:
+                        break
+                    # Gather continuation lines with only year/condition info
+                    if not year_nxt and not re.search(r'\b(?:used|new|unworn|nos|bnib|full\s*set|brand\s*new)\b', nxt, re.IGNORECASE):
+                        break
+                if consumed > 0:
+                    lines.append(merged)
+                    i += consumed + 1
+                    continue
         lines.append(raw_lines[i])
         i += 1
 
@@ -1953,6 +2268,9 @@ def _process_messages_sync(
             progress_state["percent"] = pct
             progress_state["detail"] = f"Processing messages... {idx:,}/{total_messages:,}"
         content = msg["content"]
+        # Strip media markers like "Bild weggelassen" / "image omitted" that are
+        # injected by WhatsApp exports alongside the actual listing content.
+        content = _strip_media_markers(content).strip()
         sender = msg["sender"]
         timestamp = msg["timestamp"]
 
