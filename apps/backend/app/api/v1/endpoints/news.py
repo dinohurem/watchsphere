@@ -20,6 +20,7 @@ class NewsResponse(BaseModel):
     content: str
     excerpt: Optional[str] = None
     cover_image: Optional[str] = None
+    images: List[str] = []
     author_id: str
     author_name: str
     status: NewsStatus
@@ -53,6 +54,7 @@ class NewsCreate(BaseModel):
     content: str
     excerpt: Optional[str] = None
     cover_image: Optional[str] = None
+    images: List[str] = []
     status: NewsStatus = NewsStatus.DRAFT
     tags: List[str] = []
 
@@ -62,6 +64,7 @@ class NewsUpdate(BaseModel):
     content: Optional[str] = None
     excerpt: Optional[str] = None
     cover_image: Optional[str] = None
+    images: Optional[List[str]] = None
     status: Optional[NewsStatus] = None
     tags: Optional[List[str]] = None
 
@@ -156,6 +159,7 @@ async def get_news(slug_or_id: str) -> Any:
         "content": article.content,
         "excerpt": article.excerpt,
         "cover_image": article.cover_image,
+        "images": article.images,
         "author_id": article.author_id,
         "author_name": article.author_name,
         "status": article.status,
@@ -191,6 +195,7 @@ async def admin_list_all_news(
             "content": article.content,
             "excerpt": article.excerpt,
             "cover_image": article.cover_image,
+            "images": article.images,
             "author_id": article.author_id,
             "author_name": article.author_name,
             "status": article.status,
@@ -226,6 +231,7 @@ async def admin_get_news(
         "content": article.content,
         "excerpt": article.excerpt,
         "cover_image": article.cover_image,
+        "images": article.images,
         "author_id": article.author_id,
         "author_name": article.author_name,
         "status": article.status,
@@ -261,6 +267,7 @@ async def admin_create_news(
         content=news_data.content,
         excerpt=news_data.excerpt,
         cover_image=news_data.cover_image,
+        images=news_data.images,
         author_id=str(current_admin.id),
         author_name=current_admin.name,
         status=news_data.status,
@@ -277,6 +284,7 @@ async def admin_create_news(
         "content": article.content,
         "excerpt": article.excerpt,
         "cover_image": article.cover_image,
+        "images": article.images,
         "author_id": article.author_id,
         "author_name": article.author_name,
         "status": article.status,
@@ -337,6 +345,7 @@ async def admin_update_news(
         "content": article.content,
         "excerpt": article.excerpt,
         "cover_image": article.cover_image,
+        "images": article.images,
         "author_id": article.author_id,
         "author_name": article.author_name,
         "status": article.status,

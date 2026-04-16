@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, Search, Edit2, Trash2, Eye, Send } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Eye, Send, Upload, X, Loader2 } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 import { ImageUpload } from '@/components/ui/ImageUpload'
@@ -12,6 +12,7 @@ interface NewsArticle {
   content: string
   excerpt: string | null
   cover_image: string | null
+  images: string[]
   author_id: string
   author_name: string
   status: 'draft' | 'published' | 'archived'
@@ -40,6 +41,7 @@ interface NewsFormData {
   content: string
   excerpt: string
   cover_image: string
+  images: string[]
   status: string
   tags: string[]
 }
@@ -49,6 +51,7 @@ const emptyForm: NewsFormData = {
   content: '',
   excerpt: '',
   cover_image: '',
+  images: [],
   status: 'draft',
   tags: [],
 }
@@ -95,6 +98,7 @@ export function AdminNews() {
       content: article.content,
       excerpt: article.excerpt || '',
       cover_image: article.cover_image || '',
+      images: article.images || [],
       status: article.status,
       tags: article.tags,
     })
@@ -144,6 +148,7 @@ export function AdminNews() {
         ...formData,
         excerpt: formData.excerpt || undefined,
         cover_image: formData.cover_image || undefined,
+        images: formData.images,
       }
 
       if (editingArticle) {
@@ -358,9 +363,16 @@ export function AdminNews() {
               </div>
 
               <ImageUpload
-                label={t('admin.news.articleModal.imageLabel')}
+                label={t('admin.news.articleModal.previewImageLabel')}
                 value={formData.cover_image || undefined}
                 onChange={(url) => setFormData({ ...formData, cover_image: url || '' })}
+                uploadEndpoint="/upload/news"
+              />
+
+              <GalleryUpload
+                label={t('admin.news.articleModal.galleryLabel')}
+                values={formData.images}
+                onChange={(urls) => setFormData({ ...formData, images: urls })}
                 uploadEndpoint="/upload/news"
               />
 
@@ -457,6 +469,116 @@ export function AdminNews() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+interface GalleryUploadProps {
+  label: string
+  values: string[]
+  onChange: (urls: string[]) => void
+  uploadEndpoint: string
+}
+
+function GalleryUpload({ label, values, onChange, uploadEndpoint }: GalleryUploadProps) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+
+    setUploading(true)
+    setError(null)
+
+    try {
+      const uploaded: string[] = []
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) continue
+        if (file.size > 10 * 1024 * 1024) {
+          setError('Each image must be smaller than 10MB')
+          continue
+        }
+
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await api.post(uploadEndpoint, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        if (response.data?.url) {
+          uploaded.push(response.data.url)
+        }
+      }
+
+      if (uploaded.length > 0) {
+        onChange([...values, ...uploaded])
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to upload image')
+    } finally {
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  const handleRemove = (index: number) => {
+    const next = values.filter((_, i) => i !== index)
+    onChange(next)
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+
+      {values.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-3">
+          {values.map((url, index) => (
+            <div
+              key={`${url}-${index}`}
+              className="relative w-full h-28 bg-gray-100 rounded-lg overflow-hidden group"
+            >
+              <img src={url} alt={`Gallery ${index + 1}`} className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => handleRemove(index)}
+                className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label="Remove image"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div
+        onClick={() => inputRef.current?.click()}
+        className={`w-full h-24 border-2 border-dashed rounded-lg cursor-pointer flex flex-col items-center justify-center gap-1 transition-colors border-gray-300 hover:border-gray-400 ${uploading ? 'pointer-events-none opacity-70' : ''}`}
+      >
+        {uploading ? (
+          <>
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+            <span className="text-xs text-gray-500">Uploading...</span>
+          </>
+        ) : (
+          <>
+            <Upload className="w-6 h-6 text-gray-400" />
+            <span className="text-sm text-gray-600">Click or drop to add gallery images</span>
+            <span className="text-xs text-gray-400">Multiple files supported • Max 10MB each</span>
+          </>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={(e) => handleFiles(e.target.files)}
+        className="hidden"
+      />
+
+      {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
     </div>
   )
 }

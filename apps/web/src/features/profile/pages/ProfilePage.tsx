@@ -408,36 +408,23 @@ export function ProfilePage() {
           )}
         </div>
 
-        {/* Favorites Section - Collapsible */}
-        <div className="mb-8">
+        {/* Watchlist Section - Collapsible, shows all items */}
+        <div id="watchlist" className="mb-8">
           <button
             onClick={() => setFavoritesExpanded(!favoritesExpanded)}
             className="flex items-center justify-between w-full mb-4"
           >
             <div className="flex items-center gap-2">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900">{t('profile.favorites')}</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">{t('profile.watchlist')}</h3>
               <span className="text-sm text-gray-500">({favorites.length})</span>
             </div>
-            <div className="flex items-center gap-2">
-              {favorites.length > 0 && (
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate('/app/watchlist');
-                  }}
-                  className="text-sm font-medium text-gray-500 hover:text-gray-700"
-                >
-                  {t('profile.seeAll')}
-                </span>
-              )}
-              <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${favoritesExpanded ? '' : '-rotate-90'}`} />
-            </div>
+            <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${favoritesExpanded ? '' : '-rotate-90'}`} />
           </button>
 
           {favoritesExpanded && (
             favorites.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {favorites.slice(0, 4).map((watch) => (
+                {favorites.map((watch) => (
                   <WatchCard
                     key={watch.id}
                     brand={watch.brand}
