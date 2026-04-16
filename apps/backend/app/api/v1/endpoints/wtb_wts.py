@@ -60,7 +60,12 @@ async def _gridfs_delete(file_id: str) -> None:
 
 async def _cleanup_expired_files(run: WtbWtsRun) -> None:
     """Delete GridFS files for a run and clear references."""
-    for field in ("matched_csv_gridfs_id", "needs_review_csv_gridfs_id", "suggested_csv_gridfs_id"):
+    for field in (
+        "matched_csv_gridfs_id",
+        "needs_review_csv_gridfs_id",
+        "not_in_database_csv_gridfs_id",
+        "suggested_csv_gridfs_id",
+    ):
         file_id = getattr(run, field, None)
         if file_id:
             await _gridfs_delete(file_id)
@@ -68,6 +73,7 @@ async def _cleanup_expired_files(run: WtbWtsRun) -> None:
     await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
         "matched_csv_gridfs_id": None,
         "needs_review_csv_gridfs_id": None,
+        "not_in_database_csv_gridfs_id": None,
         "suggested_csv_gridfs_id": None,
         "files_expire_at": None,
     }})
@@ -116,10 +122,12 @@ class RunResponse(BaseModel):
     detected_posts: int = 0
     matched_count: int = 0
     needs_review_count: int = 0
+    not_in_database_count: int = 0
     fuzzy_matched_count: int = 0
     ai_matched_count: int = 0
     has_matched_csv: bool = False
     has_needs_review_csv: bool = False
+    has_not_in_database_csv: bool = False
     has_suggested_csv: bool = False
     suggested_additions_count: int = 0
     files_expire_at: Optional[datetime] = None
@@ -144,10 +152,12 @@ def _run_to_response(run: WtbWtsRun) -> RunResponse:
         detected_posts=run.detected_posts,
         matched_count=run.matched_count,
         needs_review_count=run.needs_review_count,
+        not_in_database_count=getattr(run, "not_in_database_count", 0),
         fuzzy_matched_count=run.fuzzy_matched_count,
         ai_matched_count=run.ai_matched_count,
         has_matched_csv=bool(run.matched_csv_gridfs_id),
         has_needs_review_csv=bool(run.needs_review_csv_gridfs_id),
+        has_not_in_database_csv=bool(getattr(run, "not_in_database_csv_gridfs_id", None)),
         has_suggested_csv=bool(getattr(run, "suggested_csv_gridfs_id", None)),
         suggested_additions_count=getattr(run, "suggested_additions_count", 0),
         files_expire_at=getattr(run, "files_expire_at", None),
@@ -209,6 +219,13 @@ async def _run_processing(
                 f"needs-review-{filename.replace('.txt', '.csv')}",
             )
 
+        not_in_database_gridfs_id = None
+        if result.get("not_in_database_csv"):
+            not_in_database_gridfs_id = await _gridfs_put(
+                result["not_in_database_csv"],
+                f"not-in-database-{filename.replace('.txt', '.csv')}",
+            )
+
         # Store suggested-additions CSV
         suggested_csv = result.get("suggested_additions_csv", "")
         suggested_gridfs_id = None
@@ -224,11 +241,13 @@ async def _run_processing(
         await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
             "matched_csv_gridfs_id": matched_gridfs_id,
             "needs_review_csv_gridfs_id": needs_review_gridfs_id,
+            "not_in_database_csv_gridfs_id": not_in_database_gridfs_id,
             "suggested_csv_gridfs_id": suggested_gridfs_id,
             "total_messages": result["total_messages"],
             "detected_posts": result["detected_posts"],
             "matched_count": result["matched_count"],
             "needs_review_count": result["needs_review_count"],
+            "not_in_database_count": result.get("not_in_database_count", 0),
             "fuzzy_matched_count": result.get("fuzzy_matched_count", 0),
             "ai_matched_count": result.get("ai_matched_count", 0),
             "suggested_additions_count": result.get("suggested_additions_count", 0),
@@ -445,6 +464,49 @@ async def download_needs_review_csv(
         media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="needs-review-{run.filename.replace(".txt", ".csv")}"'
+        },
+    )
+
+
+@router.get("/admin/wtb-wts/runs/{run_id}/not-in-database-csv")
+async def download_not_in_database_csv(
+    run_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Download not-in-database CSV from a run (Admin only).
+
+    Contains rows where the parser could not find any matching watch in the
+    catalog — typically candidates for new catalog entries. These are split
+    out from needs-review so reviewers can triage the two lists separately.
+    """
+
+    run = await WtbWtsRun.get(PydanticObjectId(run_id))
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Run not found"
+        )
+
+    gridfs_id = getattr(run, "not_in_database_csv_gridfs_id", None)
+    if not gridfs_id:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
+        )
+
+    try:
+        content = await _gridfs_get(gridfs_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
+        )
+
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="not-in-database-{run.filename.replace(".txt", ".csv")}"'
         },
     )
 
