@@ -10,6 +10,7 @@ import {
   FileText,
   X,
   FileOutput,
+  HelpCircle,
 } from 'lucide-react'
 import { api } from '@/services/api'
 
@@ -26,8 +27,10 @@ interface WtbWtsRun {
   detected_posts: number
   matched_count: number
   needs_review_count: number
+  not_in_database_count: number
   has_matched_csv: boolean
   has_needs_review_csv: boolean
+  has_not_in_database_csv: boolean
   has_suggested_csv: boolean
   suggested_additions_count: number
   files_expire_at?: string
@@ -68,8 +71,13 @@ const STATUS_COLORS = {
 
 function isFilesExpired(run: WtbWtsRun): boolean {
   if (run.status !== 'completed') return false
-  // Files are expired when neither CSV is available
-  return !run.has_matched_csv && !run.has_needs_review_csv && !run.has_suggested_csv
+  // Files are expired when none of the CSVs are available
+  return (
+    !run.has_matched_csv &&
+    !run.has_needs_review_csv &&
+    !run.has_not_in_database_csv &&
+    !run.has_suggested_csv
+  )
 }
 
 function getTimeRemaining(run: WtbWtsRun): string | null {
@@ -241,7 +249,7 @@ export function AdminWtbWtsGenerator() {
 
   const handleDownload = async (
     runId: string,
-    type: 'matched-csv' | 'needs-review-csv' | 'suggested-csv',
+    type: 'matched-csv' | 'needs-review-csv' | 'not-in-database-csv' | 'suggested-csv',
     filename: string
   ) => {
     try {
@@ -253,7 +261,14 @@ export function AdminWtbWtsGenerator() {
       const a = document.createElement('a')
       a.href = url
       const csvFilename = filename.replace(/\.txt$/i, '.csv')
-      const prefix = type === 'matched-csv' ? 'matched-' : type === 'suggested-csv' ? 'suggested-' : 'needs-review-'
+      const prefix =
+        type === 'matched-csv'
+          ? 'matched-'
+          : type === 'suggested-csv'
+            ? 'suggested-'
+            : type === 'not-in-database-csv'
+              ? 'not-in-database-'
+              : 'needs-review-'
       a.download = `${prefix}${csvFilename}`
       a.click()
       window.URL.revokeObjectURL(url)
@@ -550,6 +565,14 @@ export function AdminWtbWtsGenerator() {
                 </p>
                 <p className="text-xs text-gray-500">Needs Review</p>
               </div>
+              {(result.not_in_database_count || 0) > 0 && (
+                <div className="text-center p-2 bg-rose-50 rounded">
+                  <p className="text-lg font-bold text-rose-700">
+                    {result.not_in_database_count}
+                  </p>
+                  <p className="text-xs text-gray-500">Not in Database</p>
+                </div>
+              )}
               {(result.suggested_additions_count || 0) > 0 && (
                 <div className="text-center p-2 bg-indigo-50 rounded">
                   <p className="text-lg font-bold text-indigo-700">
@@ -583,6 +606,17 @@ export function AdminWtbWtsGenerator() {
                   >
                     <Download className="w-4 h-4" />
                     Download Needs Review CSV
+                  </button>
+                )}
+                {result.has_not_in_database_csv && (
+                  <button
+                    onClick={() =>
+                      handleDownload(result.id, 'not-in-database-csv', result.filename)
+                    }
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-rose-800 bg-rose-100 border border-rose-300 rounded-lg hover:bg-rose-200 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Not in Database CSV
                   </button>
                 )}
                 {result.has_suggested_csv && (
@@ -646,6 +680,12 @@ export function AdminWtbWtsGenerator() {
                             / {run.needs_review_count} review
                           </span>
                         )}
+                        {(run.not_in_database_count || 0) > 0 && (
+                          <span className="text-rose-600">
+                            {' '}
+                            / {run.not_in_database_count} not in DB
+                          </span>
+                        )}
                         {(run.suggested_additions_count || 0) > 0 && (
                           <span className="text-indigo-600">
                             {' '}
@@ -679,6 +719,17 @@ export function AdminWtbWtsGenerator() {
                             title="Download needs review CSV"
                           >
                             <AlertTriangle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {run.has_not_in_database_csv && (
+                          <button
+                            onClick={() =>
+                              handleDownload(run.id, 'not-in-database-csv', run.filename)
+                            }
+                            className="p-2 hover:bg-rose-100 rounded-lg text-rose-600"
+                            title={`Download not-in-database CSV (${run.not_in_database_count || 0})`}
+                          >
+                            <HelpCircle className="w-4 h-4" />
                           </button>
                         )}
                         {run.has_suggested_csv && (

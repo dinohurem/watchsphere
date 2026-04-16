@@ -332,6 +332,74 @@ WATCH_DESCRIPTOR_ALIASES = {
     "onyx": "Onyx",
     "pave": "Paved",
     "paved": "Paved",
+    # --- Multilingual color names -----------------------------------------
+    # So "126334 Blau" (DE) or "126334 azul" (ES) match the same watch as
+    # "126334 Blue" without requiring a per-locale alias in the catalog.
+    # German
+    "schwarz": "Black",
+    "weiss": "White",
+    "weiß": "White",
+    "blau": "Blue",
+    "grün": "Green",
+    "gruen": "Green",
+    "rot": "Red",
+    "grau": "Grey",
+    "braun": "Brown",
+    "silber": "Silver",
+    "römisch": "Roman",
+    "roemisch": "Roman",
+    # Spanish
+    "negro": "Black",
+    "blanco": "White",
+    "azul": "Blue",
+    "verde": "Green",  # also Italian
+    "rojo": "Red",
+    "gris": "Grey",  # also French
+    "marron": "Brown",  # also French
+    "marrón": "Brown",
+    "plata": "Silver",
+    "plateado": "Silver",
+    "dorado": "Gold",
+    "romano": "Roman",  # also Italian
+    # French
+    "noir": "Black",
+    "blanc": "White",
+    "bleu": "Blue",
+    "vert": "Green",
+    "rouge": "Red",
+    "argent": "Silver",
+    "romain": "Roman",
+    # Italian
+    "nero": "Black",
+    "bianco": "White",
+    # "blu" already mapped to Blue above
+    # "verde" already mapped above
+    "rosso": "Red",
+    "grigio": "Grey",
+    "marrone": "Brown",
+    "argento": "Silver",
+    # Bosnian / Croatian / Serbian
+    "crna": "Black",
+    "crno": "Black",
+    "bijela": "White",
+    "bijelo": "White",
+    "bela": "White",
+    "belo": "White",
+    "plava": "Blue",
+    "plavo": "Blue",
+    "zelena": "Green",
+    "zeleno": "Green",
+    "crvena": "Red",
+    "crveno": "Red",
+    "siva": "Grey",
+    "sivo": "Grey",
+    "smeđa": "Brown",
+    "smedja": "Brown",
+    "srebrna": "Silver",
+    "srebrno": "Silver",
+    "zlatna": "Gold",
+    "zlatno": "Gold",
+    "roza": "Pink",
 }
 
 CSV_HEADERS = [
@@ -683,6 +751,8 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
                     "reference": (data.get("reference") or "").strip(),
                     "oem_references": [r.strip() for r in (data.get("oem_references") or [])],
                     "aliases": [a.strip() for a in (data.get("aliases") or [])],
+                    "dial": (data.get("dial") or "").strip(),
+                    "bracelet": (data.get("bracelet") or "").strip(),
                 })
             except json.JSONDecodeError:
                 continue
@@ -699,6 +769,8 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
                 "reference": (w.reference or "").strip(),
                 "oem_references": [r.strip() for r in (w.oem_references or [])],
                 "aliases": [a.strip() for a in (w.aliases or [])],
+                "dial": (w.dial or "").strip(),
+                "bracelet": (w.bracelet or "").strip(),
             })
 
     by_ws_code = {}
@@ -1002,13 +1074,23 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
         score = 0
         ws_lower = w["ws_code"].lower()
         model_lower = w.get("model", "").lower()
+        dial_lower = w.get("dial", "").lower()
+        bracelet_lower = w.get("bracelet", "").lower()
         aliases_lower = [a.lower() for a in w.get("aliases", [])]
 
-        # Check each resolved token against ws_code
+        # Check each resolved token against ws_code, dial, bracelet, model, aliases
         for variants in resolved_tokens:
             for t in variants:
                 # Check if token appears in ws_code (e.g., 'jub' in '126710BLNR Jub')
                 if t in ws_lower:
+                    score += 10
+                    break
+                # Check dial field (e.g., 'blue' in 'Blue' for dial color variants)
+                if dial_lower and t in dial_lower:
+                    score += 10
+                    break
+                # Check bracelet field (e.g., 'jubilee' in 'Jubilee')
+                if bracelet_lower and t in bracelet_lower:
                     score += 10
                     break
                 # Check if token appears in model
@@ -1052,21 +1134,29 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
     return matches
 
 
-# Cache for fuzzy match results to avoid redundant computation
-_fuzzy_match_cache: dict[tuple[str, Optional[str]], list[dict]] = {}
+# Cache for fuzzy match results to avoid redundant computation.
+# Value is (matched_watches, best_score) so callers can make confidence decisions.
+_fuzzy_match_cache: dict[tuple[str, Optional[str]], tuple[list[dict], Optional[int]]] = {}
 # Counter for fuzzy matches in current run (reset per process_generation call)
 _fuzzy_match_count = 0
 
+# Minimum score to even consider a fuzzy candidate.
 FUZZY_SCORE_THRESHOLD = 85
+# Minimum score to auto-accept a fuzzy match as "confident". Matches in the
+# [FUZZY_SCORE_THRESHOLD, FUZZY_CONFIDENT_THRESHOLD) band are surfaced as
+# "similar reference — please verify" and routed to needs_review.
+FUZZY_CONFIDENT_THRESHOLD = 95
 
 
-def fuzzy_match_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = None) -> list[dict]:
+def fuzzy_match_ref(
+    ref: str, watch_index: dict, brand_hint: Optional[str] = None
+) -> tuple[list[dict], Optional[int]]:
     """Fuzzy-match a reference string against the watch index using rapidfuzz.
     Called as a fallback when exact/substring matching fails.
-    Returns list of matched watches (empty if no good match)."""
+    Returns (list of matched watches, best score) — both empty/None if no good match."""
     ref_lower = ref.lower().strip()
     if len(ref_lower) < 3:
-        return []
+        return [], None
 
     cache_key = (ref_lower, brand_hint.lower() if brand_hint else None)
     if cache_key in _fuzzy_match_cache:
@@ -1074,8 +1164,8 @@ def fuzzy_match_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = Non
 
     candidates = watch_index.get("fuzzy_candidates", [])
     if not candidates:
-        _fuzzy_match_cache[cache_key] = []
-        return []
+        _fuzzy_match_cache[cache_key] = ([], None)
+        return [], None
 
     # Filter candidates by brand if hint is available
     if brand_hint:
@@ -1095,31 +1185,36 @@ def fuzzy_match_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = Non
     )
 
     if not results:
-        _fuzzy_match_cache[cache_key] = []
-        return []
+        _fuzzy_match_cache[cache_key] = ([], None)
+        return [], None
 
     # Filter by threshold
     good_matches = [(match_str, score, idx) for match_str, score, idx in results if score >= FUZZY_SCORE_THRESHOLD]
 
     if not good_matches:
-        _fuzzy_match_cache[cache_key] = []
-        return []
+        _fuzzy_match_cache[cache_key] = ([], None)
+        return [], None
 
     # Deduplicate by ws_code
     seen_ws = set()
     matched_watches = []
-    for _, _, idx in good_matches:
+    best_score = 0
+    for _, score, idx in good_matches:
         _, watch = candidates[idx]
         ws = watch["ws_code"].lower()
         if ws and ws not in seen_ws:
             matched_watches.append(watch)
             seen_ws.add(ws)
+            if score > best_score:
+                best_score = int(score)
+
+    result = (matched_watches, best_score if matched_watches else None)
 
     # Limit cache size
     if len(_fuzzy_match_cache) < 10000:
-        _fuzzy_match_cache[cache_key] = matched_watches
+        _fuzzy_match_cache[cache_key] = result
 
-    return matched_watches
+    return result
 
 
 async def batch_ai_match(
@@ -1277,13 +1372,19 @@ JSON array:"""
 
 
 def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = None,
-                       line_tokens: Optional[list[str]] = None) -> list[dict]:
+                       line_tokens: Optional[list[str]] = None,
+                       return_fuzzy_score: bool = False):
     """Match a reference string against the watch index.
     Uses brand_hint to filter by brand and line_tokens to disambiguate variants.
-    All comparisons are case-insensitive."""
+    All comparisons are case-insensitive.
+
+    If return_fuzzy_score=True, returns (matches, fuzzy_score) where fuzzy_score
+    is the best fuzzy score (int) if the fuzzy path was used, else None. This lets
+    callers downgrade low-confidence fuzzy hits to needs_review.
+    Otherwise returns just the matches list (backward compatible).
+    """
     ref_lower = ref.lower()
     matches = []
-    seen_ws = set()
 
     def _collect(candidates):
         result = []
@@ -1302,9 +1403,14 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
                 return filtered
         return candidates
 
+    def _ret(m, score):
+        if return_fuzzy_score:
+            return m, score
+        return m
+
     # 1. Try ws_code exact match
     if ref_lower in watch_index["by_ws_code"]:
-        return [watch_index["by_ws_code"][ref_lower]]
+        return _ret([watch_index["by_ws_code"][ref_lower]], None)
 
     # 2. Try oem_references exact match (more specific than plain reference)
     if ref_lower in watch_index["by_oem_ref"]:
@@ -1313,7 +1419,7 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
         if matches:
             if len(matches) > 1 and line_tokens:
                 matches = _disambiguate_matches(matches, line_tokens)
-            return matches
+            return _ret(matches, None)
 
     # 3. Try reference exact match
     if ref_lower in watch_index["by_reference"]:
@@ -1322,7 +1428,7 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
         if matches:
             if len(matches) > 1 and line_tokens:
                 matches = _disambiguate_matches(matches, line_tokens)
-            return matches
+            return _ret(matches, None)
 
     # 4. Try aliases exact match
     if ref_lower in watch_index["by_alias"]:
@@ -1331,20 +1437,20 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
         if matches:
             if len(matches) > 1 and line_tokens:
                 matches = _disambiguate_matches(matches, line_tokens)
-            return matches
+            return _ret(matches, None)
 
     # 5. Fuzzy matching fallback (brand-filtered only)
     # (Substring matching removed — it causes cross-brand contamination)
     global _fuzzy_match_count
-    fuzzy_results = fuzzy_match_ref(ref, watch_index, brand_hint)
+    fuzzy_results, fuzzy_score = fuzzy_match_ref(ref, watch_index, brand_hint)
     if fuzzy_results:
         if len(fuzzy_results) > 1 and line_tokens:
             fuzzy_results = _disambiguate_matches(fuzzy_results, line_tokens)
         if len(fuzzy_results) == 1:
             _fuzzy_match_count += 1
-        return fuzzy_results
+        return _ret(fuzzy_results, fuzzy_score)
 
-    return []
+    return _ret([], None)
 
 
 def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = None) -> list[dict]:
@@ -1951,11 +2057,19 @@ def parse_stock_list(
     ref_year: int,
     phone: Optional[str],
     sender_country: Optional[str],
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], list[dict]]:
     """Parse a structured stock list message into individual watch rows.
-    Returns (matched_rows, needs_review_rows)."""
+    Returns (matched_rows, needs_review_rows, not_in_database_rows).
+
+    - matched_rows: confident matches with all required info.
+    - needs_review_rows: rows that have a likely/ambiguous match but need a human
+      to confirm (ambiguous between variants, low-confidence fuzzy, missing info).
+    - not_in_database_rows: rows where no matching watch was found at all —
+      typically candidates for catalog additions.
+    """
     matched_rows = []
     needs_review_rows = []
+    not_in_database_rows = []
 
     current_brand = None
     section_condition = None
@@ -2046,17 +2160,20 @@ def parse_stock_list(
             remaining = cleaned_line[len(ref):].strip()
         line_tokens = remaining.split() if remaining else []
 
-        watch_matches = match_watch_by_ref(ref, watch_index, brand_hint=current_brand,
-                                           line_tokens=line_tokens)
+        watch_matches, fuzzy_score = match_watch_by_ref(
+            ref, watch_index, brand_hint=current_brand,
+            line_tokens=line_tokens, return_fuzzy_score=True,
+        )
 
         if len(watch_matches) == 0:
-            # Also try full-line matching
+            # Also try full-line matching (no fuzzy — this only exact-matches via
+            # pre-compiled patterns, so no fuzzy score to worry about here).
             watch_matches = match_watch(stripped, watch_index, brand_hint=current_brand)
             if len(watch_matches) > 1 and line_tokens:
                 watch_matches = _disambiguate_matches(watch_matches, line_tokens)
 
         if len(watch_matches) == 0:
-            review_reasons.append("No matching watch found in database")
+            # No match at all — goes to not_in_database, not needs_review.
             # Build partial row
             line_condition = extract_condition_from_line(stripped, section_condition)
             raw_month_year = extract_month_year_from_text(stripped)
@@ -2073,6 +2190,9 @@ def parse_stock_list(
             remarks = normalize_remarks(stripped)
             price_str = f"{price} {currency}" if price and currency else (price or "")
 
+            nid_reason = "No matching watch found in database"
+            if not phone:
+                nid_reason = f"{nid_reason}; no phone number (contact name used)"
             row = {
                 "Nachrichten Art": mode,
                 "Marke": current_brand or "",
@@ -2085,14 +2205,22 @@ def parse_stock_list(
                 "Nummer": phone or sender,
                 "Gruppe": group_name,
                 "Nachricht gepostet am": format_timestamp(timestamp),
-                "Review Reason": "; ".join(review_reasons),
+                "Review Reason": nid_reason,
                 "Original Text": stripped[:500],
                 "Extracted Ref": ref,
-                "_review_reason": "; ".join(review_reasons),
+                "_review_reason": nid_reason,
                 "_original_content": stripped,
             }
-            needs_review_rows.append(row)
+            not_in_database_rows.append(row)
             continue
+
+        # Low-confidence fuzzy hit — we found a *similar* reference but aren't
+        # sure it's the right one. Route to needs_review with an explanation.
+        if fuzzy_score is not None and fuzzy_score < FUZZY_CONFIDENT_THRESHOLD:
+            ws_codes = ", ".join(w["ws_code"] for w in watch_matches if w["ws_code"])
+            review_reasons.append(
+                f"Similar reference — please verify ({fuzzy_score}% match: {ws_codes})"
+            )
 
         if len(watch_matches) > 1:
             ws_codes = ", ".join(w["ws_code"] for w in watch_matches if w["ws_code"])
@@ -2140,6 +2268,7 @@ def parse_stock_list(
                 "Nachricht gepostet am": format_timestamp(timestamp),
                 "Review Reason": "; ".join(review_reasons),
                 "Original Text": stripped[:500],
+                "Extracted Ref": ref,
             }
             needs_review_rows.append(row)
         else:
@@ -2157,7 +2286,7 @@ def parse_stock_list(
                 "Nachricht gepostet am": format_timestamp(timestamp),
             })
 
-    return matched_rows, needs_review_rows
+    return matched_rows, needs_review_rows, not_in_database_rows
 
 
 def _build_row(
@@ -2253,11 +2382,13 @@ def _process_messages_sync(
     progress_state: optional shared dict for thread-safe progress reporting.
     The async caller reads this dict periodically to push updates to MongoDB.
 
-    Returns dict with matched_rows, needs_review_rows, detected_posts, fuzzy_match_count."""
+    Returns dict with matched_rows, needs_review_rows, not_in_database_rows,
+    detected_posts, fuzzy_match_count."""
     global _fuzzy_match_count
 
     matched_rows = []
     needs_review_rows = []
+    not_in_database_rows = []
     detected_posts = 0
     total_messages = len(messages)
 
@@ -2287,7 +2418,7 @@ def _process_messages_sync(
 
         # Check if this is a structured stock list
         if _is_stock_list_message(content):
-            m_rows, nr_rows = parse_stock_list(
+            m_rows, nr_rows, nid_rows = parse_stock_list(
                 content=content,
                 mode=mode,
                 watch_index=watch_index,
@@ -2301,6 +2432,7 @@ def _process_messages_sync(
             )
             matched_rows.extend(m_rows)
             needs_review_rows.extend(nr_rows)
+            not_in_database_rows.extend(nid_rows)
             continue
 
         # Non-stock-list: single post processing
@@ -2312,12 +2444,15 @@ def _process_messages_sync(
         watch_matches = match_watch(content, watch_index, brand_hint=msg_brand_hint)
 
         if len(watch_matches) == 0:
-            review_reasons.append("No matching watch found in database")
-            needs_review_rows.append(_build_row(
+            # No watch found at all — route to not_in_database, not needs_review.
+            nid_reason = "No matching watch found in database"
+            if not phone:
+                nid_reason = f"{nid_reason}; no phone number (contact name used)"
+            not_in_database_rows.append(_build_row(
                 mode=mode, content=content, sender=sender, timestamp=timestamp,
                 group_name=group_name, ref_month=ref_month, ref_year=ref_year,
                 sender_country=sender_country, phone=phone, watch=None,
-                reason="; ".join(review_reasons),
+                reason=nid_reason,
             ))
             continue
 
@@ -2385,6 +2520,7 @@ def _process_messages_sync(
     return {
         "matched_rows": matched_rows,
         "needs_review_rows": needs_review_rows,
+        "not_in_database_rows": not_in_database_rows,
         "detected_posts": detected_posts,
         "fuzzy_match_count": _fuzzy_match_count,
     }
@@ -2464,16 +2600,23 @@ async def process_generation(
 
     matched_rows = sync_result["matched_rows"]
     needs_review_rows = sync_result["needs_review_rows"]
+    not_in_database_rows = sync_result["not_in_database_rows"]
     detected_posts = sync_result["detected_posts"]
 
     t_main_loop = time.time()
     logger.info(f"process_generation: main loop done in {t_main_loop-t_start:.1f}s — "
                 f"{detected_posts} posts detected, {len(matched_rows)} matched, "
-                f"{len(needs_review_rows)} needs_review, {sync_result['fuzzy_match_count']} fuzzy matches")
+                f"{len(needs_review_rows)} needs_review, {len(not_in_database_rows)} not_in_database, "
+                f"{sync_result['fuzzy_match_count']} fuzzy matches")
 
-    await _report("processing", 75, f"Main processing done — {len(matched_rows):,} matched, {len(needs_review_rows):,} needs review")
+    await _report(
+        "processing", 75,
+        f"Main processing done — {len(matched_rows):,} matched, "
+        f"{len(needs_review_rows):,} needs review, "
+        f"{len(not_in_database_rows):,} not in database",
+    )
 
-    # --- AI matching pass: attempt to match remaining "no match" items ---
+    # --- AI matching pass: attempt to match remaining "not in database" items ---
     # Cap at 3000 items to avoid excessive OpenAI costs and timeouts.
     # 3000 items = 2 batches × 1500 ≈ 2 API calls, ~$0.10-0.20 total.
     AI_MATCHING_CAP = 3000
@@ -2481,19 +2624,18 @@ async def process_generation(
 
     ai_matched_count = 0
     ai_suggested_additions = []  # Watches not in catalog but identified by AI
-    no_match_reason = "No matching watch found"
     unmatched_for_ai = []
     unmatched_indices = []
 
-    for i, row in enumerate(needs_review_rows):
-        reason = row.get("_review_reason", "")
-        if no_match_reason in reason:
-            unmatched_for_ai.append({
-                "index": len(unmatched_for_ai),
-                "content": row.get("_original_content", ""),
-                "brand_hint": row.get("Marke", None),
-            })
-            unmatched_indices.append(i)
+    # AI pass now operates on the not_in_database bucket — these are the rows
+    # where automatic matching found nothing and we want AI to take a second look.
+    for i, row in enumerate(not_in_database_rows):
+        unmatched_for_ai.append({
+            "index": len(unmatched_for_ai),
+            "content": row.get("_original_content", ""),
+            "brand_hint": row.get("Marke", None),
+        })
+        unmatched_indices.append(i)
 
     if unmatched_for_ai:
         total_unmatched = len(unmatched_for_ai)
@@ -2523,23 +2665,31 @@ async def process_generation(
         # Build lookup: ai line index -> match result
         ai_lookup = {r["index"]: r for r in ai_results}
 
-        # Process in reverse order to safely remove from needs_review
+        # Track which not_in_database rows were matched (remove) or upgraded to
+        # needs_review (move). We process in reverse order for safe removal.
         indices_to_remove = []
-        for ai_idx, nr_idx in enumerate(unmatched_indices):
+        indices_to_move_to_review = []
+        for ai_idx, nid_idx in enumerate(unmatched_indices):
             if ai_idx in ai_lookup:
                 result = ai_lookup[ai_idx]
                 confidence = result.get("confidence", 0)
 
                 if confidence < 80:
-                    # Low confidence — keep in needs-review but add AI info
-                    row = needs_review_rows[nr_idx]
+                    # Low confidence — AI found *something* similar, so promote
+                    # this row from not_in_database to needs_review with the AI
+                    # suggestion attached. The human can confirm or reject.
+                    row = not_in_database_rows[nid_idx]
                     ai_info = f"AI suggestion ({confidence}%): {result.get('ai_ws_code', '?')}"
-                    row["Review Reason"] = f"{row.get('Review Reason', '')}; {ai_info}"
+                    row["Review Reason"] = (
+                        f"{row.get('Review Reason', '')}; {ai_info}"
+                        if row.get("Review Reason") else ai_info
+                    )
+                    indices_to_move_to_review.append(nid_idx)
                     continue
 
                 watch = result.get("watch")
                 in_catalog = result.get("in_catalog", False)
-                row = needs_review_rows[nr_idx]
+                row = not_in_database_rows[nid_idx]
                 original_content = row.get("_original_content", "")
 
                 # Re-extract fields for the matched row
@@ -2577,7 +2727,7 @@ async def process_generation(
                     "Gruppe": group_name,
                     "Nachricht gepostet am": row.get("Nachricht gepostet am", ""),
                 })
-                indices_to_remove.append(nr_idx)
+                indices_to_remove.append(nid_idx)
                 ai_matched_count += 1
 
                 # Track suggested catalog additions (watches not in catalog)
@@ -2591,9 +2741,16 @@ async def process_generation(
                         "example_line": original_content[:200],
                     })
 
-        # Remove AI-matched items from needs_review (reverse order)
-        for idx in sorted(indices_to_remove, reverse=True):
-            needs_review_rows.pop(idx)
+        # Apply moves/removals to not_in_database_rows. Process in reverse index
+        # order so earlier indices stay valid while we splice.
+        move_set = set(indices_to_move_to_review)
+        remove_set = set(indices_to_remove)
+        all_touched = sorted(move_set | remove_set, reverse=True)
+        for idx in all_touched:
+            row = not_in_database_rows[idx]
+            if idx in move_set:
+                needs_review_rows.append(row)
+            not_in_database_rows.pop(idx)
 
     # Generate suggested-additions CSV (watches identified by AI but not in catalog)
     suggested_csv = ""
@@ -2680,30 +2837,68 @@ async def process_generation(
     if nr_deduped > 0:
         logger.info(f"process_generation: deduped {nr_deduped} needs-review rows")
 
+    # Dedup not_in_database rows using the same strategy as needs_review
+    nid_dedup_map = {}
+    for row in not_in_database_rows:
+        price_parts = row.get("Preis", "").split() if row.get("Preis") else ["", ""]
+        price_num = price_parts[0] if price_parts else ""
+        currency = price_parts[1] if len(price_parts) > 1 else ""
+        key = _make_dedup_key(
+            row.get("WS-Code", ""),
+            row.get("Nummer", ""),
+            price_num,
+            currency,
+            row.get("Monat/Jahr", ""),
+        )
+        extracted_ref = row.get("Extracted Ref", "")
+        if extracted_ref and not row.get("WS-Code"):
+            key = f"{key}|{extracted_ref.lower()}"
+
+        existing = nid_dedup_map.get(key)
+        if existing is None:
+            nid_dedup_map[key] = row
+        else:
+            existing_ts = existing.get("Nachricht gepostet am", "")
+            new_ts = row.get("Nachricht gepostet am", "")
+            if new_ts > existing_ts:
+                nid_dedup_map[key] = row
+
+    nid_deduped = len(not_in_database_rows) - len(nid_dedup_map)
+    not_in_database_rows = list(nid_dedup_map.values())
+    if nid_deduped > 0:
+        logger.info(f"process_generation: deduped {nid_deduped} not-in-database rows")
+
     await _report("generating_csv", 95, "Generating CSV files...")
 
     # Clean internal fields before CSV generation
     for row in needs_review_rows:
         row.pop("_review_reason", None)
         row.pop("_original_content", None)
+    for row in not_in_database_rows:
+        row.pop("_review_reason", None)
+        row.pop("_original_content", None)
 
     matched_csv = _rows_to_csv(matched_rows)
     needs_review_csv = _rows_to_csv(needs_review_rows)
+    not_in_database_csv = _rows_to_csv(not_in_database_rows)
 
     logger.info(f"process_generation: COMPLETE in {time.time()-t_start:.1f}s — "
                 f"{len(matched_rows)} matched, {len(needs_review_rows)} needs_review, "
+                f"{len(not_in_database_rows)} not_in_database, "
                 f"{_fuzzy_match_count} fuzzy, {ai_matched_count} AI")
 
-    total_rows = len(matched_rows) + len(needs_review_rows)
+    total_rows = len(matched_rows) + len(needs_review_rows) + len(not_in_database_rows)
 
     return {
         "matched_csv": matched_csv,
         "needs_review_csv": needs_review_csv,
+        "not_in_database_csv": not_in_database_csv,
         "suggested_additions_csv": suggested_csv,
         "total_messages": total_rows,
         "detected_posts": total_rows,
         "matched_count": len(matched_rows),
         "needs_review_count": len(needs_review_rows),
+        "not_in_database_count": len(not_in_database_rows),
         "fuzzy_matched_count": _fuzzy_match_count,
         "ai_matched_count": ai_matched_count,
         "suggested_additions_count": len(unique_suggestions) if ai_suggested_additions else 0,
