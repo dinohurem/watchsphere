@@ -332,6 +332,18 @@ WATCH_DESCRIPTOR_ALIASES = {
     "onyx": "Onyx",
     "pave": "Paved",
     "paved": "Paved",
+    # Additional abbreviations found in dealer messages
+    "bk": "Black",       # "228238a bk" = Black variant
+    "wh": "White",
+    "ombre": "Ombre",    # "228239 ombré blue" — accent-stripped version
+    "ombrè": "Ombre",
+    "ombré": "Ombre",
+    "bright": "Bright",
+    "rainbow": "Rainbow",
+    "ice": "Ice Blue",   # "228396A ice blue" — "ice" alone implies Ice Blue
+    "mop": "MOP",        # Mother of Pearl
+    "ruby": "Ruby",
+    "sapphire": "Sapphire",
     # --- Multilingual color names -----------------------------------------
     # So "126334 Blau" (DE) or "126334 azul" (ES) match the same watch as
     # "126334 Blue" without requiring a per-locale alias in the catalog.
@@ -1018,15 +1030,28 @@ def _extract_ref_from_line(line: str) -> Optional[str]:
     return None
 
 
+def _strip_diacritics(s: str) -> str:
+    """Remove diacritics: 'ombré' -> 'ombre', 'grün' -> 'grun'."""
+    import unicodedata
+    nfkd = unicodedata.normalize('NFKD', s)
+    return ''.join(c for c in nfkd if not unicodedata.combining(c))
+
+
 def _resolve_descriptor(token: str) -> list[str]:
     """Resolve a token to its canonical descriptor(s).
     Returns a list: [canonical_name] if the token is a known alias, else [token].
-    E.g., 'blk' -> ['black'], 'jub' -> ['jubilee'], 'rom' -> ['roman']."""
+    E.g., 'blk' -> ['black'], 'jub' -> ['jubilee'], 'rom' -> ['roman'].
+    Also strips diacritics so 'ombré' resolves via 'ombre'."""
     t = token.lower()
     canonical = WATCH_DESCRIPTOR_ALIASES.get(t)
     if canonical:
-        # Return both the original and canonical in lowercase for matching
         return [t, canonical.lower()]
+    # Try diacritics-stripped version: 'ombré' -> 'ombre'
+    t_stripped = _strip_diacritics(t)
+    if t_stripped != t:
+        canonical = WATCH_DESCRIPTOR_ALIASES.get(t_stripped)
+        if canonical:
+            return [t, t_stripped, canonical.lower()]
     return [t]
 
 
@@ -1265,26 +1290,51 @@ async def batch_ai_match(
             for item in batch_lines
         )
 
-        prompt = f"""You are an expert luxury watch dealer reference matcher. Match each line to the correct watch.
+        prompt = f"""You are an expert luxury watch dealer reference matcher. Match each WhatsApp dealer message line to the correct watch from the catalog.
 
 WATCH CATALOG (match against these if possible):
 {catalog_text}
 
-DEALER ABBREVIATIONS:
-jub=Jubilee bracelet, oys=Oyster bracelet, wim=Wimbledon dial, gnrn=Sprite GMT (green/black),
-blnr=Batman GMT (blue/black), blro=Pepsi GMT (blue/red), vtnr=Destro GMT (green/black),
-rom=Roman numeral dial, choc/choco=Chocolate dial, yml=Yellow dial,
-pn=Paul Newman dial, tbr=Tiger bracelet, sun=Sundust dial, tiff=Tiffany dial,
-JD.CAR=Jade dial (Cartier), N1/N2/N3/N12=month codes (Jan/Feb/Mar/Dec),
-pp=Patek Philippe, ap=Audemars Piguet, rm=Richard Mille, jlc=Jaeger-LeCoultre,
-vc=Vacheron Constantin, fpj=F.P. Journe
+REFERENCE FORMAT GUIDE:
+Watch references follow brand-specific patterns:
+- Rolex: 6-digit number + optional letter suffix (126334G, 126500LN, 228238A, 126710BLNR)
+  Suffixes: G=Gold dial, LN=Lunette Noire, BLNR=Blue/Black, BLRO=Blue/Red, CHNR=Choco/Black, TBR=Tiger bracelet
+- Patek Philippe: 4-5 digits + slash + variant (5711/1A, 7118/1200R, 5980/60G, 5167A)
+  Letter suffix = case material: R=Rose Gold, G=White Gold, A=Steel, P=Platinum, J=Yellow Gold
+- Audemars Piguet: 5-digit (15510ST, 26240OR, 26715ST) — sometimes with full OEM (26240ST.OO.1320ST.08)
+  ST=Steel, OR=Rose Gold, CE=Ceramic, BC=White Gold, TI=Titanium
+- Richard Mille: RM + 2-3 digit number + optional dash suffix (RM07-01, RM11-03, RM035, RM055)
+  Watch out: "RM 11-03" (with space) = "RM11-03" — normalize by removing the space
+- Omega: dot-separated (310.30.42.50.01.001) or simplified (310.30.42)
+- Cartier: alphanumeric codes (WHSA0042, WGBB0035, W2020033)
+- Hublot: 3 digits + dot + alphanumeric (441.NX.1171.RX, 645.QG.5217.RX)
 
-RULES:
-1. NEVER match across brands — a Tudor reference must stay Tudor, never become Rolex
-2. If no catalog match exists but you can confidently identify the watch, provide your best ws_code suggestion
-3. A ws_code is typically: reference + key descriptor (e.g., "126710BLNR Jub", "5711/1A White", "15500ST Blue")
-4. Confidence must be 0-100. Only matches >80 are considered reliable.
-5. For lines you truly cannot identify, set confidence to 0
+DEALER ABBREVIATIONS (used in messages to describe watch variants):
+Color/Dial: blk/bk=Black, wht/wh=White, blu=Blue, grn=Green, grey/gray=Grey, choc/cho=Chocolate,
+  champ=Champagne, yml=Yellow, sun=Sundust, mete=Meteorite, tiff=Tiffany, pn=Paul Newman,
+  ice=Ice Blue, mop=MOP (mother of pearl), ombre/ombré=Ombre, pave/paved=Paved
+Bracelet: jub=Jubilee, oys=Oyster, rom/roma=Roman numeral
+GMT bezels: blnr=Blue/Black (Batman), blro=Blue/Red (Pepsi), gnrn/grnr=Green/Black (Sprite),
+  vtnr=Green/Black (Destro), chnr=Chocolate/Black (Root Beer)
+Other: tbr=Tiger Eye bracelet, pistachio=Pistachio dial
+
+BRAND ALIASES: pp=Patek Philippe, ap=Audemars Piguet, rm=Richard Mille, jlc=Jaeger-LeCoultre,
+  vc=Vacheron Constantin, fpj=F.P. Journe, bp=Blancpain, gp=Girard-Perregaux, fm=Franck Muller
+
+DATE CODES: N1-N12 = month codes (N1=Jan, N12=Dec), 19y=2019, 20y=2020, 25y=2025
+Price suffixes: k=thousands (387k=387,000), m=millions (1.17m=1,170,000)
+Currency: HKD (Hong Kong Dollar), USDT/USD, EUR, GBP, CHF — HKD is default for HK/CN/SG dealers
+
+MATCHING RULES:
+1. NEVER match across brands — a Tudor ref must stay Tudor, never become Rolex. A 5990 (Patek) must not match a 5905 (also Patek but different model).
+2. Match the EXACT reference first. If the catalog has "126710BLNR Jub" and the line says "126710 blnr jub", that's a match.
+3. If the catalog has the reference but with a different descriptor (e.g., "126500LN White" but line says "126500 blk"), match to the BLACK variant if it exists, otherwise flag the closest.
+4. Common confusions to avoid: 5990 ≠ 5905, 7118 ≠ 7128, 5268 ≠ 5269, 228348 ≠ 228398, 128238 ≠ 228238
+5. If no catalog match exists but you can confidently identify the watch, provide a suggested_ws_code.
+6. A ws_code typically = reference + key descriptor (e.g., "126710BLNR Jub", "5711/1A White", "15500ST Blue")
+7. Confidence: 0-100. >90 = certain match, 80-90 = likely match, <80 = uncertain. Set 0 for unidentifiable lines.
+8. Multi-watch lines (comma/slash separated refs like "5167, 5711, 5712") — match the FIRST ref only.
+9. Lines that are just years ("2022y HKD 570K") or conditions ("Unworn fullset") are NOT watches — confidence 0.
 
 UNMATCHED LINES:
 {lines_text}
@@ -1693,14 +1743,16 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
     content = re.sub(r'\b(?:SC|SN|REF|ser\.?)\s*[\d,]+', '', content, flags=re.IGNORECASE)
 
     # Currency-prefixed patterns (HK$, HKD, $, €, £)
+    # Allow [:;\s] separators (dealers use "HKD:950000", "HKD 300k", "hkd563k")
+    _sep = r'[:\s]*'
     prefix_patterns = [
-        (r'(?:HK\$|hk\$)\s*([\d,.]+[kKmM]?)', "HKD"),
-        (r'(?:HKD|hkd)\s*([\d,.]+[kKmM]?)', "HKD"),  # hkd563k, HKD 300k
-        (r'(?:USDT|usdt)\s*([\d,.]+[kKmM]?)', "USDT"),
-        (r'(?:USD|usd)\s*([\d,.]+[kKmM]?)', "USD"),
-        (r'€\s*([\d,.]+[kKmM]?)', "EUR"),
-        (r'£\s*([\d,.]+[kKmM]?)', "GBP"),
-        (r'\$\s*([\d,.]+[kKmM]?)', None),  # $ — resolved by sender country
+        (rf'(?:HK\$|hk\$){_sep}([\d,.]+[kKmM]?)', "HKD"),
+        (rf'(?:HKD|hkd){_sep}([\d,.]+[kKmM]?)', "HKD"),  # hkd563k, HKD 300k, HKD:950000
+        (rf'(?:USDT|usdt){_sep}([\d,.]+[kKmM]?)', "USDT"),
+        (rf'(?:USD|usd){_sep}([\d,.]+[kKmM]?)', "USD"),
+        (rf'€{_sep}([\d,.]+[kKmM]?)', "EUR"),
+        (rf'£{_sep}([\d,.]+[kKmM]?)', "GBP"),
+        (rf'\${_sep}([\d,.]+[kKmM]?)', None),  # $ — resolved by sender country
     ]
 
     for pattern, currency in prefix_patterns:
