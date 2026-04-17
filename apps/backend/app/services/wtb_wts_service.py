@@ -1939,17 +1939,29 @@ def _format_price(raw: str) -> Optional[str]:
 
     try:
         if '.' in raw and raw.count('.') > 1:
+            # Multiple dots — all are thousands separators: 1.208.000 → 1208000
             raw = raw.replace('.', '')
         elif '.' in raw:
             parts = raw.split('.')
             if len(parts[1]) == 3:
-                raw = raw.replace('.', '')
+                # Single dot with 3-digit decimal part.
+                # European thousands separator: "62.000" → 62000, "1.208" → 1208
+                # BUT NOT when the integer part is already large (1208000.000 is NOT 1,208,000,000)
+                # A real European number uses dots for grouping: "1.208.000" (has 2 dots, handled above)
+                # If integer part has >3 digits, this dot is a decimal point, not thousands separator
+                if len(parts[0]) <= 3:
+                    raw = raw.replace('.', '')
+                # else: keep as decimal (e.g., "1208000.000" → float 1208000.0 → 1,208,000)
 
         val = float(raw)
         if val < 1:
             return None
         # Reject values that look like years (2010-2035)
         if 2010 <= val <= 2035 and val == int(val):
+            return None
+        # Sanity cap: no watch price exceeds 50M in any currency.
+        # Values above this threshold are parsing errors (e.g., 1,208,000,000).
+        if val > 50_000_000:
             return None
         return f"{int(val):,}"
     except ValueError:
@@ -2336,6 +2348,7 @@ def parse_stock_list(
                 "Nummer": phone or sender,
                 "Gruppe": group_name,
                 "Nachricht gepostet am": format_timestamp(timestamp),
+                "Original Text": stripped[:500],
             })
 
     return matched_rows, needs_review_rows, not_in_database_rows
@@ -2567,6 +2580,7 @@ def _process_messages_sync(
             "Nummer": phone or sender,
             "Gruppe": group_name,
             "Nachricht gepostet am": format_timestamp(timestamp),
+            "Original Text": content[:500],
         })
 
     return {
@@ -2778,6 +2792,7 @@ async def process_generation(
                     "Nummer": phone_val,
                     "Gruppe": group_name,
                     "Nachricht gepostet am": row.get("Nachricht gepostet am", ""),
+                    "Original Text": original_content[:500],
                 })
                 indices_to_remove.append(nid_idx)
                 ai_matched_count += 1
