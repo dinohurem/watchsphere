@@ -19,13 +19,15 @@ class News(Document):
     excerpt: Optional[str] = None  # Short summary for previews
 
     # Media
-    cover_image: Optional[str] = None
+    cover_image: Optional[str] = None  # Preview image shown on article cards
     cover_image_thumbnail: Optional[str] = None
     cover_image_path: Optional[str] = None  # For deletion
+    images: List[str] = Field(default_factory=list)  # Gallery images shown on article detail page
+    images_paths: List[str] = Field(default_factory=list)  # For deletion
 
     # Author
     author_id: str = Field(..., index=True)
-    author_name: str  # Denormalized for display
+    author_name: str  # Denormalized for display (kept for backward compatibility and admin list)
 
     # Status & Publishing
     status: NewsStatus = NewsStatus.DRAFT
@@ -59,6 +61,7 @@ class News(Document):
                 "content": "<p>Rolex has announced...</p>",
                 "excerpt": "Rolex unveils their latest Submariner model with significant upgrades.",
                 "cover_image": "https://example.com/image.jpg",
+                "images": ["https://example.com/image1.jpg", "https://example.com/image2.jpg"],
                 "author_id": "123456",
                 "author_name": "Admin",
                 "status": "published",

@@ -154,7 +154,6 @@ interface MarketItem {
 
 interface NewsItem {
   id: string;
-  source: string;
   date: string;
   title: string;
   image: string;
@@ -384,7 +383,6 @@ export function HomePage() {
       if (response.data && response.data.length > 0) {
         setNewsItems(response.data.map((item: any) => ({
           id: item.id,
-          source: item.author_name || 'WatchSphere',
           date: formatTimeAgo(item.published_at || item.created_at),
           title: item.title,
           image: item.cover_image || '',
@@ -542,7 +540,15 @@ export function HomePage() {
 
       {/* Watchlist Section */}
       <div className="flex flex-col gap-8">
-        <h2 className="text-xl sm:text-2xl font-semibold text-[#212121] leading-[1.1]">{t('home.watchlist.title')}</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl sm:text-2xl font-semibold text-[#212121] leading-[1.1]">{t('home.watchlist.title')}</h2>
+          <button
+            onClick={() => navigate('/app/profile')}
+            className="text-sm font-medium text-[#212121]/60 hover:text-[#212121] transition-colors"
+          >
+            {t('common.seeAll')}
+          </button>
+        </div>
         {loadingWatchlist ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -797,8 +803,6 @@ export function HomePage() {
                 {/* News Content */}
                 <div className="bg-white border border-black/5 border-t-0 rounded-b-2xl p-6 h-[178px] flex flex-col gap-2">
                   <div className="flex items-center gap-1 text-[#787789] text-[13px] leading-[20px] tracking-[-0.13px]">
-                    <span className="font-medium">{news.source}</span>
-                    <span className="text-xs leading-[16px]">·</span>
                     <span className="font-medium">{news.date}</span>
                   </div>
                   <h3 className="text-[20px] font-semibold text-[#212121] leading-normal tracking-[0.1px] line-clamp-3">

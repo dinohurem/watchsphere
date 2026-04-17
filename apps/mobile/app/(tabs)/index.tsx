@@ -72,7 +72,6 @@ interface QuickAccessItem {
 interface NewsItem {
   id: string;
   title: string;
-  source: string;
   time: string;
   imageUrl?: string;
 }
@@ -296,7 +295,6 @@ export default function HomeScreen() {
         setNewsItems(response.data.map((item: any) => ({
           id: item.id,
           title: item.title,
-          source: item.author_name || 'WatchSphere',
           time: formatTimeAgo(item.published_at || item.created_at),
           imageUrl: item.cover_image,
         })));
@@ -877,7 +875,10 @@ export default function HomeScreen() {
         <View style={[styles.watchlistSection, !v2Enabled && { paddingTop: hp(8) }]}>
           <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
             <Text style={styles.sectionTitle}>{t('home.watchlist')}</Text>
-            <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push('/market')}>
+            <TouchableOpacity
+              style={styles.viewAllButton}
+              onPress={() => router.push({ pathname: '/(tabs)/profile', params: { section: 'watchlist' } } as any)}
+            >
               <Text style={styles.viewAllText}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
@@ -1067,8 +1068,6 @@ export default function HomeScreen() {
                 <View style={styles.newsContent}>
                   <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
                   <View style={styles.newsSourceRow}>
-                    <Text style={styles.newsSource}>{item.source}</Text>
-                    <Text style={styles.newsTime}> · </Text>
                     <Text style={styles.newsTime}>{item.time}</Text>
                   </View>
                 </View>

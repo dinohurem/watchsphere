@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { BackArrow } from '@/components/icons';
 import { api } from '@/services/api';
+import { wp, hp, sp, fp } from '@/utils/responsive';
 
 interface NewsArticle {
   id: string;
@@ -13,7 +14,7 @@ interface NewsArticle {
   content: string;
   excerpt?: string;
   cover_image?: string;
-  author_name: string;
+  images?: string[];
   published_at?: string;
   created_at: string;
   source_url?: string;
@@ -60,10 +61,10 @@ export default function NewsArticleScreen() {
   };
 
   const title = article?.title || '';
-  const source = article?.author_name || 'WatchSphere';
   const date = formatDate(article?.published_at || article?.created_at);
   const fullText = article?.content || '';
   const imageUrl = article?.cover_image || '';
+  const galleryImages = article?.images || [];
 
   const styles = StyleSheet.create({
     container: {
@@ -113,18 +114,6 @@ export default function NewsArticleScreen() {
       fontFamily: fonts.regular,
       color: colors.textSecondary,
     },
-    separator: {
-      width: 4,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: colors.textSecondary,
-      marginHorizontal: 10,
-    },
-    source: {
-      fontSize: 14,
-      fontFamily: fonts.medium,
-      color: colors.primary,
-    },
     title: {
       fontSize: 24,
       fontFamily: fonts.semiBold,
@@ -138,6 +127,29 @@ export default function NewsArticleScreen() {
       color: colors.text,
       lineHeight: 26,
       marginBottom: 24,
+    },
+    galleryTitle: {
+      fontSize: fp(18),
+      fontFamily: fonts.semiBold,
+      color: colors.text,
+      marginTop: hp(8),
+      marginBottom: hp(12),
+    },
+    galleryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginHorizontal: -wp(4),
+    },
+    galleryItem: {
+      width: '50%',
+      paddingHorizontal: wp(4),
+      marginBottom: hp(8),
+    },
+    galleryImage: {
+      width: '100%',
+      aspectRatio: 4 / 3,
+      borderRadius: sp(12),
+      backgroundColor: colors.backgroundSecondary,
     },
     loadingContainer: {
       flex: 1,
@@ -228,8 +240,6 @@ export default function NewsArticleScreen() {
           {/* Meta Info */}
           <View style={styles.meta}>
             <Text style={styles.date}>{date}</Text>
-            <View style={styles.separator} />
-            <Text style={styles.source}>{source}</Text>
           </View>
 
           {/* Title */}
@@ -237,6 +247,24 @@ export default function NewsArticleScreen() {
 
           {/* Body */}
           <Text style={styles.body}>{fullText}</Text>
+
+          {/* Image Gallery */}
+          {galleryImages.length > 0 && (
+            <>
+              <Text style={styles.galleryTitle}>Gallery</Text>
+              <View style={styles.galleryGrid}>
+                {galleryImages.map((url, index) => (
+                  <View key={`${url}-${index}`} style={styles.galleryItem}>
+                    <Image
+                      source={{ uri: url }}
+                      style={styles.galleryImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

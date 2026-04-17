@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Calendar, User, Eye, Newspaper } from 'lucide-react'
+import { ChevronLeft, Calendar, Eye, Newspaper } from 'lucide-react'
 import { api } from '@/services/api'
 
 interface NewsArticle {
@@ -10,6 +10,7 @@ interface NewsArticle {
   content: string
   excerpt?: string
   cover_image?: string
+  images?: string[]
   author_id: string
   author_name: string
   status: string
@@ -142,10 +143,6 @@ export function NewsDetailsPage() {
           {/* Meta Info */}
           <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
             <div className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              <span>{article.author_name}</span>
-            </div>
-            <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               <span>{formatDate(article.published_at || article.created_at)}</span>
             </div>
@@ -168,6 +165,31 @@ export function NewsDetailsPage() {
           className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-600 prose-img:rounded-lg"
           dangerouslySetInnerHTML={{ __html: article.content }}
         />
+
+        {/* Image Gallery */}
+        {article.images && article.images.length > 0 && (
+          <div className="mt-10">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Gallery</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {article.images.map((imageUrl, index) => (
+                <a
+                  key={index}
+                  href={imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-xl overflow-hidden bg-gray-100 aspect-[4/3] hover:opacity-90 transition-opacity"
+                >
+                  <img
+                    src={imageUrl}
+                    alt={`${article.title} - Image ${index + 1}`}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -14,7 +14,6 @@ interface NewsArticle {
   title: string;
   excerpt?: string;
   cover_image?: string;
-  author_name: string;
   published_at?: string;
   created_at: string;
 }
@@ -241,8 +240,6 @@ export default function NewsListScreen() {
               <View style={styles.newsContent}>
                 <Text style={styles.newsTitle} numberOfLines={2}>{article.title}</Text>
                 <View style={styles.newsMetaRow}>
-                  <Text style={styles.newsSource}>{article.author_name || 'WatchSphere'}</Text>
-                  <Text style={styles.newsTime}> · </Text>
                   <Text style={styles.newsTime}>
                     {formatTimeAgo(article.published_at || article.created_at)}
                   </Text>

@@ -586,7 +586,31 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Orders and Favorites - wrapped in single subscription overlay */}
+        {/* Watchlist Section - shows all watchlisted watches (visible regardless of v2) */}
+        <View style={styles.favoritesSection}>
+          <View style={styles.favoritesHeader}>
+            <Text style={styles.favoritesTitle}>{t('profile.watchlist')}</Text>
+          </View>
+
+          {/* Watch Cards Grid or Empty State */}
+          {favoriteWatches.length > 0 ? (
+            <View style={styles.watchGrid}>
+              {renderFavoritesGrid(favoriteWatches)}
+            </View>
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <View style={styles.emptyIconContainer}>
+                <HeartIcon />
+              </View>
+              <Text style={styles.emptyTitle}>{t('profile.noFavorites')}</Text>
+              <Text style={styles.emptySubtitle}>
+                {t('profile.addToWatchlist')}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Orders - wrapped in subscription overlay */}
         {v2Enabled && <SubscriptionOverlay feature="orders" compact>
           <>
             {/* Buy Orders Section */}
@@ -655,39 +679,6 @@ export default function ProfileScreen() {
               )}
             </View>
 
-            {/* Favorites Section */}
-            <View style={styles.favoritesSection}>
-              <View style={styles.favoritesHeader}>
-                <Text style={styles.favoritesTitle}>{t('profile.favorites')}</Text>
-                {favoriteWatches.length > 0 && (
-                  <TouchableOpacity
-                    style={styles.seeAllButton}
-                    activeOpacity={0.7}
-                    onPress={() => router.push('/profile/favorites' as any)}
-                  >
-                    <Text style={styles.seeAllText}>{t('common.seeAll')}</Text>
-                    <ChevronRightSmall />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Watch Cards Grid or Empty State */}
-              {favoriteWatches.length > 0 ? (
-                <View style={styles.watchGrid}>
-                  {renderFavoritesGrid(favoriteWatches.slice(0, 4))}
-                </View>
-              ) : (
-                <View style={styles.emptyStateContainer}>
-                  <View style={styles.emptyIconContainer}>
-                    <HeartIcon />
-                  </View>
-                  <Text style={styles.emptyTitle}>{t('profile.noFavorites')}</Text>
-                  <Text style={styles.emptySubtitle}>
-                    {t('profile.addToWatchlist')}
-                  </Text>
-                </View>
-              )}
-            </View>
           </>
         </SubscriptionOverlay>}
       </ScrollView>
