@@ -137,11 +137,16 @@ function HeartIcon() {
 interface FavoriteWatch {
   id: string;
   brand: string;
+  model: string;
   reference: string;
+  ws_code: string;
   price: string;
+  priceChange: number;
   change: string;
   isPositive: boolean;
   image: string;
+  wtsCount?: number;
+  wtbCount?: number;
 }
 
 interface Order {
@@ -324,13 +329,17 @@ export default function ProfileScreen() {
       if (response.data && Array.isArray(response.data)) {
         const formattedWatches: FavoriteWatch[] = response.data.map((item: any) => ({
           id: item.id || item._id,
-          brand: `${item.brand} ${item.model}`.trim(),
+          brand: item.brand || '',
+          model: item.model || '',
           reference: item.reference || '',
+          ws_code: item.ws_code || item.reference || '',
           price: item.target_price ? `${item.target_price.toLocaleString('de-DE')}€` : '0€',
+          priceChange: item.price_change || 0,
           change: item.price_change ? `${Math.abs(item.price_change).toFixed(1).replace('.', ',')}%` : '0%',
           isPositive: (item.price_change || 0) >= 0,
-          // Use image from API, or empty string to trigger placeholder
           image: item.image || item.cover_image || '',
+          wtsCount: item.wts_count ?? 0,
+          wtbCount: item.wtb_count ?? 0,
         }));
         setFavoriteWatches(formattedWatches);
       }
@@ -347,16 +356,17 @@ export default function ProfileScreen() {
       onPress={() => router.push({
         pathname: '/market/[id]',
         params: {
-          // Use reference as id for market lookup (aggregated endpoint uses reference)
-          // Encode to handle references with special characters (e.g., 5711/1A-010)
           id: encodeURIComponent(watch.reference || watch.id),
           reference: watch.reference,
           brand: watch.brand,
+          model: watch.model,
+          ws_code: watch.ws_code || '',
+          fromUserWatchlist: 'true',
         },
       } as any)}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
     >
-      {/* Watch Image with Gradient Background */}
+      {/* Watch Image with Gradient — matches home card */}
       <View style={styles.watchImageContainer}>
         <LinearGradient
           colors={['#FFFFFF', '#F4F4F4']}
@@ -374,25 +384,35 @@ export default function ProfileScreen() {
         </LinearGradient>
       </View>
 
-      {/* Watch Info */}
-      <View style={styles.watchInfo}>
-        <View style={styles.watchNameContainer}>
-          <Text style={styles.watchBrand} numberOfLines={1}>{watch.brand}</Text>
-          <Text style={styles.watchReference} numberOfLines={1}>{watch.reference}</Text>
+      {/* Watch Info — same layout as home: brand / model / ws_code on separate lines */}
+      <View style={styles.watchCardContent}>
+        <View>
+          <Text style={styles.watchCardBrand} numberOfLines={1}>{watch.brand}</Text>
+          <Text style={styles.watchCardModel} numberOfLines={1}>{watch.model}</Text>
+          <Text style={styles.watchCardRef} numberOfLines={1}>{watch.ws_code || watch.reference}</Text>
         </View>
-
         <View style={styles.watchPriceRow}>
-          <Text style={styles.watchPrice}>{watch.price}</Text>
-          <View style={[
-            styles.changeBadge,
-            { backgroundColor: watch.isPositive ? 'rgba(74, 160, 120, 0.05)' : 'rgba(201, 57, 39, 0.05)' }
-          ]}>
-            {watch.isPositive ? <TrendUpIcon /> : <TrendDownIcon />}
-            <Text style={[
-              styles.changeText,
-              { color: watch.isPositive ? '#4AA078' : '#C93927' }
-            ]}>{watch.change}</Text>
-          </View>
+          {v2Enabled ? (
+            <View style={[
+              styles.changeBadge,
+              { backgroundColor: watch.isPositive ? 'rgba(74, 160, 120, 0.05)' : 'rgba(201, 57, 39, 0.05)' }
+            ]}>
+              {watch.isPositive ? <TrendUpIcon /> : <TrendDownIcon />}
+              <Text style={[
+                styles.changeText,
+                { color: watch.isPositive ? '#4AA078' : '#C93927' }
+              ]}>{Math.abs(watch.priceChange).toFixed(1)}%</Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4) }}>
+              <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(10), color: '#4AA078' }}>WTS {watch.wtsCount ?? 0}</Text>
+              </View>
+              <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(99) }}>
+                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(10), color: '#5B9BD5' }}>WTB {watch.wtbCount ?? 0}</Text>
+              </View>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -877,6 +897,32 @@ const styles = StyleSheet.create({
     fontSize: fp(10),
     color: '#666666',
   },
+  // Watchlist card content — matches home page card layout exactly
+  watchCardContent: {
+    padding: wp(12),
+    paddingTop: hp(10),
+    gap: hp(4),
+  },
+  watchCardBrand: {
+    fontSize: fp(13),
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    color: '#212121',
+    lineHeight: fp(17),
+  },
+  watchCardModel: {
+    fontSize: fp(13),
+    fontFamily: 'HankenGrotesk_400Regular',
+    color: '#212121',
+    lineHeight: fp(17),
+  },
+  watchCardRef: {
+    fontSize: fp(13),
+    fontFamily: 'HankenGrotesk_500Medium',
+    color: '#212121',
+    opacity: 0.5,
+    lineHeight: fp(17),
+  },
+  // Legacy styles kept for order cards
   watchInfo: {
     padding: wp(16),
     paddingTop: hp(12),
@@ -904,6 +950,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: hp(4),
   },
   watchPrice: {
     fontFamily: 'HankenGrotesk_600SemiBold',

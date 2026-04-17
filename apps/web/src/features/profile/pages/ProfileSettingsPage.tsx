@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@watchsphere/shared/stores';
-import { User, CreditCard, Settings, ChevronRight, ChevronDown, LogOut, Crown, Check, Loader2, ShoppingBag, Sliders, FileText, HelpCircle, BookOpen, PlayCircle, AlertTriangle, Bug, Mail, Plus, ArrowLeft, Trash2, TrendingUp, TrendingDown, Tag, Globe } from 'lucide-react';
+import { User, CreditCard, Settings, ChevronRight, ChevronDown, LogOut, Crown, Check, Loader2, ShoppingBag, Sliders, FileText, HelpCircle, BookOpen, PlayCircle, AlertTriangle, Bug, Mail, Plus, ArrowLeft, Trash2, TrendingUp, TrendingDown, Tag, Globe, Heart, Star } from 'lucide-react';
 import { api } from '@/services/api';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { useV2 } from '@/contexts/V2Context';
@@ -56,7 +56,7 @@ interface ProfileData {
   customer_id?: string;
 }
 
-type ActiveSection = 'profile' | 'account' | 'billing' | 'orders' | 'general' | 'terms' | 'support';
+type ActiveSection = 'profile' | 'account' | 'billing' | 'watchlist' | 'orders' | 'general' | 'terms' | 'support';
 
 // General Settings Component
 function GeneralSettings() {
@@ -315,6 +315,21 @@ export function ProfileSettingsPage() {
     });
   };
 
+  // Watchlist state
+  interface WatchlistItem {
+    id: string;
+    brand: string;
+    model: string;
+    reference: string;
+    ws_code: string;
+    price: number;
+    priceChange: number;
+    image: string;
+  }
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [loadingWatchlist, setLoadingWatchlist] = useState(false);
+  const [watchlistLoaded, setWatchlistLoaded] = useState(false);
+
   // Orders state
   const [buyOrders, setBuyOrders] = useState<Order[]>([]);
   const [sellOrders, setSellOrders] = useState<Order[]>([]);
@@ -328,6 +343,8 @@ export function ProfileSettingsPage() {
     const path = location.pathname;
     if (path.includes('billing')) {
       setActiveSection('billing');
+    } else if (path.includes('watchlist')) {
+      setActiveSection('watchlist');
     } else if (path.includes('orders')) {
       setActiveSection('orders');
     } else if (path.includes('settings')) {
@@ -619,6 +636,41 @@ export function ProfileSettingsPage() {
     }
   };
 
+  const loadWatchlist = async () => {
+    setLoadingWatchlist(true);
+    try {
+      const response = await api.get('/profile/watchlist');
+      if (response.data && Array.isArray(response.data)) {
+        setWatchlist(response.data.map((item: any) => ({
+          id: item.id || item._id,
+          brand: item.brand || '',
+          model: item.model || '',
+          reference: item.reference || '',
+          ws_code: item.ws_code || item.reference || '',
+          price: item.price || 0,
+          priceChange: item.price_change || 0,
+          image: item.cover_image || item.image || '',
+        })));
+        setWatchlistLoaded(true);
+      }
+    } catch (error) {
+      console.error('Failed to load watchlist:', error);
+      setWatchlist([]);
+      setWatchlistLoaded(true);
+    } finally {
+      setLoadingWatchlist(false);
+    }
+  };
+
+  const removeFromWatchlist = async (id: string) => {
+    try {
+      await api.delete(`/profile/watchlist/${id}`);
+      setWatchlist(prev => prev.filter(w => w.id !== id));
+    } catch (error) {
+      console.error('Failed to remove from watchlist:', error);
+    }
+  };
+
   const loadOrders = async () => {
     setLoadingOrders(true);
     try {
@@ -672,6 +724,7 @@ export function ProfileSettingsPage() {
     { id: 'profile' as const, label: t('settings.profileSettings'), icon: User },
     { id: 'account' as const, label: t('settings.accountDetails'), icon: Settings },
     { id: 'billing' as const, label: t('settings.billingSubscription'), icon: CreditCard },
+    { id: 'watchlist' as const, label: t('settings.watchlist', 'Watchlist'), icon: Heart },
     { id: 'orders' as const, label: t('settings.orders'), icon: ShoppingBag, v2Only: true },
     { id: 'general' as const, label: t('settings.general'), icon: Sliders },
     { id: 'terms' as const, label: t('settings.termsPrivacy'), icon: FileText },
@@ -685,6 +738,104 @@ export function ProfileSettingsPage() {
       return (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+        </div>
+      );
+    }
+
+    if (activeSection === 'watchlist') {
+      if (!watchlistLoaded && !loadingWatchlist) {
+        loadWatchlist();
+      }
+
+      return (
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.watchlist', 'Watchlist')}</h2>
+          <p className="text-gray-500 mb-6">{t('settings.watchlistDescription', 'Your saved watches')}</p>
+
+          {loadingWatchlist ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+            </div>
+          ) : watchlist.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {watchlist.map((watch) => {
+                const isPositive = watch.priceChange >= 0;
+                return (
+                  <div
+                    key={watch.id}
+                    className="relative border border-black/5 rounded-2xl overflow-hidden cursor-pointer hover:bg-[rgba(29,29,31,0.02)] transition-colors bg-white"
+                    onClick={() => navigate(`/app/watch/${watch.reference}`)}
+                  >
+                    {/* Favorite Button */}
+                    <button
+                      className="absolute top-2 right-2 w-9 h-9 rounded-full bg-[#f4f4f4] flex items-center justify-center z-10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFromWatchlist(watch.id);
+                      }}
+                    >
+                      <Star className="w-4 h-4 text-[#1d1d1f]" fill="currentColor" />
+                    </button>
+                    {/* Watch Image */}
+                    <div className="h-[150px] bg-gradient-to-b from-white to-[#f4f4f4] flex items-center justify-center rounded-t-xl">
+                      {watch.image ? (
+                        <img
+                          src={watch.image}
+                          alt={`${watch.brand} ${watch.model}`}
+                          className="max-h-full max-w-full object-contain"
+                          loading="lazy"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <ImagePlaceholder width={120} height={120} borderRadius={0} />
+                      )}
+                    </div>
+                    {/* Watch Info */}
+                    <div className="px-4 pb-4 pt-3 flex flex-col gap-3">
+                      <div>
+                        <p className="text-[13px] font-semibold text-[#212121] leading-[1.3] truncate">
+                          {watch.brand}
+                        </p>
+                        <p className="text-[13px] font-normal text-[#212121]/70 leading-[1.3] truncate">
+                          {watch.model}
+                        </p>
+                        <p className="text-[13px] font-medium text-[#212121]/50 leading-[1.3] truncate">
+                          {watch.ws_code || watch.reference}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <div className={`flex items-center gap-1 px-[7px] py-[3px] rounded-full ${
+                          isPositive ? 'bg-[rgba(74,160,120,0.05)]' : 'bg-[rgba(201,57,39,0.05)]'
+                        }`}>
+                          {isPositive ? (
+                            <TrendingUp className="w-3 h-3 text-[#4aa078]" />
+                          ) : (
+                            <TrendingDown className="w-3 h-3 text-[#c93927]" />
+                          )}
+                          <span className={`text-[11px] font-semibold leading-[1.3] ${
+                            isPositive ? 'text-[#4aa078]' : 'text-[#c93927]'
+                          }`}>
+                            {Math.abs(watch.priceChange).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+              <div className="w-14 h-14 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                <Heart className="w-7 h-7 text-gray-400" />
+              </div>
+              <h4 className="font-semibold text-gray-900 mb-1">{t('profile.noFavorites', 'No watches saved')}</h4>
+              <p className="text-gray-500 text-sm">{t('profile.addToWatchlist', 'Add watches to your watchlist from the market')}</p>
+            </div>
+          )}
         </div>
       );
     }
