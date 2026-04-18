@@ -272,8 +272,10 @@ async def get_my_watchlist(
                 count_field = watch.ws_code
                 count_key = "ws_code"
 
+                # Strict ws_code match — distinct variants (e.g. 5205R Green vs
+                # 5205R Black) must stay separate. No reference fallback.
                 sell_orders = await Order.find(
-                    Order.reference == watch.reference,
+                    Order.ws_code == watch.ws_code,
                     Order.order_type == OrderType.SELL,
                     Order.status == OrderStatus.ACTIVE,
                 ).sort([("price", 1)]).limit(1).to_list()
