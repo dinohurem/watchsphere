@@ -63,7 +63,8 @@ class OrderResponse(BaseModel):
     model: str
     reference: Optional[str] = None
     watch_id: Optional[str] = None
-    price: float
+    # Optional: WTB (buy) orders are allowed without a published price.
+    price: Optional[float] = None
     currency: str
     condition: Optional[OrderCondition] = None
     country_code: Optional[str] = None
@@ -90,7 +91,8 @@ class OrderBookEntry(BaseModel):
     id: str
     date: str  # Formatted date MM.DD.YY
     condition: str  # "Used" or "Unworn"
-    price: float
+    # Optional: WTB rows can omit price.
+    price: Optional[float] = None
     currency: str
     country_code: str
     country_name: Optional[str] = None
