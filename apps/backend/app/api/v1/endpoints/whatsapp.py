@@ -419,16 +419,12 @@ async def process_csv_import(
     # Preserve headers for unmatched CSV output
     fieldnames = reader.fieldnames or []
 
-    # Build caches for watch matching: ws_code exact, reference, and ws_code prefix
+    # Build cache for strict ws_code matching.
     all_watches = await Watch.find(Watch.status == "active").to_list()
     watch_by_ws_code: dict[str, Watch] = {}
-    watch_by_reference: dict[str, list[Watch]] = {}
     for w in all_watches:
         if w.ws_code:
             watch_by_ws_code[w.ws_code.strip().upper()] = w
-        if w.reference:
-            ref_upper = w.reference.strip().upper()
-            watch_by_reference.setdefault(ref_upper, []).append(w)
 
     import_id = str(import_record.id)
     admin_id = str(admin.id)
@@ -530,39 +526,12 @@ async def process_csv_import(
         # Extract reference from WS-Code
         reference = extract_reference_from_ws_code(ws_code)
 
-        # Match by ws_code — try exact match first, then reference fallback
+        # Strict ws_code match only. No reference fallback — that would collapse
+        # distinct variants (e.g. "5167A" vs "5167A Black") into one Order.
+        # Rows that don't resolve to an exact catalog ws_code are left unmatched.
         matched_watch = None
         if ws_code:
-            # 1. Exact ws_code match
             matched_watch = watch_by_ws_code.get(ws_code.strip().upper())
-
-            if not matched_watch:
-                # 2. Try matching by extracted reference (e.g., "5396R" from "5396R Blue")
-                ref_upper = reference.strip().upper() if reference else ws_code.strip().upper()
-                ref_candidates = watch_by_reference.get(ref_upper, [])
-                # Filter by brand if available
-                if ref_candidates and brand:
-                    brand_filtered = [w for w in ref_candidates if w.brand and w.brand.lower() == brand.lower()]
-                    if brand_filtered:
-                        ref_candidates = brand_filtered
-                if len(ref_candidates) == 1:
-                    matched_watch = ref_candidates[0]
-                elif len(ref_candidates) > 1:
-                    # Multiple ref matches — try to disambiguate using ws_code descriptor
-                    ws_upper = ws_code.strip().upper()
-                    for w in ref_candidates:
-                        if w.ws_code and w.ws_code.strip().upper() == ws_upper:
-                            matched_watch = w
-                            break
-                    if not matched_watch:
-                        # Try ws_code as prefix match (e.g., "5396R" matches "5396R Blue")
-                        for w in ref_candidates:
-                            if w.ws_code and w.ws_code.strip().upper().startswith(ws_upper):
-                                matched_watch = w
-                                break
-                    if not matched_watch:
-                        # Take first candidate as best guess
-                        matched_watch = ref_candidates[0]
 
         if not matched_watch:
             # No match found — skip this row (count as unmatched)

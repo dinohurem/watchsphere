@@ -359,19 +359,16 @@ async def get_order_book(
     """
     import re as re_mod
 
-    # Try ws_code-first lookup for the watch
+    # Strict ws_code-only lookup (case-insensitive). No reference fallback —
+    # orders must match by full ws_code to prevent mixing up watch variants.
     ws_regex = re_mod.compile(f"^{re_mod.escape(reference)}$", re_mod.IGNORECASE)
     watch = await Watch.find_one({"ws_code": {"$regex": ws_regex}})
-    if not watch:
-        watch = await Watch.find_one(Watch.reference == reference)
 
     # Sort by usd_price if available, fall back to price
     # usd_price allows correct cross-currency sorting
     buy_sort = [("usd_price", -1), ("price", -1)]
     sell_sort = [("usd_price", 1), ("price", 1)]
 
-    # If watch has a ws_code, filter orders by ws_code for exact variant matching
-    # Otherwise fall back to reference-based matching
     if watch and watch.ws_code:
         buy_query = Order.find(
             Order.ws_code == watch.ws_code,
@@ -384,14 +381,15 @@ async def get_order_book(
             Order.status == OrderStatus.ACTIVE,
         )
     else:
-        lookup_ref = watch.reference if watch else reference
+        # No Watch found by ws_code — return empty order book. Do NOT fall back
+        # to reference matching (would collapse distinct variants together).
         buy_query = Order.find(
-            Order.reference == lookup_ref,
+            Order.ws_code == reference,
             Order.order_type == OrderType.BUY,
             Order.status == OrderStatus.ACTIVE,
         )
         sell_query = Order.find(
-            Order.reference == lookup_ref,
+            Order.ws_code == reference,
             Order.order_type == OrderType.SELL,
             Order.status == OrderStatus.ACTIVE,
         )
@@ -1809,10 +1807,12 @@ async def admin_get_orders_by_reference(
     """Get all orders for a specific watch reference or ws_code (Admin only)"""
 
     # If ws_code is provided, filter by ws_code for exact watch variant matching
-    if ws_code:
-        query_conditions = [Order.ws_code == ws_code]
-    else:
-        query_conditions = [Order.reference == reference]
+    # Strict: filter by ws_code only. Falling back to reference would collapse
+    # distinct variants (e.g. 5205R Green vs 5205R Black) into one list.
+    # The caller is expected to pass the ws_code; if absent, use the {reference}
+    # path value as the ws_code and do NOT broaden to Order.reference matching.
+    lookup_ws = ws_code or reference
+    query_conditions = [Order.ws_code == lookup_ws]
 
     if order_type:
         query_conditions.append(Order.order_type == order_type)

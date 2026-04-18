@@ -11,7 +11,6 @@ from rapidfuzz import fuzz, process
 
 logger = logging.getLogger(__name__)
 
-
 # Phone prefix to country code mapping
 PHONE_PREFIX_TO_COUNTRY = {
     "1": "US",
@@ -119,6 +118,30 @@ PHONE_PREFIX_TO_COUNTRY = {
 }
 
 HKD_DEFAULT_COUNTRIES = {"HK", "CN", "MO", "SG"}
+EUR_DEFAULT_COUNTRIES = {
+    # Eurozone
+    "DE", "FR", "IT", "ES", "NL", "BE", "AT", "PT", "IE", "FI", "GR", "LU",
+    "SK", "SI", "EE", "LV", "LT", "MT", "CY", "HR",
+}
+GBP_DEFAULT_COUNTRIES = {"UK", "GB"}
+CHF_DEFAULT_COUNTRIES = {"CH"}
+
+
+def _default_currency_for_country(sender_country: Optional[str]) -> str:
+    """Pick the default currency for a bare price when sender country is known.
+    Falls back to USD when country is unknown or not in any mapping."""
+    if not sender_country:
+        return "USD"
+    c = sender_country.upper()
+    if c in HKD_DEFAULT_COUNTRIES:
+        return "HKD"
+    if c in EUR_DEFAULT_COUNTRIES:
+        return "EUR"
+    if c in GBP_DEFAULT_COUNTRIES:
+        return "GBP"
+    if c in CHF_DEFAULT_COUNTRIES:
+        return "CHF"
+    return "USD"
 
 COUNTRY_NAMES = {
     "US": "United States", "UK": "United Kingdom", "DE": "Germany", "IT": "Italy",
@@ -210,16 +233,60 @@ _SOLD_ONLY_RE = re.compile(r'^\s*[\w/\-\s\u0080-\uffff\*🏷️]*\s*-?\s*sold\s*
 _SKIP_RE = re.compile('|'.join(SKIP_PATTERNS), re.IGNORECASE)
 
 REMARKS_MAP = {
-    "both tag": "Both Tag",
-    "export only": "Export only",
-    "full set": "Full Set", "fullset": "Full Set",
+    # only watch (variants) — longer phrases first so they win substring checks
+    "single watch": "only watch",
+    "watch only": "only watch",
+    "only watch": "only watch",
+    "no paper": "only watch",
+    "no papers": "only watch",
+    "naked": "only watch",
+
+    # white tag (both tag is an alias)
+    "white tag": "white tag",
+    "both tag": "white tag",
+    "both tags": "white tag",
+
+    # full sticker
+    "full sticker": "full sticker",
+    "fullsticker": "full sticker",
+    "fs": "full sticker",  # short, matched with word boundary below
+
+    # fullset
+    "full set": "fullset",
+    "fullset": "fullset",
+    "complete set": "fullset",
+
+    # NFC card
+    "nfc card": "NFC Card",
+    "nfc": "NFC Card",
+
+    # net price (ex-vat, intracom, netto)
+    "intracommunity": "net price",
+    "intracom": "net price",
+    "intra": "net price",
+    "ex-vat": "net price",
+    "ex vat": "net price",
+    "excluding vat": "net price",
+    "net price": "net price",
+    "netto": "net price",
+    "net": "net price",
+
+    # only export
+    "need export": "only export",
+    "only export": "only export",
+    "export only": "only export",
+    "export": "only export",
+
+    # misc single-word / phrase remarks
+    "margin scheme": "margin scheme",
+    "dial change": "dial change",
+    "retail ready": "retail ready",
+    "polished": "polished",
+
+    # legacy entries retained to avoid losing coverage from older chats
     "card only": "Card Only",
     "box only": "Box Only",
     "no box": "No Box",
-    "no papers": "No Papers",
-    "complete set": "Complete Set",
-    "watch only": "Watch Only",
-    "single watch": "Watch Only",
 }
 
 # Brand abbreviation/nickname mapping (lowercase -> canonical brand name)
@@ -882,7 +949,7 @@ _EMOJI_RE = re.compile(
     r'\U00002702-\U000027B0'    # Dingbats
     r'\U0000FE00-\U0000FE0F'    # Variation selectors
     r'\U0000200D'               # Zero-width joiner
-    r'\U0001F1E0-\U0001F1FF'    # Regional indicator (flags)
+    r'\U0001F100-\U0001F1FF'    # Enclosed alphanumerics + regional indicators (🆕 = U+1F195)
     r'\U00002600-\U000026FF'    # Misc symbols
     r'\U00002300-\U000023FF'    # Misc technical
     r'\U0000200B-\U0000200F'    # Zero-width spaces
@@ -894,11 +961,15 @@ _clean_text_cache: dict[str, str] = {}
 
 
 def _clean_text(text: str) -> str:
-    """Remove emoji and special decorative chars from text. Results are cached."""
+    """Remove emoji and special decorative chars from text. Results are cached.
+    Emoji are replaced with a space so adjacent tokens stay separated
+    (e.g. '26240ce🖤2023' -> '26240ce 2023', not '26240ce2023')."""
     cached = _clean_text_cache.get(text)
     if cached is not None:
         return cached
-    cleaned = _EMOJI_RE.sub('', text).strip()
+    cleaned = _EMOJI_RE.sub(' ', text)
+    # Collapse runs of whitespace created by emoji substitution
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     # Limit cache size to prevent memory issues
     if len(_clean_text_cache) < 50000:
         _clean_text_cache[text] = cleaned
@@ -1015,6 +1086,14 @@ def _extract_ref_from_line(line: str) -> Optional[str]:
         ref = re.sub(r'^(RM)\s+', r'\1', ref, flags=re.IGNORECASE)
         return ref
 
+    # Reject currency-prefixed price tokens like "hkd910k", "usd122k", "usdt470k",
+    # "eur5000". These are price lines that follow a ref line in stock lists, not refs.
+    if re.match(
+        r'^(?:hkd|usdt|usd|eur|gbp|chf|aed|sgd|jpy)\s*[\d.,]+\s*[kKmM]?\b',
+        cleaned, re.IGNORECASE,
+    ):
+        return None
+
     # Match reference patterns at start: alphanumeric with optional /- separators
     m = re.match(r'^([A-Za-z]{0,4}\d{2,6}(?:[/\-][A-Za-z0-9]+)*[A-Za-z]{0,4})\b', cleaned)
     if m:
@@ -1122,7 +1201,13 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
                 if t in model_lower:
                     score += 5
                     break
-                # Check against aliases
+                # Check against aliases — but SKIP alias matching for discriminating
+                # descriptors (blk/white/green/…). Those should score via dial/
+                # bracelet fields only. Aliases like '126508g blk' would otherwise
+                # give the 'g' variant free points on any 'blk' line and collide
+                # with the dedicated '126508 Blk' variant.
+                if t in _DISCRIMINATING_DESCRIPTORS:
+                    continue
                 for alias in aliases_lower:
                     if t in alias or alias in t:
                         score += 8
@@ -1146,14 +1231,25 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
     # Sort by score descending
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # If top score is clearly better, return just that one
-    if scored[0][0] > 0 and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+    # Require confidence: top score must clear an absolute threshold AND
+    # beat the runner-up by a safe margin. Otherwise return the close
+    # candidates unchanged so the caller routes the row to needs_review.
+    # Prevents silently picking the wrong variant on thin wins
+    # (e.g. 126508g scored 18 vs 126508 Blk scored 16 was previously enough).
+    MIN_CONFIDENT = 10
+    MARGIN = 5
+
+    if scored[0][0] >= MIN_CONFIDENT and (
+        len(scored) == 1 or scored[0][0] - scored[1][0] >= MARGIN
+    ):
         return [scored[0][1]]
 
-    # If multiple have the same top score > 0, return those
+    # Not confident enough — return all candidates within MARGIN of the top.
     if scored[0][0] > 0:
-        top_score = scored[0][0]
-        return [w for s, w in scored if s == top_score]
+        cutoff = scored[0][0] - MARGIN
+        close = [w for s, w in scored if s >= cutoff]
+        if len(close) > 1:
+            return close
 
     # No disambiguation possible
     return matches
@@ -1421,6 +1517,199 @@ JSON array:"""
     return all_results
 
 
+async def batch_ai_verify(
+    items: list[dict],
+    watch_index: dict,
+    mode: str,
+) -> list[dict]:
+    """Use OpenAI GPT-5.2 to VERIFY deterministic matches and prices.
+
+    Each input item: {
+        "index": int,
+        "original_text": str,
+        "current_ws_code": str | None,      # what the deterministic pipeline chose (None if ambiguous/unmatched)
+        "current_price": str | None,        # formatted price (e.g. '1,815,000')
+        "current_currency": str | None,     # e.g. 'HKD'
+        "candidates": list[str],            # short-list of ws_codes the deterministic pipeline considered
+        "brand_hint": str | None,
+    }
+
+    Returns list of {
+        "index": int,
+        "action": "keep" | "flip" | "demote",   # keep=current is fine, flip=change ws_code, demote=send to needs_review
+        "ws_code": str,                          # when flipping; else echoes current
+        "price": str | None,
+        "currency": str | None,
+        "confidence": int,                       # 0-100
+        "reason": str,
+    }
+
+    Decision rules (enforced in prompt):
+    - Be DECISIVE. If text says 'black', pick the black variant; never return "both options".
+    - A literal ws_code in the text is ground truth.
+    - Color/descriptor mismatches are not-matches (5205R Green doesn't match 'blk').
+    - Never merge variants (5167A ≠ 5167A Black).
+    - Verify the price too: 17,5€ = 17,500 EUR; 'hkd 850k' = 850,000 HKD.
+    - If confidence < 80, recommend demote; confidence ≥ 95 required to FLIP an existing match.
+    """
+    from openai import AsyncOpenAI
+    from app.core.config import settings
+    import asyncio
+
+    if not settings.OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY not set, skipping AI verification")
+        return []
+    if not items:
+        return []
+
+    # Build a compact catalog lookup keyed by lower ws_code
+    ws_to_watch = {}
+    for ws_lower, watch in watch_index["by_ws_code"].items():
+        ws_to_watch[ws_lower] = watch
+
+    BATCH_SIZE = 800
+    MAX_CONCURRENT = 5
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=120.0)
+    all_results: list[dict] = []
+
+    def _format_item(it: dict) -> str:
+        cand_block = ""
+        for ws in it.get("candidates", [])[:8]:
+            w = ws_to_watch.get(ws.lower())
+            if not w:
+                continue
+            dial = w.get("dial") or "-"
+            brac = w.get("bracelet") or "-"
+            aliases = ", ".join((w.get("aliases") or [])[:6]) or "-"
+            cand_block += f"  - {w['ws_code']} | {w['brand']} {w.get('model','')} | dial={dial} bracelet={brac} aliases={aliases}\n"
+        if not cand_block:
+            cand_block = "  (no short-list provided)\n"
+        return (
+            f"[{it['index']}]\n"
+            f"  text: {it['original_text'][:400]}\n"
+            f"  current: ws_code={it.get('current_ws_code') or 'NONE'} price={it.get('current_price') or 'NONE'} "
+            f"currency={it.get('current_currency') or 'NONE'}\n"
+            f"  brand_hint: {it.get('brand_hint') or 'NONE'}\n"
+            f"  candidates:\n{cand_block}"
+        )
+
+    async def process_batch(batch_items: list[dict]) -> list[dict]:
+        items_text = "\n".join(_format_item(it) for it in batch_items)
+
+        prompt = f"""You are an expert luxury watch dealer verifying WhatsApp dealer messages against a catalog.
+Your job: VERIFY each row's ws_code AND price. Be decisive. Never say "both options".
+
+MATCHING RULES (enforce strictly):
+1. A literal ws_code in the text is ground truth. If text says '126508g blk', the ws_code is '126508g' (the literal match wins over color).
+2. Color words decide between variants: 'blk'/'black' -> the Black variant, NEVER the 'g' (Gold) variant if a Black variant exists in the short-list.
+3. If the short-list has Black, White, Green and the text says 'black', pick Black — do NOT return Green just because Green is in the short-list.
+4. Never merge variants: '5167A' is NOT the same as '5167A Black'. If the text gives plain '5167A' with no descriptor, pick the short-list entry whose ws_code is exactly '5167A' (no extra descriptor); if none exists, demote.
+5. Never cross brands (Tudor ref stays Tudor, etc).
+6. If no candidate fits the descriptors on the line, set action=demote (confidence 0-79).
+
+PRICE VERIFICATION:
+- Dealer shorthand: 'k' = thousands, 'm' = millions. '850k' = 850,000. '1.815m' = 1,815,000. '2.05m' = 2,050,000.
+- European notation '17,5€' or '17.5€' (1-2 digits before AND after the decimal) means 17,500 EUR. But '125€' (integer) means 125 EUR, and '125.00€' (3-digit decimal) is 125 EUR.
+- Currency precedence for bare amounts (no currency symbol): HK/CN/MO/SG -> HKD; DE/FR/IT/ES/NL/BE/AT/PT/IE/FI/GR/LU/SK/SI/EE/LV/LT/MT/CY/HR -> EUR; UK/GB -> GBP; CH -> CHF; US/JP/AE/others -> USD.
+- Symbol '$' means HKD for HK/CN/MO/SG senders, USD otherwise.
+- USDT should be normalized to USD in the currency field.
+- If the text contains multiple prices (e.g. 'hkd1.815m usd235.5k'), prefer USDT > USD > EUR > GBP > CHF > HKD.
+
+DECISION:
+- action='keep': current ws_code and price are correct. Set confidence 80-100.
+- action='flip': current ws_code is wrong (or was NONE) and a candidate clearly fits. Only use this if confidence >= 95. Supply the corrected ws_code (must be from candidates or text-literal). Also include corrected price/currency.
+- action='demote': ambiguous or no good match. Supply confidence 0-79 and a short reason. This sends the row to human review.
+
+MODE: {mode}  (WTS = seller ad with price; WTB = buy-request, price may be absent)
+
+ITEMS TO VERIFY:
+{items_text}
+
+Respond with ONLY a JSON array, one element per item:
+{{"index": <int>, "action": "keep"|"flip"|"demote", "ws_code": "<ws_code>", "price": "<formatted or null>", "currency": "<ISO or null>", "confidence": <0-100>, "reason": "<short>"}}
+
+JSON array:"""
+
+        try:
+            response = await client.chat.completions.create(
+                model="gpt-5.2",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.05,
+                max_tokens=16384,
+            )
+            content = response.choices[0].message.content.strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                content = content.strip()
+            return json.loads(content)
+        except Exception as e:
+            logger.error(f"AI verification batch failed: {e}")
+            return []
+
+    batches = [items[i:i + BATCH_SIZE] for i in range(0, len(items), BATCH_SIZE)]
+    logger.info(f"batch_ai_verify: verifying {len(items)} rows in {len(batches)} batches")
+
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+
+    async def limited(b):
+        async with semaphore:
+            return await process_batch(b)
+
+    batch_results = await asyncio.gather(*[limited(b) for b in batches])
+    for r in batch_results:
+        all_results.extend(r)
+    logger.info(f"batch_ai_verify: returned {len(all_results)} verdicts")
+    return all_results
+
+
+# Tokens we consider distinguishing descriptors (color/dial/bracelet/style markers).
+# If a line contains any of these and none of them matches the candidate's
+# ws_code / dial / bracelet / aliases, we refuse to assign the candidate.
+_DISCRIMINATING_DESCRIPTORS = frozenset({
+    "blk", "black", "wht", "white", "blu", "blue", "grn", "green", "grey", "gray",
+    "red", "pink", "purple", "champ", "champagne", "gold", "silver", "brown",
+    "lavender", "mete", "meteorite", "onyx", "pave", "paved", "ombre", "slate",
+    "chocolate", "choc", "choco", "mop", "ruby", "sapphire", "tiffany", "tiff",
+    "pistachio", "sodalite", "turqoise", "turquoise", "rainbow", "wimbledon",
+    "wim", "roman", "rom", "roma", "sundust", "sun", "jubilee", "jub", "oyster",
+    "oys", "yml", "pikachu", "nadal",
+})
+
+
+def _has_descriptor_conflict(candidate: dict, line_tokens: Optional[list[str]]) -> bool:
+    """Return True when the line contains a discriminating descriptor that
+    does NOT appear in the candidate's ws_code / dial / bracelet / aliases.
+    Used to reject a sole candidate when the line clearly describes a
+    different variant (e.g. line says 'blk' but only 'Green' exists in catalog).
+    """
+    if not line_tokens:
+        return False
+    ws_lower = (candidate.get("ws_code") or "").lower()
+    dial_lower = (candidate.get("dial") or "").lower()
+    bracelet_lower = (candidate.get("bracelet") or "").lower()
+    aliases_lower = [(a or "").lower() for a in candidate.get("aliases", [])]
+    haystack = " ".join([ws_lower, dial_lower, bracelet_lower] + aliases_lower)
+
+    for raw in line_tokens:
+        t = raw.lower().strip()
+        if not t:
+            continue
+        # Skip month codes, prices, years, common non-descriptor words
+        if re.match(r'^[nN]\d', t) or re.match(r'^[\d,.]+[kKmM]?$', t):
+            continue
+        if re.match(r'^20[1-2]\d', t) or re.match(r'^\d{2}y$', t):
+            continue
+        variants = _resolve_descriptor(t)
+        for v in variants:
+            if v in _DISCRIMINATING_DESCRIPTORS:
+                if v not in haystack:
+                    return True
+                break
+    return False
+
+
 def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = None,
                        line_tokens: Optional[list[str]] = None,
                        return_fuzzy_score: bool = False):
@@ -1458,7 +1747,16 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
             return m, score
         return m
 
-    # 1. Try ws_code exact match
+    def _apply_conflict_guard(m):
+        """When exactly one candidate remains, reject it if the line contains a
+        descriptor (blk/white/green/…) not present on that candidate. The caller
+        will then treat the row as 'no match' → needs_review / not_in_database."""
+        if len(m) == 1 and _has_descriptor_conflict(m[0], line_tokens):
+            return []
+        return m
+
+    # 1. Try ws_code exact match (most specific — skip conflict guard since
+    # the line literally referenced this ws_code).
     if ref_lower in watch_index["by_ws_code"]:
         return _ret([watch_index["by_ws_code"][ref_lower]], None)
 
@@ -1469,6 +1767,7 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
         if matches:
             if len(matches) > 1 and line_tokens:
                 matches = _disambiguate_matches(matches, line_tokens)
+            matches = _apply_conflict_guard(matches)
             return _ret(matches, None)
 
     # 3. Try reference exact match
@@ -1478,6 +1777,7 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
         if matches:
             if len(matches) > 1 and line_tokens:
                 matches = _disambiguate_matches(matches, line_tokens)
+            matches = _apply_conflict_guard(matches)
             return _ret(matches, None)
 
     # 4. Try aliases exact match
@@ -1487,6 +1787,7 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
         if matches:
             if len(matches) > 1 and line_tokens:
                 matches = _disambiguate_matches(matches, line_tokens)
+            matches = _apply_conflict_guard(matches)
             return _ret(matches, None)
 
     # 5. Fuzzy matching fallback (brand-filtered only)
@@ -1496,6 +1797,7 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
     if fuzzy_results:
         if len(fuzzy_results) > 1 and line_tokens:
             fuzzy_results = _disambiguate_matches(fuzzy_results, line_tokens)
+        fuzzy_results = _apply_conflict_guard(fuzzy_results)
         if len(fuzzy_results) == 1:
             _fuzzy_match_count += 1
         return _ret(fuzzy_results, fuzzy_score)
@@ -1758,29 +2060,30 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
     for pattern, currency in prefix_patterns:
         m = re.search(pattern, content)
         if m:
-            raw_price = m.group(1).strip()
+            raw_price = _normalize_adjacent_currency_price(m.group(1).strip())
             formatted = _format_price(raw_price)
             if formatted:
                 if currency is None:
-                    if sender_country in HKD_DEFAULT_COUNTRIES:
-                        currency = "HKD"
-                    else:
-                        currency = "USD"
+                    currency = _default_currency_for_country(sender_country)
                 return formatted, currency
 
     # Number followed by currency suffix: 387k hkd, 435,000hkd, 1.265m hkd, 300k usdt
+    # Also handles symbol suffixes: 17,5€, 9.8€, 125£
     # The number+k/m is always together (no space between digits and k/m)
-    currency_suffix = r'(?:\s*(?:HKD|USD|USDT|EUR|GBP|CHF|AED|SGD|JPY|hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy))'
+    currency_suffix = r'(?:\s*(?:HKD|USD|USDT|EUR|GBP|CHF|AED|SGD|JPY|hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy|€|£))'
     m = re.search(r'([\d,.]+[kKmM]?)' + currency_suffix, content)
     if m:
-        raw_price = m.group(1).strip()
+        raw_price = _normalize_adjacent_currency_price(m.group(1).strip())
         formatted = _format_price(raw_price)
         if formatted:
-            # Extract the actual currency from the match
             full = m.group(0).upper()
             for cur in ["USDT", "HKD", "USD", "EUR", "GBP", "CHF", "AED", "SGD", "JPY"]:
                 if cur in full:
                     return formatted, cur
+            if '€' in m.group(0):
+                return formatted, "EUR"
+            if '£' in m.group(0):
+                return formatted, "GBP"
             return formatted, "USD"
 
     return None, None
@@ -1819,10 +2122,8 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
                 cur = "EUR"
             elif '£' in prefix:
                 cur = "GBP"
-            elif sender_country in HKD_DEFAULT_COUNTRIES:
-                cur = "HKD"
             else:
-                cur = "USD"
+                cur = _default_currency_for_country(sender_country)
             return discounted, cur
 
     # Try standard extraction first (handles currency prefix/suffix)
@@ -1830,14 +2131,20 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
     if price:
         return price, currency
 
-    # Try concatenated format: 345000hkd, 142000hkd, 450000hkd
-    concat_pattern = r'(\d{3,9})\s*(hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy)'
+    # Try concatenated format: 345000hkd, 142000hkd, 450000hkd, 125€, 17,5€
+    concat_pattern = r'([\d,.]+[kKmM]?)\s*(hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy|€|£)'
     m = re.search(concat_pattern, line, re.IGNORECASE)
     if m:
-        raw_price = m.group(1)
-        currency = m.group(2).upper()
-        if currency == "USDT":
-            currency = "USD"  # Treat USDT as USD
+        raw_price = _normalize_adjacent_currency_price(m.group(1))
+        cur_raw = m.group(2)
+        if cur_raw == '€':
+            currency = "EUR"
+        elif cur_raw == '£':
+            currency = "GBP"
+        else:
+            currency = cur_raw.upper()
+            if currency == "USDT":
+                currency = "USD"  # Treat USDT as USD
         formatted = _format_price(raw_price)
         if formatted:
             return formatted, currency
@@ -1866,9 +2173,7 @@ def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> 
             continue
         formatted = _format_price(token_clean)
         if formatted:
-            if sender_country in HKD_DEFAULT_COUNTRIES:
-                return formatted, "HKD"
-            return formatted, "USD"
+            return formatted, _default_currency_for_country(sender_country)
 
     return None, None
 
@@ -1913,6 +2218,61 @@ def extract_all_prices(content: str, sender_country: Optional[str] = None) -> li
     return prices
 
 
+def _normalize_adjacent_currency_price(raw: str) -> str:
+    """When a price is written adjacent to a currency symbol/suffix, always
+    treat it as thousands. Luxury watches are never priced in the single or
+    low-hundreds range of any currency, so dealers writing `125€` mean 125k EUR.
+
+    Examples:
+        '17,5'   -> '17.5k'  -> 17,500
+        '17.5'   -> '17.5k'
+        '9,8'    -> '9.8k'
+        '125'    -> '125k'   -> 125,000
+        '125.00' -> '125k'   -> 125,000
+        '435.000'-> '435k'   -> 435,000
+        '1.815m' -> '1.815m' (k/m suffix preserved)
+        '1,265,000' -> '1,265,000' (5+ digit integer already a full price)
+
+    Rules:
+    - Values already carrying a k or m suffix are left untouched.
+    - Integers of 4+ digits are treated as already a full price (e.g.
+      '10000€' stays 10,000 — user wrote the full amount).
+    - Anything else (small integers, European decimals, 3-digit "thousands"
+      separators) gets ×1000.
+    """
+    s = raw.strip()
+    if not s:
+        return s
+    # Already has k/m suffix — leave for _format_price to expand.
+    if re.match(r'^[\d.,]+[kKmM]$', s):
+        return s
+
+    # Classify: small decimal (`17,5` / `9.8` / `125.00`) vs 3-digit-decimal
+    # (`435.000` = European thousands separator) vs full integer.
+    # Rule: always treat as thousands for luxury-watch dealer messages.
+    small_dec = re.match(r'^(\d{1,3})[,.](\d{1,2})$', s)
+    if small_dec:
+        return f"{small_dec.group(1)}.{small_dec.group(2)}k"
+
+    # 3-digit decimal (thousands-sep): '435.000' means 435,000 — already whole.
+    three_dec = re.match(r'^(\d{1,3})[,.](\d{3})$', s)
+    if three_dec:
+        # e.g. '435.000' -> '435000' already a full price, leave.
+        return s
+
+    # Mixed-separator (e.g. '1,265.5' or '1,265,000') — already a full price.
+    if s.count(',') + s.count('.') >= 2:
+        return s
+
+    # Pure integer — treat as thousands. '125' -> '125k', '10000' -> leave.
+    if re.match(r'^\d+$', s):
+        if len(s) >= 4:
+            return s  # '10000' is already a full amount
+        return f"{s}k"
+
+    return s
+
+
 def _format_price(raw: str) -> Optional[str]:
     """Format a raw price string: expand k/m, add commas.
     Rejects values that look like years (2010-2035) unless they have k/m suffix."""
@@ -1924,16 +2284,17 @@ def _format_price(raw: str) -> Optional[str]:
     m = re.match(r'^([\d.]+)\s*[mM]$', raw)
     if m:
         try:
-            val = float(m.group(1)) * 1000000
-            return f"{int(val):,}"
+            # Use round() to avoid float drift: 2.05 * 1_000_000 = 2_049_999.999...
+            val = round(float(m.group(1)) * 1000000)
+            return f"{val:,}"
         except ValueError:
             return None
 
     m = re.match(r'^([\d.]+)\s*[kK]$', raw)
     if m:
         try:
-            val = float(m.group(1)) * 1000
-            return f"{int(val):,}"
+            val = round(float(m.group(1)) * 1000)
+            return f"{val:,}"
         except ValueError:
             return None
 
@@ -2032,11 +2393,30 @@ def extract_wtb_location_remarks(content: str) -> Optional[str]:
 
 
 def normalize_remarks(content: str) -> str:
-    """Extract and normalize remarks from message text."""
+    """Extract and normalize remarks from message text.
+
+    Keywords are matched with word boundaries to avoid false positives like
+    'net' matching inside 'internet'. Keys are scanned longest-first so a
+    longer phrase (e.g. 'nfc card') claims its span before a shorter
+    substring (e.g. 'nfc') would otherwise fire on the same text.
+    """
     content_lower = content.lower()
-    found_remarks = []
-    for keyword, normalized in REMARKS_MAP.items():
-        if keyword in content_lower:
+    consumed = [False] * len(content_lower)
+    found_remarks: list[str] = []
+
+    keys = sorted(REMARKS_MAP.keys(), key=len, reverse=True)
+    for keyword in keys:
+        normalized = REMARKS_MAP[keyword]
+        # Build a word-boundary regex for this keyword. Hyphens and spaces
+        # inside the keyword are matched literally; \b is used on each side.
+        pattern = r'(?<![a-z0-9])' + re.escape(keyword) + r'(?![a-z0-9])'
+        for m in re.finditer(pattern, content_lower):
+            # Skip if this span overlaps an already-consumed region (a
+            # longer phrase claimed it first).
+            if any(consumed[m.start():m.end()]):
+                continue
+            for i in range(m.start(), m.end()):
+                consumed[i] = True
             if normalized not in found_remarks:
                 found_remarks.append(normalized)
     return ", ".join(found_remarks)
@@ -2866,6 +3246,139 @@ async def process_generation(
             if idx in move_set:
                 needs_review_rows.append(row)
             not_in_database_rows.pop(idx)
+
+    # ─── AI verification pass ───
+    # Re-check every matched row and every needs_review row. AI may:
+    #   - Keep (high confidence): leave untouched
+    #   - Flip (confidence >= 95): correct the ws_code / price / currency
+    #   - Demote (confidence < 80): move to needs_review with AI reason
+    # Skipped if OPENAI_API_KEY is missing.
+    try:
+        from app.core.config import settings as _settings  # type: ignore
+        _ai_enabled = bool(getattr(_settings, 'OPENAI_API_KEY', None))
+    except Exception:
+        _ai_enabled = False
+
+    if _ai_enabled and (matched_rows or needs_review_rows):
+        await _report("ai_verification", 86, "AI verifying matches and prices...")
+        verify_items: list[dict] = []
+        # Tag each source row so we can apply the verdict back. Tier markers:
+        #   ("matched", row_index) or ("review", row_index)
+        verify_sources: list[tuple[str, int]] = []
+        for i, row in enumerate(matched_rows):
+            price_parts = (row.get("Preis") or "").split()
+            cur_price = price_parts[0] if price_parts else None
+            cur_currency = price_parts[1] if len(price_parts) > 1 else None
+            verify_items.append({
+                "index": len(verify_items),
+                "original_text": row.get("Original Text", "")[:400],
+                "current_ws_code": row.get("WS-Code"),
+                "current_price": cur_price,
+                "current_currency": cur_currency,
+                "candidates": [row.get("WS-Code")] if row.get("WS-Code") else [],
+                "brand_hint": row.get("Marke"),
+            })
+            verify_sources.append(("matched", i))
+        for i, row in enumerate(needs_review_rows):
+            price_parts = (row.get("Preis") or "").split()
+            cur_price = price_parts[0] if price_parts else None
+            cur_currency = price_parts[1] if len(price_parts) > 1 else None
+            # Try to harvest candidate ws_codes from the review reason
+            reason = row.get("Review Reason", "") or ""
+            candidates = []
+            m = re.search(r'Ambiguous match:\s*([^;]+)', reason)
+            if m:
+                candidates = [c.strip() for c in m.group(1).split(",") if c.strip()]
+            if row.get("WS-Code") and row["WS-Code"] not in candidates:
+                candidates.insert(0, row["WS-Code"])
+            verify_items.append({
+                "index": len(verify_items),
+                "original_text": (row.get("Original Text") or row.get("_original_content") or "")[:400],
+                "current_ws_code": row.get("WS-Code") or None,
+                "current_price": cur_price,
+                "current_currency": cur_currency,
+                "candidates": candidates,
+                "brand_hint": row.get("Marke"),
+            })
+            verify_sources.append(("review", i))
+
+        verify_cap = min(len(verify_items), AI_MATCHING_CAP)
+        if verify_cap < len(verify_items):
+            logger.info(f"process_generation: capping AI verification from {len(verify_items)} to {verify_cap}")
+            verify_items = verify_items[:verify_cap]
+            verify_sources = verify_sources[:verify_cap]
+
+        try:
+            verify_results = await asyncio.wait_for(
+                batch_ai_verify(verify_items, watch_index, mode),
+                timeout=AI_MATCHING_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            verify_results = []
+            logger.warning("process_generation: AI verification timed out — keeping deterministic results")
+
+        verdict_lookup = {v.get("index"): v for v in verify_results if v.get("index") is not None}
+
+        # Apply verdicts. Collect indices to move so we don't mutate during iteration.
+        matched_to_demote: list[int] = []
+        for verdict_idx, (tier, row_idx) in enumerate(verify_sources):
+            verdict = verdict_lookup.get(verdict_idx)
+            if not verdict:
+                continue
+            action = verdict.get("action")
+            conf = verdict.get("confidence", 0)
+            new_ws = (verdict.get("ws_code") or "").strip()
+            new_price = verdict.get("price")
+            new_currency = verdict.get("currency")
+            reason = verdict.get("reason") or ""
+
+            if tier == "matched":
+                row = matched_rows[row_idx]
+                if action == "flip" and conf >= 95 and new_ws:
+                    # Look up catalog watch for the new ws_code
+                    cat_watch = watch_index["by_ws_code"].get(new_ws.lower())
+                    if cat_watch:
+                        row["WS-Code"] = cat_watch["ws_code"]
+                        row["Marke"] = cat_watch["brand"]
+                    else:
+                        row["WS-Code"] = new_ws
+                    if new_price and new_currency:
+                        row["Preis"] = f"{new_price} {new_currency}"
+                    elif new_price:
+                        row["Preis"] = new_price
+                elif action == "demote" and conf < 80:
+                    row["Review Reason"] = (
+                        f"AI demoted ({conf}%): {reason}" if not row.get("Review Reason")
+                        else f"{row['Review Reason']}; AI demoted ({conf}%): {reason}"
+                    )
+                    matched_to_demote.append(row_idx)
+                # 'keep' → do nothing; ignore flips below threshold (too risky)
+            else:  # tier == "review"
+                row = needs_review_rows[row_idx]
+                if action in ("keep", "flip") and conf >= 80 and new_ws:
+                    cat_watch = watch_index["by_ws_code"].get(new_ws.lower())
+                    if cat_watch:
+                        row["WS-Code"] = cat_watch["ws_code"]
+                        row["Marke"] = cat_watch["brand"]
+                    else:
+                        row["WS-Code"] = new_ws
+                    if new_price and new_currency:
+                        row["Preis"] = f"{new_price} {new_currency}"
+                    # Leave it in needs_review unless action asks for promote — keep conservative
+                else:
+                    # Append AI reason to existing review reason
+                    ai_note = f"AI ({conf}%): {reason}"
+                    row["Review Reason"] = (
+                        ai_note if not row.get("Review Reason")
+                        else f"{row['Review Reason']}; {ai_note}"
+                    )
+
+        # Move demoted matched rows to needs_review (process in reverse)
+        for idx in sorted(set(matched_to_demote), reverse=True):
+            needs_review_rows.append(matched_rows[idx])
+            matched_rows.pop(idx)
+
+        logger.info(f"AI verification applied: {len(verdict_lookup)} verdicts, {len(matched_to_demote)} demoted")
 
     # Generate suggested-additions CSV (watches identified by AI but not in catalog)
     suggested_csv = ""
