@@ -2354,6 +2354,60 @@ def parse_stock_list(
     return matched_rows, needs_review_rows, not_in_database_rows
 
 
+def _resolve_month_year(content: str, mode: str, ref_month: int, ref_year: int) -> tuple[Optional[str], str]:
+    """Resolve month/year for a message.
+    Returns (raw_month_year, normalized_month_year).
+
+    For WTB: never fabricate from message timestamp. If no month/year token is
+    present, try a bare-year fallback (e.g. '2021+', '2024+'), else return empty.
+    For WTS: fall back to the message timestamp MM/YY (existing behavior).
+    """
+    raw_month_year = extract_month_year_from_text(content)
+    if raw_month_year:
+        return raw_month_year, normalize_month_year(raw_month_year, ref_month, ref_year, mode)
+
+    if mode == "WTB":
+        year = extract_year_from_line(content)
+        if year:
+            return None, f"{year}+"
+        return None, ""
+
+    # WTS default: message timestamp
+    return None, f"{ref_month:02d}/{ref_year % 100:02d}"
+
+
+def _find_watch_line(content: str, watch: Optional[dict]) -> str:
+    """Return the single line of `content` most likely to describe the matched watch.
+    Falls back to the full content when no anchor is found."""
+    if not watch or not content:
+        return content
+    anchors = []
+    for key in ("ws_code", "reference"):
+        val = watch.get(key) if isinstance(watch, dict) else None
+        if val:
+            anchors.append(str(val).lower())
+    aliases = watch.get("aliases") if isinstance(watch, dict) else None
+    if isinstance(aliases, (list, tuple)):
+        anchors.extend(str(a).lower() for a in aliases if a)
+    oem_refs = watch.get("oem_references") if isinstance(watch, dict) else None
+    if isinstance(oem_refs, (list, tuple)):
+        anchors.extend(str(o).lower() for o in oem_refs if o)
+
+    if not anchors:
+        return content
+
+    lines = content.splitlines()
+    if len(lines) <= 1:
+        return content
+
+    for line in lines:
+        low = line.lower()
+        for a in anchors:
+            if a and a in low:
+                return line.strip()
+    return content
+
+
 def _build_row(
     mode: str,
     content: str,
@@ -2368,9 +2422,7 @@ def _build_row(
     reason: str = "",
 ) -> dict:
     """Build a CSV row dict (used for needs_review entries)."""
-    raw_month_year = extract_month_year_from_text(content)
-    default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
-    month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode) if raw_month_year else default_month_year
+    raw_month_year, month_year = _resolve_month_year(content, mode, ref_month, ref_year)
     location = extract_location(content, sender_country, mode)
     condition = extract_condition(content, mode, raw_month_year, ref_month, ref_year)
     price, currency = extract_price(content, sender_country)
@@ -2396,7 +2448,7 @@ def _build_row(
         "Nachricht gepostet am": format_timestamp(timestamp),
     }
     row["Review Reason"] = reason
-    row["Original Text"] = content[:500]
+    row["Original Text"] = _find_watch_line(content, watch)[:500]
     # Internal fields for AI matching pass (removed before CSV output)
     row["_review_reason"] = reason
     row["_original_content"] = content
@@ -2534,9 +2586,7 @@ def _process_messages_sync(
 
         watch = watch_matches[0]
 
-        raw_month_year = extract_month_year_from_text(content)
-        default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
-        month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode) if raw_month_year else default_month_year
+        raw_month_year, month_year = _resolve_month_year(content, mode, ref_month, ref_year)
 
         location = extract_location(content, sender_country, mode)
         condition = extract_condition(content, mode, raw_month_year, ref_month, ref_year)
@@ -2580,7 +2630,7 @@ def _process_messages_sync(
             "Nummer": phone or sender,
             "Gruppe": group_name,
             "Nachricht gepostet am": format_timestamp(timestamp),
-            "Original Text": content[:500],
+            "Original Text": _find_watch_line(content, watch)[:500],
         })
 
     return {
@@ -2759,9 +2809,7 @@ async def process_generation(
                 original_content = row.get("_original_content", "")
 
                 # Re-extract fields for the matched row
-                raw_month_year = extract_month_year_from_text(original_content)
-                default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
-                month_year_val = normalize_month_year(raw_month_year, ref_month, ref_year, mode) if raw_month_year else default_month_year
+                raw_month_year, month_year_val = _resolve_month_year(original_content, mode, ref_month, ref_year)
                 phone_val = row.get("Nummer", "")
                 sender_country_val = get_country_from_phone(phone_val) if phone_val.startswith("+") else None
                 location_val = extract_location(original_content, sender_country_val, mode)
@@ -2792,7 +2840,7 @@ async def process_generation(
                     "Nummer": phone_val,
                     "Gruppe": group_name,
                     "Nachricht gepostet am": row.get("Nachricht gepostet am", ""),
-                    "Original Text": original_content[:500],
+                    "Original Text": _find_watch_line(original_content, watch)[:500],
                 })
                 indices_to_remove.append(nid_idx)
                 ai_matched_count += 1

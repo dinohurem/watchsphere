@@ -238,3 +238,6 @@ ios/
 # MCP Configuration (contains sensitive tokens)
 .mcp.json
 .worktrees/
+test_files/
+.playwright-mcp/
+scripts/

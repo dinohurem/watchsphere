@@ -269,6 +269,9 @@ async def get_my_watchlist(
 
         for watch in watches:
             if watch.ws_code:
+                count_field = watch.ws_code
+                count_key = "ws_code"
+
                 sell_orders = await Order.find(
                     Order.reference == watch.reference,
                     Order.order_type == OrderType.SELL,
@@ -278,10 +281,20 @@ async def get_my_watchlist(
                 lowest_order_price = sell_orders[0].price if sell_orders else None
                 display_price = lowest_order_price if lowest_order_price else watch.price
 
+                # Count WTS/WTB orders for this specific watch variant
+                wts_count = await Order.find(
+                    {count_key: count_field, "order_type": OrderType.SELL.value, "status": OrderStatus.ACTIVE.value},
+                ).count()
+                wtb_count = await Order.find(
+                    {count_key: count_field, "order_type": OrderType.BUY.value, "status": OrderStatus.ACTIVE.value},
+                ).count()
+
                 market_data[watch.ws_code] = {
                     "price_change": watch.price_change or 0.0,
                     "image": watch.cover_image,
                     "display_price": display_price,
+                    "wts_count": wts_count,
+                    "wtb_count": wtb_count,
                 }
 
     return [
@@ -301,6 +314,8 @@ async def get_my_watchlist(
             "price": market_data.get(item.ws_code, {}).get("display_price") or item.target_price or 0,
             "priceChange": market_data.get(item.ws_code, {}).get("price_change", 0.0),
             "image": market_data.get(item.ws_code, {}).get("image"),
+            "wts_count": market_data.get(item.ws_code, {}).get("wts_count", 0),
+            "wtb_count": market_data.get(item.ws_code, {}).get("wtb_count", 0),
         }
         for item in items
     ]

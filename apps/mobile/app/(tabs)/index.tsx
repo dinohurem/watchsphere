@@ -160,33 +160,12 @@ export default function HomeScreen() {
   const loadWatchlist = async () => {
     if (isGuideActive) { setWatchlistItems(GUIDE_MOCK_WATCHLIST); setLoadingWatchlist(false); return; }
     try {
-      // Fetch watchlist and market aggregated counts in parallel so we can
-      // merge WTS/WTB counts into the items before setting state. This avoids
-      // a flicker where the pills briefly render as 0 before the counts load.
-      const [watchlistResponse, marketResponse] = await Promise.all([
-        api.get('/profile/watchlist'),
-        !v2Enabled ? api.get('/market/aggregated').catch(() => null) : Promise.resolve(null),
-      ]);
-
-      // Build a lookup map keyed by ws_code / reference → counts
-      const countMap = new Map<string, { wts: number; wtb: number }>();
-      if (marketResponse?.data) {
-        marketResponse.data.forEach((item: any) => {
-          const counts = { wts: item.wts_count || 0, wtb: item.wtb_count || 0 };
-          if (item.ws_code) countMap.set(item.ws_code.toUpperCase(), counts);
-          if (item.reference) countMap.set(item.reference.toUpperCase(), counts);
-        });
-      }
-
-      const withCounts = (item: WatchlistItem): WatchlistItem => {
-        if (v2Enabled) return item;
-        const key = (item.ws_code || item.reference || '').toUpperCase();
-        const counts = countMap.get(key);
-        return { ...item, wtsCount: counts?.wts ?? 0, wtbCount: counts?.wtb ?? 0 };
-      };
+      // Fetch watchlist — WTS/WTB counts are now included in the response
+      // from /profile/watchlist, so no need for a separate /market/aggregated call.
+      const watchlistResponse = await api.get('/profile/watchlist');
 
       if (watchlistResponse.data && watchlistResponse.data.length > 0) {
-        setWatchlistItems(watchlistResponse.data.slice(0, 4).map((item: any) => withCounts({
+        setWatchlistItems(watchlistResponse.data.slice(0, 4).map((item: any) => ({
           id: item.id,
           brand: item.brand,
           model: item.model,
@@ -195,7 +174,9 @@ export default function HomeScreen() {
           price: item.price || item.target_price || 0,
           priceChange: item.priceChange || 0,
           image: item.image,
-          isFromUserWatchlist: true, // From user's personal watchlist
+          isFromUserWatchlist: true,
+          wtsCount: item.wts_count ?? 0,
+          wtbCount: item.wtb_count ?? 0,
         })));
       } else {
         // User watchlist is empty, try to fetch default watchlist
@@ -203,7 +184,7 @@ export default function HomeScreen() {
           const defaultResponse = await api.get('/default-watchlist/public');
           if (defaultResponse.data && defaultResponse.data.length > 0) {
             // Map to watchlist format (items are already filtered by is_active on backend)
-            setWatchlistItems(defaultResponse.data.slice(0, 4).map((item: any) => withCounts({
+            setWatchlistItems(defaultResponse.data.slice(0, 4).map((item: any) => ({
               id: item.id,
               brand: item.brand,
               model: item.model,
@@ -212,7 +193,9 @@ export default function HomeScreen() {
               price: item.target_price || 0,
               priceChange: 0,
               image: item.image_url || null,
-              isFromUserWatchlist: false, // From default watchlist (not user's)
+              isFromUserWatchlist: false,
+              wtsCount: item.wts_count ?? 0,
+              wtbCount: item.wtb_count ?? 0,
             })));
           } else {
             setWatchlistItems([]);
