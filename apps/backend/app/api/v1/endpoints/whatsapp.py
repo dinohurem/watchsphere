@@ -469,7 +469,14 @@ async def process_csv_import(
         month_year = (row.get("Monat/Jahr") or row.get("monat/jahr") or "").strip()
         location = (row.get("Standort") or row.get("standort") or "").strip().upper()
         condition_str = (row.get("Zustand") or row.get("zustand") or "").strip()
-        remarks = (row.get("Remarks") or row.get("remarks") or "").strip()
+        # CSV uses German header "Bemerkungen" — keep English variants as fallback.
+        remarks = (
+            row.get("Bemerkungen")
+            or row.get("bemerkungen")
+            or row.get("Remarks")
+            or row.get("remarks")
+            or ""
+        ).strip()
         price_str = (row.get("Preis") or row.get("preis") or "").strip()
         phone = (row.get("Nummer") or row.get("nummer") or "").strip()
         group = (row.get("Gruppe") or row.get("gruppe") or "").strip()
@@ -624,9 +631,13 @@ async def process_csv_import(
 
             existing_order = existing_order_map.get(dup_key)
             if existing_order is not None:
-                # Existing DB order — freshness update: update timestamp so "28d" becomes "1d"
+                # Existing DB order — freshness update: bump timestamp so "28d"
+                # becomes "1d", and backfill remarks if the existing row is
+                # missing them (older imports dropped the Bemerkungen column).
                 existing_order.created_at = message_timestamp or datetime.utcnow()
                 existing_order.updated_at = datetime.utcnow()
+                if remarks and not existing_order.remarks:
+                    existing_order.remarks = remarks
                 await existing_order.save()
                 refreshed_count += 1
                 continue

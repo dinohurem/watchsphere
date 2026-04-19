@@ -1668,13 +1668,21 @@ JSON array:"""
 # If a line contains any of these and none of them matches the candidate's
 # ws_code / dial / bracelet / aliases, we refuse to assign the candidate.
 _DISCRIMINATING_DESCRIPTORS = frozenset({
+    # Basic colors
     "blk", "black", "wht", "white", "blu", "blue", "grn", "green", "grey", "gray",
-    "red", "pink", "purple", "champ", "champagne", "gold", "silver", "brown",
-    "lavender", "mete", "meteorite", "onyx", "pave", "paved", "ombre", "slate",
-    "chocolate", "choc", "choco", "mop", "ruby", "sapphire", "tiffany", "tiff",
-    "pistachio", "sodalite", "turqoise", "turquoise", "rainbow", "wimbledon",
-    "wim", "roman", "rom", "roma", "sundust", "sun", "jubilee", "jub", "oyster",
-    "oys", "yml", "pikachu", "nadal",
+    "red", "pink", "purple", "violet", "champ", "champagne", "gold", "silver",
+    "brown", "lavender", "slate", "navy", "olive", "khaki", "ivory", "cream",
+    "beige", "taupe", "bronze", "rose", "salmon", "coral", "teal", "turquoise",
+    "turqoise", "mint", "lime", "amber", "yellow", "orange", "magenta", "fuchsia",
+    "indigo",
+    # Premium / specialty dials
+    "mete", "meteorite", "onyx", "pave", "paved", "ombre", "ombré",
+    "chocolate", "choc", "choco", "coffee", "mop", "ruby", "sapphire", "emerald",
+    "tiffany", "tiff", "pistachio", "sodalite", "rainbow", "wimbledon", "wim",
+    "roman", "rom", "roma", "sundust", "sun", "yml", "pikachu", "nadal",
+    "diamond", "diamonds", "dia", "baguette",
+    # Bracelet / style markers
+    "jubilee", "jub", "oyster", "oys", "leather",
 })
 
 
@@ -1747,47 +1755,66 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
             return m, score
         return m
 
-    def _apply_conflict_guard(m):
-        """When exactly one candidate remains, reject it if the line contains a
-        descriptor (blk/white/green/…) not present on that candidate. The caller
-        will then treat the row as 'no match' → needs_review / not_in_database."""
+    def _apply_simple_conflict_guard(m):
+        """For oem_ref/alias paths — only descriptor conflict check. These hits
+        are specific enough that a missing descriptor on the line is acceptable."""
         if len(m) == 1 and _has_descriptor_conflict(m[0], line_tokens):
             return []
         return m
 
-    # 1. Try ws_code exact match (most specific — skip conflict guard since
-    # the line literally referenced this ws_code).
+    def _apply_ref_only_guard(m):
+        """For reference-only paths — both descriptor conflict AND
+        descriptor-required check. If the catalog ws_code is descriptor-qualified
+        but the line has no descriptor, refuse the match."""
+        if len(m) != 1:
+            return m
+        cand = m[0]
+        if _has_descriptor_conflict(cand, line_tokens):
+            return []
+        ws_lower = (cand.get("ws_code") or "").lower()
+        ref_lower_cand = (cand.get("reference") or "").lower()
+        ws_has_descriptor = bool(ref_lower_cand) and ws_lower.replace(ref_lower_cand, "", 1).strip() != ""
+        if ws_has_descriptor and line_tokens:
+            line_has_descriptor = any(
+                v in _DISCRIMINATING_DESCRIPTORS
+                for t in line_tokens for v in _resolve_descriptor(str(t).lower())
+            )
+            if not line_has_descriptor:
+                return []
+        return m
+
+    # 1. Try ws_code exact match (most specific — ground truth, no guard).
     if ref_lower in watch_index["by_ws_code"]:
         return _ret([watch_index["by_ws_code"][ref_lower]], None)
 
-    # 2. Try oem_references exact match (more specific than plain reference)
-    if ref_lower in watch_index["by_oem_ref"]:
-        candidates = _brand_filter(watch_index["by_oem_ref"][ref_lower])
-        matches = _collect(candidates)
-        if matches:
-            if len(matches) > 1 and line_tokens:
-                matches = _disambiguate_matches(matches, line_tokens)
-            matches = _apply_conflict_guard(matches)
-            return _ret(matches, None)
-
-    # 3. Try reference exact match
-    if ref_lower in watch_index["by_reference"]:
-        candidates = _brand_filter(watch_index["by_reference"][ref_lower])
-        matches = _collect(candidates)
-        if matches:
-            if len(matches) > 1 and line_tokens:
-                matches = _disambiguate_matches(matches, line_tokens)
-            matches = _apply_conflict_guard(matches)
-            return _ret(matches, None)
-
-    # 4. Try aliases exact match
+    # 2. Try aliases exact match (full alias hit = authoritative match per rule).
     if ref_lower in watch_index["by_alias"]:
         candidates = _brand_filter(watch_index["by_alias"][ref_lower])
         matches = _collect(candidates)
         if matches:
             if len(matches) > 1 and line_tokens:
                 matches = _disambiguate_matches(matches, line_tokens)
-            matches = _apply_conflict_guard(matches)
+            return _ret(matches, None)
+
+    # 3. Try oem_references exact match — apply only conflict guard.
+    if ref_lower in watch_index["by_oem_ref"]:
+        candidates = _brand_filter(watch_index["by_oem_ref"][ref_lower])
+        matches = _collect(candidates)
+        if matches:
+            if len(matches) > 1 and line_tokens:
+                matches = _disambiguate_matches(matches, line_tokens)
+            matches = _apply_simple_conflict_guard(matches)
+            return _ret(matches, None)
+
+    # 4. Try reference exact match — apply BOTH guards (descriptor conflict AND
+    # required-descriptor-when-catalog-has-one).
+    if ref_lower in watch_index["by_reference"]:
+        candidates = _brand_filter(watch_index["by_reference"][ref_lower])
+        matches = _collect(candidates)
+        if matches:
+            if len(matches) > 1 and line_tokens:
+                matches = _disambiguate_matches(matches, line_tokens)
+            matches = _apply_ref_only_guard(matches)
             return _ret(matches, None)
 
     # 5. Fuzzy matching fallback (brand-filtered only)
@@ -1797,7 +1824,7 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
     if fuzzy_results:
         if len(fuzzy_results) > 1 and line_tokens:
             fuzzy_results = _disambiguate_matches(fuzzy_results, line_tokens)
-        fuzzy_results = _apply_conflict_guard(fuzzy_results)
+        fuzzy_results = _apply_simple_conflict_guard(fuzzy_results)
         if len(fuzzy_results) == 1:
             _fuzzy_match_count += 1
         return _ret(fuzzy_results, fuzzy_score)
@@ -1822,18 +1849,51 @@ def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = Non
             matches.append(watch)
             seen_ws_codes.add(ws)
 
-    def _apply_conflict_guard(m: list) -> list:
-        """Reject a sole candidate when the message contains a discriminating
-        descriptor (blk/white/green/…) that doesn't fit that candidate. Without
-        this guard, '5205R white' would silently match catalog '5205R Green'."""
+    def _apply_ref_only_guard(m: list) -> list:
+        """Guard for reference-pattern matches (no ws_code/alias/oem hit).
+        Two checks:
+        (1) Reject sole candidate when the message contains a discriminating
+            descriptor that doesn't fit ('5205R white' vs catalog '5205R Green').
+        (2) Reject sole candidate when the catalog ws_code is descriptor-qualified
+            (e.g. '7010R Purple') but the message contains NO descriptor at all
+            ('7010R 2024used 480K'). Forces such cases to needs_review/AI rather
+            than guessing the wrong colour variant.
+        """
+        if len(m) != 1:
+            return m
+        cand = m[0]
+        tokens = _clean_text(content).lower().split()
+        # Check 1: descriptor conflict
+        if _has_descriptor_conflict(cand, tokens):
+            return []
+        # Check 2: catalog ws_code has descriptor, line has none
+        ws_lower = (cand.get("ws_code") or "").lower()
+        ref_lower = (cand.get("reference") or "").lower()
+        # Treat ws_code as "descriptor-qualified" if it's longer than just the reference
+        # (e.g. '7010R Purple' vs reference '7010R'). Also catches embedded suffixes
+        # like '5205R Green' vs '5205R'.
+        ws_has_descriptor = bool(ref_lower) and ws_lower.replace(ref_lower, "", 1).strip() != ""
+        if ws_has_descriptor:
+            line_has_descriptor = any(
+                v in _DISCRIMINATING_DESCRIPTORS
+                for t in tokens for v in _resolve_descriptor(t.lower())
+            )
+            if not line_has_descriptor:
+                return []
+        return m
+
+    def _apply_simple_conflict_guard(m: list) -> list:
+        """Guard for OEM-ref matches: only descriptor-conflict check (no
+        no-descriptor-on-line refusal). OEM refs are specific enough to keep
+        the match even without colour qualifiers on the line."""
         if len(m) == 1:
             tokens = _clean_text(content).lower().split()
             if _has_descriptor_conflict(m[0], tokens):
                 return []
         return m
 
-    # Try ws_code word-boundary match (most specific). Skip the conflict guard
-    # here — a literal ws_code match is ground truth.
+    # Try ws_code word-boundary match (most specific). Skip guards here —
+    # a literal ws_code match is ground truth.
     pattern = watch_index.get("_ws_code_pattern")
     if pattern:
         for m in pattern.finditer(content_lower):
@@ -1845,19 +1905,21 @@ def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = Non
     if matches:
         return matches
 
-    # Try reference exact token match — single regex scan
-    pattern = watch_index.get("_reference_pattern")
+    # Try alias exact token match BEFORE reference. Per matching rule: a full
+    # alias match is as authoritative as a ws_code match — return immediately
+    # without any descriptor-conflict guard.
+    pattern = watch_index.get("_alias_pattern")
     if pattern:
         for m in pattern.finditer(content_lower):
             matched_key = m.group(0)
-            watch_list = watch_index["by_reference"].get(matched_key, [])
+            watch_list = watch_index["by_alias"].get(matched_key, [])
             for w in watch_list:
                 _add_match(w)
 
     if matches:
-        return _apply_conflict_guard(matches)
+        return matches
 
-    # Try OEM reference exact token match — single regex scan
+    # Try OEM reference exact token match — apply only conflict guard.
     pattern = watch_index.get("_oem_ref_pattern")
     if pattern:
         for m in pattern.finditer(content_lower):
@@ -1867,18 +1929,19 @@ def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = Non
                 _add_match(w)
 
     if matches:
-        return _apply_conflict_guard(matches)
+        return _apply_simple_conflict_guard(matches)
 
-    # Try alias exact token match — single regex scan
-    pattern = watch_index.get("_alias_pattern")
+    # Try reference exact token match — apply BOTH guards (descriptor conflict
+    # AND no-descriptor-on-line-when-catalog-has-one).
+    pattern = watch_index.get("_reference_pattern")
     if pattern:
         for m in pattern.finditer(content_lower):
             matched_key = m.group(0)
-            watch_list = watch_index["by_alias"].get(matched_key, [])
+            watch_list = watch_index["by_reference"].get(matched_key, [])
             for w in watch_list:
                 _add_match(w)
 
-    return _apply_conflict_guard(matches)
+    return _apply_ref_only_guard(matches)
 
 
 def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) -> str:

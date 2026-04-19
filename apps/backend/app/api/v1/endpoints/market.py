@@ -324,22 +324,29 @@ async def list_watches(
     # Execute query
     watches_query = Watch.find(*query_conditions)
 
-    # Apply text search if provided (search in brand, model, description)
+    # Apply text search if provided (search in brand, model, description).
+    # Normalize the user's query so that spaces and hyphens match interchangeably:
+    # 'GMT Master', 'GMT-Master', 'GMT  Master' all match catalog 'GMT-Master 2'.
     if search:
-        # For now, use regex-based search
-        # In production, consider MongoDB text indexes
+        import re as _re
+        # Escape regex specials, then turn any whitespace/hyphen run into a flexible
+        # separator pattern that matches one or more spaces, hyphens, or underscores.
+        escaped = _re.escape(search.strip())
+        # _re.escape turns '-' into '\-' and ' ' stays ' '. Replace these sequences
+        # with a flexible class so they cross-match in either direction.
+        flexible = _re.sub(r'(?:\\\s|\\-|\s|_)+', lambda _m: r'[\s\-_]+', escaped)
         watches_query = Watch.find(
             *query_conditions,
             {
                 "$or": [
-                    {"brand": {"$regex": search, "$options": "i"}},
-                    {"model": {"$regex": search, "$options": "i"}},
-                    {"reference": {"$regex": search, "$options": "i"}},
-                    {"description": {"$regex": search, "$options": "i"}},
-                    {"collection": {"$regex": search, "$options": "i"}},
-                    {"ws_code": {"$regex": search, "$options": "i"}},
-                    {"oem_references": {"$regex": search, "$options": "i"}},
-                    {"aliases": {"$regex": search, "$options": "i"}},
+                    {"brand": {"$regex": flexible, "$options": "i"}},
+                    {"model": {"$regex": flexible, "$options": "i"}},
+                    {"reference": {"$regex": flexible, "$options": "i"}},
+                    {"description": {"$regex": flexible, "$options": "i"}},
+                    {"collection": {"$regex": flexible, "$options": "i"}},
+                    {"ws_code": {"$regex": flexible, "$options": "i"}},
+                    {"oem_references": {"$regex": flexible, "$options": "i"}},
+                    {"aliases": {"$regex": flexible, "$options": "i"}},
                 ]
             }
         )
@@ -542,15 +549,18 @@ async def get_aggregated_market_data(
         needs_post_filter = category in ("gainers", "losers")
 
         if search:
+            import re as _re
+            escaped = _re.escape(search.strip())
+            flexible = _re.sub(r'(?:\\\s|\\-|\s|_)+', lambda _m: r'[\s\-_]+', escaped)
             search_filter = {
                 "$or": [
-                    {"brand": {"$regex": search, "$options": "i"}},
-                    {"model": {"$regex": search, "$options": "i"}},
-                    {"reference": {"$regex": search, "$options": "i"}},
-                    {"collection": {"$regex": search, "$options": "i"}},
-                    {"ws_code": {"$regex": search, "$options": "i"}},
-                    {"oem_references": {"$regex": search, "$options": "i"}},
-                    {"aliases": {"$regex": search, "$options": "i"}},
+                    {"brand": {"$regex": flexible, "$options": "i"}},
+                    {"model": {"$regex": flexible, "$options": "i"}},
+                    {"reference": {"$regex": flexible, "$options": "i"}},
+                    {"collection": {"$regex": flexible, "$options": "i"}},
+                    {"ws_code": {"$regex": flexible, "$options": "i"}},
+                    {"oem_references": {"$regex": flexible, "$options": "i"}},
+                    {"aliases": {"$regex": flexible, "$options": "i"}},
                 ]
             }
             q = Watch.find(base_query, search_filter).sort([("order_count", -1), ("created_at", -1)])
@@ -858,7 +868,10 @@ async def admin_list_all_watches(
     if dealer_id:
         query_conditions.append(Watch.dealer_id == dealer_id)
     if search:
-        search_regex = {"$regex": search, "$options": "i"}
+        import re as _re
+        escaped = _re.escape(search.strip())
+        flexible = _re.sub(r'(?:\\\s|\\-|\s|_)+', lambda _m: r'[\s\-_]+', escaped)
+        search_regex = {"$regex": flexible, "$options": "i"}
         query_conditions.append({"$or": [
             {"brand": search_regex},
             {"model": search_regex},
@@ -922,7 +935,10 @@ async def admin_count_watches(
     if dealer_id:
         query_conditions.append(Watch.dealer_id == dealer_id)
     if search:
-        search_regex = {"$regex": search, "$options": "i"}
+        import re as _re
+        escaped = _re.escape(search.strip())
+        flexible = _re.sub(r'(?:\\\s|\\-|\s|_)+', lambda _m: r'[\s\-_]+', escaped)
+        search_regex = {"$regex": flexible, "$options": "i"}
         query_conditions.append({"$or": [
             {"brand": search_regex},
             {"model": search_regex},
