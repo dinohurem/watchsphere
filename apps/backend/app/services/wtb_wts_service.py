@@ -1822,7 +1822,18 @@ def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = Non
             matches.append(watch)
             seen_ws_codes.add(ws)
 
-    # Try ws_code word-boundary match (most specific) — single regex scan
+    def _apply_conflict_guard(m: list) -> list:
+        """Reject a sole candidate when the message contains a discriminating
+        descriptor (blk/white/green/…) that doesn't fit that candidate. Without
+        this guard, '5205R white' would silently match catalog '5205R Green'."""
+        if len(m) == 1:
+            tokens = _clean_text(content).lower().split()
+            if _has_descriptor_conflict(m[0], tokens):
+                return []
+        return m
+
+    # Try ws_code word-boundary match (most specific). Skip the conflict guard
+    # here — a literal ws_code match is ground truth.
     pattern = watch_index.get("_ws_code_pattern")
     if pattern:
         for m in pattern.finditer(content_lower):
@@ -1844,7 +1855,7 @@ def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = Non
                 _add_match(w)
 
     if matches:
-        return matches
+        return _apply_conflict_guard(matches)
 
     # Try OEM reference exact token match — single regex scan
     pattern = watch_index.get("_oem_ref_pattern")
@@ -1856,7 +1867,7 @@ def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = Non
                 _add_match(w)
 
     if matches:
-        return matches
+        return _apply_conflict_guard(matches)
 
     # Try alias exact token match — single regex scan
     pattern = watch_index.get("_alias_pattern")
@@ -1867,7 +1878,7 @@ def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = Non
             for w in watch_list:
                 _add_match(w)
 
-    return matches
+    return _apply_conflict_guard(matches)
 
 
 def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) -> str:
@@ -2615,6 +2626,11 @@ def parse_stock_list(
             watch_matches = match_watch(stripped, watch_index, brand_hint=current_brand)
             if len(watch_matches) > 1 and line_tokens:
                 watch_matches = _disambiguate_matches(watch_matches, line_tokens)
+                # After disambiguation, if a single survivor was picked, re-apply
+                # the descriptor-conflict guard. Disambiguation may resolve to one
+                # variant whose descriptor doesn't match the line's tokens.
+                if len(watch_matches) == 1 and _has_descriptor_conflict(watch_matches[0], line_tokens):
+                    watch_matches = []
 
         if len(watch_matches) == 0:
             # No match at all — goes to not_in_database, not needs_review.
