@@ -506,7 +506,8 @@ export default function WatchDetailsScreen() {
     }
   };
 
-  const formatPrice = (price: number) => {
+  const formatPrice = (price: number | null | undefined) => {
+    if (price == null) return '—';
     return `€${price.toLocaleString('de-DE')}`;
   };
 

@@ -103,7 +103,8 @@ interface FilterState {
   [key: string]: string[];
 }
 
-const formatCurrency = (price: number, currency?: string): string => {
+const formatCurrency = (price: number | null | undefined, currency?: string): string => {
+  if (price === null || price === undefined) return '—';
   if (!currency || currency === 'EUR') return `€${price.toLocaleString()}`;
   return `${currency} ${price.toLocaleString()}`;
 };
@@ -459,7 +460,10 @@ export function WatchDetailsPage() {
     const watchName = watchDetails ? `${watchDetails.brand} ${watchDetails.model}` : '';
     const watchCode = watchDetails?.reference || '';
     const currency = entry.currency || 'EUR';
-    const message = `Hi, is ${watchName} ${watchCode} available?\n${currency} ${entry.price.toLocaleString('de-DE')} - thank you very much!`;
+    const priceText = entry.price != null
+      ? `\n${currency} ${entry.price.toLocaleString('de-DE')} - thank you very much!`
+      : '';
+    const message = `Hi, is ${watchName} ${watchCode} available?${priceText}`;
     const phone = entry.whatsapp_phone.replace(/[^0-9]/g, '');
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };

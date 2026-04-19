@@ -682,7 +682,10 @@ export default function WatchDetailsScreen() {
     const watchName = `${watch?.brand || ''} ${watch?.model || ''}`.trim();
     const watchRef = watch?.reference || '';
     const orderCurrency = order.currency || watch.currency || 'EUR';
-    const message = `Hi, is ${watchName} ${watchRef} available?\n${orderCurrency} ${order.price.toLocaleString('de-DE')} - thank you very much!`;
+    const priceText = order.price != null
+      ? `\n${orderCurrency} ${order.price.toLocaleString('de-DE')} - thank you very much!`
+      : '';
+    const message = `Hi, is ${watchName} ${watchRef} available?${priceText}`;
     const url = `https://wa.me/${order.whatsapp_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open WhatsApp. Make sure it is installed.');
@@ -1108,15 +1111,16 @@ export default function WatchDetailsScreen() {
   const currencyPrefix = watch.currency !== 'EUR' ? `${watch.currency} ` : '€';
 
   // Stats format: symbol AFTER number with period as thousands separator (e.g., "104.500€" or "HKD 104.500")
-  // Returns "-" for 0 or undefined values
-  const formatPriceEurAfter = (price: number) => {
-    if (!price || price === 0) return '-';
+  // Returns "-" for 0, null, or undefined values
+  const formatPriceEurAfter = (price: number | null | undefined) => {
+    if (price == null || price === 0) return '-';
     if (watch.currency !== 'EUR') return `${watch.currency} ${price.toLocaleString('de-DE')}`;
     return `${price.toLocaleString('de-DE')}€`;
   };
 
   // Price format: symbol BEFORE number (e.g., "€104,500" or "HKD 104,500")
-  const formatPriceEurBefore = (price: number) => {
+  const formatPriceEurBefore = (price: number | null | undefined) => {
+    if (price == null) return '-';
     return `${currencyPrefix}${price.toLocaleString('de-DE')}`;
   };
 
@@ -1434,12 +1438,12 @@ export default function WatchDetailsScreen() {
                     return formatPriceEurBefore(filteredPriceHistory[selectedChartIndex]);
                   }
                   // Otherwise show latest order book price (using order's own currency)
-                  if (sellOrders.length > 0) {
+                  if (sellOrders.length > 0 && sellOrders[0].price != null) {
                     const o = sellOrders[0];
                     const prefix = o.currency && o.currency !== 'EUR' ? `${o.currency} ` : '€';
                     return `${prefix}${o.price.toLocaleString('de-DE')}`;
                   }
-                  if (buyOrders.length > 0) {
+                  if (buyOrders.length > 0 && buyOrders[0].price != null) {
                     const o = buyOrders[0];
                     const prefix = o.currency && o.currency !== 'EUR' ? `${o.currency} ` : '€';
                     return `${prefix}${o.price.toLocaleString('de-DE')}`;
@@ -1602,7 +1606,11 @@ export default function WatchDetailsScreen() {
                     </View>
                   )}
                   <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'center' }]}>
-                    {order.currency && order.currency !== 'EUR' ? `${order.currency} ${order.price.toLocaleString('de-DE')}` : formatPriceEurBefore(order.price)}
+                    {order.price == null
+                      ? '—'
+                      : order.currency && order.currency !== 'EUR'
+                        ? `${order.currency} ${order.price.toLocaleString('de-DE')}`
+                        : formatPriceEurBefore(order.price)}
                   </Text>
                   <View style={{ flex: v2Enabled ? 0.7 : 0.5, alignItems: 'center', justifyContent: 'center', paddingVertical: hp(6) }}>
                     <TouchableOpacity
