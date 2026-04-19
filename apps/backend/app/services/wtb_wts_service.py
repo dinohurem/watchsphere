@@ -1817,6 +1817,37 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
             matches = _apply_ref_only_guard(matches)
             return _ret(matches, None)
 
+    # 4b. Before fuzzy: try alias/ws_code pattern match against the reconstructed
+    # line (ref + remaining tokens). Multi-word aliases like "228238a black",
+    # "228238 onyx" only hit here — _extract_ref_from_line strips them to just
+    # "228238a" which is not a key in any dict. A full alias match is
+    # authoritative and should beat a fuzzy score.
+    if line_tokens:
+        reconstructed = ref + " " + " ".join(str(t) for t in line_tokens)
+        reconstructed_lower = reconstructed.lower()
+        alias_pat = watch_index.get("_alias_pattern")
+        ws_pat = watch_index.get("_ws_code_pattern")
+        alias_hits: list[dict] = []
+        seen_ws: set[str] = set()
+        # ws_code literal wins outright — check it first
+        if ws_pat:
+            for m in ws_pat.finditer(reconstructed_lower):
+                w = watch_index["by_ws_code"].get(m.group(0))
+                if w and w["ws_code"].lower() not in seen_ws:
+                    alias_hits.append(w)
+                    seen_ws.add(w["ws_code"].lower())
+        if not alias_hits and alias_pat:
+            for m in alias_pat.finditer(reconstructed_lower):
+                for w in watch_index["by_alias"].get(m.group(0), []):
+                    if w["ws_code"].lower() not in seen_ws:
+                        alias_hits.append(w)
+                        seen_ws.add(w["ws_code"].lower())
+        if alias_hits:
+            alias_hits = _brand_filter(alias_hits)
+            if len(alias_hits) > 1:
+                alias_hits = _disambiguate_matches(alias_hits, line_tokens)
+            return _ret(alias_hits, None)
+
     # 5. Fuzzy matching fallback (brand-filtered only)
     # (Substring matching removed — it causes cross-brand contamination)
     global _fuzzy_match_count
@@ -2120,32 +2151,50 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
 
     # Currency-prefixed patterns (HK$, HKD, $, €, £)
     # Allow [:;\s] separators (dealers use "HKD:950000", "HKD 300k", "hkd563k")
+    # Case-insensitive so mixed-case tokens like "Hkd", "HkD" also match — otherwise
+    # the suffix pattern below wins on stray digits before the currency tag (e.g.
+    # "4/26 Hkd 968k" would grab "26" instead of "968k").
     _sep = r'[:\s]*'
     prefix_patterns = [
-        (rf'(?:HK\$|hk\$){_sep}([\d,.]+[kKmM]?)', "HKD"),
-        (rf'(?:HKD|hkd){_sep}([\d,.]+[kKmM]?)', "HKD"),  # hkd563k, HKD 300k, HKD:950000
-        (rf'(?:USDT|usdt){_sep}([\d,.]+[kKmM]?)', "USDT"),
-        (rf'(?:USD|usd){_sep}([\d,.]+[kKmM]?)', "USD"),
+        (rf'hk\${_sep}([\d,.]+[kKmM]?)', "HKD"),
+        (rf'hkd{_sep}([\d,.]+[kKmM]?)', "HKD"),  # hkd563k, HKD 300k, HKD:950000
+        (rf'usdt{_sep}([\d,.]+[kKmM]?)', "USDT"),
+        (rf'usd{_sep}([\d,.]+[kKmM]?)', "USD"),
         (rf'€{_sep}([\d,.]+[kKmM]?)', "EUR"),
         (rf'£{_sep}([\d,.]+[kKmM]?)', "GBP"),
         (rf'\${_sep}([\d,.]+[kKmM]?)', None),  # $ — resolved by sender country
     ]
 
     for pattern, currency in prefix_patterns:
-        m = re.search(pattern, content)
+        m = re.search(pattern, content, re.IGNORECASE)
         if m:
             raw_price = _normalize_adjacent_currency_price(m.group(1).strip())
             formatted = _format_price(raw_price)
             if formatted:
+                # If an explicit currency tag immediately follows the matched
+                # number (e.g. "$505,000 HKD" or "$880,000 HKD Bild weggelassen"),
+                # prefer the trailing tag over the symbol's default. Dealers who
+                # write both $ and HKD mean HKD — the $ is decorative.
+                tail = content[m.end():m.end() + 10].lstrip().lower()
+                suffix_cur = None
+                for tag in ("usdt", "hkd", "usd", "eur", "gbp", "chf"):
+                    if tail.startswith(tag):
+                        suffix_cur = "USD" if tag == "usdt" else tag.upper()
+                        break
+                if suffix_cur:
+                    return formatted, suffix_cur
                 if currency is None:
                     currency = _default_currency_for_country(sender_country)
                 return formatted, currency
 
     # Number followed by currency suffix: 387k hkd, 435,000hkd, 1.265m hkd, 300k usdt
     # Also handles symbol suffixes: 17,5€, 9.8€, 125£
-    # The number+k/m is always together (no space between digits and k/m)
-    currency_suffix = r'(?:\s*(?:HKD|USD|USDT|EUR|GBP|CHF|AED|SGD|JPY|hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy|€|£))'
-    m = re.search(r'([\d,.]+[kKmM]?)' + currency_suffix, content)
+    # The number+k/m is always together (no space between digits and k/m).
+    # The leading lookbehind `(?<![A-Za-z])` prevents month-code bleed-through:
+    # without it, "N4,1.475M hkd" would match starting at "4,1.475M" and parse
+    # as 41,475,000 — the N4 month code joining the price via the comma.
+    currency_suffix = r'(?:\s*(?:hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy|€|£))'
+    m = re.search(r'(?<![A-Za-z])([\d,.]+[kKmM]?)' + currency_suffix, content, re.IGNORECASE)
     if m:
         raw_price = _normalize_adjacent_currency_price(m.group(1).strip())
         formatted = _format_price(raw_price)
@@ -2258,23 +2307,24 @@ def extract_all_prices(content: str, sender_country: Optional[str] = None) -> li
     USDT/USD > EUR/GBP/CHF > HKD > other."""
     prices = []
 
-    # Find all currency-tagged prices
+    # Find all currency-tagged prices (case-insensitive — mixed-case tokens
+    # like "Hkd", "Usdt" appear in real data).
     all_patterns = [
-        (r'(?:USDT|usdt)\s*([\d,.]+[kKmM]?)', "USDT"),
-        (r'(?:USD|usd)\s*([\d,.]+[kKmM]?)', "USD"),
-        (r'([\d,.]+[kKmM]?)\s*(?:usdt|USDT)', "USDT"),
-        (r'([\d,.]+[kKmM]?)\s*(?:usd|USD)', "USD"),
-        (r'(?:HKD|hkd)\s*([\d,.]+[kKmM]?)', "HKD"),
-        (r'([\d,.]+[kKmM]?)\s*(?:hkd|HKD)', "HKD"),
-        (r'(\d{3,9})\s*(?:hkd|HKD)', "HKD"),
-        (r'(\d{3,9})\s*(?:usdt|USDT)', "USDT"),
-        (r'(?:EUR|eur|€)\s*([\d,.]+[kKmM]?)', "EUR"),
-        (r'(?:GBP|gbp|£)\s*([\d,.]+[kKmM]?)', "GBP"),
+        (r'usdt\s*([\d,.]+[kKmM]?)', "USDT"),
+        (r'usd\s*([\d,.]+[kKmM]?)', "USD"),
+        (r'([\d,.]+[kKmM]?)\s*usdt', "USDT"),
+        (r'([\d,.]+[kKmM]?)\s*usd', "USD"),
+        (r'hkd\s*([\d,.]+[kKmM]?)', "HKD"),
+        (r'([\d,.]+[kKmM]?)\s*hkd', "HKD"),
+        (r'(\d{3,9})\s*hkd', "HKD"),
+        (r'(\d{3,9})\s*usdt', "USDT"),
+        (r'(?:eur|€)\s*([\d,.]+[kKmM]?)', "EUR"),
+        (r'(?:gbp|£)\s*([\d,.]+[kKmM]?)', "GBP"),
     ]
 
     seen_positions = set()
     for pattern, currency in all_patterns:
-        for m in re.finditer(pattern, content):
+        for m in re.finditer(pattern, content, re.IGNORECASE):
             pos = m.start()
             # Avoid double-counting overlapping matches
             if any(abs(pos - sp) < 5 for sp in seen_positions):
@@ -2350,16 +2400,32 @@ def _normalize_adjacent_currency_price(raw: str) -> str:
 def _format_price(raw: str) -> Optional[str]:
     """Format a raw price string: expand k/m, add commas.
     Rejects values that look like years (2010-2035) unless they have k/m suffix."""
-    raw = raw.strip().replace(' ', '').replace(',', '')
+    raw = raw.strip().replace(' ', '')
+    # A comma in a short k/m-suffixed value is the European decimal comma
+    # ("1,16m" = 1.16 million, "1,5k" = 1,500). A comma in a longer value
+    # (already comma-grouped thousands like "1,185,000") is the US separator.
+    # Heuristic: if there is exactly one comma and at most one digit/no-digit
+    # before it ends in k/m, treat the comma as a decimal point.
+    _ksuf = re.match(r'^(\d{1,3}),(\d{1,3})\s*([kKmM])$', raw)
+    if _ksuf:
+        raw = f"{_ksuf.group(1)}.{_ksuf.group(2)}{_ksuf.group(3)}"
+    else:
+        raw = raw.replace(',', '')
     # Double dots like "144..5" are likely reference numbers, not prices
     if '..' in raw:
         return None
+
+    # Sanity cap applied at the end of each path — no watch is priced above
+    # 50M in any currency; anything higher is a parsing error.
+    SANITY_CAP = 50_000_000
 
     m = re.match(r'^([\d.]+)\s*[mM]$', raw)
     if m:
         try:
             # Use round() to avoid float drift: 2.05 * 1_000_000 = 2_049_999.999...
             val = round(float(m.group(1)) * 1000000)
+            if val > SANITY_CAP:
+                return None
             return f"{val:,}"
         except ValueError:
             return None
@@ -2368,6 +2434,8 @@ def _format_price(raw: str) -> Optional[str]:
     if m:
         try:
             val = round(float(m.group(1)) * 1000)
+            if val > SANITY_CAP:
+                return None
             return f"{val:,}"
         except ValueError:
             return None
@@ -2697,17 +2765,19 @@ def parse_stock_list(
 
         if len(watch_matches) == 0:
             # No match at all — goes to not_in_database, not needs_review.
-            # Build partial row
+            # Build partial row. When no date tokens are present on the line,
+            # leave Monat/Jahr empty rather than fabricating it from the
+            # message timestamp (matches the WTB parsing rule: never hallucinate
+            # a warranty date the dealer did not write).
             line_condition = extract_condition_from_line(stripped, section_condition)
             raw_month_year = extract_month_year_from_text(stripped)
             year_str = extract_year_from_line(stripped)
-            default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
             if raw_month_year:
                 month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode)
             elif year_str:
                 month_year = year_str
             else:
-                month_year = default_month_year
+                month_year = ""
 
             price, currency = extract_price_from_line(stripped, sender_country)
             remarks = normalize_remarks(stripped)
@@ -2754,13 +2824,13 @@ def parse_stock_list(
         line_condition = extract_condition_from_line(stripped, section_condition)
         raw_month_year = extract_month_year_from_text(stripped)
         year_str = extract_year_from_line(stripped)
-        default_month_year = f"{ref_month:02d}/{ref_year % 100:02d}"
         if raw_month_year:
             month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode)
         elif year_str:
             month_year = year_str
         else:
-            month_year = default_month_year
+            # No date on the line — don't fabricate one from the message timestamp.
+            month_year = ""
 
         price, currency = extract_price_from_line(stripped, sender_country)
         remarks = normalize_remarks(stripped)
@@ -2817,22 +2887,20 @@ def _resolve_month_year(content: str, mode: str, ref_month: int, ref_year: int) 
     """Resolve month/year for a message.
     Returns (raw_month_year, normalized_month_year).
 
-    For WTB: never fabricate from message timestamp. If no month/year token is
-    present, try a bare-year fallback (e.g. '2021+', '2024+'), else return empty.
-    For WTS: fall back to the message timestamp MM/YY (existing behavior).
+    Neither WTS nor WTB fabricates a warranty date from the message timestamp —
+    that would stamp every dateless listing with the export month. If no
+    month/year token is present, try a bare-year fallback (WTB adds `+`), else
+    return empty.
     """
     raw_month_year = extract_month_year_from_text(content)
     if raw_month_year:
         return raw_month_year, normalize_month_year(raw_month_year, ref_month, ref_year, mode)
 
-    if mode == "WTB":
-        year = extract_year_from_line(content)
-        if year:
-            return None, f"{year}+"
-        return None, ""
-
-    # WTS default: message timestamp
-    return None, f"{ref_month:02d}/{ref_year % 100:02d}"
+    year = extract_year_from_line(content)
+    if year:
+        suffix = "+" if mode == "WTB" else ""
+        return None, f"{year}{suffix}"
+    return None, ""
 
 
 def _find_watch_line(content: str, watch: Optional[dict]) -> str:
@@ -3478,6 +3546,77 @@ async def process_generation(
         for s in sorted(unique_suggestions, key=lambda x: x["confidence"], reverse=True):
             sug_writer.writerow(s)
         suggested_csv = sug_output.getvalue()
+
+    # --- Cross-currency normalization pass ---
+    # Rationale: a bare "$550K" from a contact-name sender (no phone → country
+    # unknown) gets labelled USD, while the identical listing from a phoned
+    # sender gets HKD. When the same ws_code + numeric value appears in a group
+    # under the group's dominant currency, flip the minority-currency row.
+    def _parse_preis(preis: str) -> tuple[Optional[str], Optional[str]]:
+        if not preis:
+            return None, None
+        parts = preis.split()
+        if len(parts) >= 2:
+            return parts[0], parts[1]
+        return (parts[0] if parts else None), None
+
+    # Build per-group currency tallies from matched rows (ground truth — these
+    # had enough context to be confidently matched). Needs_review rows are
+    # noisier and excluded from the tally.
+    group_currency_counts: dict[str, dict[str, int]] = {}
+    for row in matched_rows:
+        grp = row.get("Gruppe") or ""
+        _p, cur = _parse_preis(row.get("Preis") or "")
+        if not cur:
+            continue
+        group_currency_counts.setdefault(grp, {})
+        group_currency_counts[grp][cur] = group_currency_counts[grp].get(cur, 0) + 1
+
+    # Index: (group, ws_code, numeric_value) → currencies present (from matched rows)
+    value_index: dict[tuple[str, str, str], set[str]] = {}
+    for row in matched_rows:
+        grp = row.get("Gruppe") or ""
+        ws = (row.get("WS-Code") or "").lower()
+        num, cur = _parse_preis(row.get("Preis") or "")
+        if not ws or not num or not cur:
+            continue
+        key = (grp, ws, num)
+        value_index.setdefault(key, set()).add(cur)
+
+    def _maybe_flip(row: dict) -> bool:
+        grp = row.get("Gruppe") or ""
+        ws = (row.get("WS-Code") or "").lower()
+        num, cur = _parse_preis(row.get("Preis") or "")
+        if not ws or not num or not cur:
+            return False
+        counts = group_currency_counts.get(grp, {})
+        if not counts:
+            return False
+        dominant = max(counts.items(), key=lambda kv: kv[1])[0]
+        if cur == dominant:
+            return False
+        cur_count = counts.get(cur, 0)
+        dom_count = counts.get(dominant, 0)
+        # Require dominant clearly wins: either 3x the minority OR minority is
+        # exactly this row (cur_count <= 1 means no other row votes for cur).
+        if dom_count < 3 or (cur_count > 1 and dom_count < cur_count * 3):
+            return False
+        peer_currencies = value_index.get((grp, ws, num), set())
+        if dominant in peer_currencies:
+            row["Preis"] = f"{num} {dominant}"
+            return True
+        return False
+
+    flipped_count = 0
+    for row in matched_rows:
+        if _maybe_flip(row):
+            flipped_count += 1
+    for row in needs_review_rows:
+        if _maybe_flip(row):
+            flipped_count += 1
+
+    if flipped_count:
+        logger.info(f"process_generation: cross-currency normalized {flipped_count} matched rows")
 
     await _report("dedup", 88, "Deduplicating rows...")
 
