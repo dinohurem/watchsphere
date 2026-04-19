@@ -1306,7 +1306,7 @@ export function AdminWatches() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`text-sm font-medium ${orderTab === 'buy' ? 'text-green-600' : 'text-red-600'}`}>
-                            {order.currency} {order.price.toLocaleString()}
+                            {order.price != null ? `${order.currency} ${order.price.toLocaleString()}` : '—'}
                           </span>
                         </td>
                         <td className="px-4 py-3">

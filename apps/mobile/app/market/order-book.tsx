@@ -211,7 +211,8 @@ export default function OrderBookScreen() {
     }
   };
 
-  const formatPrice = (price: number, currency: string = 'EUR') => {
+  const formatPrice = (price: number | null | undefined, currency: string = 'EUR') => {
+    if (price === null || price === undefined) return '—';
     if (currency === 'EUR') return `€${price.toLocaleString('de-DE')}`;
     return `${currency} ${price.toLocaleString('de-DE')}`;
   };
@@ -238,7 +239,10 @@ export default function OrderBookScreen() {
     if (!order.whatsapp_phone) return;
     const watchName = `${orderBook?.brand || ''} ${orderBook?.model || ''}`.trim();
     const watchCode = orderBook?.reference || '';
-    const message = `Hi, is ${watchName} ${watchCode} available?\n${order.currency} ${order.price.toLocaleString('de-DE')} - thank you very much!`;
+    const priceText = order.price != null
+      ? `\n${order.currency} ${order.price.toLocaleString('de-DE')} - thank you very much!`
+      : '';
+    const message = `Hi, is ${watchName} ${watchCode} available?${priceText}`;
     const url = `https://wa.me/${order.whatsapp_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open WhatsApp. Make sure it is installed.');
