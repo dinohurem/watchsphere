@@ -2136,6 +2136,21 @@ def extract_year_from_line(content: str) -> Optional[str]:
     return None
 
 
+def _canonicalize_currency(cur: Optional[str]) -> Optional[str]:
+    """Normalize currency labels per dealer convention:
+    - USDT → USD (same asset, report as USD)
+    - RMB → CNY (same currency, report as CNY)
+    Leaves everything else unchanged."""
+    if not cur:
+        return cur
+    u = cur.upper()
+    if u == "USDT":
+        return "USD"
+    if u == "RMB":
+        return "CNY"
+    return u
+
+
 def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
     """Extract price and currency from message text.
     Returns (formatted_price, currency) or (None, None).
@@ -2143,13 +2158,37 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
     Price formats: 387k, 1.17m, 435,000, 138,000, 162k, 1.265m
     Currency can follow (with/without space): 387k hkd, 435,000hkd, 300k usdt
     Currency can precede: HK$387k, $300k, €5,000
+    Chinese: '97w人民币' = 97 × 10,000 RMB = 970,000 CNY.
     If $ is used by HK/CN/MO/SG sender without USD/USDT qualifier -> HKD.
     """
     # Remove serial code prefixes that can interfere with price parsing
     # SC = Serial Code, SN = Serial Number, Ref = Reference
     content = re.sub(r'\b(?:SC|SN|REF|ser\.?)\s*[\d,]+', '', content, flags=re.IGNORECASE)
 
-    # Currency-prefixed patterns (HK$, HKD, $, €, £)
+    # Chinese-numeric pattern used in Chinese dealer messages. Fires only as a
+    # last resort (after HKD/USDT/etc prefix and suffix patterns) so messages
+    # that list HKD first ("678.000HKD / 86.500 USDT / 60w5人民币") pick HKD.
+    def _extract_chinese_price() -> tuple[Optional[str], Optional[str]]:
+        m = re.search(
+            r'(\d+(?:[.,]\d+)?)\s*w\s*(\d)?\s*(?:人民币|rmb|cny)',
+            content, re.IGNORECASE
+        )
+        if not m:
+            return None, None
+        base = m.group(1).replace(',', '.')
+        extra = m.group(2)  # "84w5" → base=84, extra=5 (meaning 84.5×10,000)
+        try:
+            value = float(base)
+            if extra:
+                value = value + float(extra) / 10
+            total = round(value * 10000)
+            if 0 < total <= 50_000_000:
+                return f"{total:,}", "CNY"
+        except ValueError:
+            pass
+        return None, None
+
+    # Currency-prefixed patterns (HK$, HKD, $, €, £, RMB)
     # Allow [:;\s] separators (dealers use "HKD:950000", "HKD 300k", "hkd563k")
     # Case-insensitive so mixed-case tokens like "Hkd", "HkD" also match — otherwise
     # the suffix pattern below wins on stray digits before the currency tag (e.g.
@@ -2160,8 +2199,10 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
         (rf'hkd{_sep}([\d,.]+[kKmM]?)', "HKD"),  # hkd563k, HKD 300k, HKD:950000
         (rf'usdt{_sep}([\d,.]+[kKmM]?)', "USDT"),
         (rf'usd{_sep}([\d,.]+[kKmM]?)', "USD"),
+        (rf'(?:rmb|cny){_sep}([\d,.]+[kKmM]?)', "CNY"),
         (rf'€{_sep}([\d,.]+[kKmM]?)', "EUR"),
         (rf'£{_sep}([\d,.]+[kKmM]?)', "GBP"),
+        (rf'¥{_sep}([\d,.]+[kKmM]?)', "CNY"),
         (rf'\${_sep}([\d,.]+[kKmM]?)', None),  # $ — resolved by sender country
     ]
 
@@ -2177,39 +2218,82 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
                 # write both $ and HKD mean HKD — the $ is decorative.
                 tail = content[m.end():m.end() + 10].lstrip().lower()
                 suffix_cur = None
-                for tag in ("usdt", "hkd", "usd", "eur", "gbp", "chf"):
+                for tag in ("usdt", "hkd", "usd", "eur", "gbp", "chf", "cny", "rmb"):
                     if tail.startswith(tag):
-                        suffix_cur = "USD" if tag == "usdt" else tag.upper()
+                        suffix_cur = _canonicalize_currency(tag)
                         break
                 if suffix_cur:
                     return formatted, suffix_cur
                 if currency is None:
                     currency = _default_currency_for_country(sender_country)
-                return formatted, currency
+                return formatted, _canonicalize_currency(currency)
 
     # Number followed by currency suffix: 387k hkd, 435,000hkd, 1.265m hkd, 300k usdt
-    # Also handles symbol suffixes: 17,5€, 9.8€, 125£
+    # Also handles symbol suffixes: 17,5€, 9.8€, 125£, 450k rmb
     # The number+k/m is always together (no space between digits and k/m).
     # The leading lookbehind `(?<![A-Za-z])` prevents month-code bleed-through:
     # without it, "N4,1.475M hkd" would match starting at "4,1.475M" and parse
     # as 41,475,000 — the N4 month code joining the price via the comma.
-    currency_suffix = r'(?:\s*(?:hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy|€|£))'
+    # Trailing bare "$" accepted as suffix (dealers write "260000$" meaning USD/HKD
+    # depending on sender country).
+    currency_suffix = r'(?:\s*(?:hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy|cny|rmb|€|£|¥|\$))'
     m = re.search(r'(?<![A-Za-z])([\d,.]+[kKmM]?)' + currency_suffix, content, re.IGNORECASE)
     if m:
         raw_price = _normalize_adjacent_currency_price(m.group(1).strip())
         formatted = _format_price(raw_price)
         if formatted:
             full = m.group(0).upper()
-            for cur in ["USDT", "HKD", "USD", "EUR", "GBP", "CHF", "AED", "SGD", "JPY"]:
+            for cur in ["USDT", "HKD", "USD", "EUR", "GBP", "CHF", "AED", "SGD", "JPY", "CNY", "RMB"]:
                 if cur in full:
-                    return formatted, cur
+                    return formatted, _canonicalize_currency(cur)
             if '€' in m.group(0):
                 return formatted, "EUR"
             if '£' in m.group(0):
                 return formatted, "GBP"
+            if '¥' in m.group(0):
+                return formatted, "CNY"
+            if '$' in m.group(0):
+                # trailing bare $ — resolve by sender country, same rule as prefix $
+                return formatted, _default_currency_for_country(sender_country)
             return formatted, "USD"
 
+    # Last-resort Chinese pattern (only fires when no standard currency found)
+    cn_result = _extract_chinese_price()
+    if cn_result[0]:
+        return cn_result
+
     return None, None
+
+
+def extract_wtb_price(content: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+    """WTB-specific price extractor. Buyers express a budget via phrases like
+    'target: 105k HKD', 'budget: 105k', 'up to: 105k', 'can confirm: 105k',
+    'max 105k hkd', 'offer 105k'. Peel off the prefix phrase (everything up to
+    the colon or the keyword) and feed the remainder to the regular extractor,
+    so existing currency logic (HKD/USDT/RMB/etc) continues to work.
+    """
+    # Ordered longest-first so "can confirm" matches before "confirm" would.
+    prefixes = [
+        r'can\s+confirm',
+        r'up\s+to',
+        r'willing\s+to\s+pay',
+        r'target\s+price',
+        r'price\s+target',
+        r'target',
+        r'budget',
+        r'offer',
+        r'max',
+        r'at',
+    ]
+    pattern = r'\b(?:' + '|'.join(prefixes) + r')\s*[:\-]?\s*(.+)$'
+    m = re.search(pattern, content, re.IGNORECASE)
+    if m:
+        tail = m.group(1)
+        p, c = extract_price(tail, sender_country)
+        if p:
+            return p, c
+    # Fall back to the standard extractor
+    return extract_price(content, sender_country)
 
 
 def _apply_discount(price_val: float, discount_pct: float) -> str:
@@ -2320,6 +2404,8 @@ def extract_all_prices(content: str, sender_country: Optional[str] = None) -> li
         (r'(\d{3,9})\s*usdt', "USDT"),
         (r'(?:eur|€)\s*([\d,.]+[kKmM]?)', "EUR"),
         (r'(?:gbp|£)\s*([\d,.]+[kKmM]?)', "GBP"),
+        (r'(?:rmb|cny|¥)\s*([\d,.]+[kKmM]?)', "CNY"),
+        (r'([\d,.]+[kKmM]?)\s*(?:rmb|cny)', "CNY"),
     ]
 
     seen_positions = set()
@@ -2332,11 +2418,11 @@ def extract_all_prices(content: str, sender_country: Optional[str] = None) -> li
             raw = m.group(1).strip()
             formatted = _format_price(raw)
             if formatted:
-                prices.append((formatted, currency))
+                prices.append((formatted, _canonicalize_currency(currency)))
                 seen_positions.add(pos)
 
     # Sort by currency preference
-    currency_priority = {"USDT": 0, "USD": 1, "EUR": 2, "GBP": 3, "CHF": 4, "HKD": 5}
+    currency_priority = {"USD": 0, "EUR": 2, "GBP": 3, "CHF": 4, "HKD": 5, "CNY": 6}
     prices.sort(key=lambda x: currency_priority.get(x[1], 99))
 
     return prices
@@ -2952,7 +3038,10 @@ def _build_row(
     raw_month_year, month_year = _resolve_month_year(content, mode, ref_month, ref_year)
     location = extract_location(content, sender_country, mode)
     condition = extract_condition(content, mode, raw_month_year, ref_month, ref_year)
-    price, currency = extract_price(content, sender_country)
+    if mode == "WTB":
+        price, currency = extract_wtb_price(content, sender_country)
+    else:
+        price, currency = extract_price(content, sender_country)
     remarks = normalize_remarks(content)
     if mode == "WTB":
         location_remarks = extract_wtb_location_remarks(content)
@@ -3117,7 +3206,10 @@ def _process_messages_sync(
 
         location = extract_location(content, sender_country, mode)
         condition = extract_condition(content, mode, raw_month_year, ref_month, ref_year)
-        price, currency = extract_price(content, sender_country)
+        if mode == "WTB":
+            price, currency = extract_wtb_price(content, sender_country)
+        else:
+            price, currency = extract_price(content, sender_country)
 
         if mode == "WTS" and not price:
             review_reasons.append("No price found for WTS post")
@@ -3617,6 +3709,70 @@ async def process_generation(
 
     if flipped_count:
         logger.info(f"process_generation: cross-currency normalized {flipped_count} matched rows")
+
+    # --- Outlier price detection ---
+    # Group matched rows by ws_code. For each group, compute the median HKD-
+    # equivalent price. Any row whose HKD-equiv price is <1/3 or >3× the median
+    # is moved to needs_review with a "Price outlier" reason. This catches:
+    # (a) currency misclassifications (USD 140k vs HKD 140k = 8x discrepancy),
+    # (b) wildly-off dealer typos (260k for 5712/1R when market is 1.8M+),
+    # (c) single-row currency defaults that don't match the group.
+    #
+    # Requires at least 3 peer rows for the same ws_code — below that, any
+    # "outlier" is likely just low sample size.
+    FX_TO_HKD = {
+        "HKD": 1.0, "USD": 7.8, "USDT": 7.8, "CNY": 1.1, "RMB": 1.1,
+        "EUR": 8.4, "GBP": 9.8, "CHF": 8.8, "JPY": 0.05, "AED": 2.1, "SGD": 5.8,
+    }
+    def _to_hkd(num: str, cur: str) -> Optional[float]:
+        try:
+            return float(num.replace(',', '')) * FX_TO_HKD.get((cur or '').upper(), 1.0)
+        except ValueError:
+            return None
+
+    peers_by_ws: dict[str, list[float]] = {}
+    for row in matched_rows:
+        ws = (row.get("WS-Code") or "").strip()
+        num, _, cur = (row.get("Preis") or "").partition(' ')
+        if not ws or not num or not cur:
+            continue
+        v = _to_hkd(num, cur)
+        if v is not None:
+            peers_by_ws.setdefault(ws, []).append(v)
+
+    outlier_indices: list[int] = []
+    for idx, row in enumerate(matched_rows):
+        ws = (row.get("WS-Code") or "").strip()
+        num, _, cur = (row.get("Preis") or "").partition(' ')
+        if not ws or not num or not cur:
+            continue
+        peers = peers_by_ws.get(ws, [])
+        if len(peers) < 3:
+            continue
+        v = _to_hkd(num, cur)
+        if v is None:
+            continue
+        sorted_peers = sorted(peers)
+        median = sorted_peers[len(sorted_peers) // 2]
+        if median <= 0:
+            continue
+        ratio = v / median
+        if ratio < 0.33 or ratio > 3.0:
+            reason = (
+                f"Price outlier: {num} {cur} (~{int(v):,} HKD) vs market median "
+                f"~{int(median):,} HKD for {ws}"
+            )
+            row["_review_reason"] = reason
+            row["Review Reason"] = reason
+            row["_original_content"] = row.get("Original Text", "")
+            outlier_indices.append(idx)
+
+    for idx in sorted(set(outlier_indices), reverse=True):
+        needs_review_rows.append(matched_rows[idx])
+        matched_rows.pop(idx)
+
+    if outlier_indices:
+        logger.info(f"process_generation: flagged {len(outlier_indices)} price outliers")
 
     await _report("dedup", 88, "Deduplicating rows...")
 

@@ -424,7 +424,10 @@ async def get_order_book(
         # Prefer order-level whatsapp_phone (set by admin), fall back to user profile
         whatsapp_phone = order.whatsapp_phone or user_whatsapp_map.get(order.user_id)
 
-        # If year_raw is set (e.g., "2022+"), use it directly as date string
+        # If year_raw is set (e.g., "2022+"), use it directly as date string.
+        # When no warranty date was extracted from the dealer message, return empty
+        # — don't fall back to the message timestamp (that was the "04/26 every row"
+        # bug where dateless listings displayed the export month).
         year_raw = getattr(order, 'year_raw', None)
         if year_raw:
             date_str = year_raw
@@ -435,7 +438,7 @@ async def get_order_book(
             else:
                 date_str = f"01.01.{short_year:02d}"
         else:
-            date_str = order.created_at.strftime("%m.%d.%y")
+            date_str = ""
 
         # Use condition_raw if available (e.g., "Unworn only"), otherwise use enum value
         condition_raw = getattr(order, 'condition_raw', None)
