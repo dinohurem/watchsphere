@@ -3710,16 +3710,37 @@ async def process_generation(
     if flipped_count:
         logger.info(f"process_generation: cross-currency normalized {flipped_count} matched rows")
 
+    # --- Require Monat/Jahr on matched rows (unless 'only watch' in remarks) ---
+    # Matched rows without a year are ambiguous for buyers — we can't tell a 2018
+    # from a 2025 listing. The only legitimate exception is 'only watch' (bare
+    # watch with no papers/box), where the dealer often omits the year because
+    # there's no warranty card anyway.
+    missing_year_indices: list[int] = []
+    for idx, row in enumerate(matched_rows):
+        if row.get("Monat/Jahr", "").strip():
+            continue
+        remarks_l = (row.get("Bemerkungen") or "").lower()
+        if "only watch" in remarks_l:
+            continue
+        reason = "Matched watch has no year and remarks do not contain 'only watch'"
+        row["_review_reason"] = reason
+        row["Review Reason"] = reason
+        row["_original_content"] = row.get("Original Text", "")
+        missing_year_indices.append(idx)
+
+    for idx in sorted(set(missing_year_indices), reverse=True):
+        needs_review_rows.append(matched_rows[idx])
+        matched_rows.pop(idx)
+
+    if missing_year_indices:
+        logger.info(f"process_generation: moved {len(missing_year_indices)} rows to needs_review (no year, not only-watch)")
+
     # --- Outlier price detection ---
-    # Group matched rows by ws_code. For each group, compute the median HKD-
-    # equivalent price. Any row whose HKD-equiv price is <1/3 or >3× the median
-    # is moved to needs_review with a "Price outlier" reason. This catches:
-    # (a) currency misclassifications (USD 140k vs HKD 140k = 8x discrepancy),
-    # (b) wildly-off dealer typos (260k for 5712/1R when market is 1.8M+),
-    # (c) single-row currency defaults that don't match the group.
-    #
-    # Requires at least 3 peer rows for the same ws_code — below that, any
-    # "outlier" is likely just low sample size.
+    # Year-based check first (peers = same ws_code + same condition + same year),
+    # with a global-median fallback for rows that have no year-based peers at all.
+    # Catches: (a) currency misclassifications (USD 140k vs HKD 140k ≈ 8× drift),
+    # (b) wildly-off dealer typos (260k for 5712/1R when 2018 market is ~1.8M+),
+    # (c) single-row currency defaults that don't match the group consensus.
     FX_TO_HKD = {
         "HKD": 1.0, "USD": 7.8, "USDT": 7.8, "CNY": 1.1, "RMB": 1.1,
         "EUR": 8.4, "GBP": 9.8, "CHF": 8.8, "JPY": 0.05, "AED": 2.1, "SGD": 5.8,
@@ -3730,27 +3751,118 @@ async def process_generation(
         except ValueError:
             return None
 
+    def _extract_year(my: str) -> Optional[int]:
+        """Extract 4-digit year from the Monat/Jahr field.
+        Handles '02/26', 'N3/2026', '2025', '2025+', '11-2024', etc."""
+        if not my:
+            return None
+        m = re.search(r'(20\d{2})', my)
+        if m:
+            return int(m.group(1))
+        m = re.search(r'/(\d{2})(?:\+|$)', my)
+        if m:
+            return 2000 + int(m.group(1))
+        m = re.match(r'^(\d{2})(?:/|\+|$)', my)
+        if m:
+            yy = int(m.group(1))
+            if 10 <= yy <= 35:
+                return 2000 + yy
+        return None
+
+    # Bucket by (ws_code, condition, year) for year-based peers,
+    # and by ws_code alone for the global-median fallback.
+    year_buckets: dict[tuple[str, str, int], list[float]] = {}
     peers_by_ws: dict[str, list[float]] = {}
     for row in matched_rows:
         ws = (row.get("WS-Code") or "").strip()
+        cond = (row.get("Zustand") or "").strip().lower()
         num, _, cur = (row.get("Preis") or "").partition(' ')
         if not ws or not num or not cur:
             continue
         v = _to_hkd(num, cur)
-        if v is not None:
-            peers_by_ws.setdefault(ws, []).append(v)
+        if v is None:
+            continue
+        peers_by_ws.setdefault(ws, []).append(v)
+        year = _extract_year(row.get("Monat/Jahr") or "")
+        if year is not None:
+            year_buckets.setdefault((ws, cond, year), []).append(v)
+
+    def _peers_for_year(ws: str, cond: str, year: int, self_hkd: float) -> tuple[Optional[list[float]], int]:
+        """Return (peers list excluding one instance of self, year_used). Tries
+        exact year first, then nearest higher, then nearest lower, requiring
+        ≥3 peers in the chosen bucket (i.e. ≥2 after self is removed).
+        Returns (None, 0) when no bucket qualifies."""
+        def _without_self(bucket: list[float]) -> list[float]:
+            # Remove one occurrence of self_hkd so the row doesn't self-anchor.
+            out = list(bucket)
+            try:
+                out.remove(self_hkd)
+            except ValueError:
+                pass
+            return out
+
+        exact = year_buckets.get((ws, cond, year))
+        if exact and len(exact) >= 3:
+            return _without_self(exact), year
+        # Nearest higher years (up to +10)
+        for offset in range(1, 11):
+            b = year_buckets.get((ws, cond, year + offset))
+            if b and len(b) >= 3:
+                return _without_self(b), year + offset
+        # Nearest lower years (up to -10)
+        for offset in range(1, 11):
+            b = year_buckets.get((ws, cond, year - offset))
+            if b and len(b) >= 3:
+                return _without_self(b), year - offset
+        return None, 0
 
     outlier_indices: list[int] = []
     for idx, row in enumerate(matched_rows):
         ws = (row.get("WS-Code") or "").strip()
+        cond = (row.get("Zustand") or "").strip().lower()
         num, _, cur = (row.get("Preis") or "").partition(' ')
         if not ws or not num or not cur:
             continue
-        peers = peers_by_ws.get(ws, [])
-        if len(peers) < 3:
-            continue
         v = _to_hkd(num, cur)
         if v is None:
+            continue
+
+        year = _extract_year(row.get("Monat/Jahr") or "")
+        year_check_fired = False
+
+        if year is not None:
+            peers, year_used = _peers_for_year(ws, cond, year, v)
+            if peers and len(peers) >= 2:
+                year_check_fired = True
+                # Use inter-quartile range to establish the "typical" band,
+                # then widen by tolerance. Min/max is fooled when the bucket
+                # itself contains duplicate outlier rows (e.g. a bad price
+                # reposted N times — the bad value becomes the min).
+                sp = sorted(peers)
+                n = len(sp)
+                q1 = sp[n // 4]
+                q3 = sp[(3 * n) // 4] if n >= 4 else sp[-1]
+                tolerance = 0.25 if year_used == year else 0.35
+                lo_bound = q1 * (1 - tolerance)
+                hi_bound = q3 * (1 + tolerance)
+                if not (lo_bound <= v <= hi_bound):
+                    year_tag = f"{year_used}" if year_used == year else f"{year_used} (nearest to {year})"
+                    reason = (
+                        f"Price outlier: {num} {cur} (~{int(v):,} HKD) outside "
+                        f"{int(tolerance*100)}% of {int(q1):,}-{int(q3):,} HKD "
+                        f"for {ws} {cond or '?'} {year_tag}"
+                    )
+                    row["_review_reason"] = reason
+                    row["Review Reason"] = reason
+                    row["_original_content"] = row.get("Original Text", "")
+                    outlier_indices.append(idx)
+
+        # Fallback: global-median per ws_code — only when the year-based check
+        # didn't fire (no year, or no qualifying peer bucket anywhere).
+        if year_check_fired:
+            continue
+        peers = peers_by_ws.get(ws, [])
+        if len(peers) < 3:
             continue
         sorted_peers = sorted(peers)
         median = sorted_peers[len(sorted_peers) // 2]
