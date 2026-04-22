@@ -217,9 +217,11 @@ export default function OrderBookScreen() {
     return `${currency} ${price.toLocaleString('de-DE')}`;
   };
 
-  // Format date to show MM/YY format (e.g., "02/26")
+  // Format date to show MM/YY format (e.g., "02/26") or bare year ("2022", "2026+")
   const formatOrderDate = (dateStr: string | undefined) => {
     if (!dateStr) return '-';
+    // Bare 4-digit year (with optional + for WTB): show as-is
+    if (/^\d{4}\+?$/.test(dateStr)) return dateStr;
     // Try parsing MM.DD.YY format from backend API
     const parts = dateStr.split('.');
     if (parts.length === 3) {

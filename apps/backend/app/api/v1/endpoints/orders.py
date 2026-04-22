@@ -436,7 +436,9 @@ async def get_order_book(
             if order.watch_month:
                 date_str = f"{order.watch_month:02d}.01.{short_year:02d}"
             else:
-                date_str = f"01.01.{short_year:02d}"
+                # Bare year (no month) — emit just the 4-digit year so the
+                # frontend renders "2022" instead of fabricating "01/22".
+                date_str = f"{order.year}"
         else:
             date_str = ""
 

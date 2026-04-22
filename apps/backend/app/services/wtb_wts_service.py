@@ -287,6 +287,17 @@ REMARKS_MAP = {
     "card only": "Card Only",
     "box only": "Box Only",
     "no box": "No Box",
+
+    # "Can be Used" — per-user rule: applies to BOTH WTS and WTB so dealers who
+    # tag a listing as "used ok" / "used fine" / "worn" map to one canonical label.
+    "can be used": "Can be Used",
+    "used ok": "Can be Used",
+    "used okay": "Can be Used",
+    "used fine": "Can be Used",
+
+    # WTB-only "any year" sentinel — surfaces the buyer's "any year" intent in
+    # the remarks column so reviewers can see it at a glance.
+    "any year": "Any Year",
 }
 
 # Brand abbreviation/nickname mapping (lowercase -> canonical brand name)
@@ -774,12 +785,32 @@ def detect_post_type(content: str) -> Optional[str]:
     wts_pos = _find_keyword_pos(content_lower, WTS_KEYWORDS)
     wtb_pos = _find_keyword_pos(content_lower, WTB_KEYWORDS)
 
-    # If both found, whichever appears first wins
+    def _has_heavy_wts_signal(txt: str) -> bool:
+        """A message with multiple currency-tagged prices is a WTS stock list
+        regardless of how it starts. Catches messages like 'Looking for USDT
+        pay HKD cash' followed by 40 lines of priced inventory."""
+        price_hits = len(re.findall(
+            r'(?:\$|€|£|HKD|USD|EUR|GBP|CHF|USDT|HK\$)\s*[\d,.]+'
+            r'|[\d,.]+\s*(?:HKD|USD|EUR|GBP|CHF|AED|USDT)\b',
+            txt, re.IGNORECASE,
+        ))
+        # 3+ priced lines → definitely a seller's stock list
+        return price_hits >= 3
+
+    # If both found, whichever appears first wins — UNLESS the WTB keyword is
+    # just a header on an obvious WTS stock list. Only flip when WTB won AND
+    # the rest of the message reads as a seller's priced inventory.
     if wts_pos is not None and wtb_pos is not None:
-        return "WTS" if wts_pos <= wtb_pos else "WTB"
+        winner = "WTS" if wts_pos <= wtb_pos else "WTB"
+        if winner == "WTB" and _has_heavy_wts_signal(content):
+            return "WTS"
+        return winner
     if wts_pos is not None:
         return "WTS"
     if wtb_pos is not None:
+        # Pure WTB header but body is priced inventory → reclassify as WTS.
+        if _has_heavy_wts_signal(content):
+            return "WTS"
         return "WTB"
 
     # Currency-tagged price → clear WTS signal
@@ -2273,12 +2304,19 @@ def extract_wtb_price(content: str, sender_country: Optional[str] = None) -> tup
     so existing currency logic (HKD/USDT/RMB/etc) continues to work.
     """
     # Ordered longest-first so "can confirm" matches before "confirm" would.
+    # Covers every variant the user listed: target/budget/up to/can confirm/
+    # can pay/pay max/willing to pay/offer/max/at. Each is allowed an optional
+    # "[:\-]" separator before the price.
     prefixes = [
         r'can\s+confirm',
-        r'up\s+to',
         r'willing\s+to\s+pay',
+        r'pay\s+max',
+        r'can\s+pay',
+        r'up\s+to',
         r'target\s+price',
         r'price\s+target',
+        r'any\s+year\s+target',
+        r'any\s+year\s+budget',
         r'target',
         r'budget',
         r'offer',
@@ -2601,23 +2639,95 @@ def extract_location(content: str, sender_country: Optional[str], mode: str) -> 
     return sender_country
 
 
-def extract_wtb_location_remarks(content: str) -> Optional[str]:
-    """For WTB: extract location preferences from text to add to remarks."""
-    patterns = [
-        r'(?:only\s+in\s+\w+)',
-        r'(?:\w+\s+only)',
-        r'(?:\w+\s+deals?\s+only)',
-        r'(?:\w+\s+sellers?\s+preferred)',
-        r'(?:eu\s+(?:only|deals?))',
-        r'(?:europe\s+(?:only|deals?))',
-    ]
-    content_lower = content.lower()
-    remarks = []
-    for pattern in patterns:
-        m = re.search(pattern, content_lower)
+_LOCATION_CODES = {
+    "hk": "HK", "hong kong": "HK", "hongkong": "HK",
+    "us": "US", "usa": "US", "united states": "US",
+    "uk": "UK", "united kingdom": "UK", "england": "UK",
+    "eu": "EU", "europe": "EU",
+    "de": "DE", "germany": "DE", "deutschland": "DE",
+    "fr": "FR", "france": "FR",
+    "it": "IT", "italy": "IT", "italia": "IT",
+    "ch": "CH", "switzerland": "CH", "swiss": "CH",
+    "ae": "AE", "dxb": "AE", "dubai": "AE", "uae": "AE", "emirates": "AE",
+    "sg": "SG", "singapore": "SG",
+    "jp": "JP", "japan": "JP",
+    "cn": "CN", "china": "CN",
+    "nl": "NL", "netherlands": "NL", "holland": "NL",
+    "au": "AU", "australia": "AU",
+    "ca": "CA", "canada": "CA",
+    "kr": "KR", "korea": "KR",
+    "th": "TH", "thailand": "TH",
+    "vn": "VN", "vietnam": "VN",
+    "ph": "PH", "philippines": "PH",
+    "worldwide": "Worldwide", "any country": "Worldwide", "any location": "Worldwide",
+}
+# Longest-first so "hong kong" matches before "hk" would consume "h".
+_LOCATION_TOKENS_SORTED = sorted(_LOCATION_CODES.keys(), key=len, reverse=True)
+_LOCATION_TOKEN_PATTERN = r'\b(?:' + '|'.join(re.escape(t) for t in _LOCATION_TOKENS_SORTED) + r')\b'
+
+
+def extract_location_remarks(content: str, mode: str) -> Optional[str]:
+    """Extract location-preference remarks for BOTH WTS and WTB.
+
+    Matches the dealer phrases described by the user:
+      - "watch in HK"  / "watch in EU"            (WTS seller's location)
+      - "need in HK"   / "need in EU"             (WTB buyer's requested location)
+      - "worldwide", "can be worldwide"
+      - multi-country: "need in HK, US or DXB" → "Need in HK, US, AE"
+
+    Returns a normalized string like "Watch in HK" or "Need in HK, US, AE",
+    or None if no location preference is present.
+    """
+    cl = content.lower()
+
+    # Match the prefix verb ("watch in", "need in", "located in") and capture
+    # the tail up to end-of-line or a terminator. Split the tail on commas,
+    # slashes, "or", "and" and canonicalize each candidate to a code.
+    prefix_match = re.search(
+        r'\b(watch|need|looking|located|available)\s+(?:is\s+)?(?:in|at)\s+([^\n.;]+)',
+        cl,
+    )
+    verb_label = "Watch in"
+    tail = None
+    if prefix_match:
+        verb = prefix_match.group(1)
+        tail = prefix_match.group(2)
+        verb_label = {
+            "watch": "Watch in",
+            "located": "Watch in",
+            "available": "Watch in",
+            "need": "Need in",
+            "looking": "Need in",
+        }.get(verb, "Watch in")
+
+    # Worldwide shortcut
+    if re.search(r'\b(?:worldwide|any\s+country|any\s+location)\b', cl):
+        return "Worldwide" if mode == "WTB" else "Watch Worldwide"
+
+    if not tail:
+        return None
+
+    # Tokenize the tail on commas/slashes/or/and
+    parts = re.split(r'[,/]|\bor\b|\band\b', tail)
+    codes: list[str] = []
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        # Try to match any location token inside this part
+        m = re.search(_LOCATION_TOKEN_PATTERN, p)
         if m:
-            remarks.append(m.group(0).strip().title())
-    return "; ".join(remarks) if remarks else None
+            code = _LOCATION_CODES.get(m.group(0))
+            if code and code not in codes:
+                codes.append(code)
+    if not codes:
+        return None
+    return f"{verb_label} " + ", ".join(codes)
+
+
+# Backward-compatible WTB helper (kept for _build_row callers)
+def extract_wtb_location_remarks(content: str) -> Optional[str]:
+    return extract_location_remarks(content, "WTB")
 
 
 def normalize_remarks(content: str) -> str:
@@ -2746,6 +2856,10 @@ def parse_stock_list(
     current_brand = None
     section_condition = None
 
+    # Message-level location remarks apply to every row in the stock list
+    # (dealers usually write "Watch in HK" once at the top, not per line).
+    msg_location_remarks = extract_location_remarks(content, mode) or ""
+
     # Pre-process: merge split lines where reference is on one line and price/year
     # on the next (common in AP/PP stock lists). Pattern: line with ref but no price,
     # followed by 1-2 lines with price/year but no ref.
@@ -2867,6 +2981,8 @@ def parse_stock_list(
 
             price, currency = extract_price_from_line(stripped, sender_country)
             remarks = normalize_remarks(stripped)
+            if msg_location_remarks:
+                remarks = f"{remarks}; {msg_location_remarks}" if remarks else msg_location_remarks
             price_str = f"{price} {currency}" if price and currency else (price or "")
 
             nid_reason = "No matching watch found in database"
@@ -2920,6 +3036,8 @@ def parse_stock_list(
 
         price, currency = extract_price_from_line(stripped, sender_country)
         remarks = normalize_remarks(stripped)
+        if msg_location_remarks:
+            remarks = f"{remarks}; {msg_location_remarks}" if remarks else msg_location_remarks
 
         if mode == "WTS" and not price:
             review_reasons.append("No price found for WTS post")
@@ -3043,10 +3161,10 @@ def _build_row(
     else:
         price, currency = extract_price(content, sender_country)
     remarks = normalize_remarks(content)
-    if mode == "WTB":
-        location_remarks = extract_wtb_location_remarks(content)
-        if location_remarks:
-            remarks = f"{remarks}; {location_remarks}" if remarks else location_remarks
+    # Location-preference remarks apply to BOTH WTS and WTB per user rules.
+    location_remarks = extract_location_remarks(content, mode)
+    if location_remarks:
+        remarks = f"{remarks}; {location_remarks}" if remarks else location_remarks
 
     price_str = f"{price} {currency}" if price and currency else (price or "")
 
@@ -3202,14 +3320,20 @@ def _process_messages_sync(
 
         watch = watch_matches[0]
 
-        raw_month_year, month_year = _resolve_month_year(content, mode, ref_month, ref_year)
+        # When the message contains multiple watches on different lines with
+        # different years, resolve date/condition/price against the ONE line
+        # that names this watch — not the full content. Otherwise every match
+        # inherits the first year/price/etc in the message.
+        watch_line = _find_watch_line(content, watch) or content
+
+        raw_month_year, month_year = _resolve_month_year(watch_line, mode, ref_month, ref_year)
 
         location = extract_location(content, sender_country, mode)
-        condition = extract_condition(content, mode, raw_month_year, ref_month, ref_year)
+        condition = extract_condition(watch_line, mode, raw_month_year, ref_month, ref_year)
         if mode == "WTB":
-            price, currency = extract_wtb_price(content, sender_country)
+            price, currency = extract_wtb_price(watch_line, sender_country)
         else:
-            price, currency = extract_price(content, sender_country)
+            price, currency = extract_price(watch_line, sender_country)
 
         if mode == "WTS" and not price:
             review_reasons.append("No price found for WTS post")
@@ -3230,10 +3354,9 @@ def _process_messages_sync(
             continue
 
         remarks = normalize_remarks(content)
-        if mode == "WTB":
-            location_remarks = extract_wtb_location_remarks(content)
-            if location_remarks:
-                remarks = f"{remarks}; {location_remarks}" if remarks else location_remarks
+        location_remarks = extract_location_remarks(content, mode)
+        if location_remarks:
+            remarks = f"{remarks}; {location_remarks}" if remarks else location_remarks
 
         price_str = f"{price} {currency}" if price and currency else (price or "")
 
@@ -3437,10 +3560,9 @@ async def process_generation(
                 if not price_val:
                     price_val, currency_val = extract_price_from_line(original_content, sender_country_val)
                 remarks_val = normalize_remarks(original_content)
-                if mode == "WTB":
-                    loc_remarks = extract_wtb_location_remarks(original_content)
-                    if loc_remarks:
-                        remarks_val = f"{remarks_val}; {loc_remarks}" if remarks_val else loc_remarks
+                loc_remarks = extract_location_remarks(original_content, mode)
+                if loc_remarks:
+                    remarks_val = f"{remarks_val}; {loc_remarks}" if remarks_val else loc_remarks
                 price_str_val = f"{price_val} {currency_val}" if price_val and currency_val else (price_val or "")
 
                 # Use catalog watch data if available, otherwise AI-determined data
@@ -3834,22 +3956,20 @@ async def process_generation(
             peers, year_used = _peers_for_year(ws, cond, year, v)
             if peers and len(peers) >= 2:
                 year_check_fired = True
-                # Use inter-quartile range to establish the "typical" band,
-                # then widen by tolerance. Min/max is fooled when the bucket
-                # itself contains duplicate outlier rows (e.g. a bad price
-                # reposted N times — the bad value becomes the min).
+                # Median-based band. Median is robust to bucket contamination
+                # by duplicated outliers (a bad price reposted N times doesn't
+                # drag the median the way min/max or IQR does). The tolerance
+                # widens around the median value.
                 sp = sorted(peers)
-                n = len(sp)
-                q1 = sp[n // 4]
-                q3 = sp[(3 * n) // 4] if n >= 4 else sp[-1]
+                median = sp[len(sp) // 2]
                 tolerance = 0.25 if year_used == year else 0.35
-                lo_bound = q1 * (1 - tolerance)
-                hi_bound = q3 * (1 + tolerance)
+                lo_bound = median * (1 - tolerance)
+                hi_bound = median * (1 + tolerance)
                 if not (lo_bound <= v <= hi_bound):
                     year_tag = f"{year_used}" if year_used == year else f"{year_used} (nearest to {year})"
                     reason = (
                         f"Price outlier: {num} {cur} (~{int(v):,} HKD) outside "
-                        f"{int(tolerance*100)}% of {int(q1):,}-{int(q3):,} HKD "
+                        f"{int(tolerance*100)}% of median {int(median):,} HKD "
                         f"for {ws} {cond or '?'} {year_tag}"
                     )
                     row["_review_reason"] = reason
