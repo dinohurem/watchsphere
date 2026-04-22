@@ -1027,13 +1027,15 @@ export default function WatchDetailsScreen() {
         // Helper to format date safely - show MM/YY format (e.g., "02/26")
         const formatOrderDate = (dateStr: string | undefined) => {
           if (!dateStr) return '-';
-          // Try parsing MM.DD.YY format from backend
+          // Bare 4-digit year (e.g., "2022") — show as-is (no month fabrication)
+          if (/^\d{4}\+?$/.test(dateStr)) return dateStr;
+          // MM.DD.YY format from backend
           const parts = dateStr.split('.');
           if (parts.length === 3) {
             return `${parts[0]}/${parts[2]}`;
           }
           const date = new Date(dateStr);
-          if (isNaN(date.getTime())) return '-';
+          if (isNaN(date.getTime())) return dateStr;
           const month = (date.getMonth() + 1).toString().padStart(2, '0');
           const year = date.getFullYear().toString().slice(-2);
           return `${month}/${year}`;
@@ -1605,13 +1607,17 @@ export default function WatchDetailsScreen() {
                       )}
                     </View>
                   )}
-                  <Text style={[styles.tableCell, styles.tableCellTextBold, { flex: 1, textAlign: 'center' }]}>
-                    {order.price == null
-                      ? '—'
-                      : order.currency && order.currency !== 'EUR'
-                        ? `${order.currency} ${order.price.toLocaleString('de-DE')}`
-                        : formatPriceEurBefore(order.price)}
-                  </Text>
+                  <View style={[styles.tableCell, { flex: 1, alignItems: 'center', justifyContent: 'center' }]}>
+                    {order.price == null ? (
+                      <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#CCCCCC' }]}>-</Text>
+                    ) : (
+                      <Text style={[styles.tableCellTextBold, { textAlign: 'center' }]}>
+                        {order.currency && order.currency !== 'EUR'
+                          ? `${order.currency} ${order.price.toLocaleString('de-DE')}`
+                          : formatPriceEurBefore(order.price)}
+                      </Text>
+                    )}
+                  </View>
                   <View style={{ flex: v2Enabled ? 0.7 : 0.5, alignItems: 'center', justifyContent: 'center', paddingVertical: hp(6) }}>
                     <TouchableOpacity
                       onPress={() => handleWhatsAppChat(order)}
