@@ -2062,16 +2062,20 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
             return f"{month:02d}/{year % 100:02d}{suffix}"
 
     # Pure 4-digit year: 2024, 2025 — return as year only, not MM/YY
+    # WTB "+" suffix means "year or later"; drop it when year >= current year
+    # (no future to extend to).
     m = re.match(r'^(\d{4})$', text_clean)
     if m:
         year = int(m.group(1))
-        return f"{year}{suffix}"
+        year_suffix = suffix if year < ref_year else ""
+        return f"{year}{year_suffix}"
 
     # Pure 2-digit number: could be a year (19=2019, 25=2025)
     m = re.match(r'^(\d{2})$', text_clean)
     if m:
         year = 2000 + int(m.group(1))
-        return f"{year}{suffix}"
+        year_suffix = suffix if year < ref_year else ""
+        return f"{year}{year_suffix}"
 
     return text + suffix if suffix else text
 
@@ -3103,7 +3107,7 @@ def _resolve_month_year(content: str, mode: str, ref_month: int, ref_year: int) 
 
     year = extract_year_from_line(content)
     if year:
-        suffix = "+" if mode == "WTB" else ""
+        suffix = "+" if mode == "WTB" and year < ref_year else ""
         return None, f"{year}{suffix}"
     return None, ""
 
