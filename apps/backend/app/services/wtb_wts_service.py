@@ -2680,11 +2680,11 @@ def extract_location_remarks(content: str, mode: str) -> Optional[str]:
     """
     cl = content.lower()
 
-    # Match the prefix verb ("watch in", "need in", "located in") and capture
-    # the tail up to end-of-line or a terminator. Split the tail on commas,
-    # slashes, "or", "and" and canonicalize each candidate to a code.
+    # Match the prefix verb ("watch in", "need in", "located in", "only in")
+    # and capture the tail up to end-of-line or a terminator. Split the tail
+    # on commas, slashes, "or", "and" and canonicalize each candidate to a code.
     prefix_match = re.search(
-        r'\b(watch|need|looking|located|available)\s+(?:is\s+)?(?:in|at)\s+([^\n.;]+)',
+        r'\b(watch|need|looking|located|available|only)\s+(?:is\s+)?(?:in|at)\s+([^\n.;]+)',
         cl,
     )
     verb_label = "Watch in"
@@ -2698,6 +2698,7 @@ def extract_location_remarks(content: str, mode: str) -> Optional[str]:
             "available": "Watch in",
             "need": "Need in",
             "looking": "Need in",
+            "only": "Need in" if mode == "WTB" else "Watch in",
         }.get(verb, "Watch in")
 
     # Worldwide shortcut
@@ -3320,20 +3321,29 @@ def _process_messages_sync(
 
         watch = watch_matches[0]
 
-        # When the message contains multiple watches on different lines with
-        # different years, resolve date/condition/price against the ONE line
-        # that names this watch — not the full content. Otherwise every match
-        # inherits the first year/price/etc in the message.
-        watch_line = _find_watch_line(content, watch) or content
+        # When the message contains multiple distinct watches, resolve
+        # date/condition/price against the specific line naming THIS watch, so
+        # each match gets its own attributes. When there's only one watch, use
+        # the full content — WTB messages commonly spread the ref on one line
+        # and year/target/location across separate follow-up lines.
+        if len(watch_matches) > 1:
+            scope = _find_watch_line(content, watch) or content
+        else:
+            scope = content
 
-        raw_month_year, month_year = _resolve_month_year(watch_line, mode, ref_month, ref_year)
+        raw_month_year, month_year = _resolve_month_year(scope, mode, ref_month, ref_year)
 
         location = extract_location(content, sender_country, mode)
-        condition = extract_condition(watch_line, mode, raw_month_year, ref_month, ref_year)
+        condition = extract_condition(scope, mode, raw_month_year, ref_month, ref_year)
         if mode == "WTB":
-            price, currency = extract_wtb_price(watch_line, sender_country)
+            price, currency = extract_wtb_price(scope, sender_country)
         else:
-            price, currency = extract_price(watch_line, sender_country)
+            price, currency = extract_price(scope, sender_country)
+            # Fallback for lines without explicit currency tags:
+            # "126508 YML 530k n3" has no HKD/USD marker but 530k is clearly
+            # the price. extract_price_from_line scans bare numeric tokens.
+            if not price:
+                price, currency = extract_price_from_line(scope, sender_country)
 
         if mode == "WTS" and not price:
             review_reasons.append("No price found for WTS post")
@@ -3832,30 +3842,10 @@ async def process_generation(
     if flipped_count:
         logger.info(f"process_generation: cross-currency normalized {flipped_count} matched rows")
 
-    # --- Require Monat/Jahr on matched rows (unless 'only watch' in remarks) ---
-    # Matched rows without a year are ambiguous for buyers — we can't tell a 2018
-    # from a 2025 listing. The only legitimate exception is 'only watch' (bare
-    # watch with no papers/box), where the dealer often omits the year because
-    # there's no warranty card anyway.
-    missing_year_indices: list[int] = []
-    for idx, row in enumerate(matched_rows):
-        if row.get("Monat/Jahr", "").strip():
-            continue
-        remarks_l = (row.get("Bemerkungen") or "").lower()
-        if "only watch" in remarks_l:
-            continue
-        reason = "Matched watch has no year and remarks do not contain 'only watch'"
-        row["_review_reason"] = reason
-        row["Review Reason"] = reason
-        row["_original_content"] = row.get("Original Text", "")
-        missing_year_indices.append(idx)
-
-    for idx in sorted(set(missing_year_indices), reverse=True):
-        needs_review_rows.append(matched_rows[idx])
-        matched_rows.pop(idx)
-
-    if missing_year_indices:
-        logger.info(f"process_generation: moved {len(missing_year_indices)} rows to needs_review (no year, not only-watch)")
+    # Missing-year rows are kept in matched. Year is a quality signal but not
+    # a blocker — a watch with price + condition + remarks is still a useful
+    # listing even without a warranty date. The year-based price-outlier check
+    # already handles the downstream "is this price sane" question.
 
     # --- Outlier price detection ---
     # Year-based check first (peers = same ws_code + same condition + same year),
