@@ -629,14 +629,28 @@ export default function WatchDetailsScreen() {
     return filteredBuyOrders.filter(order => {
       if (!matchesLocationFilter(order.country_code)) return false;
       if (selectedYears.length > 0 || selectedMonths.length > 0) {
-        const parts = order.date?.split('/');
-        if (parts && parts.length === 2) {
-          const orderMonth = parseInt(parts[0], 10);
-          const orderYear = 2000 + parseInt(parts[1], 10);
-          if (selectedYears.length > 0 && !selectedYears.includes(orderYear)) return false;
-          if (selectedMonths.length > 0 && !selectedMonths.includes(orderMonth)) return false;
-        } else if (selectedYears.length > 0 || selectedMonths.length > 0) {
-          return false;
+        // Order.date can be MM/YY (e.g. "03/26"), bare year ("2025", "2025+"),
+        // or "-" for missing. Extract month (optional) and year.
+        const raw = order.date || '';
+        let orderMonth: number | null = null;
+        let orderYear: number | null = null;
+        const mmYy = raw.match(/^(\d{1,2})\/(\d{2})\+?$/);
+        const bareYear = raw.match(/^(\d{4})\+?$/);
+        if (mmYy) {
+          orderMonth = parseInt(mmYy[1], 10);
+          orderYear = 2000 + parseInt(mmYy[2], 10);
+        } else if (bareYear) {
+          orderYear = parseInt(bareYear[1], 10);
+        }
+        // Year constraint: require the order to have a year AND match selection.
+        if (selectedYears.length > 0) {
+          if (orderYear == null || !selectedYears.includes(orderYear)) return false;
+        }
+        // Month constraint: only filters rows that have a month. Bare-year rows
+        // bypass this (no month to compare) so they still appear under a year
+        // filter without a month selection.
+        if (selectedMonths.length > 0) {
+          if (orderMonth == null || !selectedMonths.includes(orderMonth)) return false;
         }
       }
       return true;
@@ -648,14 +662,28 @@ export default function WatchDetailsScreen() {
     return filteredSellOrders.filter(order => {
       if (!matchesLocationFilter(order.country_code)) return false;
       if (selectedYears.length > 0 || selectedMonths.length > 0) {
-        const parts = order.date?.split('/');
-        if (parts && parts.length === 2) {
-          const orderMonth = parseInt(parts[0], 10);
-          const orderYear = 2000 + parseInt(parts[1], 10);
-          if (selectedYears.length > 0 && !selectedYears.includes(orderYear)) return false;
-          if (selectedMonths.length > 0 && !selectedMonths.includes(orderMonth)) return false;
-        } else if (selectedYears.length > 0 || selectedMonths.length > 0) {
-          return false;
+        // Order.date can be MM/YY (e.g. "03/26"), bare year ("2025", "2025+"),
+        // or "-" for missing. Extract month (optional) and year.
+        const raw = order.date || '';
+        let orderMonth: number | null = null;
+        let orderYear: number | null = null;
+        const mmYy = raw.match(/^(\d{1,2})\/(\d{2})\+?$/);
+        const bareYear = raw.match(/^(\d{4})\+?$/);
+        if (mmYy) {
+          orderMonth = parseInt(mmYy[1], 10);
+          orderYear = 2000 + parseInt(mmYy[2], 10);
+        } else if (bareYear) {
+          orderYear = parseInt(bareYear[1], 10);
+        }
+        // Year constraint: require the order to have a year AND match selection.
+        if (selectedYears.length > 0) {
+          if (orderYear == null || !selectedYears.includes(orderYear)) return false;
+        }
+        // Month constraint: only filters rows that have a month. Bare-year rows
+        // bypass this (no month to compare) so they still appear under a year
+        // filter without a month selection.
+        if (selectedMonths.length > 0) {
+          if (orderMonth == null || !selectedMonths.includes(orderMonth)) return false;
         }
       }
       return true;
