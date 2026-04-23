@@ -449,7 +449,7 @@ interface OrderBookItem {
   country_code: string;
   country_name?: string;
   date: string;
-  condition: 'Used' | 'Unworn';
+  condition: string;
   price: number;
   currency?: string;
   has_box?: boolean;
@@ -497,6 +497,7 @@ export default function WatchDetailsScreen() {
   // Watch alert state
   const [watchAlerts, setWatchAlerts] = useState<any[]>([]);
   const [showAlertModal, setShowAlertModal] = useState(false);
+  const [remarksModal, setRemarksModal] = useState<string | null>(null);
   const [alertLoading, setAlertLoading] = useState(false);
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
   const [alertListMode, setAlertListMode] = useState(true);
@@ -1075,7 +1076,7 @@ export default function WatchDetailsScreen() {
           country_code: order.country_code || 'us',
           country_name: order.country_name,
           date: formatOrderDate(order.date),
-          condition: order.condition === 'Unworn' ? 'Unworn' : 'Used',
+          condition: order.condition || '',
           price: order.price,
           currency: order.currency || 'EUR',
           has_box: order.has_box,
@@ -1093,7 +1094,7 @@ export default function WatchDetailsScreen() {
           country_code: order.country_code || 'us',
           country_name: order.country_name,
           date: formatOrderDate(order.date),
-          condition: order.condition === 'Unworn' ? 'Unworn' : 'Used',
+          condition: order.condition || '',
           price: order.price,
           currency: order.currency || 'EUR',
           has_box: order.has_box,
@@ -1624,13 +1625,22 @@ export default function WatchDetailsScreen() {
                   </View>
                   {hasRemarks && (
                     <View style={[styles.tableCell, { flex: 0.8, alignItems: 'center' }]}>
-                      {order.remarks ? (
-                        <View style={{ backgroundColor: 'rgba(33,33,33,0.06)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(6) }}>
-                          <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(10), color: '#555555' }]} numberOfLines={2}>
-                            {order.remarks}
-                          </Text>
-                        </View>
-                      ) : (
+                      {order.remarks ? (() => {
+                        const parts = order.remarks.split(/\s*;\s*/).filter(Boolean);
+                        const isMulti = parts.length > 1;
+                        return (
+                          <TouchableOpacity
+                            onPress={() => setRemarksModal(order.remarks!)}
+                            activeOpacity={0.6}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            style={{ backgroundColor: 'rgba(33,33,33,0.06)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(6) }}
+                          >
+                            <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(10), color: '#555555' }]} numberOfLines={2}>
+                              {isMulti ? `${parts[0]} +${parts.length - 1}` : parts[0]}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })() : (
                         <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#CCCCCC' }]}>-</Text>
                       )}
                     </View>
@@ -2484,6 +2494,44 @@ export default function WatchDetailsScreen() {
               <Text style={styles.yearFilterApplyText}>Apply</Text>
             </TouchableOpacity>
           </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Remarks tooltip modal */}
+      <Modal
+        visible={remarksModal !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRemarksModal(null)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setRemarksModal(null)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: wp(32) }}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {}}
+            style={{ backgroundColor: '#FFFFFF', borderRadius: sp(16), paddingHorizontal: wp(20), paddingVertical: hp(18), width: '100%', maxWidth: wp(320), shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: hp(12) }}>
+              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121' }}>Remarks</Text>
+              <TouchableOpacity onPress={() => setRemarksModal(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(18), color: '#999999' }}>×</Text>
+              </TouchableOpacity>
+            </View>
+            {(remarksModal || '').split(/\s*;\s*/).filter(Boolean).map((part, i) => (
+              <View
+                key={i}
+                style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: hp(6) }}
+              >
+                <View style={{ width: sp(5), height: sp(5), borderRadius: sp(5), backgroundColor: '#212121', marginTop: hp(8), marginRight: wp(10) }} />
+                <Text style={{ flex: 1, fontFamily: 'HankenGrotesk_400Regular', fontSize: fp(14), color: '#333333', lineHeight: fp(20) }}>
+                  {part}
+                </Text>
+              </View>
+            ))}
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </View>

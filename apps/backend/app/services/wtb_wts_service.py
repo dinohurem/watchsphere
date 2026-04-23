@@ -2062,20 +2062,16 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
             return f"{month:02d}/{year % 100:02d}{suffix}"
 
     # Pure 4-digit year: 2024, 2025 — return as year only, not MM/YY
-    # WTB "+" suffix means "year or later"; drop it when year >= current year
-    # (no future to extend to).
     m = re.match(r'^(\d{4})$', text_clean)
     if m:
         year = int(m.group(1))
-        year_suffix = suffix if year < ref_year else ""
-        return f"{year}{year_suffix}"
+        return f"{year}{suffix}"
 
     # Pure 2-digit number: could be a year (19=2019, 25=2025)
     m = re.match(r'^(\d{2})$', text_clean)
     if m:
         year = 2000 + int(m.group(1))
-        year_suffix = suffix if year < ref_year else ""
-        return f"{year}{year_suffix}"
+        return f"{year}{suffix}"
 
     return text + suffix if suffix else text
 
@@ -2616,18 +2612,23 @@ def extract_condition(content: str, mode: str, month_year: Optional[str] = None,
     return None
 
 
-def extract_condition_from_line(line: str, section_condition: Optional[str] = None) -> Optional[str]:
+def extract_condition_from_line(line: str, section_condition: Optional[str] = None, mode: str = "WTS") -> Optional[str]:
     """Extract condition from a single watch line, falling back to section condition.
     section_condition comes from the brand header (e.g., 'Patek Used' -> 'Used').
-    Defaults to 'Unworn' when no condition is found (stock list items are typically unworn)."""
+    For WTS, defaults to 'Unworn' when no condition is found (stock list items are
+    typically unworn). For WTB, condition vocabulary is different ('Only Unworn' /
+    'Can be Used') and there is no per-line default — fall back to section_condition
+    or None."""
     line_lower = line.lower()
+    conditions = WTS_CONDITIONS if mode == "WTS" else WTB_CONDITIONS
 
-    for keyword in sorted(WTS_CONDITIONS.keys(), key=len, reverse=True):
+    for keyword in sorted(conditions.keys(), key=len, reverse=True):
         if keyword in line_lower:
-            return WTS_CONDITIONS[keyword]
+            return conditions[keyword]
 
-    # Fall back to section condition, then default to Unworn
-    return section_condition or "Unworn"
+    if mode == "WTS":
+        return section_condition or "Unworn"
+    return section_condition
 
 
 def extract_location(content: str, sender_country: Optional[str], mode: str) -> Optional[str]:
@@ -2770,27 +2771,27 @@ def format_timestamp(ts: datetime) -> str:
     return ts.strftime("%d.%m.%y %H:%M:%S")
 
 
-def _detect_section_condition(line: str) -> Optional[str]:
+def _detect_section_condition(line: str, mode: str = "WTS") -> Optional[str]:
     """Detect condition from a brand section header line.
-    E.g., 'Patek Used ✨✨' -> 'Used', 'RM Used Fullset' -> 'Used',
-    'New Fullset' -> 'Unworn', 'Like' -> 'Used' (short for Like New).
-    Check more specific terms first (like new, unworn, brand new) before generic ones."""
+    WTS vocabulary: 'Unworn' / 'Used'. WTB vocabulary: 'Only Unworn' / 'Can be Used'.
+    E.g., 'Patek Used ✨✨' -> 'Used' (WTS) or 'Can be Used' (WTB)."""
     cleaned = _clean_text(line).lower().strip()
-    # Check specific unworn indicators first
+    is_wtb = mode == "WTB"
+    used_label = "Can be Used" if is_wtb else "Used"
+    unworn_label = "Only Unworn" if is_wtb else "Unworn"
+
     if 'like new' in cleaned:
-        return "Used"  # Like New is closer to Used than Unworn
-    # Bare "like" (short for "like new") — common in stock lists
+        return used_label
     if re.match(r'^like\s*$', cleaned):
-        return "Used"
+        return used_label
     if 'unworn' in cleaned or 'brand new' in cleaned or 'bnib' in cleaned:
-        return "Unworn"
+        return unworn_label
     if 'nos' in cleaned or 'stickered' in cleaned or 'sealed' in cleaned:
-        return "Unworn"
-    # Check "new" but not as part of "like new" (already handled above)
+        return unworn_label
     if re.search(r'\bnew\b', cleaned):
-        return "Unworn"
+        return unworn_label
     if 'used' in cleaned or 'pre-owned' in cleaned or 'preowned' in cleaned:
-        return "Used"
+        return used_label
     return None
 
 
@@ -2916,13 +2917,13 @@ def parse_stock_list(
         brand = detect_brand_header(stripped)
         if brand is not None:
             current_brand = brand
-            section_condition = _detect_section_condition(stripped)
+            section_condition = _detect_section_condition(stripped, mode)
             continue
 
         # Check if it's a section header (condition group, separator, etc.)
         if _is_section_header(stripped):
             # Could be a condition sub-header like "New Fullset" or "Used Fullset"
-            cond = _detect_section_condition(stripped)
+            cond = _detect_section_condition(stripped, mode)
             if cond:
                 section_condition = cond
             continue
@@ -2974,7 +2975,7 @@ def parse_stock_list(
             # leave Monat/Jahr empty rather than fabricating it from the
             # message timestamp (matches the WTB parsing rule: never hallucinate
             # a warranty date the dealer did not write).
-            line_condition = extract_condition_from_line(stripped, section_condition)
+            line_condition = extract_condition_from_line(stripped, section_condition, mode)
             raw_month_year = extract_month_year_from_text(stripped)
             year_str = extract_year_from_line(stripped)
             if raw_month_year:
@@ -3028,7 +3029,7 @@ def parse_stock_list(
 
         watch = watch_matches[0]
 
-        line_condition = extract_condition_from_line(stripped, section_condition)
+        line_condition = extract_condition_from_line(stripped, section_condition, mode)
         raw_month_year = extract_month_year_from_text(stripped)
         year_str = extract_year_from_line(stripped)
         if raw_month_year:
@@ -3107,7 +3108,7 @@ def _resolve_month_year(content: str, mode: str, ref_month: int, ref_year: int) 
 
     year = extract_year_from_line(content)
     if year:
-        suffix = "+" if mode == "WTB" and year < ref_year else ""
+        suffix = "+" if mode == "WTB" else ""
         return None, f"{year}{suffix}"
     return None, ""
 

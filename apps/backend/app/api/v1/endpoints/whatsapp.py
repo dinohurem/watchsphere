@@ -617,6 +617,13 @@ async def process_csv_import(
             order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
             order_reference = watch_reference or ws_code
 
+            # WTB orders must display only WTB-vocabulary conditions
+            # ("Only Unworn" / "Can be Used"). Force condition_raw so the
+            # order book never renders WTS labels like "Used"/"Unworn" on
+            # a WTB row, regardless of what the parser emitted.
+            if offer_type == OfferType.WTB:
+                condition_raw = "Only Unworn" if condition == "Unworn" else "Can be Used"
+
             # Check for duplicate orders (5-field dedup key)
             dup_ws = (matched_watch.ws_code or ws_code or "").strip().upper()
             dup_phone = phone.strip() if phone else ""
