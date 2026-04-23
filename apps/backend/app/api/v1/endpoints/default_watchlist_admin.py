@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.default_watchlist import DefaultWatchlistItem
 from app.models.watchlist import WatchlistItemType
 from app.models.watch import Watch, WatchStatus
+from app.models.order import Order, OrderType, OrderStatus
 from beanie.operators import In
 
 router = APIRouter()
@@ -32,6 +33,8 @@ class DefaultWatchlistResponse(BaseModel):
     created_by_name: str
     created_at: datetime
     updated_at: Optional[datetime] = None
+    wts_count: int = 0
+    wtb_count: int = 0
 
 
 # Request Models
@@ -85,6 +88,19 @@ async def get_public_default_watchlist(
             if watch.reference:
                 ws_code_map[watch.reference] = watch.ws_code
 
+    # Compute WTS/WTB counts per ws_code so home/profile cards show real numbers.
+    counts_map: dict[str, dict[str, int]] = {}
+    ws_codes = [c for c in ws_code_map.values() if c]
+    if ws_codes:
+        for ws in set(ws_codes):
+            wts_count = await Order.find(
+                {"ws_code": ws, "order_type": OrderType.SELL.value, "status": OrderStatus.ACTIVE.value},
+            ).count()
+            wtb_count = await Order.find(
+                {"ws_code": ws, "order_type": OrderType.BUY.value, "status": OrderStatus.ACTIVE.value},
+            ).count()
+            counts_map[ws] = {"wts": wts_count, "wtb": wtb_count}
+
     return [
         {
             "id": str(item.id),
@@ -103,6 +119,8 @@ async def get_public_default_watchlist(
             "created_by_name": item.created_by_name,
             "created_at": item.created_at,
             "updated_at": item.updated_at,
+            "wts_count": counts_map.get(ws_code_map.get(item.reference) or "", {}).get("wts", 0),
+            "wtb_count": counts_map.get(ws_code_map.get(item.reference) or "", {}).get("wtb", 0),
         }
         for item in items
     ]

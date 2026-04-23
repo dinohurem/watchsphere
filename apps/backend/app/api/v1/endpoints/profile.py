@@ -33,6 +33,8 @@ class WatchlistItemResponse(BaseModel):
     price: Optional[float] = None  # Alias for target_price
     priceChange: float = 0.0  # Placeholder - will be calculated from market data
     image: Optional[str] = None  # Watch image URL
+    wts_count: int = 0
+    wtb_count: int = 0
 
 
 class WatchlistCreateRequest(BaseModel):

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, FlatList, Keyboard, InputAccessoryView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, FlatList, Keyboard, InputAccessoryView, Dimensions } from 'react-native';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -497,7 +497,14 @@ export default function WatchDetailsScreen() {
   // Watch alert state
   const [watchAlerts, setWatchAlerts] = useState<any[]>([]);
   const [showAlertModal, setShowAlertModal] = useState(false);
-  const [remarksModal, setRemarksModal] = useState<string | null>(null);
+  const [remarksBubble, setRemarksBubble] = useState<{
+    text: string;
+    anchorX: number;
+    anchorY: number;
+    anchorWidth: number;
+    anchorHeight: number;
+  } | null>(null);
+  const [remarksBubbleSize, setRemarksBubbleSize] = useState<{ width: number; height: number } | null>(null);
   const [alertLoading, setAlertLoading] = useState(false);
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
   const [alertListMode, setAlertListMode] = useState(true);
@@ -1628,17 +1635,38 @@ export default function WatchDetailsScreen() {
                       {order.remarks ? (() => {
                         const parts = order.remarks.split(/\s*;\s*/).filter(Boolean);
                         const isMulti = parts.length > 1;
+                        let seeAllRef: any = null;
                         return (
-                          <TouchableOpacity
-                            onPress={() => setRemarksModal(order.remarks!)}
-                            activeOpacity={0.6}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                            style={{ backgroundColor: 'rgba(33,33,33,0.06)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(6) }}
-                          >
-                            <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(10), color: '#555555' }]} numberOfLines={2}>
-                              {isMulti ? `${parts[0]} +${parts.length - 1}` : parts[0]}
-                            </Text>
-                          </TouchableOpacity>
+                          <View style={{ alignItems: 'center' }}>
+                            <View style={{ backgroundColor: 'rgba(33,33,33,0.06)', paddingHorizontal: wp(6), paddingVertical: hp(2), borderRadius: sp(6) }}>
+                              <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(10), color: '#555555' }]} numberOfLines={2}>
+                                {parts[0]}
+                              </Text>
+                            </View>
+                            {isMulti && (
+                              <TouchableOpacity
+                                ref={(r) => { seeAllRef = r; }}
+                                onPress={() => {
+                                  if (seeAllRef && typeof seeAllRef.measureInWindow === 'function') {
+                                    seeAllRef.measureInWindow((x: number, y: number, w: number, h: number) => {
+                                      setRemarksBubbleSize(null);
+                                      setRemarksBubble({ text: order.remarks!, anchorX: x, anchorY: y, anchorWidth: w, anchorHeight: h });
+                                    });
+                                  } else {
+                                    setRemarksBubbleSize(null);
+                                    setRemarksBubble({ text: order.remarks!, anchorX: 0, anchorY: 0, anchorWidth: 0, anchorHeight: 0 });
+                                  }
+                                }}
+                                activeOpacity={0.6}
+                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                style={{ marginTop: hp(3) }}
+                              >
+                                <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(10), color: '#5B9BD5' }}>
+                                  See all (+{parts.length - 1})
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
                         );
                       })() : (
                         <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#CCCCCC' }]}>-</Text>
@@ -2497,41 +2525,154 @@ export default function WatchDetailsScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Remarks tooltip modal */}
+      {/* Remarks tooltip — chat-bubble anchored to the tapped pill */}
       <Modal
-        visible={remarksModal !== null}
+        visible={remarksBubble !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setRemarksModal(null)}
+        onRequestClose={() => setRemarksBubble(null)}
       >
         <TouchableOpacity
           activeOpacity={1}
-          onPress={() => setRemarksModal(null)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: wp(32) }}
+          onPress={() => setRemarksBubble(null)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.18)' }}
         >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => {}}
-            style={{ backgroundColor: '#FFFFFF', borderRadius: sp(16), paddingHorizontal: wp(20), paddingVertical: hp(18), width: '100%', maxWidth: wp(320), shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: hp(12) }}>
-              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121' }}>Remarks</Text>
-              <TouchableOpacity onPress={() => setRemarksModal(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(18), color: '#999999' }}>×</Text>
-              </TouchableOpacity>
-            </View>
-            {(remarksModal || '').split(/\s*;\s*/).filter(Boolean).map((part, i) => (
+          {remarksBubble && (() => {
+            const screen = Dimensions.get('window');
+            const bubbleMaxWidth = screen.width - wp(24);
+            const sideMargin = wp(12);
+            const tailSize = sp(7);
+            const gap = hp(8);
+            const anchorCenterX = remarksBubble.anchorX + remarksBubble.anchorWidth / 2;
+            const measured = remarksBubbleSize !== null;
+            const w = measured ? (remarksBubbleSize as { width: number; height: number }).width : 0;
+            const h = measured ? (remarksBubbleSize as { width: number; height: number }).height : 0;
+            let left = measured ? anchorCenterX - w / 2 : sideMargin;
+            if (measured) {
+              if (left < sideMargin) left = sideMargin;
+              if (left + w > screen.width - sideMargin) left = screen.width - sideMargin - w;
+            }
+            const placeAbove = measured
+              ? remarksBubble.anchorY - h - gap > hp(60)
+              : true;
+            const top = measured
+              ? (placeAbove
+                  ? remarksBubble.anchorY - h - gap
+                  : remarksBubble.anchorY + remarksBubble.anchorHeight + gap)
+              : remarksBubble.anchorY;
+            const tailLeft = measured
+              ? Math.max(sp(14), Math.min(w - sp(14) - tailSize * 2, anchorCenterX - left - tailSize))
+              : 0;
+            const parts = remarksBubble.text.split(/\s*;\s*/).filter(Boolean);
+            return (
               <View
-                key={i}
-                style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: hp(6) }}
+                pointerEvents="box-none"
+                style={{ position: 'absolute', left, top, maxWidth: bubbleMaxWidth, alignSelf: 'flex-start', opacity: measured ? 1 : 0 }}
+                onLayout={(e) => {
+                  const { width: nw, height: nh } = e.nativeEvent.layout;
+                  if (
+                    remarksBubbleSize === null ||
+                    Math.abs(remarksBubbleSize.width - nw) > 0.5 ||
+                    Math.abs(remarksBubbleSize.height - nh) > 0.5
+                  ) {
+                    setRemarksBubbleSize({ width: nw, height: nh });
+                  }
+                }}
               >
-                <View style={{ width: sp(5), height: sp(5), borderRadius: sp(5), backgroundColor: '#212121', marginTop: hp(8), marginRight: wp(10) }} />
-                <Text style={{ flex: 1, fontFamily: 'HankenGrotesk_400Regular', fontSize: fp(14), color: '#333333', lineHeight: fp(20) }}>
-                  {part}
-                </Text>
+                <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+                  {/* Top tail (when bubble is below the row) */}
+                  {!placeAbove && (
+                    <>
+                      <View
+                        style={{
+                          position: 'absolute',
+                          top: -tailSize,
+                          left: tailLeft,
+                          width: 0, height: 0,
+                          borderLeftWidth: tailSize, borderRightWidth: tailSize, borderBottomWidth: tailSize,
+                          borderLeftColor: 'transparent', borderRightColor: 'transparent',
+                          borderBottomColor: '#F5F5F5',
+                        }}
+                      />
+                      <View
+                        style={{
+                          position: 'absolute',
+                          top: -tailSize + 1.5,
+                          left: tailLeft,
+                          width: 0, height: 0,
+                          borderLeftWidth: tailSize, borderRightWidth: tailSize, borderBottomWidth: tailSize,
+                          borderLeftColor: 'transparent', borderRightColor: 'transparent',
+                          borderBottomColor: '#FFFFFF',
+                        }}
+                      />
+                    </>
+                  )}
+                  <View
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: sp(14),
+                      borderWidth: 1,
+                      borderColor: '#F5F5F5',
+                      paddingHorizontal: wp(12),
+                      paddingVertical: hp(10),
+                      shadowColor: '#000',
+                      shadowOpacity: 0.12,
+                      shadowRadius: 10,
+                      shadowOffset: { width: 0, height: 4 },
+                      elevation: 6,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginRight: -wp(6), marginBottom: -hp(6) }}>
+                      {parts.map((part, i) => (
+                        <View
+                          key={i}
+                          style={{
+                            backgroundColor: 'rgba(33,33,33,0.06)',
+                            paddingHorizontal: wp(10),
+                            paddingVertical: hp(5),
+                            borderRadius: sp(99),
+                            marginRight: wp(6),
+                            marginBottom: hp(6),
+                          }}
+                        >
+                          <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#212121' }}>
+                            {part}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                  {/* Bottom tail (when bubble is above the row) */}
+                  {placeAbove && (
+                    <>
+                      <View
+                        style={{
+                          position: 'absolute',
+                          bottom: -tailSize,
+                          left: tailLeft,
+                          width: 0, height: 0,
+                          borderLeftWidth: tailSize, borderRightWidth: tailSize, borderTopWidth: tailSize,
+                          borderLeftColor: 'transparent', borderRightColor: 'transparent',
+                          borderTopColor: '#F5F5F5',
+                        }}
+                      />
+                      <View
+                        style={{
+                          position: 'absolute',
+                          bottom: -tailSize + 1.5,
+                          left: tailLeft,
+                          width: 0, height: 0,
+                          borderLeftWidth: tailSize, borderRightWidth: tailSize, borderTopWidth: tailSize,
+                          borderLeftColor: 'transparent', borderRightColor: 'transparent',
+                          borderTopColor: '#FFFFFF',
+                        }}
+                      />
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
-            ))}
-          </TouchableOpacity>
+            );
+          })()}
         </TouchableOpacity>
       </Modal>
     </View>
