@@ -446,6 +446,16 @@ async def get_order_book(
         condition_raw = getattr(order, 'condition_raw', None)
         condition_str = condition_raw if condition_raw else order.condition.value
 
+        # Enforce WTB display vocabulary: WTB orders may ONLY show
+        # "Only Unworn" or "Can be Used". Map any leaked WTS labels
+        # (legacy rows, raw text without normalization) to the WTB pair.
+        if order.order_type == OrderType.BUY:
+            cond_lower = (condition_str or "").lower()
+            if "unworn" in cond_lower or "new" in cond_lower or "bnib" in cond_lower:
+                condition_str = "Only Unworn"
+            elif cond_lower:
+                condition_str = "Can be Used"
+
         remarks = getattr(order, 'remarks', None)
 
         return OrderBookEntry(
