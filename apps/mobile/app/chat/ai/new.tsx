@@ -182,7 +182,7 @@ export default function NewChatScreen() {
       console.error('Error calling assistant API:', error);
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: generateMockResponse(content),
+        content: 'Sorry — I could not reach the WatchSphere assistant just now. Please try again.',
         isUser: false,
         timestamp: new Date(),
       };
@@ -629,66 +629,4 @@ export default function NewChatScreen() {
       </SafeAreaView>
     </SubscriptionOverlay>
   );
-}
-
-// Mock response generator for demo
-function generateMockResponse(userMessage: string): string {
-  const lowerMessage = userMessage.toLowerCase();
-
-  if (lowerMessage.includes('nautilus') || lowerMessage.includes('5711')) {
-    return `Here's the short version:
-
-**Why the Patek Philippe Nautilus 5711 spiked in price**
-
-1. **Discontinuation:** Patek officially stopped producing the steel 5711 in 2021, making existing pieces instantly rarer.
-2. **Extreme scarcity:** Even before that, demand far exceeded supply — long waitlists and limited production.
-3. **Hype & status:** Celebrity ownership, social media buzz, and its reputation as the luxury steel sports watch fueled desire.
-4. **Speculation:** Collectors and investors treated it like an asset, driving up resale values.
-5. **Brand strategy:** Patek replaced it with the costlier gold 5811, reinforcing the 5711's exclusivity.
-
-In short: *limited supply + massive hype + discontinuation* = price explosion.
-
-Would you like me to add this watch to your watchlist so you can track price changes?`;
-  }
-
-  if (lowerMessage.includes('rolex') || lowerMessage.includes('submariner')) {
-    return `The Rolex Submariner is one of the most iconic dive watches in history. Here's what you should know:
-
-**Market Overview:**
-
-1. **Current pricing:** Pre-owned models range from €8,000 to €15,000 depending on condition and year.
-2. **Availability:** Still very limited at authorized dealers, often requiring waitlists.
-3. **Investment potential:** Historically strong value retention, especially for vintage references.
-
-Would you like me to add this watch to your watchlist to track market prices?`;
-  }
-
-  if (lowerMessage.includes('reference') || lowerMessage.includes('number')) {
-    return `Based on the information provided, I can help identify watch references. Here are some common Patek Philippe Nautilus references:
-
-**Nautilus Reference Numbers:**
-
-1. **5711/1A:** The classic steel blue dial version
-2. **5711/1R:** Rose gold version
-3. **5712/1A:** Moonphase complication variant
-4. **5726/1A:** Annual calendar variant
-5. **5980/1A:** Chronograph version
-
-Could you share more details or an image of the specific watch you're asking about?`;
-  }
-
-  return `Thank you for your question about "${userMessage}".
-
-I'd be happy to help you with information about luxury watches. Here's what I can assist with:
-
-**My capabilities:**
-
-1. **Market analysis:** Current pricing trends and market values
-2. **Authentication tips:** How to verify authenticity
-3. **Investment advice:** Which models hold value best
-4. **Buying guidance:** Where and how to purchase safely
-
-What specific aspect would you like me to elaborate on?
-
-Would you like me to add any watches to your watchlist for tracking?`;
 }

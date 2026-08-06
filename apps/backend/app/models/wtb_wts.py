@@ -33,6 +33,8 @@ class WtbWtsRun(Document):
     needs_review_csv_gridfs_id: Optional[str] = None
     not_in_database_csv_gridfs_id: Optional[str] = None
     suggested_csv_gridfs_id: Optional[str] = None
+    # Rows that could only be assigned correctly through image analysis
+    matched_via_image_csv_gridfs_id: Optional[str] = None
     files_expire_at: Optional[datetime] = None
 
     # Stats
@@ -44,6 +46,10 @@ class WtbWtsRun(Document):
     fuzzy_matched_count: int = 0
     ai_matched_count: int = 0
     suggested_additions_count: int = 0
+    # Image-analysis layer stats
+    matched_via_image_count: int = 0
+    image_analyzed_count: int = 0
+    image_enriched_count: int = 0
 
     # Progress tracking
     progress_percent: int = 0

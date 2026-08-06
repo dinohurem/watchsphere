@@ -7,6 +7,14 @@ import logging
 from datetime import datetime
 from typing import Optional
 from app.models.watch import Watch
+from app.services.vision_matching import (
+    disambiguate_variant,
+    extract_attachment_names,
+    extract_missing_month_year,
+    gather_limited,
+    message_images,
+    strip_attachment_markers,
+)
 from rapidfuzz import fuzz, process
 
 logger = logging.getLogger(__name__)
@@ -298,6 +306,37 @@ REMARKS_MAP = {
     # WTB-only "any year" sentinel — surfaces the buyer's "any year" intent in
     # the remarks column so reviewers can see it at a glance.
     "any year": "Any Year",
+
+    # service / component replacements
+    "new clasp": "New Clasp",
+    "new buckle": "New Buckle",
+    "new certificate": "New Paper",
+    "new paper": "New Paper",
+    "new papers": "New Paper",
+    "new caliber": "New Caliber",
+    "new calibre": "New Caliber",
+
+    # sticker/seal state
+    "double seal": "Double Seal",
+    "single seal": "Single Seal",
+
+    # warranty card without a filled-in date
+    "open date": "Open Date",
+
+    # payment / settlement terms
+    "wire": "Wire",
+    "wire transfer": "Wire",
+    "bh": "Cash",
+    "cash": "Cash",
+    "usdt": "USDT",
+
+    # trade-show / handover location
+    "wta": "WTA Munich",
+    "wta munich": "WTA Munich",
+
+    # dial details
+    "mercedes hands": "Mercedes Hands",
+    "mercedes": "Mercedes Hands",
 }
 
 # Brand abbreviation/nickname mapping (lowercase -> canonical brand name)
@@ -668,6 +707,13 @@ def parse_whatsapp_txt(content: str) -> list[dict]:
     if current_msg:
         messages.append(current_msg)
 
+    # Record image attachments per message (used by the optional image-analysis
+    # layer) and drop the attachment-only lines so they don't pollute parsing.
+    for msg in messages:
+        msg["attachments"] = extract_attachment_names(msg["content"])
+        if msg["attachments"]:
+            msg["content"] = strip_attachment_markers(msg["content"]).strip()
+
     return messages
 
 
@@ -863,6 +909,8 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
                     "aliases": [a.strip() for a in (data.get("aliases") or [])],
                     "dial": (data.get("dial") or "").strip(),
                     "bracelet": (data.get("bracelet") or "").strip(),
+                    "index": (data.get("index") or data.get("indexes") or "").strip(),
+                    "cover_image": (data.get("cover_image") or "").strip(),
                 })
             except json.JSONDecodeError:
                 continue
@@ -881,6 +929,11 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
                 "aliases": [a.strip() for a in (w.aliases or [])],
                 "dial": (w.dial or "").strip(),
                 "bracelet": (w.bracelet or "").strip(),
+                # Index type is not a first-class catalog field yet — fall back
+                # to whatever the document carries so the vision layer can use
+                # it once it exists.
+                "index": (getattr(w, "index", None) or "").strip(),
+                "cover_image": (w.cover_image or (w.images[0] if w.images else "") or "").strip(),
             })
 
     by_ws_code = {}
@@ -2706,9 +2759,11 @@ def extract_location_remarks(content: str, mode: str) -> Optional[str]:
             "only": "Need in" if mode == "WTB" else "Watch in",
         }.get(verb, "Watch in")
 
-    # Worldwide shortcut
-    if re.search(r'\b(?:worldwide|any\s+country|any\s+location)\b', cl):
-        return "Worldwide" if mode == "WTB" else "Watch Worldwide"
+    # Worldwide shortcut — WTB only. The buyer accepting any origin is real
+    # information; the WTS-side "Watch Worldwide" remark was removed per user
+    # request, so a seller saying "worldwide" yields no remark at all.
+    if mode == "WTB" and re.search(r'\b(?:worldwide|any\s+country|any\s+location)\b', cl):
+        return "Worldwide"
 
     if not tail:
         return None
@@ -2724,6 +2779,9 @@ def extract_location_remarks(content: str, mode: str) -> Optional[str]:
         m = re.search(_LOCATION_TOKEN_PATTERN, p)
         if m:
             code = _LOCATION_CODES.get(m.group(0))
+            # "Worldwide" is not a WTS location remark (removed per user request)
+            if code == "Worldwide" and mode != "WTB":
+                continue
             if code and code not in codes:
                 codes.append(code)
     if not codes:
@@ -3157,6 +3215,7 @@ def _build_row(
     phone: Optional[str] = None,
     watch: Optional[dict] = None,
     reason: str = "",
+    attachments: Optional[list[str]] = None,
 ) -> dict:
     """Build a CSV row dict (used for needs_review entries)."""
     raw_month_year, month_year = _resolve_month_year(content, mode, ref_month, ref_year)
@@ -3192,6 +3251,7 @@ def _build_row(
     # Internal fields for AI matching pass (removed before CSV output)
     row["_review_reason"] = reason
     row["_original_content"] = content
+    row["_attachments"] = attachments or []
     return row
 
 
@@ -3261,6 +3321,7 @@ def _process_messages_sync(
         content = _strip_media_markers(content).strip()
         sender = msg["sender"]
         timestamp = msg["timestamp"]
+        attachments = msg.get("attachments") or []
 
         post_type = detect_post_type(content)
         if post_type is None:
@@ -3309,7 +3370,7 @@ def _process_messages_sync(
                 mode=mode, content=content, sender=sender, timestamp=timestamp,
                 group_name=group_name, ref_month=ref_month, ref_year=ref_year,
                 sender_country=sender_country, phone=phone, watch=None,
-                reason=nid_reason,
+                reason=nid_reason, attachments=attachments,
             ))
             continue
 
@@ -3320,7 +3381,7 @@ def _process_messages_sync(
                 mode=mode, content=content, sender=sender, timestamp=timestamp,
                 group_name=group_name, ref_month=ref_month, ref_year=ref_year,
                 sender_country=sender_country, phone=phone, watch=None,
-                reason="; ".join(review_reasons),
+                reason="; ".join(review_reasons), attachments=attachments,
             ))
             continue
 
@@ -3364,7 +3425,7 @@ def _process_messages_sync(
                 mode=mode, content=content, sender=sender, timestamp=timestamp,
                 group_name=group_name, ref_month=ref_month, ref_year=ref_year,
                 sender_country=sender_country, phone=phone, watch=watch,
-                reason="; ".join(review_reasons),
+                reason="; ".join(review_reasons), attachments=attachments,
             ))
             continue
 
@@ -3388,6 +3449,8 @@ def _process_messages_sync(
             "Gruppe": group_name,
             "Nachricht gepostet am": format_timestamp(timestamp),
             "Original Text": _find_watch_line(content, watch)[:500],
+            "_attachments": attachments,
+            "_original_content": content,
         })
 
     return {
@@ -3399,6 +3462,158 @@ def _process_messages_sync(
     }
 
 
+# Cap image analysis so a huge export can't run up an unbounded vision bill.
+IMAGE_ANALYSIS_CAP = 200
+
+
+def _ambiguous_candidates(row: dict, watch_index: dict) -> list[dict]:
+    """Catalog candidates behind an 'Ambiguous match: A, B' review reason."""
+    reason = row.get("Review Reason") or row.get("_review_reason") or ""
+    m = re.search(r'Ambiguous match:\s*([^;]+)', reason)
+    if not m:
+        return []
+    candidates = []
+    for code in m.group(1).split(","):
+        watch = watch_index["by_ws_code"].get(code.strip().lower())
+        if watch:
+            candidates.append(watch)
+    return candidates
+
+
+async def _image_analysis_pass(
+    matched_rows: list[dict],
+    needs_review_rows: list[dict],
+    watch_index: dict,
+    media_archive: Optional[dict],
+    report,
+) -> tuple[list[dict], int, int]:
+    """Resolve same-reference variants (and missing dates) from listing photos.
+
+    Mutates `matched_rows` (enriched dates) and `needs_review_rows` (rows that
+    the image resolved are removed). Returns
+    (matched_via_image_rows, analyzed_count, enriched_count).
+
+    Rows the image cannot settle stay exactly where they were — an unclear photo
+    never produces an automatic match.
+    """
+    if not media_archive:
+        return [], 0, 0
+
+    from app.services.vision_matching import create_client
+    client = create_client()
+    if client is None:
+        logger.info("image analysis: skipped — no OPENAI_API_KEY configured")
+        return [], 0, 0
+
+    # --- 1. Ambiguous rows: which catalog variant is it? ---
+    variant_targets: list[tuple[int, list[str], list[dict], dict]] = []
+    for idx, row in enumerate(needs_review_rows):
+        attachments = row.get("_attachments") or []
+        if not attachments:
+            continue
+        candidates = _ambiguous_candidates(row, watch_index)
+        if len(candidates) < 2:
+            continue
+        images = message_images(attachments, media_archive)
+        if not images:
+            continue
+        variant_targets.append((idx, images, candidates, row))
+        if len(variant_targets) >= IMAGE_ANALYSIS_CAP:
+            break
+
+    # --- 2. Matched rows missing the warranty date the photo may show ---
+    field_targets: list[tuple[int, list[str], dict]] = []
+    for idx, row in enumerate(matched_rows):
+        if (row.get("Monat/Jahr") or "").strip():
+            continue
+        attachments = row.get("_attachments") or []
+        if not attachments:
+            continue
+        images = message_images(attachments, media_archive)
+        if not images:
+            continue
+        field_targets.append((idx, images, row))
+        if len(field_targets) >= IMAGE_ANALYSIS_CAP:
+            break
+
+    analyzed = len(variant_targets) + len(field_targets)
+    if not analyzed:
+        logger.info("image analysis: no rows qualified for image analysis")
+        return [], 0, 0
+
+    await report(
+        "image_analysis", 87,
+        f"Analyzing images — {len(variant_targets):,} ambiguous variants, "
+        f"{len(field_targets):,} missing dates",
+    )
+    logger.info(f"image analysis: {len(variant_targets)} variant rows, "
+                f"{len(field_targets)} field rows")
+
+    variant_results = await gather_limited([
+        (lambda text=(r.get("Original Text") or r.get("_original_content") or ""),
+                imgs=images, cands=candidates:
+            disambiguate_variant(client, text, imgs, cands))
+        for _, images, candidates, r in variant_targets
+    ])
+
+    field_results = await gather_limited([
+        (lambda text=(r.get("Original Text") or r.get("_original_content") or ""),
+                imgs=images, ws=(r.get("WS-Code") or ""):
+            extract_missing_month_year(client, text, imgs, ws))
+        for _, images, r in field_targets
+    ])
+
+    # Apply variant verdicts: a confident hit becomes a "Matched via Image" row.
+    matched_via_image_rows: list[dict] = []
+    resolved_indices: list[int] = []
+    for (idx, _images, candidates, row), result in zip(variant_targets, variant_results):
+        if not result:
+            continue
+        watch = next(
+            (c for c in candidates
+             if (c.get("ws_code") or "").lower() == result["ws_code"].lower()),
+            None,
+        )
+        if not watch:
+            continue
+        observed = result.get("observed") or {}
+        observed_str = ", ".join(
+            f"{k}: {v}" for k, v in observed.items() if v
+        )
+        matched_via_image_rows.append({
+            "Nachrichten Art": row.get("Nachrichten Art", ""),
+            "Marke": watch.get("brand", ""),
+            "WS-Code": watch.get("ws_code", ""),
+            "Monat/Jahr": row.get("Monat/Jahr", ""),
+            "Standort": row.get("Standort", ""),
+            "Zustand": row.get("Zustand", ""),
+            "Bemerkungen": row.get("Bemerkungen", ""),
+            "Preis": row.get("Preis", ""),
+            "Nummer": row.get("Nummer", ""),
+            "Gruppe": row.get("Gruppe", ""),
+            "Nachricht gepostet am": row.get("Nachricht gepostet am", ""),
+            "Original Text": row.get("Original Text", ""),
+            "Image Confidence": result["confidence"],
+            "Image Evidence": observed_str or result.get("reason", ""),
+        })
+        resolved_indices.append(idx)
+
+    for idx in sorted(set(resolved_indices), reverse=True):
+        needs_review_rows.pop(idx)
+
+    # Apply field verdicts: fill the date in place, the row was already matched.
+    enriched = 0
+    for (idx, _images, row), result in zip(field_targets, field_results):
+        if not result:
+            continue
+        matched_rows[idx]["Monat/Jahr"] = result["month_year"]
+        enriched += 1
+
+    logger.info(f"image analysis: {len(matched_via_image_rows)} variants resolved, "
+                f"{enriched} dates recovered, {analyzed} rows analyzed")
+    return matched_via_image_rows, analyzed, enriched
+
+
 async def process_generation(
     txt_content: str,
     mode: str,
@@ -3407,6 +3622,7 @@ async def process_generation(
     group_name: str,
     jsonl_content: Optional[str] = None,
     progress_callback=None,
+    media_archive: Optional[dict] = None,
 ) -> dict:
     """Main processing function. Returns matched_csv, needs_review_csv, and stats.
     progress_callback: optional async callable(stage, percent, detail) for progress updates.
@@ -4001,6 +4217,18 @@ async def process_generation(
     if outlier_indices:
         logger.info(f"process_generation: flagged {len(outlier_indices)} price outliers")
 
+    # ─── Image-based variant disambiguation ───
+    # Runs only when a media archive was uploaded, and only on the rows text
+    # parsing could not settle on its own. Everything already matched from text
+    # is left untouched.
+    matched_via_image_rows, image_analyzed_count, image_enriched_count = await _image_analysis_pass(
+        matched_rows=matched_rows,
+        needs_review_rows=needs_review_rows,
+        watch_index=watch_index,
+        media_archive=media_archive,
+        report=_report,
+    )
+
     await _report("dedup", 88, "Deduplicating rows...")
 
     # --- Dedup matched rows: (ws_code, phone, price, currency, month_year) ---
@@ -4100,29 +4328,36 @@ async def process_generation(
     await _report("generating_csv", 95, "Generating CSV files...")
 
     # Clean internal fields before CSV generation
-    for row in needs_review_rows:
-        row.pop("_review_reason", None)
-        row.pop("_original_content", None)
-    for row in not_in_database_rows:
-        row.pop("_review_reason", None)
-        row.pop("_original_content", None)
+    for bucket in (matched_rows, needs_review_rows, not_in_database_rows,
+                   matched_via_image_rows):
+        for row in bucket:
+            row.pop("_review_reason", None)
+            row.pop("_original_content", None)
+            row.pop("_attachments", None)
 
     matched_csv = _rows_to_csv(matched_rows)
     needs_review_csv = _rows_to_csv(needs_review_rows)
     not_in_database_csv = _rows_to_csv(not_in_database_rows)
+    matched_via_image_csv = _rows_to_csv(matched_via_image_rows)
 
     logger.info(f"process_generation: COMPLETE in {time.time()-t_start:.1f}s — "
                 f"{len(matched_rows)} matched, {len(needs_review_rows)} needs_review, "
                 f"{len(not_in_database_rows)} not_in_database, "
+                f"{len(matched_via_image_rows)} matched_via_image, "
                 f"{_fuzzy_match_count} fuzzy, {ai_matched_count} AI")
 
-    total_rows = len(matched_rows) + len(needs_review_rows) + len(not_in_database_rows)
+    total_rows = (len(matched_rows) + len(needs_review_rows)
+                  + len(not_in_database_rows) + len(matched_via_image_rows))
 
     return {
         "matched_csv": matched_csv,
         "needs_review_csv": needs_review_csv,
         "not_in_database_csv": not_in_database_csv,
+        "matched_via_image_csv": matched_via_image_csv,
         "suggested_additions_csv": suggested_csv,
+        "matched_via_image_count": len(matched_via_image_rows),
+        "image_analyzed_count": image_analyzed_count,
+        "image_enriched_count": image_enriched_count,
         "total_messages": total_rows,
         "detected_posts": total_rows,
         "matched_count": len(matched_rows),

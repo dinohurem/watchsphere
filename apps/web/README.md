@@ -93,7 +93,7 @@ feature_name/
    ```
 
 4. **Open browser**:
-   - Navigate to http://localhost:3000
+   - Navigate to http://localhost:5177
 
 ## Available Scripts
 
@@ -176,13 +176,13 @@ export const useAppStore = create<AppState>((set) => ({
 ## API Integration
 
 The web app connects to the FastAPI backend:
-- Base URL: `http://localhost:8000/api/v1`
-- WebSocket: `ws://localhost:8000/ws`
+- Base URL: `http://localhost:8787/api/v1`
+- WebSocket: `ws://localhost:8787/ws`
 
 Configure these in `.env`:
 ```
-VITE_API_BASE_URL=http://localhost:8000/api/v1
-VITE_WS_BASE_URL=ws://localhost:8000/ws
+VITE_API_BASE_URL=http://localhost:8787/api/v1
+VITE_WS_BASE_URL=ws://localhost:8787/ws
 ```
 
 ## Styling with Tailwind

@@ -20,9 +20,9 @@ interface Conversation {
 
 // Suggestion pills
 const SUGGESTIONS = [
-  'How do I know if a watch is authentic?',
-  'How often should I service my watch?',
-  'What are the most popular luxury watch brands right now?',
+  'What is safe to pay for a 228238A Blk?',
+  'Is there anyone looking for a 126710BLRO Jub 02/26 fullset?',
+  'Whats the cheapest WSSA0039 that you can find?',
 ]
 
 interface FormattedTextPart {
@@ -140,41 +140,53 @@ export function AIChatPage() {
       }
       setMessages((prev) => [...prev, userMessage])
 
-      // Simulate AI response (in a real app, this would call an AI service)
-      setTimeout(async () => {
-        const aiResponseContent = generateMockResponse(userMessageContent)
+      // Ask the WatchSphere AI bot, passing the conversation for context
+      const conversationHistory = messages.map((msg) => ({
+        content: msg.content,
+        is_user: msg.isUser,
+      }))
 
-        // Save AI response to backend
-        try {
-          await api.post(`/ai-chats/${chatId}/messages`, {
-            content: aiResponseContent,
-            is_ai: true,
-          })
-        } catch (error) {
-          console.error('Failed to save AI response:', error)
-        }
+      let aiResponseContent: string
+      try {
+        const response = await api.post('/assistant/query', {
+          message: userMessageContent,
+          conversation_history: conversationHistory,
+        })
+        aiResponseContent = response.data.suggested_response
+      } catch (error) {
+        console.error('Assistant query failed:', error)
+        aiResponseContent =
+          'Sorry — I could not reach the WatchSphere assistant just now. Please try again.'
+      }
 
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
+      // Save AI response to backend
+      try {
+        await api.post(`/ai-chats/${chatId}/messages`, {
           content: aiResponseContent,
-          isUser: false,
-          timestamp: new Date(),
-        }
-        setMessages((prev) => [...prev, aiResponse])
-        setIsLoading(false)
+          is_ai: true,
+        })
+      } catch (error) {
+        console.error('Failed to save AI response:', error)
+      }
 
-        // Update conversation preview
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === chatId ? { ...c, preview: aiResponseContent.slice(0, 50) } : c
-          )
-        )
-      }, 2000)
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        content: aiResponseContent,
+        isUser: false,
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, aiResponse])
+      setIsLoading(false)
+
+      // Update conversation preview
+      setConversations((prev) =>
+        prev.map((c) => (c.id === chatId ? { ...c, preview: aiResponseContent.slice(0, 50) } : c))
+      )
     } catch (error) {
       console.error('Failed to send message:', error)
       setIsLoading(false)
     }
-  }, [inputText, isLoading, activeConversation])
+  }, [inputText, isLoading, activeConversation, messages])
 
   const handleSuggestionClick = (suggestion: string) => {
     setInputText(suggestion)
@@ -487,87 +499,4 @@ export function AIChatPage() {
     )}
     </SubscriptionOverlay>
   )
-}
-
-// Mock response generator
-function generateMockResponse(userMessage: string): string {
-  const lowerMessage = userMessage.toLowerCase()
-
-  if (lowerMessage.includes('authentic') || lowerMessage.includes('authenticity')) {
-    return `Here are the key ways to verify watch authenticity:
-
-**Visual Inspection:**
-
-1. **Serial & Model Numbers:** Check for clean, precise engravings between the lugs and on the case back.
-2. **Dial Quality:** Look for perfect alignment, crisp printing, and consistent font spacing.
-3. **Movement:** Authentic movements have fine finishing, proper branding, and smooth operation.
-4. **Weight & Materials:** Genuine luxury watches have substantial weight from quality materials.
-5. **Documentation:** Original box, papers, and warranty cards with matching serial numbers.
-
-*Pro tip:* When in doubt, have the watch authenticated by an authorized dealer or reputable watchmaker.`
-  }
-
-  if (lowerMessage.includes('service') || lowerMessage.includes('maintenance')) {
-    return `Watch servicing recommendations vary by brand and usage:
-
-**General Guidelines:**
-
-1. **Mechanical watches:** Every 5-7 years for regular wear, or 3-5 years for daily wear.
-2. **Quartz watches:** Battery replacement every 2-3 years, full service every 5 years.
-3. **Dive watches:** Annual pressure testing if used underwater.
-4. **Vintage pieces:** More frequent servicing due to older gaskets and lubricants.
-
-**Signs you need service:**
-- Losing or gaining more than 10 seconds per day
-- Power reserve diminishing
-- Crown feels stiff or loose
-- Condensation under crystal
-
-*Always use authorized service centers* for warranty coverage and genuine parts.`
-  }
-
-  if (lowerMessage.includes('popular') || lowerMessage.includes('brands')) {
-    return `Here are the most sought-after luxury watch brands currently:
-
-**Top Tier (Investment Grade):**
-
-1. **Patek Philippe:** The gold standard for collectors, especially Nautilus and Aquanaut.
-2. **Rolex:** Submariner, Daytona, and GMT-Master remain highly liquid assets.
-3. **Audemars Piguet:** Royal Oak dominates the steel sports luxury segment.
-
-**Rising Demand:**
-
-4. **Vacheron Constantin:** Overseas gaining significant collector interest.
-5. **A. Lange & Söhne:** German excellence in haute horlogerie.
-6. **F.P. Journe:** Boutique brand with explosive secondary market growth.
-
-*Market insight:* Steel sports watches from established brands continue to command premium prices despite market corrections.`
-  }
-
-  if (lowerMessage.includes('nautilus') || lowerMessage.includes('5711')) {
-    return `Here's the short version:
-
-**Why the Patek Philippe Nautilus 5711 spiked in price**
-
-1. **Discontinuation:** Patek officially stopped producing the steel 5711 in 2021, making existing pieces instantly rarer.
-2. **Extreme scarcity:** Even before that, demand far exceeded supply — long waitlists and limited production.
-3. **Hype & status:** Celebrity ownership, social media buzz, and its reputation as the luxury steel sports watch fueled desire.
-4. **Speculation:** Collectors and investors treated it like an asset, driving up resale values.
-5. **Brand strategy:** Patek replaced it with the costlier gold 5811, reinforcing the 5711's exclusivity.
-
-In short: *limited supply + massive hype + discontinuation* = price explosion.`
-  }
-
-  return `Thank you for your question about "${userMessage}".
-
-I'd be happy to help you with information about luxury watches. Here's what I can assist with:
-
-**My capabilities:**
-
-1. **Market analysis:** Current pricing trends and market values
-2. **Authentication tips:** How to verify authenticity
-3. **Investment advice:** Which models hold value best
-4. **Buying guidance:** Where and how to purchase safely
-
-What specific aspect would you like me to elaborate on?`
 }

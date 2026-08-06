@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     # AI Services (OpenAI for AI chat)
     OPENAI_API_KEY: str = ""
+    # Model used for the WTS/WTB image-based variant disambiguation layer.
+    # Override via env if a newer vision-capable model should be used.
+    OPENAI_VISION_MODEL: str = "gpt-4o"
 
     # Monri Payments
     MONRI_MERCHANT_KEY: str = "key-944bc24cd123fa7403da6278825114f1"
@@ -46,7 +49,7 @@ class Settings(BaseSettings):
     TEST_VERIFICATION_CODE: str = "123456"  # Default test code for development
 
     # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://localhost:8081"
+    ALLOWED_ORIGINS: str = "http://localhost:5177,http://localhost:8081"
 
     # File Upload
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB

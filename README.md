@@ -164,7 +164,7 @@ The backend exposes a RESTful API at `/api/v1/`:
 - `/checks` - Serial number verification
 - `/news` - Market news feed
 
-Full API documentation available at: `http://localhost:8000/docs`
+Full API documentation available at: `http://localhost:8787/docs`
 
 ## Environment Setup
 
@@ -180,8 +180,8 @@ ANTHROPIC_API_KEY=your-anthropic-key
 
 ### Web (.env)
 ```env
-VITE_API_BASE_URL=http://localhost:8000/api/v1
-VITE_WS_BASE_URL=ws://localhost:8000/ws
+VITE_API_BASE_URL=http://localhost:8787/api/v1
+VITE_WS_BASE_URL=ws://localhost:8787/ws
 ```
 
 ### Mobile

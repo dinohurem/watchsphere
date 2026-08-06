@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 from app.core.config import settings
 from app.models.watch import Watch, WatchStatus
 from app.models.news import News, NewsStatus
+from app.models.order import Order, OrderStatus, OrderType
 from app.models.whatsapp_import import ExtractedWatchListing, OfferType
 
 
@@ -521,61 +522,289 @@ RECENT NEWS & UPDATES ({len(recent_news)} articles):
     return context
 
 
-SYSTEM_PROMPT = """You are WatchSphere AI, an EXPERT luxury watch specialist with encyclopedic knowledge of watch references, models, and the market. You are THE definitive authority on luxury timepieces.
+# The verbatim reply for anything outside the WatchSphere network.
+OUT_OF_SCOPE_REPLY = (
+    "At the moment, I am exclusively focused on helping you within the WatchSphere "
+    "network with dealer offers, market activity, pricing insights, and matching "
+    "buyers and sellers.\n\n"
+    "General watch-related questions outside of the WatchSphere marketplace are "
+    "currently not supported yet.\n\n"
+    "Additional AI features and broader watch knowledge capabilities will be added "
+    "in future updates."
+)
 
-## YOUR EXPERTISE
+# Static conversion table, used only to annotate WatchSphere prices with a rough
+# EUR equivalent so the bot never has to invent an exchange rate.
+FX_TO_EUR = {
+    "EUR": 1.0, "HKD": 0.119, "HK$": 0.119, "USD": 0.925, "USDT": 0.925,
+    "GBP": 1.17, "CHF": 1.06, "AED": 0.252, "SGD": 0.69, "JPY": 0.0059,
+    "CNY": 0.128, "RMB": 0.128,
+}
 
-You have COMPLETE knowledge of watch references. When a user mentions ANY reference number (like 126610LN, 5711/1A, 15500ST, etc.), you IMMEDIATELY know:
-- The exact brand (Rolex, Patek Philippe, Audemars Piguet, etc.)
-- The exact model name
-- The watch family/collection
-- Key specifications (movement, case size, materials)
-- Whether it's discontinued or current production
-- Approximate retail and market prices
-- Historical significance
 
-## REFERENCE RECOGNITION EXAMPLES
+def _to_eur(price: Optional[float], currency: Optional[str]) -> Optional[int]:
+    """Approximate EUR value of a price, or None when it can't be converted."""
+    if not price:
+        return None
+    rate = FX_TO_EUR.get((currency or "EUR").strip().upper())
+    if rate is None:
+        return None
+    return int(round(price * rate))
 
-- 126610LN = Rolex Submariner Date (current production, 41mm, black dial/bezel)
-- 116610LV = Rolex Submariner "Hulk" (discontinued, green dial/bezel, highly collectible)
-- 5711/1A = Patek Philippe Nautilus (iconic steel sports watch, discontinued and extremely desirable)
-- 15500ST = Audemars Piguet Royal Oak (41mm steel, current production)
-- 310.30.42.50.01.001 = Omega Speedmaster Moonwatch Professional (Co-Axial Master Chronometer)
 
-## YOUR BEHAVIOR
+def _search_tokens(text: str) -> List[str]:
+    """Reference-like tokens (references, WS codes, OEM refs) from user text."""
+    if not text:
+        return []
+    tokens = []
+    for raw in re.findall(r'[A-Za-z0-9][A-Za-z0-9./\-]{3,}', text):
+        token = raw.strip('.').strip('-')
+        if len(token) < 4 or not any(c.isdigit() for c in token):
+            continue
+        if token.lower() in tokens:
+            continue
+        tokens.append(token.lower())
+    return tokens[:6]
 
-1. **When a user asks about availability of a reference:**
-   - IMMEDIATELY recognize what watch it is and confirm your knowledge
-   - Ask clarifying questions about their preferences:
-     * Preferred market/location (if they want local sellers)
-     * Condition preference (new, unworn, excellent, good)
-     * Year of production preference
-     * Budget range
-   - Then search both marketplace AND social listings to find matches
 
-2. **When presenting results:**
-   - Show marketplace listings first (verified sellers)
-   - Then show social/WhatsApp listings (may need verification)
-   - Include price, condition, seller info, and location when available
+def _token_variants(token: str) -> List[str]:
+    """The token plus its digit stem, so "228238A Blk" still finds 228238."""
+    variants = [token]
+    stem = re.match(r'^(\d{4,})[a-z]{1,4}$', token)
+    if stem:
+        variants.append(stem.group(1))
+    return variants
 
-3. **When no results are found:**
-   - Acknowledge what the user is looking for
-   - Explain why it might be rare or difficult to find
-   - Suggest alternatives or how to get notified when one becomes available
 
-## IMPORTANT GUIDELINES
+async def _catalog_matches(tokens: List[str]) -> List[Watch]:
+    """Catalog entries whose reference / WS code / OEM ref / alias matches."""
+    if not tokens:
+        return []
+    ors: List[dict] = []
+    for token in [v for t in tokens for v in _token_variants(t)]:
+        pattern = f"^{re.escape(token)}"
+        ors.extend([
+            {"reference": {"$regex": pattern, "$options": "i"}},
+            {"ws_code": {"$regex": pattern, "$options": "i"}},
+            {"oem_references": {"$regex": pattern, "$options": "i"}},
+            {"aliases": {"$regex": pattern, "$options": "i"}},
+        ])
+    return await Watch.find({"$or": ors}).limit(12).to_list()
 
-- NEVER say "I don't know what reference that is" for common references
-- Always demonstrate your expertise by identifying the watch immediately
-- Be conversational but professional
-- Use EUR as default currency unless user specifies otherwise
-- If you genuinely don't recognize a reference, ask for more details politely
-- When showing prices, note if they're above/below typical market rates
-- Recommend caution with social listings - suggest verification
+
+def _catalog_entry(w: Watch) -> dict:
+    """Full catalog description of a watch — the bot's only source of truth."""
+    return {
+        "ws_code": w.ws_code,
+        "brand": w.brand,
+        "model": w.model,
+        "collection": w.collection,
+        "reference": w.reference,
+        "oem_references": w.oem_references or [],
+        "aliases": w.aliases or [],
+        "dial": w.dial,
+        "bracelet": w.bracelet,
+        "description": (w.description or "")[:300] or None,
+        "photo": w.cover_image or (w.images[0] if w.images else None),
+    }
+
+
+def _order_entry(o: Order) -> dict:
+    """One WTS listing or WTB search, exactly as WatchSphere holds it."""
+    month_year = None
+    if o.watch_month and o.year:
+        month_year = f"{o.watch_month:02d}/{o.year % 100:02d}"
+    elif o.year:
+        month_year = str(o.year)
+    elif o.year_raw:
+        month_year = o.year_raw
+
+    entry = {
+        "ws_code": o.ws_code,
+        "brand": o.brand,
+        "reference": o.reference,
+        "dealer_phone": o.whatsapp_phone or None,
+        "dealer_name": o.user_name or None,
+        "country": o.country_name or o.country_code,
+        "country_code": o.country_code,
+        "condition": o.condition.value if o.condition else (o.condition_raw or None),
+        "date": month_year,
+        "remarks": o.remarks or None,
+        "price": o.price,
+        "currency": o.currency,
+        "price_eur_approx": _to_eur(o.price, o.currency),
+    }
+    return {k: v for k, v in entry.items() if v is not None}
+
+
+def _price_summary(entries: List[dict]) -> Optional[dict]:
+    values = [e["price_eur_approx"] for e in entries if e.get("price_eur_approx")]
+    if not values:
+        return None
+    return {
+        "count_with_price": len(values),
+        "min_eur_approx": min(values),
+        "max_eur_approx": max(values),
+        "median_eur_approx": sorted(values)[len(values) // 2],
+    }
+
+
+async def _orders_for(watches: List[Watch], tokens: List[str]) -> dict:
+    """Active WTS listings and WTB searches for the watches in question."""
+    ors: List[dict] = []
+    ws_codes = [w.ws_code for w in watches if w.ws_code]
+    references = [w.reference for w in watches if w.reference]
+    if ws_codes:
+        ors.append({"ws_code": {"$in": ws_codes}})
+    if references:
+        ors.append({"reference": {"$in": references}})
+    for token in [v for t in tokens for v in _token_variants(t)]:
+        ors.append({"reference": {"$regex": f"^{re.escape(token)}", "$options": "i"}})
+        ors.append({"ws_code": {"$regex": f"^{re.escape(token)}", "$options": "i"}})
+    if not ors:
+        return {"wts_listings": [], "wtb_searches": []}
+
+    orders = await Order.find({
+        "status": OrderStatus.ACTIVE.value,
+        "$or": ors,
+    }).limit(200).to_list()
+
+    wts = [_order_entry(o) for o in orders if o.order_type == OrderType.SELL]
+    wtb = [_order_entry(o) for o in orders if o.order_type == OrderType.BUY]
+    wts.sort(key=lambda e: e.get("price_eur_approx") or float("inf"))
+    return {"wts_listings": wts[:60], "wtb_searches": wtb[:60]}
+
+
+async def build_watchsphere_context(user_message: str, history: List[Dict[str, str]]) -> str:
+    """Assemble the ONLY data the bot is allowed to answer from.
+
+    Looks at the current message plus recent user turns, so a follow-up like
+    "Yes" still resolves against the watch discussed earlier.
+    """
+    texts = [user_message]
+    for msg in reversed(history[-8:]):
+        if not msg.get("is_ai"):
+            texts.append(msg.get("content", ""))
+
+    tokens: List[str] = []
+    for text in texts:
+        for token in _search_tokens(text):
+            if token not in tokens:
+                tokens.append(token)
+    tokens = tokens[:8]
+
+    watches = await _catalog_matches(tokens)
+    orders = await _orders_for(watches, tokens)
+
+    wts = orders["wts_listings"]
+    wtb = orders["wtb_searches"]
+
+    countries_selling: Dict[str, int] = {}
+    for e in wts:
+        key = e.get("country") or "unknown"
+        countries_selling[key] = countries_selling.get(key, 0) + 1
+    countries_buying: Dict[str, int] = {}
+    for e in wtb:
+        key = e.get("country") or "unknown"
+        countries_buying[key] = countries_buying.get(key, 0) + 1
+
+    payload = {
+        "generated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "recognized_tokens": tokens,
+        "catalog_matches": [_catalog_entry(w) for w in watches],
+        "active_wts_listings": {
+            "total": len(wts),
+            "by_country": countries_selling,
+            "price_summary": _price_summary(wts),
+            "listings": wts,
+        },
+        "active_wtb_searches": {
+            "total": len(wtb),
+            "by_country": countries_buying,
+            "target_price_summary": _price_summary(wtb),
+            "searches": wtb,
+        },
+    }
+
+    return (
+        "WATCHSPHERE DATA (the only permitted source for this answer):\n"
+        + json.dumps(payload, indent=1, default=str)
+    )
+
+
+_SYSTEM_PROMPT_TEMPLATE = """You are the WatchSphere AI bot. You are an intelligent layer on top of the
+WatchSphere ecosystem — NOT a generic internet watch chatbot.
+
+## ABSOLUTE DATA RULE
+
+Every factual statement you make — prices, dealers, availability, market activity,
+liquidity, targets, remarks, contact details — must come EXCLUSIVELY from the
+"WATCHSPHERE DATA" block supplied with the conversation. That block is built from the
+WatchSphere watch database (WS codes, references, OEM references, brands, models,
+collections, dials, bracelets, aliases, photos, descriptions), all active WTS orders,
+all active WTB orders, dealer targets, remarks and dealer contact information.
+
+You must NOT use internet knowledge, Chrono24, Google, forums, auction results or any
+external marketplace for pricing or availability. Never invent a dealer, a phone
+number, a price or a listing. If the data block holds nothing for the request, say so
+plainly and offer to notify or to widen the search.
+
+## OUT OF SCOPE
+
+If the user asks something that is not about offers/activity inside the WatchSphere
+network — general watch history, servicing advice, brand trivia, investment opinions,
+anything unrelated — reply with EXACTLY this text and nothing else:
+
+{out_of_scope}
+
+## HOW TO ANSWER
+
+1. Missing configuration → ask first. Before quoting a "safe pay" or a valuation, ask
+   only for what is genuinely missing, as a short bullet list:
+   - papers / full set or watch only
+   - date/year of the watch
+   - unworn or used
+   For a location-specific request also ask: preferred year/date, condition, full set or
+   watch only, local deal only or worldwide.
+
+2. Answering with data. Report what the network actually holds, e.g.
+   "Based on current WatchSphere data, I can currently find 8 dealers searching for this
+   exact configuration." Give target prices in the dealer's own currency with the EUR
+   equivalent in brackets when the data provides `price_eur_approx`, and give listing
+   ranges ("45 listings ... ranging from approximately €59,500 up to €61,000").
+   Then offer the next step: "Would you like me to provide you with the contact details
+   of some dealers currently searching for this watch?"
+
+3. Contact details. When the user says yes, list up to 3 entries in this shape:
+
+   Dealer 1 🇭🇰
+   +852 6103 6278
+   Target: 535,000 HK$ (€58,100) for a 2026 unworn example.
+
+   For WTS offers use the listing shape instead:
+
+   Dealer 1 🇭🇰
+   +852 6103 6278
+   5712/1R - 2022 - Used - Full Set - 1,830,000 HK$
+
+   Use the country flag emoji matching the dealer's country. When a WTB dealer has no
+   target, write "No target price specified." Close with an offer to show more options.
+
+4. Cheapest / filtered requests. Answer from the data: cheapest listing, Europe only,
+   Hong Kong only, margin scheme / wire, unworn 2026 only, and so on.
+
+5. Remarks filter with no hit. If listings exist but none carry the requested remarks
+   (e.g. "Margin Scheme", "Wire"), say so explicitly, note that many dealers do not
+   always include payment or invoice conditions in their listings so the user can still
+   contact them directly, then show the available listings without those remarks.
 
 ## TONE
 
-Be confident, knowledgeable, and helpful. You're a trusted watch advisor who happens to have access to real-time market data. Show your expertise while remaining approachable."""
+Direct, professional, dealer-to-dealer. Short lines, no filler, no marketing language.
+Never mention JSON, "the data block", or how you obtained the information."""
+
+
+SYSTEM_PROMPT = _SYSTEM_PROMPT_TEMPLATE.format(out_of_scope=OUT_OF_SCOPE_REPLY)
 
 
 async def generate_ai_response(
@@ -584,12 +813,17 @@ async def generate_ai_response(
     include_market_context: bool = True,
 ) -> str:
     """
-    Generate an AI response using OpenAI with market context.
+    Generate an AI response strictly from WatchSphere data.
+
+    The bot answers only about the WatchSphere network — catalog entries, active
+    WTS/WTB orders, dealer targets, remarks and dealer contacts. Nothing is drawn
+    from external marketplaces or general internet knowledge.
 
     Args:
         user_message: The user's message
         conversation_history: Previous messages in the conversation
-        include_market_context: Whether to include current market data
+        include_market_context: kept for backwards compatibility; WatchSphere
+            data is always attached now.
 
     Returns:
         The AI's response text
@@ -598,55 +832,12 @@ async def generate_ai_response(
         return "AI service is not configured. Please add your OpenAI API key to enable AI chat."
 
     try:
-        # Extract any reference numbers from the user's message
-        extracted_refs = extract_references_from_text(user_message)
+        context = await build_watchsphere_context(user_message, conversation_history)
 
-        # Build context about the watches mentioned
-        watch_context = []
-        search_results = []
-
-        for ref in extracted_refs:
-            # Identify the watch from our database
-            watch_info = identify_watch_from_reference(ref)
-            if watch_info:
-                watch_context.append(f"Reference {ref}: {watch_info['brand']} {watch_info['model']} ({watch_info.get('family', 'N/A')})")
-
-                # Search marketplace and social for this reference
-                marketplace_results = await search_marketplace_for_reference(ref, watch_info.get('brand'))
-                social_results = await search_social_for_reference(ref, watch_info.get('brand'))
-
-                if marketplace_results or social_results:
-                    search_results.append({
-                        "reference": ref,
-                        "watch_info": watch_info,
-                        "marketplace_listings": marketplace_results,
-                        "social_listings": social_results,
-                    })
-
-        # Build the messages array
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-        # Add watch identification context if we found references
-        if watch_context:
-            identification_context = f"""
-IDENTIFIED WATCHES FROM USER MESSAGE:
-{chr(10).join(watch_context)}
-
-SEARCH RESULTS:
-{json.dumps(search_results, indent=2, default=str)}
-"""
-            messages.append({
-                "role": "system",
-                "content": identification_context
-            })
-
-        # Add market context if requested
-        if include_market_context:
-            market_context = await get_market_context()
-            messages.append({
-                "role": "system",
-                "content": f"Current market data context:\n{market_context}"
-            })
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": context},
+        ]
 
         # Add conversation history
         for msg in conversation_history[-10:]:  # Keep last 10 messages for context
@@ -656,12 +847,11 @@ SEARCH RESULTS:
         # Add the current user message
         messages.append({"role": "user", "content": user_message})
 
-        # Call OpenAI API
         response = await openai_client.chat.completions.create(
-            model="gpt-4o",  # Using GPT-4o for best quality
+            model="gpt-4o",
             messages=messages,
             max_tokens=1500,
-            temperature=0.7,
+            temperature=0.3,
         )
 
         return response.choices[0].message.content

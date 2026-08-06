@@ -50,7 +50,7 @@ echo -e "${GREEN}Starting Backend (FastAPI)...${NC}"
     cd "$PROJECT_ROOT/apps/backend"
     source venv/bin/activate 2>/dev/null || python3 -m venv venv && source venv/bin/activate
     pip install -r requirements.txt -q 2>/dev/null
-    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    uvicorn app.main:app --reload --host 0.0.0.0 --port 8787
 ) &
 BACKEND_PID=$!
 echo -e "${GREEN}Backend started (PID: $BACKEND_PID)${NC}"
@@ -82,9 +82,9 @@ echo -e "${BLUE}========================================${NC}"
 echo -e "${GREEN}All services are starting!${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
-echo -e "  ${YELLOW}Backend:${NC}  http://localhost:8000"
-echo -e "  ${YELLOW}API Docs:${NC} http://localhost:8000/docs"
-echo -e "  ${YELLOW}Web:${NC}      http://localhost:5173"
+echo -e "  ${YELLOW}Backend:${NC}  http://localhost:8787"
+echo -e "  ${YELLOW}API Docs:${NC} http://localhost:8787/docs"
+echo -e "  ${YELLOW}Web:${NC}      http://localhost:5177"
 echo -e "  ${YELLOW}Mobile:${NC}   iOS Simulator"
 echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
