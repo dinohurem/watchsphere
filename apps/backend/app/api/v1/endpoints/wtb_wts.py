@@ -15,6 +15,7 @@ from app.core.deps import get_current_admin_user
 from app.models.user import User
 from app.models.wtb_wts import WtbWtsRun, GenerationMode, RunStatus
 from app.services.wtb_wts_service import process_generation
+from app.services.vision_matching import load_media_archive
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ async def _cleanup_expired_files(run: WtbWtsRun) -> None:
         "needs_review_csv_gridfs_id",
         "not_in_database_csv_gridfs_id",
         "suggested_csv_gridfs_id",
+        "matched_via_image_csv_gridfs_id",
     ):
         file_id = getattr(run, field, None)
         if file_id:
@@ -75,6 +77,7 @@ async def _cleanup_expired_files(run: WtbWtsRun) -> None:
         "needs_review_csv_gridfs_id": None,
         "not_in_database_csv_gridfs_id": None,
         "suggested_csv_gridfs_id": None,
+        "matched_via_image_csv_gridfs_id": None,
         "files_expire_at": None,
     }})
 
@@ -130,6 +133,10 @@ class RunResponse(BaseModel):
     has_not_in_database_csv: bool = False
     has_suggested_csv: bool = False
     suggested_additions_count: int = 0
+    has_matched_via_image_csv: bool = False
+    matched_via_image_count: int = 0
+    image_analyzed_count: int = 0
+    image_enriched_count: int = 0
     files_expire_at: Optional[datetime] = None
     imported_by: str
     imported_by_name: str
@@ -160,6 +167,10 @@ def _run_to_response(run: WtbWtsRun) -> RunResponse:
         has_not_in_database_csv=bool(getattr(run, "not_in_database_csv_gridfs_id", None)),
         has_suggested_csv=bool(getattr(run, "suggested_csv_gridfs_id", None)),
         suggested_additions_count=getattr(run, "suggested_additions_count", 0),
+        has_matched_via_image_csv=bool(getattr(run, "matched_via_image_csv_gridfs_id", None)),
+        matched_via_image_count=getattr(run, "matched_via_image_count", 0),
+        image_analyzed_count=getattr(run, "image_analyzed_count", 0),
+        image_enriched_count=getattr(run, "image_enriched_count", 0),
         files_expire_at=getattr(run, "files_expire_at", None),
         imported_by=run.imported_by,
         imported_by_name=run.imported_by_name,
@@ -179,6 +190,7 @@ async def _run_processing(
     group_name: str,
     jsonl_content: Optional[str],
     filename: str,
+    media_archive: Optional[dict] = None,
 ):
     """Run WTB/WTS processing in background with progress updates."""
     async def update_progress(stage: str, percent: int, detail: str = ""):
@@ -200,6 +212,7 @@ async def _run_processing(
             group_name=group_name,
             jsonl_content=jsonl_content,
             progress_callback=update_progress,
+            media_archive=media_archive,
         )
         logger.info(f"generate_wtb_wts: processing done — matched={result['matched_count']}, "
                      f"needs_review={result['needs_review_count']}, fuzzy={result.get('fuzzy_matched_count', 0)}, "
@@ -226,6 +239,13 @@ async def _run_processing(
                 f"not-in-database-{filename.replace('.txt', '.csv')}",
             )
 
+        matched_via_image_gridfs_id = None
+        if result.get("matched_via_image_csv"):
+            matched_via_image_gridfs_id = await _gridfs_put(
+                result["matched_via_image_csv"],
+                f"matched-via-image-{filename.replace('.txt', '.csv')}",
+            )
+
         # Store suggested-additions CSV
         suggested_csv = result.get("suggested_additions_csv", "")
         suggested_gridfs_id = None
@@ -243,6 +263,10 @@ async def _run_processing(
             "needs_review_csv_gridfs_id": needs_review_gridfs_id,
             "not_in_database_csv_gridfs_id": not_in_database_gridfs_id,
             "suggested_csv_gridfs_id": suggested_gridfs_id,
+            "matched_via_image_csv_gridfs_id": matched_via_image_gridfs_id,
+            "matched_via_image_count": result.get("matched_via_image_count", 0),
+            "image_analyzed_count": result.get("image_analyzed_count", 0),
+            "image_enriched_count": result.get("image_enriched_count", 0),
             "total_messages": result["total_messages"],
             "detected_posts": result["detected_posts"],
             "matched_count": result["matched_count"],
@@ -284,9 +308,15 @@ async def generate_wtb_wts(
     reference_month: int = Form(...),
     reference_year: int = Form(...),
     jsonl_file: Optional[UploadFile] = File(None),
+    media_file: Optional[UploadFile] = File(None),
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Generate WTB/WTS CSV from a WhatsApp .txt export (Admin only)"""
+    """Generate WTB/WTS CSV from a WhatsApp .txt export (Admin only).
+
+    `media_file` is an optional WhatsApp "export with media" .zip. When present,
+    photos attached to a message are used as an extra disambiguation layer for
+    listings whose reference matches several catalog variants.
+    """
     if not file.filename.endswith('.txt'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -317,6 +347,22 @@ async def generate_wtb_wts(
         jsonl_content = (await jsonl_file.read()).decode('utf-8', errors='ignore')
         logger.info(f"generate_wtb_wts: jsonl file={jsonl_file.filename}, size={len(jsonl_content)} chars")
 
+    media_archive = None
+    if media_file and media_file.filename:
+        if not media_file.filename.lower().endswith('.zip'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Media export must be a .zip file",
+            )
+        media_archive = load_media_archive(await media_file.read())
+        logger.info(f"generate_wtb_wts: media file={media_file.filename}, "
+                    f"{len(media_archive)} images extracted")
+        if not media_archive:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No images found in the uploaded media archive",
+            )
+
     admin_name = current_admin.name or str(current_admin.id)
 
     # Clean up any previously expired files before creating new run
@@ -337,7 +383,8 @@ async def generate_wtb_wts(
 
     # Launch processing in background — return run immediately
     asyncio.create_task(_run_processing(run, txt_content, gen_mode, reference_month,
-                                        reference_year, group_name, jsonl_content, file.filename))
+                                        reference_year, group_name, jsonl_content,
+                                        file.filename, media_archive))
 
     return _run_to_response(run)
 
@@ -507,6 +554,45 @@ async def download_not_in_database_csv(
         media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="not-in-database-{run.filename.replace(".txt", ".csv")}"'
+        },
+    )
+
+
+@router.get("/admin/wtb-wts/runs/{run_id}/matched-via-image-csv")
+async def download_matched_via_image_csv(
+    run_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Download the "Matched via Image" CSV from a run (Admin only).
+
+    Contains only the listings that text parsing could not assign on its own and
+    that were resolved by analysing the photos attached to the message.
+    """
+
+    run = await WtbWtsRun.get(PydanticObjectId(run_id))
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    gridfs_id = getattr(run, "matched_via_image_csv_gridfs_id", None)
+    if not gridfs_id:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
+        )
+
+    try:
+        content = await _gridfs_get(gridfs_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after generation."
+        )
+
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="matched-via-image-{run.filename.replace(".txt", ".csv")}"'
         },
     )
 
