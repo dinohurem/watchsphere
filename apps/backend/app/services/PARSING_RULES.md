@@ -1312,6 +1312,49 @@ Keywords are matched with word boundaries and scanned longest-first so a phrase 
 | `card only` | Card Only |
 | `box only` | Box Only |
 | `no box` | No Box |
+| `can be used`, `used ok`, `used okay`, `used fine` | Can be Used |
+| `any year` | Any Year |
+| `new clasp` | New Clasp |
+| `new buckle` | New Buckle |
+| `new paper`, `new papers`, `new certificate` | New Paper |
+| `new caliber`, `new calibre` | New Caliber |
+| `double seal` | Double Seal |
+| `single seal` | Single Seal |
+| `open date` | Open Date |
+| `wire`, `wire transfer` | Wire |
+| `cash`, `bh` | Cash |
+| `usdt` | USDT |
+| `wta`, `wta munich` | WTA Munich |
+| `mercedes`, `mercedes hands` | Mercedes Hands |
+
+Location-preference remarks are appended separately (see Appendix B). `worldwide`
+yields the `Worldwide` remark for **WTB only** — the former WTS-side
+`Watch Worldwide` remark has been removed.
+
+## Appendix A2: Image-Based Variant Matching (optional layer)
+
+Text parsing always runs first and keeps authority. Image analysis is only used when
+a WhatsApp "export with media" `.zip` is uploaded alongside the chat export, and only
+for two cases:
+
+1. **Ambiguous variant** — the reference was recognised but several catalog entries
+   share it (`Review Reason: Ambiguous match: A, B`) and the text carries no
+   distinguishing information. The photos attached to *that message only* are sent to
+   the vision model together with the candidates' variable attributes and their catalog
+   reference photos.
+2. **Missing date on a matched row** — `Monat/Jahr` is empty and the message has photos;
+   the warranty card / certificate date is read from the image.
+
+Rules:
+- Only attributes that actually differ between the candidates (`bracelet`, `dial`,
+  `index`) are used. An attribute that is absent is *fixed* for that reference (a
+  Day-Date bracelet is always President) — never treated as missing data.
+- A verdict below 85% confidence, or one naming a ws_code outside the candidate set,
+  is discarded and the row stays in **Needs Review**. An unclear photo never produces
+  an automatic match.
+- Resolved rows are written to a separate **Matched via Image** CSV (same columns plus
+  `Image Confidence` and `Image Evidence`), so they can be reviewed before import.
+- At most 200 rows per run are analysed, 3 photos per message.
 
 ## Appendix B: Location Detection (WTS Only)
 

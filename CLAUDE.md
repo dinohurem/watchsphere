@@ -52,11 +52,11 @@ npm run format       # Prettier format
 
 # Backend (from apps/backend/)
 source venv/bin/activate
-uvicorn app.main:app --reload   # Dev server on :8000
+uvicorn app.main:app --reload --port 8787   # Dev server on :8787
 python scripts/seed_admin.py    # Seed admin user
 
 # Web (from apps/web/)
-npm run dev          # Vite dev server on :3000
+npm run dev          # Vite dev server on :5177
 npm run build        # Production build to dist/
 
 # Mobile (from apps/mobile/)

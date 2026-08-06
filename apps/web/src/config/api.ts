@@ -1,6 +1,6 @@
 export const API_CONFIG = {
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1',
-  wsURL: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000/ws',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8787/api/v1',
+  wsURL: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8787/ws',
   timeout: 30000,
 }
 

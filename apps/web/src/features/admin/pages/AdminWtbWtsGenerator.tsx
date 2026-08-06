@@ -11,6 +11,7 @@ import {
   X,
   FileOutput,
   HelpCircle,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { api } from '@/services/api'
 
@@ -33,6 +34,10 @@ interface WtbWtsRun {
   has_not_in_database_csv: boolean
   has_suggested_csv: boolean
   suggested_additions_count: number
+  has_matched_via_image_csv: boolean
+  matched_via_image_count: number
+  image_analyzed_count: number
+  image_enriched_count: number
   files_expire_at?: string
   imported_by: string
   imported_by_name: string
@@ -76,7 +81,8 @@ function isFilesExpired(run: WtbWtsRun): boolean {
     !run.has_matched_csv &&
     !run.has_needs_review_csv &&
     !run.has_not_in_database_csv &&
-    !run.has_suggested_csv
+    !run.has_suggested_csv &&
+    !run.has_matched_via_image_csv
   )
 }
 
@@ -108,8 +114,10 @@ export function AdminWtbWtsGenerator() {
   const [referenceYear, setReferenceYear] = useState(new Date().getFullYear())
   const [txtFile, setTxtFile] = useState<File | null>(null)
   const [jsonlFile, setJsonlFile] = useState<File | null>(null)
+  const [mediaFile, setMediaFile] = useState<File | null>(null)
   const txtInputRef = useRef<HTMLInputElement>(null)
   const jsonlInputRef = useRef<HTMLInputElement>(null)
+  const mediaInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchRuns()
@@ -187,8 +195,10 @@ export function AdminWtbWtsGenerator() {
           setGenerating(false)
           setTxtFile(null)
           setJsonlFile(null)
+          setMediaFile(null)
           if (txtInputRef.current) txtInputRef.current.value = ''
           if (jsonlInputRef.current) jsonlInputRef.current.value = ''
+          if (mediaInputRef.current) mediaInputRef.current.value = ''
         }
       } catch {
         // Ignore polling errors
@@ -218,6 +228,9 @@ export function AdminWtbWtsGenerator() {
     formData.append('reference_year', String(referenceYear))
     if (jsonlFile) {
       formData.append('jsonl_file', jsonlFile)
+    }
+    if (mediaFile) {
+      formData.append('media_file', mediaFile)
     }
 
     try {
@@ -249,7 +262,12 @@ export function AdminWtbWtsGenerator() {
 
   const handleDownload = async (
     runId: string,
-    type: 'matched-csv' | 'needs-review-csv' | 'not-in-database-csv' | 'suggested-csv',
+    type:
+      | 'matched-csv'
+      | 'needs-review-csv'
+      | 'not-in-database-csv'
+      | 'suggested-csv'
+      | 'matched-via-image-csv',
     filename: string
   ) => {
     try {
@@ -268,7 +286,9 @@ export function AdminWtbWtsGenerator() {
             ? 'suggested-'
             : type === 'not-in-database-csv'
               ? 'not-in-database-'
-              : 'needs-review-'
+              : type === 'matched-via-image-csv'
+                ? 'matched-via-image-'
+                : 'needs-review-'
       a.download = `${prefix}${csvFilename}`
       a.click()
       window.URL.revokeObjectURL(url)
@@ -468,6 +488,56 @@ export function AdminWtbWtsGenerator() {
             )}
           </div>
 
+          {/* Media Archive Upload */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Chat Media (.zip){' '}
+              <span className="text-gray-400 font-normal">
+                — optional, enables image-based variant matching
+              </span>
+            </label>
+            {mediaFile ? (
+              <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-gray-50">
+                <ImageIcon className="w-4 h-4 text-gray-500" />
+                <span className="flex-1 text-sm text-gray-700 truncate">{mediaFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMediaFile(null)
+                    if (mediaInputRef.current) mediaInputRef.current.value = ''
+                  }}
+                  className="p-1 hover:bg-gray-200 rounded"
+                >
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              </div>
+            ) : (
+              <div
+                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors border-gray-300 hover:border-gray-400"
+                onClick={() => mediaInputRef.current?.click()}
+              >
+                <input
+                  ref={mediaInputRef}
+                  type="file"
+                  accept=".zip"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) setMediaFile(file)
+                  }}
+                  className="hidden"
+                />
+                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">
+                  Click to select the WhatsApp "export with media" .zip
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Photos are only analyzed when a reference has several catalog variants
+                  the text cannot tell apart
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Generate Button */}
           <button
             onClick={handleGenerate}
@@ -573,6 +643,22 @@ export function AdminWtbWtsGenerator() {
                   <p className="text-xs text-gray-500">Not in Database</p>
                 </div>
               )}
+              {(result.matched_via_image_count || 0) > 0 && (
+                <div className="text-center p-2 bg-teal-50 rounded">
+                  <p className="text-lg font-bold text-teal-700">
+                    {result.matched_via_image_count}
+                  </p>
+                  <p className="text-xs text-gray-500">Matched via Image</p>
+                </div>
+              )}
+              {(result.image_enriched_count || 0) > 0 && (
+                <div className="text-center p-2 bg-teal-50 rounded">
+                  <p className="text-lg font-bold text-teal-700">
+                    {result.image_enriched_count}
+                  </p>
+                  <p className="text-xs text-gray-500">Dates Read from Image</p>
+                </div>
+              )}
               {(result.suggested_additions_count || 0) > 0 && (
                 <div className="text-center p-2 bg-indigo-50 rounded">
                   <p className="text-lg font-bold text-indigo-700">
@@ -617,6 +703,17 @@ export function AdminWtbWtsGenerator() {
                   >
                     <Download className="w-4 h-4" />
                     Download Not in Database CSV
+                  </button>
+                )}
+                {result.has_matched_via_image_csv && (
+                  <button
+                    onClick={() =>
+                      handleDownload(result.id, 'matched-via-image-csv', result.filename)
+                    }
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-teal-800 bg-teal-100 border border-teal-300 rounded-lg hover:bg-teal-200 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Matched via Image CSV ({result.matched_via_image_count || 0})
                   </button>
                 )}
                 {result.has_suggested_csv && (
@@ -686,6 +783,12 @@ export function AdminWtbWtsGenerator() {
                             / {run.not_in_database_count} not in DB
                           </span>
                         )}
+                        {(run.matched_via_image_count || 0) > 0 && (
+                          <span className="text-teal-600">
+                            {' '}
+                            / {run.matched_via_image_count} via image
+                          </span>
+                        )}
                         {(run.suggested_additions_count || 0) > 0 && (
                           <span className="text-indigo-600">
                             {' '}
@@ -730,6 +833,17 @@ export function AdminWtbWtsGenerator() {
                             title={`Download not-in-database CSV (${run.not_in_database_count || 0})`}
                           >
                             <HelpCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {run.has_matched_via_image_csv && (
+                          <button
+                            onClick={() =>
+                              handleDownload(run.id, 'matched-via-image-csv', run.filename)
+                            }
+                            className="p-2 hover:bg-teal-100 rounded-lg text-teal-600"
+                            title={`Download matched-via-image CSV (${run.matched_via_image_count || 0})`}
+                          >
+                            <ImageIcon className="w-4 h-4" />
                           </button>
                         )}
                         {run.has_suggested_csv && (
