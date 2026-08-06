@@ -51,13 +51,13 @@ backend/
 
 4. **Run the development server**:
    ```bash
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8787
    ```
 
 5. **Access the API**:
-   - API: http://localhost:8000
-   - Swagger Docs: http://localhost:8000/docs
-   - ReDoc: http://localhost:8000/redoc
+   - API: http://localhost:8787
+   - Swagger Docs: http://localhost:8787/docs
+   - ReDoc: http://localhost:8787/redoc
 
 ## Key Endpoints to Implement
 

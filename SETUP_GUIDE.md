@@ -56,7 +56,7 @@ OPENAI_API_KEY=your-openai-key
 ANTHROPIC_API_KEY=your-anthropic-key
 
 # CORS
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:8081
+ALLOWED_ORIGINS=http://localhost:5177,http://localhost:5177,http://localhost:8081
 ```
 
 #### Web
@@ -67,8 +67,8 @@ cp .env.example .env
 
 Edit `apps/web/.env`:
 ```env
-VITE_API_BASE_URL=http://localhost:8000/api/v1
-VITE_WS_BASE_URL=ws://localhost:8000/ws
+VITE_API_BASE_URL=http://localhost:8787/api/v1
+VITE_WS_BASE_URL=ws://localhost:8787/ws
 ```
 
 ### 3. Set Up MongoDB
@@ -106,15 +106,15 @@ cd apps/backend
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 uvicorn app.main:app --reload
 ```
-Backend will run at: http://localhost:8000
-API Docs: http://localhost:8000/docs
+Backend will run at: http://localhost:8787
+API Docs: http://localhost:8787/docs
 
 #### Terminal 2: Web
 ```bash
 cd apps/web
 npm run dev
 ```
-Web app will run at: http://localhost:5173
+Web app will run at: http://localhost:5177
 
 #### Terminal 3: Mobile
 ```bash

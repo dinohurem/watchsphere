@@ -161,8 +161,8 @@ export const useAppStore = create<AppState>((set) => ({
 
 Configure the API in `.env`:
 ```
-EXPO_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
-EXPO_PUBLIC_WS_BASE_URL=ws://localhost:8000/ws
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8787/api/v1
+EXPO_PUBLIC_WS_BASE_URL=ws://localhost:8787/ws
 ```
 
 **Note**: Use `EXPO_PUBLIC_` prefix for environment variables that should be accessible in the app.
@@ -199,7 +199,7 @@ WebSocket support via Socket.io:
 ```typescript
 import io from 'socket.io-client';
 
-const socket = io('ws://localhost:8000');
+const socket = io('ws://localhost:8787');
 socket.on('price_update', (data) => {
   // Handle real-time price updates
 });
