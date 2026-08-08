@@ -291,16 +291,19 @@ cd apps/mobile && npx expo start
 
 
 📧 Email:    admin@watchsphere.com
-🔑 Password: Admin123!
+🔑 Password: printed by the seed script (local dev fixture)
 
 
 DEALER:
   Email: dealer@watchsphere.com
-  Password: Dealer123!
 
 COLLECTOR:
   Email: collector@watchsphere.com
-  Password: Collector123!
+
+Passwords are local development fixtures defined in
+apps/backend/scripts/seed_admin.py. Override them with SEED_ADMIN_PASSWORD /
+SEED_DEALER_PASSWORD / SEED_COLLECTOR_PASSWORD, and never seed these accounts
+into a shared or production database.
 
 
 from mobile folder:
