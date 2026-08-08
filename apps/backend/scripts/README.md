@@ -16,25 +16,26 @@ python scripts/seed_admin.py
 
 1. Connects to your MongoDB database
 2. Creates an admin user if one doesn't exist:
-   - **Email**: admin@watchsphere.com
-   - **Password**: Admin123!
+   - **Email**: admin@watchsphere.com (override: `SEED_ADMIN_EMAIL`)
+   - **Password**: local dev fixture default (override: `SEED_ADMIN_PASSWORD`)
    - **Role**: ADMIN
    - **Verified**: true
    - **Active**: true
 
 3. Optionally creates test users:
-   - **Dealer**: dealer@watchsphere.com / Dealer123!
-   - **Collector**: collector@watchsphere.com / Collector123!
+   - **Dealer**: dealer@watchsphere.com (override: `SEED_DEALER_PASSWORD`)
+   - **Collector**: collector@watchsphere.com (override: `SEED_COLLECTOR_PASSWORD`)
 
 ### Security Note
 
-⚠️ **IMPORTANT**: Change the default password after first login!
+⚠️ **IMPORTANT**: the fixture passwords in `seed_admin.py` are local
+development defaults committed to this repository, so treat them as public.
 
-The default credentials are:
-- Email: `admin@watchsphere.com`
-- Password: `Admin123!`
-
-These should NEVER be used in production without changing the password first.
+- Never run `seed_admin.py` against a shared or production database — it writes
+  to whatever `MONGODB_URL` is configured, not just localhost.
+- For production use `seed_prod_admin.py`, which requires `MONGODB_URL`,
+  `ADMIN_EMAIL` and `ADMIN_PASSWORD` from the environment and has no defaults.
+- If these fixture accounts ever existed in production, rotate their passwords.
 
 ### Running in Production
 

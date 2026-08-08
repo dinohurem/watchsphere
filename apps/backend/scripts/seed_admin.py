@@ -1,8 +1,20 @@
 """
 Seed script to create an admin user for WatchSphere
 Run this script to create the initial admin account
+
+The credentials below are LOCAL DEVELOPMENT FIXTURES. They are well known,
+so never seed them into a shared or production database — this script writes
+to whatever settings.MONGODB_URL points at. Override via the environment when
+targeting anything other than a local database:
+
+    SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
+    SEED_DEALER_PASSWORD / SEED_COLLECTOR_PASSWORD
+
+For production use scripts/seed_prod_admin.py, which requires every value to
+come from the environment.
 """
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -26,10 +38,10 @@ async def seed_admin():
         document_models=[User]
     )
 
-    # Admin credentials
-    admin_email = "admin@watchsphere.com"
-    admin_password = "Admin123!"  # Change this after first login!
-    admin_name = "WatchSphere Admin"
+    # Admin credentials - local dev fixture defaults, override via env
+    admin_email = os.getenv("SEED_ADMIN_EMAIL", "admin@watchsphere.com")
+    admin_password = os.getenv("SEED_ADMIN_PASSWORD", "Admin123!")
+    admin_name = os.getenv("SEED_ADMIN_NAME", "WatchSphere Admin")
 
     # Check if admin already exists
     existing_admin = await User.find_one(User.email == admin_email)
@@ -56,7 +68,7 @@ async def seed_admin():
     print("✓ Admin user created successfully!")
     print("="*60)
     print(f"\n📧 Email:    {admin_email}")
-    print(f"🔑 Password: {admin_password}")
+    print("🔑 Password: (fixture default, or SEED_ADMIN_PASSWORD if set)")
     print(f"\n⚠️  IMPORTANT: Change this password after first login!")
     print("="*60 + "\n")
 
@@ -77,13 +89,13 @@ async def create_test_users():
     test_users = [
         {
             "email": "dealer@watchsphere.com",
-            "password": "Dealer123!",
+            "password": os.getenv("SEED_DEALER_PASSWORD", "Dealer123!"),
             "name": "Test Dealer",
             "role": UserRole.DEALER,
         },
         {
             "email": "collector@watchsphere.com",
-            "password": "Collector123!",
+            "password": os.getenv("SEED_COLLECTOR_PASSWORD", "Collector123!"),
             "name": "Test Collector",
             "role": UserRole.COLLECTOR,
         }
@@ -114,12 +126,10 @@ async def create_test_users():
     print("\n" + "="*60)
     print("Test Users Created")
     print("="*60)
-    print("\nDEALER:")
-    print("  Email: dealer@watchsphere.com")
-    print("  Password: Dealer123!")
-    print("\nCOLLECTOR:")
-    print("  Email: collector@watchsphere.com")
-    print("  Password: Collector123!")
+    for user_data in test_users:
+        print(f"\n{user_data['role'].value.upper()}:")
+        print(f"  Email: {user_data['email']}")
+        print("  Password: (fixture default, or SEED_*_PASSWORD if set)")
     print("="*60 + "\n")
 
     # Close connection

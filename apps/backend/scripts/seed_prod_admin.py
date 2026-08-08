@@ -5,8 +5,14 @@ Run this script once to initialize the production database with an admin account
 Usage:
     python scripts/seed_prod_admin.py
 
-The script will use MONGODB_URL and MONGODB_DB_NAME from environment variables
-or fall back to .env.production values.
+Required environment variables (no defaults — this writes to production):
+    MONGODB_URL     Atlas connection string
+    ADMIN_EMAIL     login for the admin account to create
+    ADMIN_PASSWORD  password for that account
+
+Optional:
+    MONGODB_DB_NAME (default "watchsphere")
+    ADMIN_NAME      (default "WatchSphere Admin")
 """
 import asyncio
 import sys
@@ -22,17 +28,30 @@ from app.models.user import User, UserRole
 from app.core.security import get_password_hash
 
 
-# Production configuration - override via environment variables if needed
-MONGODB_URL = os.getenv(
-    "MONGODB_URL",
-    "mongodb+srv://watchsphere:Fiddle1234@watchsphere.tfueuzp.mongodb.net/?appName=WatchSphere"
-)
+def _required_env(name: str) -> str:
+    """Read a required env var, failing with an actionable message.
+
+    Deliberately has no fallback: this script writes to the production
+    database, so any committed default would be a published credential.
+    """
+    value = os.environ.get(name)
+    if not value:
+        sys.exit(
+            f"❌ {name} is not set.\n"
+            f"   This script targets production and has no built-in defaults.\n"
+            f"   Set it in the environment before running, e.g.:\n"
+            f"     export {name}='...'"
+        )
+    return value
+
+
+MONGODB_URL = _required_env("MONGODB_URL")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "watchsphere")
 
 # Admin credentials for production
-ADMIN_EMAIL = "dev@watchsphere.io"
-ADMIN_PASSWORD = "Admin123!"  # CHANGE THIS AFTER FIRST LOGIN!
-ADMIN_NAME = "WatchSphere Admin"
+ADMIN_EMAIL = _required_env("ADMIN_EMAIL")
+ADMIN_PASSWORD = _required_env("ADMIN_PASSWORD")
+ADMIN_NAME = os.getenv("ADMIN_NAME", "WatchSphere Admin")
 
 
 async def seed_prod_admin():
@@ -81,7 +100,7 @@ async def seed_prod_admin():
         print("✅ ADMIN USER CREATED SUCCESSFULLY!")
         print("=" * 60)
         print(f"\n📧 Email:    {ADMIN_EMAIL}")
-        print(f"🔑 Password: {ADMIN_PASSWORD}")
+        print(f"🔑 Password: (as supplied in ADMIN_PASSWORD — not echoed)")
         print(f"👤 Name:     {ADMIN_NAME}")
         print(f"🛡️  Role:     ADMIN")
         print("\n⚠️  IMPORTANT: Change the password after first login!")

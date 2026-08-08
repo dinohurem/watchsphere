@@ -241,3 +241,11 @@ ios/
 test_files/
 .playwright-mcp/
 scripts/
+
+# Secrets / credential-bearing scratch files (never commit)
+payments.md
+*.pem
+*.p12
+*.mobileprovision
+google-service-account.json
+service-account*.json
