@@ -153,9 +153,10 @@ python scripts/seed_admin.py
 ```
 
 This will create:
-- **Email**: admin@watchsphere.com
-- **Password**: Admin123!
-- ⚠️ Change this password after first login!
+- **Email**: admin@watchsphere.com (override: `SEED_ADMIN_EMAIL`)
+- **Password**: local dev fixture default, printed by the script (override: `SEED_ADMIN_PASSWORD`)
+- ⚠️ Local development only — never seed this account into production, and
+  change the password after first login.
 
 ### 2. Test Admin Access
 
