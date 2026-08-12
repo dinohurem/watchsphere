@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -9,7 +9,6 @@ import { BackArrow, ChevronRight, User } from '@/components/icons';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { wp, hp, sp, fp } from '@/utils/responsive';
-import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 
 interface ProfileData {
@@ -29,7 +28,6 @@ export default function ProfileSettingsScreen() {
   const { user, updateUser } = useAuthStore();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
 
   const loadProfile = async () => {
     try {
@@ -74,79 +72,6 @@ export default function ProfileSettingsScreen() {
     }, [])
   );
 
-  const handleUploadPhoto = async () => {
-    try {
-      // Request permission
-      if (Platform.OS !== 'web') {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(t('profileSettings.permissionRequired'), t('profileSettings.photoLibraryPermission'));
-          return;
-        }
-      }
-
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return;
-      }
-
-      const selectedImage = result.assets[0];
-      setUploading(true);
-
-      // Create form data for upload
-      const formData = new FormData();
-      const uri = selectedImage.uri;
-      const filename = uri.split('/').pop() || 'profile.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-      formData.append('file', {
-        uri,
-        name: filename,
-        type,
-      } as any);
-
-      // Upload to server
-      const response = await api.post('/upload/profile', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      console.log('Upload response:', JSON.stringify(response.data, null, 2));
-
-      if (response.data) {
-        console.log('New profile image URL:', response.data.url);
-        // Update local profile with new image URL
-        setProfile(prev => prev ? {
-          ...prev,
-          profile_image_url: response.data.url,
-          profile_image_thumbnail_url: response.data.thumbnail_url,
-        } : null);
-        // Sync to auth store for global access
-        updateUser({
-          profile_image_url: response.data.url,
-          profile_image_thumbnail_url: response.data.thumbnail_url || response.data.url,
-        });
-
-        Alert.alert(t('common.success'), t('profileSettings.photoUpdatedSuccess'));
-      }
-    } catch (error: any) {
-      console.error('Error uploading photo:', error);
-      Alert.alert(
-        t('profileSettings.uploadFailed'),
-        error.response?.data?.detail || t('profileSettings.uploadFailedMessage')
-      );
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const styles = StyleSheet.create({
     container: {
@@ -213,19 +138,6 @@ export default function ProfileSettingsScreen() {
       width: sp(80),
       height: sp(80),
       borderRadius: sp(40),
-    },
-    uploadButton: {
-      paddingVertical: hp(12),
-      paddingHorizontal: wp(24),
-      borderRadius: sp(12),
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    uploadButtonText: {
-      fontSize: fp(15),
-      fontFamily: fonts.regular,
-      color: colors.text,
     },
     fieldsSection: {
       paddingHorizontal: wp(16),
@@ -303,9 +215,7 @@ export default function ProfileSettingsScreen() {
         {/* Profile Image */}
         <View style={styles.profileImageSection}>
           <View style={styles.profileImage}>
-            {uploading ? (
-              <LoadingAnimation size="small" />
-            ) : profile?.profile_image_url ? (
+            {profile?.profile_image_url ? (
               <Image
                 source={{ uri: profile.profile_image_url }}
                 style={styles.profileImageActual}
@@ -314,34 +224,19 @@ export default function ProfileSettingsScreen() {
               <User size={40} color={colors.textSecondary} />
             )}
           </View>
-          <TouchableOpacity
-            style={styles.uploadButton}
-            onPress={handleUploadPhoto}
-            disabled={uploading}
-          >
-            <Text style={styles.uploadButtonText}>
-              {uploading ? t('profileSettings.uploading') : t('profileSettings.uploadPhoto')}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* Fields */}
         <View style={styles.fieldsSection}>
-          <TouchableOpacity
-            style={styles.fieldItem}
-            onPress={() => router.push({
-              pathname: '/field-edit',
-              params: { field: 'name', value: profile?.name || '' }
-            } as any)}
-          >
+          {/* Name is display-only - not user-editable */}
+          <View style={styles.fieldItem}>
             <Text style={styles.fieldLabel}>{t('profileSettings.name')}</Text>
             <View style={styles.fieldRow}>
               <Text style={profile?.name ? styles.fieldValue : styles.fieldPlaceholder}>
-                {profile?.name || t('profileSettings.enterName')}
+                {profile?.name || '—'}
               </Text>
-              <ChevronRight size={20} color={colors.textSecondary} />
             </View>
-          </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={styles.fieldItem}
