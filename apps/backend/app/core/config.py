@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # Verification
     TEST_VERIFICATION_CODE: str = "123456"  # Default test code for development
 
+    # WhatsApp bridge (apps/whatsapp-bridge)
+    # Shared secret the bridge client presents in the X-Bridge-Token header.
+    # Empty means the bridge endpoints are disabled.
+    WHATSAPP_BRIDGE_TOKEN: str = ""
+
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:5177,http://localhost:8081"
 
