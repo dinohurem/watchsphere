@@ -216,8 +216,34 @@ async def verify_email(
     request: VerifyEmailRequest,
     current_user: User = Depends(get_current_user),  # Use get_current_user to allow unapproved users
 ) -> Any:
-    """Verify user email with the verification code"""
-    # Find the verification code for this user's email
+    """Verify the signed-in user with a code from whichever channel sent it.
+
+    Signup now delivers the code over WhatsApp, so this checks the user's
+    number first and only falls back to an email code. The path keeps its
+    name so existing clients (the web onboarding step) keep working.
+    """
+    # WhatsApp first - that is where signup codes now go.
+    if current_user.whatsapp_phone:
+        if uses_remote_verification():
+            if await check_remote_verification(current_user.whatsapp_phone, request.code):
+                current_user.verified = True
+                current_user.approved = True
+                await current_user.save()
+                return {"message": "Verified successfully", "verified": True, "approved": True}
+        else:
+            phone_code = await VerificationCode.find_one(
+                VerificationCode.phone == current_user.whatsapp_phone,
+                VerificationCode.code == request.code,
+                VerificationCode.used == False,
+            )
+            if phone_code and phone_code.is_valid():
+                await phone_code.mark_used()
+                current_user.verified = True
+                current_user.approved = True
+                await current_user.save()
+                return {"message": "Verified successfully", "verified": True, "approved": True}
+
+    # Fall back to an email code for accounts with no number on file.
     verification = await VerificationCode.find_one(
         VerificationCode.email == current_user.email,
         VerificationCode.code == request.code,
