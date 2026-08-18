@@ -22,7 +22,10 @@ import type { BridgeState } from './api.js';
 
 export interface WhatsAppBridgeHandlers {
   onMessages: (messages: CapturedMessage[]) => Promise<void> | void;
-  onState: (state: BridgeState, detail?: { phoneNumber?: string | null; error?: string | null }) => void;
+  onState: (
+    state: BridgeState,
+    detail?: { phoneNumber?: string | null; error?: string | null; qr?: string | null }
+  ) => void;
   onLog: (message: string) => void;
 }
 
@@ -94,8 +97,10 @@ export class WhatsAppBridge {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr && !usePairingCode) {
-        this.handlers.onState('qr_required');
-        this.handlers.onLog('Scan this QR in WhatsApp > Linked devices:');
+        // Reported up on every rotation (~20s) so the admin UI can show a
+        // scannable code without shell access to this host.
+        this.handlers.onState('qr_required', { qr });
+        this.handlers.onLog('Scan this QR in WhatsApp > Linked devices (also shown in admin):');
         qrcode.generate(qr, { small: true });
       }
 

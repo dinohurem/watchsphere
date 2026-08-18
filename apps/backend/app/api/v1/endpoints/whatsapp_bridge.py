@@ -43,6 +43,11 @@ router = APIRouter()
 
 MAX_BATCH_SIZE = 1000
 
+# WhatsApp rotates the pairing QR roughly every 20s. Past this age the code is
+# almost certainly dead, and showing it would send an admin to scan a QR that
+# cannot work.
+QR_TTL_SECONDS = 60
+
 
 # --- Auth ---
 
@@ -104,6 +109,9 @@ class HeartbeatRequest(BaseModel):
     phone_number: Optional[str] = None
     groups: List[str] = Field(default_factory=list)
     error: Optional[str] = None
+    # Raw QR payload, sent while waiting to be paired so an admin can scan it
+    # from the web UI instead of needing shell access to the bridge host.
+    qr: Optional[str] = None
 
 
 class BridgeStatusResponse(BaseModel):
@@ -116,6 +124,9 @@ class BridgeStatusResponse(BaseModel):
     last_message_at: Optional[datetime] = None
     messages_ingested: int = 0
     is_stale: bool = False
+    # Only present while pairing is pending and the code is still fresh.
+    qr: Optional[str] = None
+    qr_generated_at: Optional[datetime] = None
 
 
 class BridgeGroupResponse(BaseModel):
@@ -232,16 +243,27 @@ async def heartbeat(
 ) -> Any:
     """Report bridge connection state. Also how an admin learns a re-pair is due."""
     now = datetime.utcnow()
+
+    # Keep the QR only while it is the thing the admin needs. Leaving a stale
+    # code on a connected bridge would invite someone to scan a dead pairing.
+    fields = {
+        "state": payload.state.value,
+        "phone_number": payload.phone_number,
+        "groups": payload.groups,
+        "error": payload.error,
+        "last_heartbeat_at": now,
+    }
+    if payload.state == BridgeState.QR_REQUIRED and payload.qr:
+        fields["qr"] = payload.qr
+        fields["qr_generated_at"] = now
+    elif payload.state != BridgeState.QR_REQUIRED:
+        fields["qr"] = None
+        fields["qr_generated_at"] = None
+
     await BridgeStatus.get_motor_collection().update_one(
         {"bridge_id": payload.bridge_id},
         {
-            "$set": {
-                "state": payload.state.value,
-                "phone_number": payload.phone_number,
-                "groups": payload.groups,
-                "error": payload.error,
-                "last_heartbeat_at": now,
-            },
+            "$set": fields,
             "$setOnInsert": {
                 "bridge_id": payload.bridge_id,
                 "messages_ingested": 0,
@@ -262,7 +284,16 @@ async def bridge_status(
 ) -> Any:
     """Connection state of every bridge client that has ever reported in."""
     statuses = await BridgeStatus.find_all().sort("-last_heartbeat_at").to_list()
-    cutoff = datetime.utcnow() - timedelta(minutes=stale_after_minutes)
+    now = datetime.utcnow()
+    cutoff = now - timedelta(minutes=stale_after_minutes)
+    qr_cutoff = now - timedelta(seconds=QR_TTL_SECONDS)
+
+    def _fresh_qr(item: BridgeStatus) -> Optional[str]:
+        if item.state != BridgeState.QR_REQUIRED or not item.qr:
+            return None
+        if not item.qr_generated_at or item.qr_generated_at < qr_cutoff:
+            return None
+        return item.qr
 
     return [
         BridgeStatusResponse(
@@ -275,6 +306,8 @@ async def bridge_status(
             last_message_at=item.last_message_at,
             messages_ingested=item.messages_ingested,
             is_stale=item.last_heartbeat_at < cutoff,
+            qr=_fresh_qr(item),
+            qr_generated_at=item.qr_generated_at if _fresh_qr(item) else None,
         )
         for item in statuses
     ]

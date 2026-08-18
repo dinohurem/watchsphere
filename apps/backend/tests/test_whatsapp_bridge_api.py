@@ -332,3 +332,58 @@ class TestEndToEnd:
         # detection and the dedup key.
         assert "+85265472648" in matched_csv.replace(" ", "")
         assert GROUP_NAME in matched_csv
+
+
+class TestPairingQr:
+    """The QR is how an admin re-pairs without shell access to the bridge host."""
+
+    def _heartbeat(self, api, **payload):
+        body = {"bridge_id": "bridge-1", **payload}
+        return api.post(
+            "/whatsapp-bridge/heartbeat", json=body, headers={"X-Bridge-Token": TOKEN}
+        )
+
+    def test_qr_is_exposed_while_pairing_is_pending(self, api):
+        self._heartbeat(api, state="qr_required", qr="2@abc,def,ghi")
+
+        row = api.get("/whatsapp-bridge/status").json()[0]
+        assert row["state"] == "qr_required"
+        assert row["qr"] == "2@abc,def,ghi"
+        assert row["qr_generated_at"] is not None
+
+    def test_connecting_clears_the_qr(self, api):
+        """A code left over after pairing would invite a scan that cannot work."""
+        self._heartbeat(api, state="qr_required", qr="2@abc")
+        self._heartbeat(api, state="connected", phone_number="+38761111111")
+
+        row = api.get("/whatsapp-bridge/status").json()[0]
+        assert row["state"] == "connected"
+        assert row["qr"] is None
+        assert row["qr_generated_at"] is None
+
+    def test_expired_qr_is_withheld(self, api, db):
+        """WhatsApp rotates the code every ~20s; a minute-old one is dead."""
+        self._heartbeat(api, state="qr_required", qr="2@abc")
+        asyncio.run(
+            db["watchsphere_test"]["whatsapp_bridge_status"].update_one(
+                {"bridge_id": "bridge-1"},
+                {"$set": {"qr_generated_at": datetime.utcnow() - timedelta(minutes=5)}},
+            )
+        )
+
+        row = api.get("/whatsapp-bridge/status").json()[0]
+        assert row["state"] == "qr_required"
+        assert row["qr"] is None
+
+    def test_rotated_qr_replaces_the_previous_one(self, api):
+        self._heartbeat(api, state="qr_required", qr="2@first")
+        self._heartbeat(api, state="qr_required", qr="2@second")
+
+        assert api.get("/whatsapp-bridge/status").json()[0]["qr"] == "2@second"
+
+    def test_qr_requires_the_bridge_token(self, api):
+        response = api.post(
+            "/whatsapp-bridge/heartbeat",
+            json={"bridge_id": "bridge-1", "state": "qr_required", "qr": "2@abc"},
+        )
+        assert response.status_code == 401
