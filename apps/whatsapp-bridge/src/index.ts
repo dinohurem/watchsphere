@@ -103,6 +103,24 @@ async function runLive(config: BridgeConfig, usePairingCode: boolean, phoneNumbe
   let currentState: BridgeState = 'starting';
   let phone: string | null = null;
   let lastError: string | null = null;
+  let pairingQr: string | null = null;
+
+  // Hoisted so onState can report a state change immediately rather than
+  // waiting for the next heartbeat tick — a pairing QR rotates every ~20s and
+  // would be dead by then.
+  async function sendHeartbeat(): Promise<void> {
+    try {
+      await api.sendHeartbeat({
+        state: currentState,
+        phoneNumber: phone,
+        groups: bridge.activeGroups(),
+        error: lastError,
+        qr: pairingQr,
+      });
+    } catch (error) {
+      log(`Heartbeat failed: ${(error as Error).message}`);
+    }
+  }
 
   const bridge = new WhatsAppBridge(config, {
     onMessages: async (messages) => {
@@ -113,23 +131,13 @@ async function runLive(config: BridgeConfig, usePairingCode: boolean, phoneNumbe
       currentState = state;
       if (detail?.phoneNumber !== undefined) phone = detail.phoneNumber;
       lastError = detail?.error ?? null;
+      // Hold the QR only while pairing is actually pending.
+      pairingQr = state === 'qr_required' ? detail?.qr ?? pairingQr : null;
       log(`State: ${state}${lastError ? ` (${lastError})` : ''}`);
+      void sendHeartbeat();
     },
     onLog: log,
   });
-
-  const sendHeartbeat = async () => {
-    try {
-      await api.sendHeartbeat({
-        state: currentState,
-        phoneNumber: phone,
-        groups: bridge.activeGroups(),
-        error: lastError,
-      });
-    } catch (error) {
-      log(`Heartbeat failed: ${(error as Error).message}`);
-    }
-  };
 
   flusher.start();
   const heartbeatTimer = setInterval(() => void sendHeartbeat(), config.heartbeatIntervalMs);

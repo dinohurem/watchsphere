@@ -80,7 +80,12 @@ npm run pair -- +38761234567
 The session lands in `BRIDGE_AUTH_DIR` (`./auth`). Back that directory up and
 never commit it — it grants full access to the account. If the session is
 revoked from the phone, the bridge reports `logged_out`; delete the auth
-directory and pair again.
+directory and restart, and the bridge will ask to be paired again.
+
+**Re-pairing without shell access.** While the bridge waits to be paired it
+pushes the QR up on every rotation, and **Admin → WhatsApp Bridge** renders it.
+Scanning from that screen is equivalent to scanning the terminal. A code older
+than 60 seconds is withheld, so a dead QR is never shown.
 
 ## Running
 
@@ -104,6 +109,15 @@ npm run replay -- fixtures/sample-group.json
 ```
 
 Exits non-zero if anything could not be delivered.
+
+## Admin UI
+
+**Admin → WhatsApp Bridge** (`/admin/whatsapp-bridge`) covers the day-to-day
+work: bridge health (with a stale-heartbeat warning, since a silent bridge looks
+healthier than a failing one), the pairing QR, captured groups with their
+coverage windows, generation over an optional time range, CSV downloads, and
+retention cleanup. The generated CSVs are imported on the existing WhatsApp
+Import page, unchanged.
 
 ## Admin endpoints
 

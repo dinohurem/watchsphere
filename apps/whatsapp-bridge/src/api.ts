@@ -26,6 +26,8 @@ export interface HeartbeatPayload {
   phoneNumber?: string | null;
   groups?: string[];
   error?: string | null;
+  /** Raw pairing QR, so an admin can scan it from the web UI. */
+  qr?: string | null;
 }
 
 export class ApiError extends Error {
@@ -124,6 +126,7 @@ export class ApiClient {
       phone_number: payload.phoneNumber ?? null,
       groups: payload.groups ?? [],
       error: payload.error ?? null,
+      qr: payload.qr ?? null,
     });
   }
 }

@@ -93,6 +93,34 @@ describe('ApiClient', () => {
     assert.equal(attempts, 2);
   });
 
+  it('sends the pairing QR on the heartbeat', async () => {
+    // This is what lets an admin re-pair from the web UI instead of needing
+    // shell access to the bridge host.
+    let body: any = null;
+    const api = clientWith(async (_url, init) => {
+      body = JSON.parse((init as RequestInit).body as string);
+      return jsonResponse({ ok: true });
+    });
+
+    await api.sendHeartbeat({ state: 'qr_required', qr: '2@abc,def' });
+
+    assert.equal(body.state, 'qr_required');
+    assert.equal(body.qr, '2@abc,def');
+    assert.equal(body.bridge_id, 'bridge-1');
+  });
+
+  it('sends a null QR when not pairing, so a dead code is cleared', async () => {
+    let body: any = null;
+    const api = clientWith(async (_url, init) => {
+      body = JSON.parse((init as RequestInit).body as string);
+      return jsonResponse({ ok: true });
+    });
+
+    await api.sendHeartbeat({ state: 'connected', phoneNumber: '+38761111111' });
+
+    assert.equal(body.qr, null);
+  });
+
   it('does not retry a rejected token', async () => {
     let attempts = 0;
     const api = clientWith(async () => {

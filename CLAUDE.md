@@ -139,6 +139,8 @@ Chat Privacy) and streams them to `/api/v1/whatsapp-bridge/messages`.
   `whatsapp.ts` (the only Baileys-aware module)
 - **Backend side**: `app/api/v1/endpoints/whatsapp_bridge.py`, `BridgeMessage` /
   `BridgeStatus` models, `services/whatsapp_bridge_export.py`
+- **Admin UI**: `apps/web/src/features/admin/pages/AdminWhatsAppBridge.tsx`
+  (`/admin/whatsapp-bridge`) — status, pairing QR, groups, generation, retention
 - Captures are stored raw and rendered back into WhatsApp export format on demand,
   so the existing WTS/WTB generator runs unchanged — **nothing reaches the order book
   without an admin generating and reviewing the CSVs**

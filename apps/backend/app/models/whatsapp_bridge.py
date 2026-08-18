@@ -69,6 +69,12 @@ class BridgeStatus(Document):
     phone_number: Optional[str] = None
     error: Optional[str] = None
 
+    # Pairing QR payload, set while state is qr_required. WhatsApp rotates it
+    # every ~20s, so it is stored with its own timestamp and treated as stale
+    # rather than trusted indefinitely.
+    qr: Optional[str] = None
+    qr_generated_at: Optional[datetime] = None
+
     # Groups the bridge is currently capturing from
     groups: List[str] = Field(default_factory=list)
 
