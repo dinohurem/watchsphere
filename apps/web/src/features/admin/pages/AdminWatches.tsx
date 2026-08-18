@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X, Download, PlusCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X, Download, Upload, PlusCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { api } from '@/services/api'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 import { ImageUpload } from '@/components/ui/ImageUpload'
@@ -267,6 +267,12 @@ export function AdminWatches() {
   const [showNewOrderModal, setShowNewOrderModal] = useState(false)
   const [newOrderFormData, setNewOrderFormData] = useState<NewOrderFormData>(emptyNewOrderForm)
   const [creatingOrder, setCreatingOrder] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importOnDuplicate, setImportOnDuplicate] = useState<'skip' | 'update'>('skip')
+  const [importResult, setImportResult] = useState<any>(null)
+  const [importParseError, setImportParseError] = useState('')
+  const [importing, setImporting] = useState(false)
   const [oemRefInput, setOemRefInput] = useState('')
   const [aliasInput, setAliasInput] = useState('')
   const [watchDetailsOpen, setWatchDetailsOpen] = useState(false)
@@ -456,6 +462,71 @@ export function AdminWatches() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to export watches:', error)
+    }
+  }
+
+  // Accepts JSONL (one object per line, as Export JSONL produces) or a plain
+  // JSON array, since people paste both. Returns the rows or throws with the
+  // offending line number so the admin can find it.
+  const parseImportText = (raw: string): any[] => {
+    const text = raw.trim()
+    if (!text) throw new Error('Nothing to import')
+
+    if (text.startsWith('[')) {
+      const parsed = JSON.parse(text)
+      if (!Array.isArray(parsed)) throw new Error('Expected a JSON array')
+      return parsed
+    }
+
+    return text.split('\n').map((line, i) => {
+      const trimmed = line.trim()
+      if (!trimmed) return null
+      try {
+        return JSON.parse(trimmed)
+      } catch {
+        throw new Error(`Line ${i + 1} is not valid JSON`)
+      }
+    }).filter(Boolean) as any[]
+  }
+
+  const runImport = async (dryRun: boolean) => {
+    setImportParseError('')
+    setImportResult(null)
+    let rows: any[]
+    try {
+      rows = parseImportText(importText)
+    } catch (err: any) {
+      setImportParseError(err.message)
+      return
+    }
+    if (rows.length === 0) {
+      setImportParseError('No rows found')
+      return
+    }
+
+    setImporting(true)
+    try {
+      const response = await api.post('/market/admin/import', {
+        watches: rows,
+        on_duplicate: importOnDuplicate,
+        dry_run: dryRun,
+      })
+      setImportResult(response.data)
+      if (!dryRun) {
+        fetchWatches()
+        fetchTotalCount()
+      }
+    } catch (err: any) {
+      const detail = err.response?.data?.detail
+      setImportParseError(
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? `Validation failed: ${detail[0]?.loc?.slice(1).join('.')} - ${detail[0]?.msg}`
+            : 'Import failed'
+      )
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -789,6 +860,13 @@ export function AdminWatches() {
           >
             <Download size={18} />
             Export JSONL
+          </button>
+          <button
+            onClick={() => { setShowImportModal(true); setImportText(''); setImportResult(null); setImportParseError('') }}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Upload size={18} />
+            Bulk Import
           </button>
           <button
             onClick={handleCreate}
@@ -2090,6 +2168,128 @@ export function AdminWatches() {
           </div>
         </div>
       )}
+
+      {/* Bulk Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+              <h2 className="text-lg font-semibold">Bulk Import Watches</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="text-sm text-gray-600 space-y-1">
+                <p>
+                  Paste <strong>JSONL</strong> (one watch per line, the format
+                  <em> Export JSONL</em> produces) or a <strong>JSON array</strong>.
+                  Every field from the Add Watch form is supported.
+                </p>
+                <p><code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">brand</code> and <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">model</code> are required. Everything else is optional.</p>
+              </div>
+
+              <details className="text-sm">
+                <summary className="cursor-pointer text-primary font-medium">Show an example</summary>
+                <pre className="mt-2 p-3 bg-gray-50 border rounded text-xs overflow-x-auto">{`{"brand":"Rolex","model":"Daytona","reference":"126500LN","ws_code":"126500LN White","dial":"White","bracelet":"Oyster","collection":"Cosmograph Daytona","oem_references":["126500LN-0001"],"aliases":["126500 White","126500LN Panda"],"description":"","status":"active","featured":false}
+{"brand":"Rolex","model":"Daytona","reference":"126500LN","ws_code":"126500LN Black","dial":"Black","status":"draft"}`}</pre>
+              </details>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paste data, or choose a file</label>
+                <input
+                  type="file"
+                  accept=".jsonl,.json,.txt"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    setImportText(await file.text())
+                    setImportResult(null)
+                    setImportParseError('')
+                  }}
+                  className="mb-2 block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-gray-300 file:bg-white file:text-sm hover:file:bg-gray-50"
+                />
+                <textarea
+                  value={importText}
+                  onChange={(e) => { setImportText(e.target.value); setImportResult(null); setImportParseError('') }}
+                  rows={10}
+                  spellCheck={false}
+                  className="w-full px-3 py-2 border rounded-lg font-mono text-xs"
+                  placeholder={'{"brand":"Rolex","model":"Daytona","reference":"126500LN"}'}
+                />
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="text-sm font-medium text-gray-700">If a watch already exists:</label>
+                <select
+                  value={importOnDuplicate}
+                  onChange={(e) => setImportOnDuplicate(e.target.value as 'skip' | 'update')}
+                  className="px-3 py-1.5 border rounded-lg text-sm"
+                >
+                  <option value="skip">Skip it</option>
+                  <option value="update">Update it</option>
+                </select>
+                <span className="text-xs text-gray-500">Matched on ws_code, or reference when absent.</span>
+              </div>
+
+              {importParseError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                  {importParseError}
+                </div>
+              )}
+
+              {importResult && (
+                <div className={`p-3 rounded border text-sm ${importResult.errors > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                  <p className="font-medium mb-1">
+                    {importResult.dry_run ? 'Preview (nothing saved)' : 'Import complete'} — {importResult.total} row{importResult.total === 1 ? '' : 's'}
+                  </p>
+                  <p className="text-gray-700">
+                    Created {importResult.created} · Updated {importResult.updated} · Skipped {importResult.skipped} · Errors {importResult.errors}
+                  </p>
+                  {importResult.results?.some((r: any) => r.action === 'error' || r.action === 'skipped') && (
+                    <ul className="mt-2 max-h-40 overflow-y-auto text-xs space-y-0.5">
+                      {importResult.results
+                        .filter((r: any) => r.action === 'error' || r.action === 'skipped')
+                        .map((r: any) => (
+                          <li key={r.row} className={r.action === 'error' ? 'text-red-700' : 'text-gray-600'}>
+                            Line {r.row} — {r.action}
+                            {r.ws_code ? ` (${r.ws_code})` : r.reference ? ` (${r.reference})` : ''}
+                            {r.message ? `: ${r.message}` : ''}
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 p-4 border-t sticky bottom-0 bg-white">
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => runImport(true)}
+                disabled={importing || !importText.trim()}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                {importing ? 'Checking...' : 'Preview'}
+              </button>
+              <button
+                onClick={() => runImport(false)}
+                disabled={importing || !importText.trim()}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
+              >
+                {importing ? 'Importing...' : 'Import'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
