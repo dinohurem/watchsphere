@@ -1183,10 +1183,11 @@ async def admin_create_watch(
     watch_data: WatchCreate,
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Create a new watch (Admin only)
+    """Create a new watch (Admin only).
 
-    When a watch is created with status 'active' and has a reference,
-    a sell order is automatically created in the order book.
+    Creates the catalog entry only. No order is created here - WTS/WTB rows
+    come from the WhatsApp import and the order endpoints, so a newly created
+    watch shows 0/0 counts until orders exist for its ws_code.
     """
 
     # Get dealer info if dealer_id provided
