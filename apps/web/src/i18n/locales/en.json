@@ -75,7 +75,9 @@
       "failed": "Registration failed. Please try again.",
       "successTitle": "Account Created!",
       "successMessage": "Your account has been created successfully. Please wait for an administrator to approve your account before you can log in.",
-      "goToLogin": "Go to Login"
+      "goToLogin": "Go to Login",
+      "whatsappLabel": "WhatsApp number",
+      "whatsappHint": "Include your country code. Your verification code arrives on WhatsApp."
     },
     "forgotPassword": {
       "title": "Forgot password?",
@@ -1104,7 +1106,7 @@
     "addNewWatchDesc": "Sell your watches and manage them all in one place.",
     "createNewListing": "Create new listing",
     "sold": "Sold",
-    "sellNow": "Sell now {{price}}\u20ac",
+    "sellNow": "Sell now {{price}}€",
     "noBuyOrders": "No buy orders"
   },
   "listing": {

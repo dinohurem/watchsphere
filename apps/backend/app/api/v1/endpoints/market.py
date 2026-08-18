@@ -1,6 +1,6 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from datetime import datetime, timedelta
 from beanie import PydanticObjectId
 import random
@@ -1032,15 +1032,162 @@ async def admin_get_watch(
     }
 
 
+class BulkImportRequest(BaseModel):
+    """A parsed batch of watches plus how to treat ones that already exist.
+
+    Rows stay untyped here on purpose. Declaring List[WatchCreate] would make
+    Pydantic reject the whole request over one bad row, so a single typo in a
+    200-row file would block all of it. Each row is validated individually
+    below and reported on its own line instead.
+    """
+    watches: List[dict]
+    # "skip" leaves an existing watch untouched, "update" overwrites its fields.
+    on_duplicate: str = "skip"
+    # When true nothing is written; the caller gets the same per-row report.
+    dry_run: bool = False
+
+
+class BulkImportRowResult(BaseModel):
+    row: int  # 1-based, matching the line number the admin sees
+    action: str  # created | updated | skipped | error
+    ws_code: Optional[str] = None
+    reference: Optional[str] = None
+    message: Optional[str] = None
+
+
+class BulkImportResponse(BaseModel):
+    dry_run: bool
+    total: int
+    created: int
+    updated: int
+    skipped: int
+    errors: int
+    results: List[BulkImportRowResult]
+
+
+@router.post("/admin/import", response_model=BulkImportResponse)
+async def admin_bulk_import_watches(
+    payload: BulkImportRequest,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Bulk-create watches from a parsed JSONL/JSON batch (Admin only).
+
+    Creates exactly what the single-watch admin form creates - same WatchCreate
+    validation, same fields, same dealer attribution. Every row is reported
+    individually so a bad row never silently disappears, and one bad row does
+    not abort the rest of the batch.
+
+    Duplicates are matched on ws_code, falling back to reference when a row has
+    no ws_code, which is how the rest of the admin identifies a catalog entry.
+    """
+    results: List[BulkImportRowResult] = []
+    created = updated = skipped = errors = 0
+
+    for index, raw_item in enumerate(payload.watches, start=1):
+        try:
+            try:
+                item = WatchCreate(**raw_item)
+            except ValidationError as exc:
+                first = exc.errors()[0]
+                field = ".".join(str(p) for p in first.get("loc", ()))
+                errors += 1
+                results.append(BulkImportRowResult(
+                    row=index, action="error",
+                    ws_code=raw_item.get("ws_code") if isinstance(raw_item, dict) else None,
+                    reference=raw_item.get("reference") if isinstance(raw_item, dict) else None,
+                    message=f"{field}: {first.get('msg')}" if field else first.get("msg"),
+                ))
+                continue
+
+            existing = None
+            if item.ws_code:
+                existing = await Watch.find_one(Watch.ws_code == item.ws_code)
+            elif item.reference:
+                existing = await Watch.find_one(Watch.reference == item.reference)
+
+            if existing:
+                if payload.on_duplicate != "update":
+                    skipped += 1
+                    results.append(BulkImportRowResult(
+                        row=index, action="skipped", ws_code=item.ws_code,
+                        reference=item.reference, message="Already exists",
+                    ))
+                    continue
+
+                if not payload.dry_run:
+                    for field, value in item.model_dump(exclude_unset=True).items():
+                        if field in ("dealer_id",):
+                            continue
+                        setattr(existing, field, value)
+                    existing.updated_at = datetime.utcnow()
+                    await existing.save()
+                updated += 1
+                results.append(BulkImportRowResult(
+                    row=index, action="updated", ws_code=item.ws_code,
+                    reference=item.reference,
+                ))
+                continue
+
+            if not payload.dry_run:
+                watch = Watch(
+                    brand=item.brand,
+                    model=item.model,
+                    reference=item.reference,
+                    price=item.price or 0,
+                    currency=item.currency,
+                    condition=item.condition,
+                    year=item.year,
+                    serial_number=item.serial_number,
+                    description=item.description,
+                    images=item.images,
+                    cover_image=item.cover_image or (item.images[0] if item.images else None),
+                    status=item.status,
+                    featured=item.featured,
+                    dealer_id=str(current_admin.id),
+                    dealer_name=current_admin.name,
+                    published_at=datetime.utcnow() if item.status == WatchStatus.ACTIVE else None,
+                    collection=item.collection,
+                    oem_references=item.oem_references,
+                    dial=item.dial,
+                    bracelet=item.bracelet,
+                    ws_code=item.ws_code,
+                    aliases=item.aliases,
+                )
+                await watch.insert()
+
+            created += 1
+            results.append(BulkImportRowResult(
+                row=index, action="created", ws_code=item.ws_code,
+                reference=item.reference,
+            ))
+        except Exception as exc:
+            errors += 1
+            results.append(BulkImportRowResult(
+                row=index, action="error", ws_code=item.ws_code,
+                reference=item.reference, message=str(exc)[:200],
+            ))
+
+    return BulkImportResponse(
+        dry_run=payload.dry_run,
+        total=len(payload.watches),
+        created=created,
+        updated=updated,
+        skipped=skipped,
+        errors=errors,
+        results=results,
+    )
+
+
 @router.post("/admin", response_model=WatchResponse)
 async def admin_create_watch(
     watch_data: WatchCreate,
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Create a new watch (Admin only)
+    """Create a new watch (Admin only).
 
-    When a watch is created with status 'active' and has a reference,
-    a sell order is automatically created in the order book.
+    Creates the catalog entry only. No order is created here - WTS/WTB rows
+    come from the WhatsApp import and the order endpoints, so a newly created
+    watch shows 0/0 counts until orders exist for its ws_code.
     """
 
     # Get dealer info if dealer_id provided

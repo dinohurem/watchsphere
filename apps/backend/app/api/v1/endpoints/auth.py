@@ -1,4 +1,5 @@
 from datetime import timedelta, datetime
+import logging
 from dateutil.relativedelta import relativedelta
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,13 +10,20 @@ from app.core.security import create_access_token, create_tokens, verify_refresh
 from app.core.deps import get_current_active_user, get_current_user
 from app.models.user import User, UserRole, AuthProvider
 from app.models.verification import VerificationCode
+from app.services.whatsapp_otp import (
+    normalize_phone,
+    send_verification_code,
+    uses_remote_verification,
+    start_remote_verification,
+    check_remote_verification,
+)
+
+logger = logging.getLogger(__name__)
 from app.models.billing import Subscription, SubscriptionPlan, SubscriptionStatus
 from app.models.auth_handoff import AuthHandoffToken
 from app.services.email import email_service
 from app.services.watchlist import assign_default_watchlist_to_user
 from pydantic import BaseModel, EmailStr
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
 import jwt as pyjwt
 import httpx
 
@@ -26,7 +34,10 @@ router = APIRouter()
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    name: str
+    whatsapp_phone: str
+    # Signup no longer collects a username; the WhatsApp number stands in as the
+    # display name unless a caller supplies one explicitly.
+    name: Optional[str] = None
     role: UserRole = UserRole.COLLECTOR
 
 
@@ -63,6 +74,15 @@ class VerifyEmailRequest(BaseModel):
     code: str
 
 
+class WhatsAppCodeRequest(BaseModel):
+    whatsapp_phone: str
+
+
+class WhatsAppVerifyRequest(BaseModel):
+    whatsapp_phone: str
+    code: str
+
+
 class ResendCodeRequest(BaseModel):
     email: EmailStr
 
@@ -86,19 +106,34 @@ class CompleteOnboardingRequest(BaseModel):
     notifications_enabled: bool = False
 
 
-class GoogleAuthRequest(BaseModel):
-    id_token: Optional[str] = None
-    access_token: Optional[str] = None
+async def _issue_whatsapp_code(phone: str) -> None:
+    """Send a verification code, and record the send for throttling.
 
+    With Twilio Verify the provider owns the code, so we still write a local
+    row purely as a rate-limit timestamp - marked used immediately so it can
+    never satisfy a verification.
+    """
+    if uses_remote_verification():
+        await start_remote_verification(phone)
+        marker = await VerificationCode.create_for_phone(
+            phone=phone,
+            expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+        )
+        await marker.mark_used()
+        return
 
-class AppleAuthRequest(BaseModel):
-    id_token: str
-    user_name: Optional[str] = None  # Apple only provides name on first sign-in
+    code = VerificationCode.generate_code()
+    await VerificationCode.create_for_phone(
+        phone=phone,
+        code=code,
+        expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+    )
+    await send_verification_code(phone, code)
 
 
 @router.post("/register", response_model=TokenData, status_code=status.HTTP_201_CREATED)
 async def register(user_in: UserCreate) -> Any:
-    """Register a new user and send verification email"""
+    """Register a new user and send a WhatsApp verification code."""
     # Check if user exists
     existing_user = await User.find_one(User.email == user_in.email)
     if existing_user:
@@ -107,11 +142,26 @@ async def register(user_in: UserCreate) -> Any:
             detail="A user with this email already exists",
         )
 
+    phone = normalize_phone(user_in.whatsapp_phone)
+    if not phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a valid WhatsApp number including the country code",
+        )
+
+    # The number is a login identifier, so it must be unique.
+    if await User.find_one(User.whatsapp_phone == phone):
+        raise HTTPException(
+            status_code=400,
+            detail="A user with this WhatsApp number already exists",
+        )
+
     # Create new user (unverified but approved)
     user = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
-        name=user_in.name,
+        name=user_in.name or phone,
+        whatsapp_phone=phone,
         role=user_in.role,
         verified=False,
         approved=True,
@@ -139,21 +189,8 @@ async def register(user_in: UserCreate) -> Any:
     # Assign default watchlist items to the new user
     await assign_default_watchlist_to_user(user)
 
-    # Generate and send verification code (always random)
-    code = VerificationCode.generate_code()
-
-    verification = await VerificationCode.create_for_email(
-        email=user_in.email,
-        code=code,
-        expires_minutes=15
-    )
-
-    # Send verification email
-    await email_service.send_verification_email(
-        to_email=user_in.email,
-        verification_code=code,
-        user_name=user_in.name
-    )
+    # Generate and send the verification code over WhatsApp
+    await _issue_whatsapp_code(phone)
 
     # Create access and refresh tokens
     access_token, refresh_token = create_tokens(str(user.id))
@@ -179,8 +216,34 @@ async def verify_email(
     request: VerifyEmailRequest,
     current_user: User = Depends(get_current_user),  # Use get_current_user to allow unapproved users
 ) -> Any:
-    """Verify user email with the verification code"""
-    # Find the verification code for this user's email
+    """Verify the signed-in user with a code from whichever channel sent it.
+
+    Signup now delivers the code over WhatsApp, so this checks the user's
+    number first and only falls back to an email code. The path keeps its
+    name so existing clients (the web onboarding step) keep working.
+    """
+    # WhatsApp first - that is where signup codes now go.
+    if current_user.whatsapp_phone:
+        if uses_remote_verification():
+            if await check_remote_verification(current_user.whatsapp_phone, request.code):
+                current_user.verified = True
+                current_user.approved = True
+                await current_user.save()
+                return {"message": "Verified successfully", "verified": True, "approved": True}
+        else:
+            phone_code = await VerificationCode.find_one(
+                VerificationCode.phone == current_user.whatsapp_phone,
+                VerificationCode.code == request.code,
+                VerificationCode.used == False,
+            )
+            if phone_code and phone_code.is_valid():
+                await phone_code.mark_used()
+                current_user.verified = True
+                current_user.approved = True
+                await current_user.save()
+                return {"message": "Verified successfully", "verified": True, "approved": True}
+
+    # Fall back to an email code for accounts with no number on file.
     verification = await VerificationCode.find_one(
         VerificationCode.email == current_user.email,
         VerificationCode.code == request.code,
@@ -218,30 +281,42 @@ async def verify_email(
 async def resend_verification_code(
     current_user: User = Depends(get_current_user),  # Use get_current_user to allow unapproved users
 ) -> Any:
-    """Resend verification code to user's email"""
+    """Resend the verification code.
+
+    Signup verifies over WhatsApp, so the resend must use the same channel -
+    otherwise the resent code would never match what the client is verifying
+    against. Falls back to email for accounts with no number on file.
+    """
     if current_user.verified:
         raise HTTPException(
             status_code=400,
-            detail="Email is already verified",
+            detail="Account is already verified",
         )
 
-    # Generate new verification code (always random)
-    code = VerificationCode.generate_code()
+    if current_user.whatsapp_phone:
+        elapsed = await VerificationCode.seconds_since_last_for_phone(current_user.whatsapp_phone)
+        cooldown = settings.WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS
+        if elapsed is not None and elapsed < cooldown:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Please wait {cooldown - elapsed} seconds before requesting another code",
+            )
+        await _issue_whatsapp_code(current_user.whatsapp_phone)
+        return {"message": "Verification code sent on WhatsApp", "channel": "whatsapp"}
 
+    # Email fallback for accounts with no number on file.
+    code = VerificationCode.generate_code()
     await VerificationCode.create_for_email(
         email=current_user.email,
         code=code,
         expires_minutes=15
     )
-
-    # Send verification email
     await email_service.send_verification_email(
         to_email=current_user.email,
         verification_code=code,
         user_name=current_user.name
     )
-
-    return {"message": "Verification code sent"}
+    return {"message": "Verification code sent", "channel": "email"}
 
 
 @router.post("/complete-onboarding")
@@ -319,6 +394,91 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
     # Create access and refresh tokens
     access_token, refresh_token = create_tokens(str(user.id))
 
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "verified": user.verified,
+            "approved": user.approved,
+            "auth_provider": user.auth_provider,
+        },
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/whatsapp/request-code")
+async def request_whatsapp_code(request: WhatsAppCodeRequest) -> Any:
+    """Send a login/verification code to a WhatsApp number.
+
+    Always reports success. Revealing whether a number is registered would turn
+    this endpoint into an account-enumeration oracle.
+    """
+    phone = normalize_phone(request.whatsapp_phone)
+    if not phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a valid WhatsApp number including the country code",
+        )
+
+    user = await User.find_one(User.whatsapp_phone == phone)
+    if user:
+        # Throttle resends. A 429 here would betray that the number is
+        # registered, so a throttled request silently skips sending and still
+        # returns the same body as every other call.
+        elapsed = await VerificationCode.seconds_since_last_for_phone(phone)
+        cooldown = settings.WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS
+        if elapsed is None or elapsed >= cooldown:
+            await _issue_whatsapp_code(phone)
+        else:
+            logger.info("WhatsApp code for %s throttled, %ss since last", phone, elapsed)
+
+    return {
+        "message": "If that number has an account, a code has been sent on WhatsApp.",
+        "expires_in_minutes": settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+        "resend_after_seconds": settings.WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS,
+    }
+
+
+@router.post("/whatsapp/verify-code", response_model=TokenData)
+async def verify_whatsapp_code(request: WhatsAppVerifyRequest) -> Any:
+    """Exchange a WhatsApp code for tokens - passwordless login and signup verification."""
+    phone = normalize_phone(request.whatsapp_phone)
+    if not phone:
+        raise HTTPException(status_code=400, detail="Invalid WhatsApp number")
+
+    verification = None
+    if uses_remote_verification():
+        # Twilio Verify is authoritative; no local code exists to compare.
+        if not await check_remote_verification(phone, request.code):
+            raise HTTPException(status_code=400, detail="Invalid or expired code")
+    else:
+        verification = await VerificationCode.find_one(
+            VerificationCode.phone == phone,
+            VerificationCode.code == request.code,
+            VerificationCode.used == False,
+        )
+        # One message for every failure mode: wrong code, expired, unknown number.
+        if not verification or not verification.is_valid():
+            raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    user = await User.find_one(User.whatsapp_phone == phone)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    if verification:
+        await verification.mark_used()
+
+    # Passing the WhatsApp challenge proves ownership of the number.
+    if not user.verified:
+        user.verified = True
+        user.updated_at = datetime.utcnow()
+        await user.save()
+
+    access_token, refresh_token = create_tokens(str(user.id))
     return {
         "user": {
             "id": str(user.id),
@@ -489,285 +649,6 @@ async def _create_oauth_user_response(user: User, is_new_user: bool = False) -> 
         "token_type": "bearer",
         "is_new_user": is_new_user,
     }
-
-
-@router.post("/google", response_model=TokenData)
-async def google_auth(request: GoogleAuthRequest) -> Any:
-    """Authenticate with Google ID token or access token"""
-    google_user_id = None
-    email = None
-    name = None
-    email_verified = False
-
-    # Validate that at least one token is provided
-    if not request.id_token and not request.access_token:
-        raise HTTPException(
-            status_code=400,
-            detail="Either id_token or access_token must be provided",
-        )
-
-    try:
-        # If access_token is provided, use it directly
-        if request.access_token:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "https://www.googleapis.com/oauth2/v3/userinfo",
-                    headers={"Authorization": f"Bearer {request.access_token}"}
-                )
-                if response.status_code == 200:
-                    userinfo = response.json()
-                    google_user_id = userinfo.get("sub")
-                    email = userinfo.get("email")
-                    name = userinfo.get("name", email.split("@")[0] if email else "User")
-                    email_verified = userinfo.get("email_verified", False)
-                else:
-                    raise HTTPException(
-                        status_code=401,
-                        detail="Invalid Google access token",
-                    )
-        # If id_token is provided, verify it
-        elif request.id_token:
-            try:
-                idinfo = id_token.verify_oauth2_token(
-                    request.id_token,
-                    google_requests.Request(),
-                    settings.GOOGLE_CLIENT_ID
-                )
-                google_user_id = idinfo["sub"]
-                email = idinfo.get("email")
-                name = idinfo.get("name", email.split("@")[0] if email else "User")
-                email_verified = idinfo.get("email_verified", False)
-            except ValueError:
-                # If ID token verification fails, try as access token (for backwards compatibility)
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(
-                        "https://www.googleapis.com/oauth2/v3/userinfo",
-                        headers={"Authorization": f"Bearer {request.id_token}"}
-                    )
-                    if response.status_code == 200:
-                        userinfo = response.json()
-                        google_user_id = userinfo.get("sub")
-                        email = userinfo.get("email")
-                        name = userinfo.get("name", email.split("@")[0] if email else "User")
-                        email_verified = userinfo.get("email_verified", False)
-                    else:
-                        raise HTTPException(
-                            status_code=401,
-                            detail="Invalid Google token",
-                        )
-
-        if not email:
-            raise HTTPException(
-                status_code=400,
-                detail="Email not provided by Google",
-            )
-
-        # Check if user exists with this email
-        existing_user = await User.find_one(User.email == email)
-
-        if existing_user:
-            # User exists - check if they used a different auth method
-            if existing_user.auth_provider == AuthProvider.EMAIL:
-                raise HTTPException(
-                    status_code=400,
-                    detail="An account with this email already exists. Please login with your email and password.",
-                )
-            elif existing_user.auth_provider == AuthProvider.APPLE:
-                raise HTTPException(
-                    status_code=400,
-                    detail="An account with this email uses Apple Sign-In. Please use the Apple button to log in.",
-                )
-
-            # Check if user is active
-            if not existing_user.is_active:
-                raise HTTPException(status_code=400, detail="Account is inactive")
-
-            # Update OAuth provider ID if not set
-            if not existing_user.oauth_provider_id:
-                existing_user.oauth_provider_id = google_user_id
-                await existing_user.save()
-
-            return await _create_oauth_user_response(existing_user, is_new_user=False)
-
-        # Create new user
-        new_user = User(
-            email=email,
-            name=name,
-            auth_provider=AuthProvider.GOOGLE,
-            oauth_provider_id=google_user_id,
-            verified=email_verified,
-            approved=True,
-            is_active=True,
-        )
-        await new_user.insert()
-
-        # Create free trial subscription
-        trial_end_date = datetime.utcnow() + relativedelta(months=1)
-        subscription = Subscription(
-            user_id=str(new_user.id),
-            user_name=new_user.name,
-            user_email=new_user.email,
-            plan=SubscriptionPlan.BASIC,
-            status=SubscriptionStatus.ACTIVE,
-            price_monthly=0.0,
-            currency="EUR",
-            started_at=datetime.utcnow(),
-            expires_at=trial_end_date,
-            next_billing_date=trial_end_date,
-            auto_renew=False,
-        )
-        await subscription.insert()
-
-        # Assign default watchlist
-        await assign_default_watchlist_to_user(new_user)
-
-        # Send welcome email
-        await email_service.send_welcome_email(
-            to_email=new_user.email,
-            user_name=new_user.name.split()[0] if new_user.name else "there"
-        )
-
-        return await _create_oauth_user_response(new_user, is_new_user=True)
-
-    except ValueError as e:
-        # Invalid token
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid Google token",
-        )
-
-
-@router.post("/apple", response_model=TokenData)
-async def apple_auth(request: AppleAuthRequest) -> Any:
-    """Authenticate with Apple ID token"""
-    try:
-        # Decode the Apple ID token (without full verification for now)
-        # In production, you should verify against Apple's public keys
-        # Get Apple's public keys
-        async with httpx.AsyncClient() as client:
-            response = await client.get("https://appleid.apple.com/auth/keys")
-            apple_keys = response.json()
-
-        # Decode the token header to get the key ID
-        unverified_header = pyjwt.get_unverified_header(request.id_token)
-        kid = unverified_header.get("kid")
-
-        # Find the matching key
-        rsa_key = None
-        for key in apple_keys.get("keys", []):
-            if key.get("kid") == kid:
-                rsa_key = key
-                break
-
-        if not rsa_key:
-            raise HTTPException(
-                status_code=401,
-                detail="Unable to find appropriate Apple key",
-            )
-
-        # Construct the public key
-        from jwt import algorithms
-        public_key = algorithms.RSAAlgorithm.from_jwk(rsa_key)
-
-        # Verify and decode the token
-        decoded = pyjwt.decode(
-            request.id_token,
-            public_key,
-            algorithms=["RS256"],
-            audience=settings.APPLE_CLIENT_ID,
-            issuer="https://appleid.apple.com",
-        )
-
-        apple_user_id = decoded.get("sub")
-        email = decoded.get("email")
-        email_verified = decoded.get("email_verified", "false") == "true"
-
-        if not email:
-            raise HTTPException(
-                status_code=400,
-                detail="Email not provided by Apple",
-            )
-
-        # Apple only provides the name on first sign-in, so we need to handle this
-        name = request.user_name or email.split("@")[0]
-
-        # Check if user exists with this email
-        existing_user = await User.find_one(User.email == email)
-
-        if existing_user:
-            # User exists - check if they used a different auth method
-            if existing_user.auth_provider == AuthProvider.EMAIL:
-                raise HTTPException(
-                    status_code=400,
-                    detail="An account with this email already exists. Please login with your email and password.",
-                )
-            elif existing_user.auth_provider == AuthProvider.GOOGLE:
-                raise HTTPException(
-                    status_code=400,
-                    detail="An account with this email uses Google Sign-In. Please use the Google button to log in.",
-                )
-
-            # Check if user is active
-            if not existing_user.is_active:
-                raise HTTPException(status_code=400, detail="Account is inactive")
-
-            # Update OAuth provider ID if not set
-            if not existing_user.oauth_provider_id:
-                existing_user.oauth_provider_id = apple_user_id
-                await existing_user.save()
-
-            return await _create_oauth_user_response(existing_user, is_new_user=False)
-
-        # Create new user
-        new_user = User(
-            email=email,
-            name=name,
-            auth_provider=AuthProvider.APPLE,
-            oauth_provider_id=apple_user_id,
-            verified=email_verified,
-            approved=True,
-            is_active=True,
-        )
-        await new_user.insert()
-
-        # Create free trial subscription
-        trial_end_date = datetime.utcnow() + relativedelta(months=1)
-        subscription = Subscription(
-            user_id=str(new_user.id),
-            user_name=new_user.name,
-            user_email=new_user.email,
-            plan=SubscriptionPlan.BASIC,
-            status=SubscriptionStatus.ACTIVE,
-            price_monthly=0.0,
-            currency="EUR",
-            started_at=datetime.utcnow(),
-            expires_at=trial_end_date,
-            next_billing_date=trial_end_date,
-            auto_renew=False,
-        )
-        await subscription.insert()
-
-        # Assign default watchlist
-        await assign_default_watchlist_to_user(new_user)
-
-        # Send welcome email
-        await email_service.send_welcome_email(
-            to_email=new_user.email,
-            user_name=new_user.name.split()[0] if new_user.name else "there"
-        )
-
-        return await _create_oauth_user_response(new_user, is_new_user=True)
-
-    except pyjwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401,
-            detail="Apple token has expired",
-        )
-    except pyjwt.InvalidTokenError as e:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid Apple token",
-        )
 
 
 # Mobile-to-Web Auth Handoff
