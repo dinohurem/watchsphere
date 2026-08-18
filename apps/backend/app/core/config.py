@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     # paired session, so the driver is swappable by configuration.
     WHATSAPP_OTP_DRIVER: str = "log"
     WHATSAPP_OTP_EXPIRY_MINUTES: int = 10
+    # Minimum gap between code requests for the same number.
+    WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS: int = 60
     # whapi.cloud
     WHAPI_BASE_URL: str = "https://gate.whapi.cloud"
     WHAPI_TOKEN: str = ""

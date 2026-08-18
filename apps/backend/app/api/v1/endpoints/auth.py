@@ -1,4 +1,5 @@
 from datetime import timedelta, datetime
+import logging
 from dateutil.relativedelta import relativedelta
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,6 +11,8 @@ from app.core.deps import get_current_active_user, get_current_user
 from app.models.user import User, UserRole, AuthProvider
 from app.models.verification import VerificationCode
 from app.services.whatsapp_otp import normalize_phone, send_verification_code
+
+logger = logging.getLogger(__name__)
 from app.models.billing import Subscription, SubscriptionPlan, SubscriptionStatus
 from app.models.auth_handoff import AuthHandoffToken
 from app.services.email import email_service
@@ -257,6 +260,13 @@ async def resend_verification_code(
     code = VerificationCode.generate_code()
 
     if current_user.whatsapp_phone:
+        elapsed = await VerificationCode.seconds_since_last_for_phone(current_user.whatsapp_phone)
+        cooldown = settings.WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS
+        if elapsed is not None and elapsed < cooldown:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Please wait {cooldown - elapsed} seconds before requesting another code",
+            )
         await VerificationCode.create_for_phone(
             phone=current_user.whatsapp_phone,
             code=code,
@@ -385,17 +395,26 @@ async def request_whatsapp_code(request: WhatsAppCodeRequest) -> Any:
 
     user = await User.find_one(User.whatsapp_phone == phone)
     if user:
-        code = VerificationCode.generate_code()
-        await VerificationCode.create_for_phone(
-            phone=phone,
-            code=code,
-            expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
-        )
-        await send_verification_code(phone, code)
+        # Throttle resends. A 429 here would betray that the number is
+        # registered, so a throttled request silently skips sending and still
+        # returns the same body as every other call.
+        elapsed = await VerificationCode.seconds_since_last_for_phone(phone)
+        cooldown = settings.WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS
+        if elapsed is None or elapsed >= cooldown:
+            code = VerificationCode.generate_code()
+            await VerificationCode.create_for_phone(
+                phone=phone,
+                code=code,
+                expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+            )
+            await send_verification_code(phone, code)
+        else:
+            logger.info("WhatsApp code for %s throttled, %ss since last", phone, elapsed)
 
     return {
         "message": "If that number has an account, a code has been sent on WhatsApp.",
         "expires_in_minutes": settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+        "resend_after_seconds": settings.WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS,
     }
 
 

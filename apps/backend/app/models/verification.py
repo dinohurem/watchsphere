@@ -76,6 +76,18 @@ class VerificationCode(Document):
         await verification.insert()
         return verification
 
+    @classmethod
+    async def seconds_since_last_for_phone(cls, phone: str) -> Optional[int]:
+        """Whole seconds since the most recent code for this number, or None.
+
+        Used to throttle resends. Looks at every code, used or not, so burning
+        a code cannot be used to bypass the cooldown.
+        """
+        last = await cls.find(cls.phone == phone).sort("-created_at").first_or_none()
+        if not last:
+            return None
+        return int((datetime.utcnow() - last.created_at).total_seconds())
+
     def is_valid(self) -> bool:
         """Check if the code is still valid (not expired and not used)"""
         return not self.used and datetime.utcnow() < self.expires_at

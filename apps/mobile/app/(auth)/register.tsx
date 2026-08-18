@@ -60,6 +60,8 @@ export default function RegisterScreen() {
   const [repeatPassword, setRepeatPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [loading, setLoading] = useState(false);
+  // Matches WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS on the server.
+  const RESEND_COOLDOWN_SECONDS = 60;
   const [resendTimer, setResendTimer] = useState(0);
 
   // Focus states for all inputs
@@ -158,7 +160,7 @@ export default function RegisterScreen() {
 
       // Move to verification step
       setStep(2);
-      setResendTimer(30);
+      setResendTimer(RESEND_COOLDOWN_SECONDS);
     } catch (error: any) {
       Alert.alert(
         'Registration Failed',
@@ -212,7 +214,7 @@ export default function RegisterScreen() {
 
     try {
       await api.post('/auth/whatsapp/request-code', { whatsapp_phone: whatsappPhone });
-      setResendTimer(30);
+      setResendTimer(RESEND_COOLDOWN_SECONDS);
       Alert.alert('Success', 'Verification code resent!');
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to resend code');

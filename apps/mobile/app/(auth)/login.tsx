@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -42,6 +42,9 @@ export default function LoginScreen() {
   const [whatsappPhone, setWhatsappPhone] = useState('');
   const [whatsappCode, setWhatsappCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
+  // Matches WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS on the server.
+  const RESEND_COOLDOWN_SECONDS = 60;
+  const [resendTimer, setResendTimer] = useState(0);
   const [loading, setLoading] = useState(false);
 
   // Focus states for inputs
@@ -51,6 +54,13 @@ export default function LoginScreen() {
   const [codeFocused, setCodeFocused] = useState(false);
 
   const login = useAuthStore((state) => state.login);
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendTimer]);
 
   const handleBack = () => {
     router.back();
@@ -110,6 +120,7 @@ export default function LoginScreen() {
     try {
       await api.post('/auth/whatsapp/request-code', { whatsapp_phone: whatsappPhone });
       setCodeSent(true);
+      setResendTimer(RESEND_COOLDOWN_SECONDS);
       // The response is deliberately identical for unknown numbers, so this
       // message must not imply the account exists.
       Alert.alert('Check WhatsApp', 'If that number has an account, we have sent it a code.');
@@ -246,9 +257,19 @@ export default function LoginScreen() {
                       onFocus={() => setCodeFocused(true)}
                       onBlur={() => setCodeFocused(false)}
                     />
-                    <TouchableOpacity onPress={() => { setCodeSent(false); setWhatsappCode(''); }}>
-                      <Text style={styles.forgotPasswordText}>Use a different number</Text>
-                    </TouchableOpacity>
+                    <View style={styles.codeActions}>
+                      <TouchableOpacity onPress={() => { setCodeSent(false); setWhatsappCode(''); setResendTimer(0); }}>
+                        <Text style={styles.forgotPasswordText}>Use a different number</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={handleSendWhatsappCode}
+                        disabled={resendTimer > 0 || loading}
+                      >
+                        <Text style={[styles.forgotPasswordText, resendTimer > 0 && styles.resendDisabled]}>
+                          {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend code'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
               </>
@@ -392,6 +413,16 @@ const styles = StyleSheet.create({
   inputGroup: {
     gap: hp(8),
   },
+  codeActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: hp(8),
+  },
+  resendDisabled: {
+    color: 'rgba(29, 29, 31, 0.4)',
+  },
+
   modeToggle: {
     flexDirection: 'row',
     backgroundColor: 'rgba(29, 29, 31, 0.05)',
