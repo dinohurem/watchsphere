@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 
-const TOTAL_STEPS = 4; // Account creation, Email verification, Personal info (handled in onboarding)
+const TOTAL_STEPS = 4; // Account creation, WhatsApp verification, Personal info (handled in onboarding)
 
 // Back Arrow Icon (matches Figma design)
 function BackArrow() {
@@ -48,14 +48,13 @@ type Step = 1 | 2;
 
 interface PasswordValidation {
   minLength: boolean;
-  hasUppercase: boolean;
+  hasLetter: boolean;
   hasNumber: boolean;
-  hasSpecial: boolean;
 }
 
 export default function RegisterScreen() {
   const [step, setStep] = useState<Step>(1);
-  const [username, setUsername] = useState('');
+  const [whatsappPhone, setWhatsappPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
@@ -64,7 +63,7 @@ export default function RegisterScreen() {
   const [resendTimer, setResendTimer] = useState(0);
 
   // Focus states for all inputs
-  const [usernameFocused, setUsernameFocused] = useState(false);
+  const [whatsappFocused, setWhatsappFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [repeatPasswordFocused, setRepeatPasswordFocused] = useState(false);
@@ -85,9 +84,8 @@ export default function RegisterScreen() {
   // Password validation
   const validatePassword = (pwd: string): PasswordValidation => ({
     minLength: pwd.length >= 8,
-    hasUppercase: /[A-Z]/.test(pwd),
+    hasLetter: /[a-zA-Z]/.test(pwd),
     hasNumber: /[0-9]/.test(pwd),
-    hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(pwd),
   });
 
   const passwordValidation = validatePassword(password);
@@ -124,7 +122,7 @@ export default function RegisterScreen() {
   };
 
   const handleCreateAccount = async () => {
-    if (!username || !email || !password || !repeatPassword) {
+    if (!whatsappPhone || !email || !password || !repeatPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -142,14 +140,14 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      // Create account - this will send verification email
+      // Create account - this sends the verification code over WhatsApp
       const response = await api.post('/auth/register', {
-        name: username,
+        whatsapp_phone: whatsappPhone,
         email,
         password,
       });
 
-      // Store tokens from registration response so we can verify email
+      // Store tokens from registration response so we can verify the number
       const { access_token, refresh_token } = response.data;
       if (access_token) {
         await AsyncStorage.setItem('auth_token', access_token);
@@ -180,24 +178,14 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      // Verify the email code
-      await api.post('/auth/verify-email', {
+      // Verify the WhatsApp code. This both confirms the number and returns
+      // session tokens, so no follow-up password login is needed.
+      const verifyResponse = await api.post('/auth/whatsapp/verify-code', {
+        whatsapp_phone: whatsappPhone,
         code: verificationCode,
       });
 
-      // After verification, login the user
-      // The register endpoint already returned tokens, so we need to login with them
-      const loginParams = new URLSearchParams();
-      loginParams.append('username', email);
-      loginParams.append('password', password);
-
-      const loginResponse = await api.post('/auth/login', loginParams.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
-
-      const { user, access_token, refresh_token } = loginResponse.data;
+      const { user, access_token, refresh_token } = verifyResponse.data;
 
       if (user && access_token) {
         // Store tokens
@@ -223,7 +211,7 @@ export default function RegisterScreen() {
     if (resendTimer > 0) return;
 
     try {
-      await api.post('/auth/resend-verification', { email });
+      await api.post('/auth/whatsapp/request-code', { whatsapp_phone: whatsappPhone });
       setResendTimer(30);
       Alert.alert('Success', 'Verification code resent!');
     } catch (error: any) {
@@ -249,25 +237,30 @@ export default function RegisterScreen() {
     >
       <Text style={styles.title}>Create your account</Text>
       <Text style={styles.subtitle}>
-        Set your email and password for WatchSphere account to continue.
+        Set your WhatsApp number, email and password to continue.
       </Text>
 
       <View style={styles.form}>
         <View style={styles.inputGroup}>
           <Text style={styles.label}>
-            Username<Text style={styles.requiredAsterisk}>*</Text>
+            WhatsApp number<Text style={styles.requiredAsterisk}>*</Text>
           </Text>
           <TextInput
-            style={[styles.input, usernameFocused && styles.inputFocused]}
-            placeholder="johndoe_watches"
+            style={[styles.input, whatsappFocused && styles.inputFocused]}
+            placeholder="+387 61 123 456"
             placeholderTextColor="rgba(29, 29, 31, 0.4)"
-            value={username}
-            onChangeText={setUsername}
+            value={whatsappPhone}
+            onChangeText={setWhatsappPhone}
+            keyboardType="phone-pad"
             autoCapitalize="none"
             autoCorrect={false}
-            onFocus={() => setUsernameFocused(true)}
-            onBlur={() => setUsernameFocused(false)}
+            textContentType="telephoneNumber"
+            onFocus={() => setWhatsappFocused(true)}
+            onBlur={() => setWhatsappFocused(false)}
           />
+          <Text style={styles.fieldHint}>
+            Include your country code. Your verification code arrives on WhatsApp.
+          </Text>
         </View>
 
         <View style={styles.inputGroup}>
@@ -343,12 +336,12 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.requirementRow}>
-            <CheckIcon checked={passwordValidation.hasUppercase} />
+            <CheckIcon checked={passwordValidation.hasLetter} />
             <Text style={[
               styles.requirementText,
-              passwordValidation.hasUppercase && styles.requirementMet
+              passwordValidation.hasLetter && styles.requirementMet
             ]}>
-              Includes <Text style={styles.requirementBold}>one uppercase letter</Text>
+              Includes <Text style={styles.requirementBold}>one letter</Text>
             </Text>
           </View>
 
@@ -359,16 +352,6 @@ export default function RegisterScreen() {
               passwordValidation.hasNumber && styles.requirementMet
             ]}>
               Includes <Text style={styles.requirementBold}>one number</Text>
-            </Text>
-          </View>
-
-          <View style={styles.requirementRow}>
-            <CheckIcon checked={passwordValidation.hasSpecial} />
-            <Text style={[
-              styles.requirementText,
-              passwordValidation.hasSpecial && styles.requirementMet
-            ]}>
-              Includes <Text style={styles.requirementBold}>one special character</Text>
             </Text>
           </View>
 
@@ -400,10 +383,10 @@ export default function RegisterScreen() {
 
   const renderStep2 = () => (
     <View style={styles.stepContent}>
-      <Text style={styles.title}>Verify your email</Text>
+      <Text style={styles.title}>Verify your WhatsApp</Text>
       <Text style={styles.subtitle}>
-        Enter the 6 digit code we sent to{'\n'}
-        <Text style={styles.emailHighlight}>{email}</Text>
+        Enter the 6 digit code we sent on WhatsApp to{'\n'}
+        <Text style={styles.emailHighlight}>{whatsappPhone}</Text>
       </Text>
 
       <View style={styles.codeContainer}>
@@ -440,7 +423,7 @@ export default function RegisterScreen() {
   );
 
   const canProceed = step === 1
-    ? isPasswordValid && passwordsMatch && email.length > 0 && username.length > 0
+    ? isPasswordValid && passwordsMatch && email.length > 0 && whatsappPhone.length > 0
     : verificationCode.length === 6;
 
   return (
@@ -565,6 +548,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1D1D1F',
     letterSpacing: 0.075,
+  },
+  fieldHint: {
+    fontSize: fp(12),
+    fontFamily: 'HankenGrotesk_400Regular',
+    color: 'rgba(29, 29, 31, 0.5)',
+    marginTop: hp(6),
   },
   requiredAsterisk: {
     color: '#FF3B30',

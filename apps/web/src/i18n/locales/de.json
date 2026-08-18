@@ -75,7 +75,9 @@
       "failed": "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.",
       "successTitle": "Konto erstellt!",
       "successMessage": "Ihr Konto wurde erfolgreich erstellt. Bitte warten Sie, bis ein Administrator Ihr Konto freigegeben hat.",
-      "goToLogin": "Zur Anmeldung"
+      "goToLogin": "Zur Anmeldung",
+      "whatsappLabel": "WhatsApp-Nummer",
+      "whatsappHint": "Mit Landesvorwahl angeben. Ihr Bestätigungscode kommt per WhatsApp."
     },
     "forgotPassword": {
       "title": "Passwort vergessen?",

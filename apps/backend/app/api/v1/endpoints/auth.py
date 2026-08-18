@@ -9,6 +9,7 @@ from app.core.security import create_access_token, create_tokens, verify_refresh
 from app.core.deps import get_current_active_user, get_current_user
 from app.models.user import User, UserRole, AuthProvider
 from app.models.verification import VerificationCode
+from app.services.whatsapp_otp import normalize_phone, send_verification_code
 from app.models.billing import Subscription, SubscriptionPlan, SubscriptionStatus
 from app.models.auth_handoff import AuthHandoffToken
 from app.services.email import email_service
@@ -26,7 +27,10 @@ router = APIRouter()
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    name: str
+    whatsapp_phone: str
+    # Signup no longer collects a username; the WhatsApp number stands in as the
+    # display name unless a caller supplies one explicitly.
+    name: Optional[str] = None
     role: UserRole = UserRole.COLLECTOR
 
 
@@ -60,6 +64,15 @@ class RefreshTokenRequest(BaseModel):
 
 
 class VerifyEmailRequest(BaseModel):
+    code: str
+
+
+class WhatsAppCodeRequest(BaseModel):
+    whatsapp_phone: str
+
+
+class WhatsAppVerifyRequest(BaseModel):
+    whatsapp_phone: str
     code: str
 
 
@@ -98,7 +111,7 @@ class AppleAuthRequest(BaseModel):
 
 @router.post("/register", response_model=TokenData, status_code=status.HTTP_201_CREATED)
 async def register(user_in: UserCreate) -> Any:
-    """Register a new user and send verification email"""
+    """Register a new user and send a WhatsApp verification code."""
     # Check if user exists
     existing_user = await User.find_one(User.email == user_in.email)
     if existing_user:
@@ -107,11 +120,26 @@ async def register(user_in: UserCreate) -> Any:
             detail="A user with this email already exists",
         )
 
+    phone = normalize_phone(user_in.whatsapp_phone)
+    if not phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a valid WhatsApp number including the country code",
+        )
+
+    # The number is a login identifier, so it must be unique.
+    if await User.find_one(User.whatsapp_phone == phone):
+        raise HTTPException(
+            status_code=400,
+            detail="A user with this WhatsApp number already exists",
+        )
+
     # Create new user (unverified but approved)
     user = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
-        name=user_in.name,
+        name=user_in.name or phone,
+        whatsapp_phone=phone,
         role=user_in.role,
         verified=False,
         approved=True,
@@ -139,21 +167,16 @@ async def register(user_in: UserCreate) -> Any:
     # Assign default watchlist items to the new user
     await assign_default_watchlist_to_user(user)
 
-    # Generate and send verification code (always random)
+    # Generate and send the verification code over WhatsApp
     code = VerificationCode.generate_code()
 
-    verification = await VerificationCode.create_for_email(
-        email=user_in.email,
+    await VerificationCode.create_for_phone(
+        phone=phone,
         code=code,
-        expires_minutes=15
+        expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
     )
 
-    # Send verification email
-    await email_service.send_verification_email(
-        to_email=user_in.email,
-        verification_code=code,
-        user_name=user_in.name
-    )
+    await send_verification_code(phone, code)
 
     # Create access and refresh tokens
     access_token, refresh_token = create_tokens(str(user.id))
@@ -218,30 +241,41 @@ async def verify_email(
 async def resend_verification_code(
     current_user: User = Depends(get_current_user),  # Use get_current_user to allow unapproved users
 ) -> Any:
-    """Resend verification code to user's email"""
+    """Resend the verification code.
+
+    Signup verifies over WhatsApp, so the resend must use the same channel -
+    otherwise the resent code would never match what the client is verifying
+    against. Falls back to email for accounts with no number on file.
+    """
     if current_user.verified:
         raise HTTPException(
             status_code=400,
-            detail="Email is already verified",
+            detail="Account is already verified",
         )
 
     # Generate new verification code (always random)
     code = VerificationCode.generate_code()
+
+    if current_user.whatsapp_phone:
+        await VerificationCode.create_for_phone(
+            phone=current_user.whatsapp_phone,
+            code=code,
+            expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+        )
+        await send_verification_code(current_user.whatsapp_phone, code)
+        return {"message": "Verification code sent on WhatsApp", "channel": "whatsapp"}
 
     await VerificationCode.create_for_email(
         email=current_user.email,
         code=code,
         expires_minutes=15
     )
-
-    # Send verification email
     await email_service.send_verification_email(
         to_email=current_user.email,
         verification_code=code,
         user_name=current_user.name
     )
-
-    return {"message": "Verification code sent"}
+    return {"message": "Verification code sent", "channel": "email"}
 
 
 @router.post("/complete-onboarding")
@@ -319,6 +353,81 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
     # Create access and refresh tokens
     access_token, refresh_token = create_tokens(str(user.id))
 
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "verified": user.verified,
+            "approved": user.approved,
+            "auth_provider": user.auth_provider,
+        },
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/whatsapp/request-code")
+async def request_whatsapp_code(request: WhatsAppCodeRequest) -> Any:
+    """Send a login/verification code to a WhatsApp number.
+
+    Always reports success. Revealing whether a number is registered would turn
+    this endpoint into an account-enumeration oracle.
+    """
+    phone = normalize_phone(request.whatsapp_phone)
+    if not phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a valid WhatsApp number including the country code",
+        )
+
+    user = await User.find_one(User.whatsapp_phone == phone)
+    if user:
+        code = VerificationCode.generate_code()
+        await VerificationCode.create_for_phone(
+            phone=phone,
+            code=code,
+            expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+        )
+        await send_verification_code(phone, code)
+
+    return {
+        "message": "If that number has an account, a code has been sent on WhatsApp.",
+        "expires_in_minutes": settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+    }
+
+
+@router.post("/whatsapp/verify-code", response_model=TokenData)
+async def verify_whatsapp_code(request: WhatsAppVerifyRequest) -> Any:
+    """Exchange a WhatsApp code for tokens - passwordless login and signup verification."""
+    phone = normalize_phone(request.whatsapp_phone)
+    if not phone:
+        raise HTTPException(status_code=400, detail="Invalid WhatsApp number")
+
+    verification = await VerificationCode.find_one(
+        VerificationCode.phone == phone,
+        VerificationCode.code == request.code,
+        VerificationCode.used == False,
+    )
+    # One message for every failure mode: wrong code, expired code, unknown number.
+    if not verification or not verification.is_valid():
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    user = await User.find_one(User.whatsapp_phone == phone)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    await verification.mark_used()
+
+    # Passing the WhatsApp challenge proves ownership of the number.
+    if not user.verified:
+        user.verified = True
+        user.updated_at = datetime.utcnow()
+        await user.save()
+
+    access_token, refresh_token = create_tokens(str(user.id))
     return {
         "user": {
             "id": str(user.id),

@@ -7,8 +7,13 @@ import string
 
 
 class VerificationCode(Document):
-    """Email verification codes for user signup"""
-    email: EmailStr = Field(..., index=True)
+    """Verification codes for signup and passwordless login.
+
+    A code is addressed to either an email or a WhatsApp phone number, so both
+    fields are optional and exactly one is set per document.
+    """
+    email: Optional[EmailStr] = Field(default=None, index=True)
+    phone: Optional[str] = Field(default=None, index=True)
     code: str
     expires_at: datetime
     used: bool = False
@@ -18,6 +23,7 @@ class VerificationCode(Document):
         name = "verification_codes"
         indexes = [
             "email",
+            "phone",
             "code",
         ]
 
@@ -43,6 +49,27 @@ class VerificationCode(Document):
         # Create new code
         verification = cls(
             email=email,
+            code=code or cls.generate_code(),
+            expires_at=datetime.utcnow() + timedelta(minutes=expires_minutes),
+        )
+        await verification.insert()
+        return verification
+
+    @classmethod
+    async def create_for_phone(
+        cls,
+        phone: str,
+        code: Optional[str] = None,
+        expires_minutes: int = 10
+    ) -> "VerificationCode":
+        """Create a code for a WhatsApp number, invalidating any existing ones."""
+        await cls.find(
+            cls.phone == phone,
+            cls.used == False
+        ).update({"$set": {"used": True}})
+
+        verification = cls(
+            phone=phone,
             code=code or cls.generate_code(),
             expires_at=datetime.utcnow() + timedelta(minutes=expires_minutes),
         )

@@ -11,6 +11,7 @@ export function RegisterPage() {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [whatsappPhone, setWhatsappPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
@@ -119,7 +120,7 @@ export function RegisterPage() {
       const response = await api.post('/auth/register', {
         email,
         password,
-        name: email.split('@')[0],
+        whatsapp_phone: whatsappPhone,
         role: 'collector',
       });
 
@@ -239,6 +240,27 @@ export function RegisterPage() {
             {/* Form */}
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
               <div className="flex flex-col gap-4">
+                {/* WhatsApp Number Field */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="whatsapp_phone" className="text-[15px] font-semibold text-[#1d1d1f] leading-5 tracking-[0.075px]">
+                    {t('auth.register.whatsappLabel')}<span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="whatsapp_phone"
+                    name="whatsapp_phone"
+                    type="tel"
+                    autoComplete="tel"
+                    required
+                    value={whatsappPhone}
+                    onChange={(e) => setWhatsappPhone(e.target.value)}
+                    className="w-full h-[44px] px-4 border border-[rgba(29,29,31,0.1)] rounded-2xl text-[15px] text-[#1d1d1f] placeholder:text-[rgba(29,29,31,0.6)] leading-5 tracking-[0.075px] focus:outline-none focus:ring-2 focus:ring-[#1d1d1f]/20 focus:border-[#1d1d1f]/20"
+                    placeholder="+387 61 123 456"
+                  />
+                  <p className="text-[13px] text-[rgba(29,29,31,0.6)]">
+                    {t('auth.register.whatsappHint')}
+                  </p>
+                </div>
+
                 {/* Email Field */}
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="email" className="text-[15px] font-semibold text-[#1d1d1f] leading-5 tracking-[0.075px]">

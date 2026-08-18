@@ -34,13 +34,21 @@ function BackArrow() {
 }
 
 export default function LoginScreen() {
+  // Two login modes: the existing email + password, and passwordless
+  // WhatsApp where a code is sent to the dealer's number.
+  const [mode, setMode] = useState<'password' | 'whatsapp'>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+  const [whatsappCode, setWhatsappCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Focus states for inputs
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [whatsappFocused, setWhatsappFocused] = useState(false);
+  const [codeFocused, setCodeFocused] = useState(false);
 
   const login = useAuthStore((state) => state.login);
 
@@ -93,7 +101,66 @@ export default function LoginScreen() {
     }
   };
 
-  const canLogin = email.length > 0 && password.length > 0;
+  const handleSendWhatsappCode = async () => {
+    if (!whatsappPhone) {
+      Alert.alert('Error', 'Enter your WhatsApp number');
+      return;
+    }
+    setLoading(true);
+    try {
+      await api.post('/auth/whatsapp/request-code', { whatsapp_phone: whatsappPhone });
+      setCodeSent(true);
+      // The response is deliberately identical for unknown numbers, so this
+      // message must not imply the account exists.
+      Alert.alert('Check WhatsApp', 'If that number has an account, we have sent it a code.');
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Could not send the code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWhatsappLogin = async () => {
+    if (whatsappCode.length !== 6) {
+      Alert.alert('Error', 'Enter the 6 digit code');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/whatsapp/verify-code', {
+        whatsapp_phone: whatsappPhone,
+        code: whatsappCode,
+      });
+      const { user, access_token, refresh_token } = response.data;
+      await AsyncStorage.setItem('auth_token', access_token);
+      await AsyncStorage.setItem('refresh_token', refresh_token);
+      login(user, access_token);
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.response?.data?.detail || 'Invalid or expired code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const canLogin =
+    mode === 'password'
+      ? email.length > 0 && password.length > 0
+      : codeSent
+        ? whatsappCode.length === 6
+        : whatsappPhone.length > 0;
+
+  const handlePrimaryPress = () => {
+    if (mode === 'password') return handleLogin();
+    return codeSent ? handleWhatsappLogin() : handleSendWhatsappCode();
+  };
+
+  const primaryLabel = loading
+    ? 'Please wait...'
+    : mode === 'password'
+      ? 'Sign in'
+      : codeSent
+        ? 'Verify & sign in'
+        : 'Send code on WhatsApp';
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -120,6 +187,73 @@ export default function LoginScreen() {
           </Text>
 
           <View style={styles.form}>
+            {/* Mode switch: password vs passwordless WhatsApp */}
+            <View style={styles.modeToggle}>
+              <TouchableOpacity
+                style={[styles.modeOption, mode === 'password' && styles.modeOptionActive]}
+                onPress={() => setMode('password')}
+              >
+                <Text style={[styles.modeText, mode === 'password' && styles.modeTextActive]}>
+                  Email & password
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeOption, mode === 'whatsapp' && styles.modeOptionActive]}
+                onPress={() => setMode('whatsapp')}
+              >
+                <Text style={[styles.modeText, mode === 'whatsapp' && styles.modeTextActive]}>
+                  WhatsApp code
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {mode === 'whatsapp' ? (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>
+                    WhatsApp number<Text style={styles.requiredAsterisk}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.input, whatsappFocused && styles.inputFocused]}
+                    placeholder="+387 61 123 456"
+                    placeholderTextColor="rgba(29, 29, 31, 0.4)"
+                    value={whatsappPhone}
+                    onChangeText={setWhatsappPhone}
+                    keyboardType="phone-pad"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="telephoneNumber"
+                    editable={!codeSent}
+                    onFocus={() => setWhatsappFocused(true)}
+                    onBlur={() => setWhatsappFocused(false)}
+                  />
+                </View>
+
+                {codeSent && (
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>
+                      Verification code<Text style={styles.requiredAsterisk}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={[styles.input, codeFocused && styles.inputFocused]}
+                      placeholder="123456"
+                      placeholderTextColor="rgba(29, 29, 31, 0.4)"
+                      value={whatsappCode}
+                      onChangeText={setWhatsappCode}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      textContentType="oneTimeCode"
+                      onFocus={() => setCodeFocused(true)}
+                      onBlur={() => setCodeFocused(false)}
+                    />
+                    <TouchableOpacity onPress={() => { setCodeSent(false); setWhatsappCode(''); }}>
+                      <Text style={styles.forgotPasswordText}>Use a different number</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            ) : (
+              <>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>
                 Email address<Text style={styles.requiredAsterisk}>*</Text>
@@ -164,6 +298,8 @@ export default function LoginScreen() {
             >
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
             </TouchableOpacity>
+              </>
+            )}
           </View>
         </ScrollView>
 
@@ -174,12 +310,10 @@ export default function LoginScreen() {
               styles.loginButton,
               (!canLogin || loading) && styles.buttonDisabled
             ]}
-            onPress={handleLogin}
+            onPress={handlePrimaryPress}
             disabled={!canLogin || loading}
           >
-            <Text style={styles.loginButtonText}>
-              {loading ? 'Signing in...' : 'Sign in'}
-            </Text>
+            <Text style={styles.loginButtonText}>{primaryLabel}</Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -257,6 +391,31 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     gap: hp(8),
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(29, 29, 31, 0.05)',
+    borderRadius: sp(10),
+    padding: sp(4),
+    marginBottom: hp(20),
+  },
+  modeOption: {
+    flex: 1,
+    paddingVertical: hp(10),
+    borderRadius: sp(8),
+    alignItems: 'center',
+  },
+  modeOptionActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  modeText: {
+    fontSize: fp(14),
+    fontFamily: 'HankenGrotesk_400Regular',
+    color: 'rgba(29, 29, 31, 0.5)',
+  },
+  modeTextActive: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    color: '#1D1D1F',
   },
   label: {
     fontFamily: 'HankenGrotesk_600SemiBold',

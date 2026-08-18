@@ -31,6 +31,20 @@ class Settings(BaseSettings):
     # Override via env if a newer vision-capable model should be used.
     OPENAI_VISION_MODEL: str = "gpt-4o"
 
+    # WhatsApp OTP delivery
+    # Driver selects the outbound transport: "log" (dev - code is logged, never
+    # sent), "whapi" or "twilio". Auth must never hard-depend on an unofficial
+    # paired session, so the driver is swappable by configuration.
+    WHATSAPP_OTP_DRIVER: str = "log"
+    WHATSAPP_OTP_EXPIRY_MINUTES: int = 10
+    # whapi.cloud
+    WHAPI_BASE_URL: str = "https://gate.whapi.cloud"
+    WHAPI_TOKEN: str = ""
+    # Twilio WhatsApp Business
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_WHATSAPP_FROM: str = ""
+
     # Monri Payments
     MONRI_MERCHANT_KEY: str = "key-944bc24cd123fa7403da6278825114f1"
     MONRI_AUTHENTICITY_TOKEN: str = "d515632967fe9eb24cf3dcc04c1fe895b4ca3583"
