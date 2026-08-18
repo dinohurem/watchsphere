@@ -18,7 +18,6 @@
       "buildNumber": "36",
       "supportsTablet": true,
       "bundleIdentifier": "com.watchsphere.watchsphere",
-      "usesAppleSignIn": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "WatchSphere needs access to your photo library to share images in messages and set your profile picture.",
         "NSPhotoLibraryAddUsageDescription": "WatchSphere needs permission to save images to your photo library.",
@@ -71,7 +70,6 @@
         }
       ],
       "expo-font",
-      "expo-apple-authentication",
       [
         "expo-image-picker",
         {
