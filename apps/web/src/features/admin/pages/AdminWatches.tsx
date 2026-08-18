@@ -459,13 +459,25 @@ export function AdminWatches() {
     }
   }
 
+  // Accepts a single value or a comma-separated list, so a whole set of
+  // variants can be pasted in one go. Surrounding whitespace is stripped and
+  // duplicates are skipped; case is preserved because "126231g" and
+  // "126231 G" are meaningfully different aliases.
+  const splitTagInput = (raw: string): string[] =>
+    raw.split(',').map((v) => v.trim()).filter(Boolean)
+
+  const mergeTags = (existing: string[], raw: string): string[] => {
+    const merged = [...existing]
+    for (const value of splitTagInput(raw)) {
+      if (!merged.includes(value)) merged.push(value)
+    }
+    return merged
+  }
+
   const handleAddOemRef = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      const val = oemRefInput.trim()
-      if (val && !formData.oem_references.includes(val)) {
-        setFormData({ ...formData, oem_references: [...formData.oem_references, val] })
-      }
+      setFormData({ ...formData, oem_references: mergeTags(formData.oem_references, oemRefInput) })
       setOemRefInput('')
     }
   }
@@ -477,10 +489,7 @@ export function AdminWatches() {
   const handleAddAlias = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      const val = aliasInput.trim()
-      if (val && !formData.aliases.includes(val)) {
-        setFormData({ ...formData, aliases: [...formData.aliases, val] })
-      }
+      setFormData({ ...formData, aliases: mergeTags(formData.aliases, aliasInput) })
       setAliasInput('')
     }
   }
@@ -1062,7 +1071,7 @@ export function AdminWatches() {
                     onChange={(e) => setOemRefInput(e.target.value)}
                     onKeyDown={handleAddOemRef}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="Type and press Enter to add"
+                    placeholder="Type or paste comma-separated values, then press Enter"
                   />
                 </div>
                 <div>
@@ -1120,7 +1129,7 @@ export function AdminWatches() {
                   onChange={(e) => setAliasInput(e.target.value)}
                   onKeyDown={handleAddAlias}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
-                  placeholder="Type and press Enter to add"
+                  placeholder="Type or paste comma-separated values, then press Enter"
                 />
               </div>
 

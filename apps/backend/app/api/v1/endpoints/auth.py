@@ -10,7 +10,13 @@ from app.core.security import create_access_token, create_tokens, verify_refresh
 from app.core.deps import get_current_active_user, get_current_user
 from app.models.user import User, UserRole, AuthProvider
 from app.models.verification import VerificationCode
-from app.services.whatsapp_otp import normalize_phone, send_verification_code
+from app.services.whatsapp_otp import (
+    normalize_phone,
+    send_verification_code,
+    uses_remote_verification,
+    start_remote_verification,
+    check_remote_verification,
+)
 
 logger = logging.getLogger(__name__)
 from app.models.billing import Subscription, SubscriptionPlan, SubscriptionStatus
@@ -100,6 +106,31 @@ class CompleteOnboardingRequest(BaseModel):
     notifications_enabled: bool = False
 
 
+async def _issue_whatsapp_code(phone: str) -> None:
+    """Send a verification code, and record the send for throttling.
+
+    With Twilio Verify the provider owns the code, so we still write a local
+    row purely as a rate-limit timestamp - marked used immediately so it can
+    never satisfy a verification.
+    """
+    if uses_remote_verification():
+        await start_remote_verification(phone)
+        marker = await VerificationCode.create_for_phone(
+            phone=phone,
+            expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+        )
+        await marker.mark_used()
+        return
+
+    code = VerificationCode.generate_code()
+    await VerificationCode.create_for_phone(
+        phone=phone,
+        code=code,
+        expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
+    )
+    await send_verification_code(phone, code)
+
+
 @router.post("/register", response_model=TokenData, status_code=status.HTTP_201_CREATED)
 async def register(user_in: UserCreate) -> Any:
     """Register a new user and send a WhatsApp verification code."""
@@ -159,15 +190,7 @@ async def register(user_in: UserCreate) -> Any:
     await assign_default_watchlist_to_user(user)
 
     # Generate and send the verification code over WhatsApp
-    code = VerificationCode.generate_code()
-
-    await VerificationCode.create_for_phone(
-        phone=phone,
-        code=code,
-        expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
-    )
-
-    await send_verification_code(phone, code)
+    await _issue_whatsapp_code(phone)
 
     # Create access and refresh tokens
     access_token, refresh_token = create_tokens(str(user.id))
@@ -244,9 +267,6 @@ async def resend_verification_code(
             detail="Account is already verified",
         )
 
-    # Generate new verification code (always random)
-    code = VerificationCode.generate_code()
-
     if current_user.whatsapp_phone:
         elapsed = await VerificationCode.seconds_since_last_for_phone(current_user.whatsapp_phone)
         cooldown = settings.WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS
@@ -255,14 +275,11 @@ async def resend_verification_code(
                 status_code=429,
                 detail=f"Please wait {cooldown - elapsed} seconds before requesting another code",
             )
-        await VerificationCode.create_for_phone(
-            phone=current_user.whatsapp_phone,
-            code=code,
-            expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
-        )
-        await send_verification_code(current_user.whatsapp_phone, code)
+        await _issue_whatsapp_code(current_user.whatsapp_phone)
         return {"message": "Verification code sent on WhatsApp", "channel": "whatsapp"}
 
+    # Email fallback for accounts with no number on file.
+    code = VerificationCode.generate_code()
     await VerificationCode.create_for_email(
         email=current_user.email,
         code=code,
@@ -389,13 +406,7 @@ async def request_whatsapp_code(request: WhatsAppCodeRequest) -> Any:
         elapsed = await VerificationCode.seconds_since_last_for_phone(phone)
         cooldown = settings.WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS
         if elapsed is None or elapsed >= cooldown:
-            code = VerificationCode.generate_code()
-            await VerificationCode.create_for_phone(
-                phone=phone,
-                code=code,
-                expires_minutes=settings.WHATSAPP_OTP_EXPIRY_MINUTES,
-            )
-            await send_verification_code(phone, code)
+            await _issue_whatsapp_code(phone)
         else:
             logger.info("WhatsApp code for %s throttled, %ss since last", phone, elapsed)
 
@@ -413,20 +424,27 @@ async def verify_whatsapp_code(request: WhatsAppVerifyRequest) -> Any:
     if not phone:
         raise HTTPException(status_code=400, detail="Invalid WhatsApp number")
 
-    verification = await VerificationCode.find_one(
-        VerificationCode.phone == phone,
-        VerificationCode.code == request.code,
-        VerificationCode.used == False,
-    )
-    # One message for every failure mode: wrong code, expired code, unknown number.
-    if not verification or not verification.is_valid():
-        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    verification = None
+    if uses_remote_verification():
+        # Twilio Verify is authoritative; no local code exists to compare.
+        if not await check_remote_verification(phone, request.code):
+            raise HTTPException(status_code=400, detail="Invalid or expired code")
+    else:
+        verification = await VerificationCode.find_one(
+            VerificationCode.phone == phone,
+            VerificationCode.code == request.code,
+            VerificationCode.used == False,
+        )
+        # One message for every failure mode: wrong code, expired, unknown number.
+        if not verification or not verification.is_valid():
+            raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     user = await User.find_one(User.whatsapp_phone == phone)
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired code")
 
-    await verification.mark_used()
+    if verification:
+        await verification.mark_used()
 
     # Passing the WhatsApp challenge proves ownership of the number.
     if not user.verified:

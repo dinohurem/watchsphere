@@ -42,10 +42,13 @@ class Settings(BaseSettings):
     # whapi.cloud
     WHAPI_BASE_URL: str = "https://gate.whapi.cloud"
     WHAPI_TOKEN: str = ""
-    # Twilio WhatsApp Business
+    # Twilio WhatsApp Business (driver "twilio")
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_WHATSAPP_FROM: str = ""
+    # Twilio Verify (driver "twilio_verify"): Twilio generates, delivers and
+    # checks the code, so no local VerificationCode record is created.
+    TWILIO_VERIFY_SERVICE_SID: str = ""
 
     # Monri Payments
     MONRI_MERCHANT_KEY: str = "key-944bc24cd123fa7403da6278825114f1"

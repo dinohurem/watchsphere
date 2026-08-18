@@ -3,9 +3,12 @@
 The transport is chosen by ``settings.WHATSAPP_OTP_DRIVER`` so authentication is
 never hard-wired to one vendor:
 
-    log     - development default. The code is logged and nothing is sent.
-    whapi   - whapi.cloud REST gateway.
-    twilio  - Twilio WhatsApp Business API.
+    log            - development default. The code is logged, nothing is sent.
+    whapi          - whapi.cloud REST gateway.
+    twilio         - Twilio WhatsApp Business API (we own the code).
+    twilio_verify  - Twilio Verify. Twilio generates, delivers AND checks the
+                     code, so no local VerificationCode is authoritative. Use
+                     uses_remote_verification() to branch.
 
 Deliberately not routed through apps/whatsapp-bridge: that bridge is inbound
 only, and it pairs an unofficial WhatsApp session that can be banned. Putting
@@ -110,4 +113,62 @@ async def send_verification_code(phone: str, code: str) -> bool:
         return False
     except Exception as exc:  # transport/network faults must not 500 the endpoint
         logger.exception("Unexpected WhatsApp OTP failure for %s: %s", phone, exc)
+        return False
+
+
+# --- Twilio Verify -------------------------------------------------------
+# Verify owns the whole code lifecycle, so these two calls replace both our
+# code generation and our comparison.
+
+def uses_remote_verification() -> bool:
+    """True when the provider validates the code instead of us."""
+    return (settings.WHATSAPP_OTP_DRIVER or "").strip().lower() == "twilio_verify"
+
+
+def _verify_base_url() -> str:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN
+            and settings.TWILIO_VERIFY_SERVICE_SID):
+        raise WhatsAppDeliveryError(
+            "Twilio Verify needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and "
+            "TWILIO_VERIFY_SERVICE_SID"
+        )
+    return f"https://verify.twilio.com/v2/Services/{settings.TWILIO_VERIFY_SERVICE_SID}"
+
+
+async def start_remote_verification(phone: str) -> bool:
+    """Ask Twilio to generate and send a code over WhatsApp."""
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_verify_base_url()}/Verifications",
+                auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
+                data={"To": phone, "Channel": "whatsapp"},
+            )
+        if resp.status_code >= 300:
+            logger.error("Twilio Verify start failed for %s: %s %s",
+                         phone, resp.status_code, resp.text[:200])
+            return False
+        return True
+    except Exception as exc:
+        logger.exception("Twilio Verify start error for %s: %s", phone, exc)
+        return False
+
+
+async def check_remote_verification(phone: str, code: str) -> bool:
+    """Ask Twilio whether this code is valid. Only "approved" passes."""
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{_verify_base_url()}/VerificationCheck",
+                auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
+                data={"To": phone, "Code": code},
+            )
+        # A wrong or expired code yields 404 here, which is a normal outcome.
+        if resp.status_code >= 300:
+            logger.info("Twilio Verify check rejected %s: %s", phone, resp.status_code)
+            return False
+        return resp.json().get("status") == "approved"
+    except Exception as exc:
+        # Never treat a transport fault as a successful verification.
+        logger.exception("Twilio Verify check error for %s: %s", phone, exc)
         return False
