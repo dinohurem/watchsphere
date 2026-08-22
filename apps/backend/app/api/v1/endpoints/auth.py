@@ -49,6 +49,9 @@ class UserResponse(BaseModel):
     verified: bool
     approved: bool
     auth_provider: AuthProvider = AuthProvider.EMAIL
+    # The signup code is delivered over WhatsApp, so clients need the number to
+    # name the channel the user should be looking at.
+    whatsapp_phone: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -199,6 +202,7 @@ async def register(user_in: UserCreate) -> Any:
         "user": {
             "id": str(user.id),
             "email": user.email,
+            "whatsapp_phone": user.whatsapp_phone,
             "name": user.name,
             "role": user.role,
             "verified": user.verified,
@@ -348,6 +352,7 @@ async def complete_onboarding(
         "user": {
             "id": str(current_user.id),
             "email": current_user.email,
+            "whatsapp_phone": current_user.whatsapp_phone,
             "name": current_user.name,
             "role": current_user.role,
             "verified": current_user.verified,
@@ -398,6 +403,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
         "user": {
             "id": str(user.id),
             "email": user.email,
+            "whatsapp_phone": user.whatsapp_phone,
             "name": user.name,
             "role": user.role,
             "verified": user.verified,
@@ -483,6 +489,7 @@ async def verify_whatsapp_code(request: WhatsAppVerifyRequest) -> Any:
         "user": {
             "id": str(user.id),
             "email": user.email,
+            "whatsapp_phone": user.whatsapp_phone,
             "name": user.name,
             "role": user.role,
             "verified": user.verified,
@@ -529,6 +536,7 @@ async def refresh_tokens(request: RefreshTokenRequest) -> Any:
         "user": {
             "id": str(user.id),
             "email": user.email,
+            "whatsapp_phone": user.whatsapp_phone,
             "name": user.name,
             "role": user.role,
             "verified": user.verified,
@@ -638,6 +646,7 @@ async def _create_oauth_user_response(user: User, is_new_user: bool = False) -> 
         "user": {
             "id": str(user.id),
             "email": user.email,
+            "whatsapp_phone": user.whatsapp_phone,
             "name": user.name,
             "role": user.role,
             "verified": user.verified,
@@ -748,6 +757,7 @@ async def redeem_handoff_token(request: RedeemHandoffRequest) -> Any:
         "user": {
             "id": str(user.id),
             "email": user.email,
+            "whatsapp_phone": user.whatsapp_phone,
             "name": user.name,
             "role": user.role,
             "verified": user.verified,

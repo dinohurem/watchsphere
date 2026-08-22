@@ -211,7 +211,12 @@ export function OnboardingPage() {
                 <p className="text-[16px] sm:text-[18px] text-[rgba(29,29,31,0.6)] tracking-[0.1px] leading-6">
                   {t('auth.onboarding.verifyDescription')}
                   <br />
-                  <span className="font-medium text-[#1d1d1f]">{user?.email || t('auth.onboarding.yourEmail')}</span>
+                  {/* Signup delivers the code over WhatsApp, so name the number
+                      the user will actually be looking at. Accounts with no
+                      number on file still fall back to the email code. */}
+                  <span className="font-medium text-[#1d1d1f]">
+                    {user?.whatsapp_phone || user?.email || t('auth.onboarding.yourEmail')}
+                  </span>
                 </p>
               </div>
 
