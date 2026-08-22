@@ -60,7 +60,19 @@
       "failed": "Login failed. Please try again.",
       "pendingApproval": "Your account is pending approval. Please wait for an administrator to approve your account.",
       "googleFailed": "Google login failed. Please try again.",
-      "appleFailed": "Apple login failed. Please try again."
+      "appleFailed": "Apple login failed. Please try again.",
+      "modePassword": "Email & password",
+      "modeWhatsapp": "WhatsApp code",
+      "whatsappLabel": "WhatsApp number",
+      "whatsappHint": "Include your country code. Your sign-in code arrives on WhatsApp.",
+      "codeLabel": "Verification code",
+      "sendCode": "Send code on WhatsApp",
+      "verifyAndSignIn": "Verify & sign in",
+      "codeSentNotice": "If that number has an account, we have sent it a code.",
+      "codeSendFailed": "Could not send the code. Please try again.",
+      "resendCode": "Resend code",
+      "resendIn": "Resend in {{seconds}}s",
+      "changeNumber": "Use a different number"
     },
     "register": {
       "title": "Sign Up",
@@ -125,8 +137,8 @@
       "matchError": "Passwords do not match"
     },
     "onboarding": {
-      "verifyTitle": "Verify your email",
-      "verifyDescription": "Enter the 6 digit code we sent to",
+      "verifyTitle": "Verify your number",
+      "verifyDescription": "Enter the 6 digit code we sent on WhatsApp to",
       "yourEmail": "your email",
       "didntGetCode": "Didn't get the code?",
       "resendIn": "Resend in",

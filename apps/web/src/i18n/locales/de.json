@@ -60,7 +60,19 @@
       "failed": "Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
       "pendingApproval": "Ihr Konto wartet auf Genehmigung. Bitte warten Sie, bis ein Administrator Ihr Konto freigegeben hat.",
       "googleFailed": "Google-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
-      "appleFailed": "Apple-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut."
+      "appleFailed": "Apple-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+      "modePassword": "E-Mail & Passwort",
+      "modeWhatsapp": "WhatsApp-Code",
+      "whatsappLabel": "WhatsApp-Nummer",
+      "whatsappHint": "Mit Landesvorwahl angeben. Ihr Anmeldecode kommt per WhatsApp.",
+      "codeLabel": "Bestätigungscode",
+      "sendCode": "Code per WhatsApp senden",
+      "verifyAndSignIn": "Bestätigen & anmelden",
+      "codeSentNotice": "Falls für diese Nummer ein Konto besteht, haben wir einen Code gesendet.",
+      "codeSendFailed": "Der Code konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+      "resendCode": "Code erneut senden",
+      "resendIn": "Erneut senden in {{seconds}}s",
+      "changeNumber": "Andere Nummer verwenden"
     },
     "register": {
       "title": "Registrieren",
@@ -125,8 +137,8 @@
       "matchError": "Passwörter stimmen nicht überein"
     },
     "onboarding": {
-      "verifyTitle": "E-Mail bestätigen",
-      "verifyDescription": "Geben Sie den 6-stelligen Code ein, den wir gesendet haben an",
+      "verifyTitle": "Nummer bestätigen",
+      "verifyDescription": "Geben Sie den 6-stelligen Code ein, den wir per WhatsApp gesendet haben an",
       "yourEmail": "Ihre E-Mail",
       "didntGetCode": "Keinen Code erhalten?",
       "resendIn": "Erneut senden in",
