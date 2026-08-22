@@ -30,6 +30,9 @@ class WhatsAppImport(Document):
     unmatched_rows: int = 0
     skipped_duplicates: int = 0
     unmatched_csv_gridfs_id: Optional[str] = None  # GridFS ID for unmatched CSV
+    # Rows held back by the cross-record price check instead of being published
+    price_flagged_rows: int = 0
+    price_flagged_csv_gridfs_id: Optional[str] = None
     files_expire_at: Optional[datetime] = None
 
     # Admin who imported
