@@ -20,6 +20,7 @@ from app.models.whatsapp_import import (
     WhatsAppImport, WhatsAppMessage, ExtractedWatchListing, ImportStatus, OfferType
 )
 from app.services.wtb_wts_service import validate_price, BRAND_MIN_PRICES, DEFAULT_MIN_PRICE
+from app.services.price_sanity import PriceRow, find_price_outliers, to_usd
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,11 @@ async def cleanup_expired_whatsapp_files() -> None:
         try:
             if imp.unmatched_csv_gridfs_id:
                 await _whatsapp_gridfs_delete(imp.unmatched_csv_gridfs_id)
+            if imp.price_flagged_csv_gridfs_id:
+                await _whatsapp_gridfs_delete(imp.price_flagged_csv_gridfs_id)
             await WhatsAppImport.find_one(WhatsAppImport.id == imp.id).update({"$set": {
                 "unmatched_csv_gridfs_id": None,
+                "price_flagged_csv_gridfs_id": None,
                 "files_expire_at": None,
             }})
             logger.info(f"Cleaned up expired WhatsApp import files for {imp.id}")
@@ -93,6 +97,9 @@ class ImportResponse(BaseModel):
     unmatched_rows: int = 0
     skipped_duplicates: int = 0
     has_unmatched_csv: bool = False
+    # Rows held back by the cross-record price check
+    price_flagged_rows: int = 0
+    has_price_flagged_csv: bool = False
 
 
 class ExtractedListingResponse(BaseModel):
@@ -436,6 +443,9 @@ async def process_csv_import(
     unmatched_count = 0
     skipped_duplicates = 0
     flagged_price_count = 0
+    # Raw CSV row behind each entry of order_docs, so a row quarantined by the
+    # cross-record price check can be written back out for an admin to review.
+    order_source_rows: list[dict] = []
     group_name = None
 
     refreshed_count = 0
@@ -685,6 +695,7 @@ async def process_csv_import(
                 else:
                     usd_price = price  # Default: assume USD
 
+            order_source_rows.append(row)
             order_docs.append(Order(
                 order_type=order_type,
                 brand=watch_brand,
@@ -713,6 +724,55 @@ async def process_csv_import(
                 created_at=message_timestamp or datetime.utcnow(),
             ))
 
+    # Cross-record price sanity. validate_price above only knows brand minimums,
+    # so a row like "HKD 103.000" among "HKD 942.000" peers, or an HKD amount
+    # mislabelled USD, sails through it. Compare every priced row against the
+    # other rows for the same ws_code plus the orders already published, and
+    # hold back whatever cannot be reconciled - a wrong price in the order book
+    # is worse than a missing one.
+    # Grouped per (book, ws_code): a WTB target is legitimately below a WTS ask,
+    # so the two must never be averaged into one median.
+    peer_usd_prices: dict[str, list[float]] = {}
+    for eo in existing_orders:
+        eo_ws = (eo.ws_code or "").strip().upper()
+        if not eo_ws or eo.price is None:
+            continue
+        eo_usd = eo.usd_price or to_usd(eo.price, eo.currency)
+        if eo_usd and eo_usd > 0:
+            peer_usd_prices.setdefault(f"{eo.order_type.value}:{eo_ws}", []).append(eo_usd)
+
+    outliers = find_price_outliers(
+        [
+            PriceRow(
+                index=i,
+                ws_code=f"{o.order_type.value}:{(o.ws_code or o.reference or '').strip().upper()}",
+                label=(o.ws_code or o.reference or "").strip().upper(),
+                price=o.price,
+                currency=o.currency,
+            )
+            for i, o in enumerate(order_docs)
+        ],
+        peer_usd_prices,
+    )
+
+    quarantined_rows: list[dict] = []
+    if outliers:
+        quarantined_indexes = {o.index: o.reason for o in outliers}
+        for i, reason in quarantined_indexes.items():
+            flagged_row = dict(order_source_rows[i]) if i < len(order_source_rows) else {}
+            flagged_row["Preis-Flag"] = reason
+            quarantined_rows.append(flagged_row)
+        order_docs = [o for i, o in enumerate(order_docs) if i not in quarantined_indexes]
+        order_source_rows = [r for i, r in enumerate(order_source_rows) if i not in quarantined_indexes]
+        matched_count -= len(quarantined_indexes)
+        flagged_price_count += len(quarantined_indexes)
+        logger.warning(
+            "Import %s quarantined %d order row(s) on price sanity: %s",
+            str(import_record.id),
+            len(quarantined_indexes),
+            "; ".join(o.reason for o in outliers[:5]),
+        )
+
     # Bulk insert
     BATCH_SIZE = 500
     if listing_docs:
@@ -734,6 +794,7 @@ async def process_csv_import(
 
     # Build unmatched CSV and store in GridFS (expires after 30 min)
     unmatched_gridfs_id = None
+    flagged_gridfs_id = None
     files_expire_at = None
     if unmatched_raw_rows and fieldnames:
         output = io.StringIO()
@@ -747,6 +808,20 @@ async def process_csv_import(
         )
         files_expire_at = datetime.utcnow() + timedelta(minutes=FILES_TTL_MINUTES)
 
+    # Quarantined rows go out as their own CSV with the reason appended, so the
+    # admin can correct the currency or the amount and re-import just those.
+    if quarantined_rows:
+        flagged_fieldnames = list(fieldnames) + ["Preis-Flag"] if fieldnames else list(quarantined_rows[0].keys())
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=flagged_fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for frow in quarantined_rows:
+            writer.writerow(frow)
+        flagged_gridfs_id = await _whatsapp_gridfs_put(
+            output.getvalue(), f"price-flagged-{import_record.filename}"
+        )
+        files_expire_at = datetime.utcnow() + timedelta(minutes=FILES_TTL_MINUTES)
+
     # Update import record
     import_record.group_name = group_name or "CSV Import"
     import_record.status = ImportStatus.COMPLETED
@@ -756,6 +831,8 @@ async def process_csv_import(
     import_record.unmatched_rows = unmatched_count
     import_record.skipped_duplicates = skipped_duplicates
     import_record.unmatched_csv_gridfs_id = unmatched_gridfs_id
+    import_record.price_flagged_rows = len(quarantined_rows)
+    import_record.price_flagged_csv_gridfs_id = flagged_gridfs_id
     import_record.files_expire_at = files_expire_at
     import_record.completed_at = datetime.utcnow()
     await import_record.save()
@@ -768,6 +845,8 @@ async def process_csv_import(
         "skipped_duplicates": skipped_duplicates,
         "refreshed_orders": refreshed_count,
         "flagged_prices": flagged_price_count,
+        "price_quarantined_rows": len(quarantined_rows),
+        "price_quarantine_reasons": [o.reason for o in outliers[:20]],
     }
 
 
@@ -816,6 +895,8 @@ async def admin_import_whatsapp(
                 "unmatched_rows": import_record.unmatched_rows,
                 "skipped_duplicates": import_record.skipped_duplicates,
                 "has_unmatched_csv": import_record.unmatched_csv_gridfs_id is not None,
+                "price_flagged_rows": import_record.price_flagged_rows,
+                "has_price_flagged_csv": import_record.price_flagged_csv_gridfs_id is not None,
             }
 
         # ZIP branch
@@ -921,6 +1002,8 @@ async def admin_import_whatsapp(
             "unmatched_rows": 0,
             "skipped_duplicates": 0,
             "has_unmatched_csv": False,
+            "price_flagged_rows": 0,
+            "has_price_flagged_csv": False,
         }
 
     except Exception as e:
@@ -959,6 +1042,10 @@ async def admin_list_imports(
             "unmatched_rows": imp.unmatched_rows,
             "skipped_duplicates": imp.skipped_duplicates,
             "has_unmatched_csv": imp.unmatched_csv_gridfs_id is not None,
+        "price_flagged_rows": imp.price_flagged_rows,
+        "has_price_flagged_csv": imp.price_flagged_csv_gridfs_id is not None,
+            "price_flagged_rows": imp.price_flagged_rows,
+            "has_price_flagged_csv": imp.price_flagged_csv_gridfs_id is not None,
         }
         for imp in imports
     ]
@@ -995,6 +1082,8 @@ async def admin_get_import(
         "unmatched_rows": imp.unmatched_rows,
         "skipped_duplicates": imp.skipped_duplicates,
         "has_unmatched_csv": imp.unmatched_csv_gridfs_id is not None,
+        "price_flagged_rows": imp.price_flagged_rows,
+        "has_price_flagged_csv": imp.price_flagged_csv_gridfs_id is not None,
     }
 
 
@@ -1032,6 +1121,48 @@ async def admin_download_unmatched_csv(
         media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="unmatched-{imp.filename}"'
+        },
+    )
+
+
+@router.get("/admin/whatsapp/imports/{import_id}/price-flagged-csv")
+async def admin_download_price_flagged_csv(
+    import_id: str,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Download the rows held back by the price sanity check (Admin only).
+
+    Each row carries a ``Preis-Flag`` column explaining why it was not
+    published, so it can be corrected and re-imported on its own.
+    """
+    from fastapi.responses import Response
+
+    imp = await WhatsAppImport.get(PydanticObjectId(import_id))
+    if not imp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Import not found"
+        )
+
+    if not imp.price_flagged_csv_gridfs_id:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after import."
+        )
+
+    try:
+        content = await _whatsapp_gridfs_get(imp.price_flagged_csv_gridfs_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="File expired or not available. Files are available for 30 minutes after import."
+        )
+
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="price-flagged-{imp.filename}"'
         },
     )
 

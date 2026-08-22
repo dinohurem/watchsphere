@@ -18,6 +18,8 @@ interface WhatsAppImport {
   unmatched_rows: number
   skipped_duplicates: number
   has_unmatched_csv: boolean
+  price_flagged_rows: number
+  has_price_flagged_csv: boolean
 }
 
 interface ExtractedListing {
@@ -147,6 +149,23 @@ export function AdminWhatsAppImport() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to download unmatched CSV:', error)
+    }
+  }
+
+  const handleDownloadPriceFlagged = async (importId: string, filename: string) => {
+    try {
+      const response = await api.get(`/whatsapp/admin/whatsapp/imports/${importId}/price-flagged-csv`, {
+        responseType: 'blob',
+      })
+      const blob = new Blob([response.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `price-flagged-${filename}`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download price-flagged CSV:', error)
     }
   }
 
@@ -319,7 +338,33 @@ export function AdminWhatsAppImport() {
                     <p className="text-lg font-bold text-gray-500">{importResult.import.skipped_duplicates}</p>
                     <p className="text-xs text-gray-500">Skipped Dupes</p>
                   </div>
+                  <div className={`text-center p-2 rounded ${importResult.import.price_flagged_rows > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
+                    <p className={`text-lg font-bold ${importResult.import.price_flagged_rows > 0 ? 'text-red-700' : 'text-gray-900'}`}>
+                      {importResult.import.price_flagged_rows}
+                    </p>
+                    <p className="text-xs text-gray-500">Price Held Back</p>
+                  </div>
                 </div>
+
+                {importResult.import.price_flagged_rows > 0 && (
+                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-800 mb-2">
+                      <strong>{importResult.import.price_flagged_rows} row{importResult.import.price_flagged_rows !== 1 ? 's' : ''}</strong> were
+                      not published: the price does not line up with the other listings for the same watch,
+                      which usually means the currency or the amount was misread. Each row in the CSV carries
+                      a <code>Preis-Flag</code> column explaining why. Correct them and reimport just that file.
+                    </p>
+                    {importResult.import.has_price_flagged_csv && (
+                      <button
+                        onClick={() => handleDownloadPriceFlagged(importResult.import.id, importResult.import.filename)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-800 bg-red-100 border border-red-300 rounded-lg hover:bg-red-200 transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download Held-Back Rows CSV
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {importResult.import.unmatched_rows > 0 && (
                   <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
@@ -452,6 +497,11 @@ export function AdminWhatsAppImport() {
                               <span>{imp.total_messages} rows processed</span>
                             )}
                           </p>
+                          {imp.price_flagged_rows > 0 && (
+                            <p className="text-sm text-red-600">
+                              {imp.price_flagged_rows} held back on price
+                            </p>
+                          )}
                         </>
                       ) : (
                         <>
@@ -473,6 +523,15 @@ export function AdminWhatsAppImport() {
                         onClick={() => handleDownloadUnmatched(imp.id, imp.filename)}
                         className="p-2 hover:bg-amber-100 rounded-lg text-amber-600"
                         title="Download unmatched rows CSV"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    )}
+                    {imp.has_price_flagged_csv && (
+                      <button
+                        onClick={() => handleDownloadPriceFlagged(imp.id, imp.filename)}
+                        className="p-2 hover:bg-red-100 rounded-lg text-red-600"
+                        title="Download rows held back by the price check"
                       >
                         <Download className="w-4 h-4" />
                       </button>
