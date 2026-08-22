@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { useTranslation } from 'react-i18next';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -45,20 +45,6 @@ function SettingsIcon() {
   );
 }
 
-// Edit Icon (Pencil)
-function EditIcon() {
-  return (
-    <Svg width={sp(13)} height={sp(13)} viewBox="0 0 13 13" fill="none">
-      <Path
-        d="M9.20833 1.08337C9.36903 0.922673 9.56043 0.795646 9.77124 0.709413C9.98205 0.62318 10.2079 0.579254 10.4358 0.579986C10.6637 0.580718 10.8892 0.62609 11.0994 0.713687C11.3097 0.801283 11.5003 0.929554 11.66 1.09129C11.8197 1.25303 11.9455 1.44488 12.0303 1.65584C12.1152 1.8668 12.158 2.09245 12.1561 2.32034C12.1542 2.54822 12.1077 2.77309 12.0193 2.98257C11.931 3.19205 11.8019 3.38169 11.6396 3.54046L4.0625 11.1175L0.8125 11.9167L1.61167 8.66671L9.20833 1.08337Z"
-        stroke="#FFFFFF"
-        strokeWidth={1.08333}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 // Trend Up Icon
 function TrendUpIcon() {
@@ -238,6 +224,11 @@ function RatingStarIcon() {
 export default function ProfileScreen() {
   const { t } = useTranslation();
   const { v2Enabled } = useV2();
+  // Home's watchlist "View all" routes here with section=watchlist. In that
+  // context the screen acts as a watchlist view, so the identity header
+  // (avatar, name, rating) is hidden.
+  const { section } = useLocalSearchParams<{ section?: string }>();
+  const showProfileHeader = section !== 'watchlist';
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
   const [favoriteWatches, setFavoriteWatches] = useState<FavoriteWatch[]>([]);
@@ -562,49 +553,44 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Profile Section */}
-        <View style={styles.profileSection}>
-          {/* Avatar with Edit Button */}
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              {profileImageUrl ? (
-                <Image
-                  source={{ uri: profileImageUrl }}
-                  style={styles.avatarImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <User size={sp(40)} color="rgba(33, 33, 33, 0.4)" />
-              )}
+        {/* Profile Section - hidden when arriving as a watchlist view */}
+        {showProfileHeader && (
+          <View style={styles.profileSection}>
+            {/* Avatar - display only; name and photo are not user-editable */}
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatar}>
+                {profileImageUrl ? (
+                  <Image
+                    source={{ uri: profileImageUrl }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <User size={sp(40)} color="rgba(33, 33, 33, 0.4)" />
+                )}
+              </View>
             </View>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => router.push('/profile-settings' as any)}
-              activeOpacity={0.8}
-            >
-              <EditIcon />
-            </TouchableOpacity>
-          </View>
 
-          {/* User Name */}
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>{user?.name || 'Fabian Wirtz'}</Text>
-            {/* Rating - Clickable to go to user profile */}
-            <TouchableOpacity
-              style={styles.ratingRow}
-              onPress={() => {
-                if (user?.id) {
-                  router.push(`/user/${user.id}` as any);
-                }
-              }}
-              activeOpacity={0.7}
-            >
-              <RatingStarIcon />
-              <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
-              <Text style={styles.reviewCountText}>({reviewCount} {t('common.reviews')})</Text>
-            </TouchableOpacity>
+            {/* User Name */}
+            <View style={styles.userInfo}>
+              <Text style={styles.userName}>{user?.name || 'Fabian Wirtz'}</Text>
+              {/* Rating - Clickable to go to user profile */}
+              <TouchableOpacity
+                style={styles.ratingRow}
+                onPress={() => {
+                  if (user?.id) {
+                    router.push(`/user/${user.id}` as any);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <RatingStarIcon />
+                <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
+                <Text style={styles.reviewCountText}>({reviewCount} {t('common.reviews')})</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Watchlist Section - shows all watchlisted watches (visible regardless of v2) */}
         <View style={styles.favoritesSection}>
@@ -760,19 +746,6 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: '100%',
     height: '100%',
-  },
-  editButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: sp(26),
-    height: sp(26),
-    borderRadius: sp(13),
-    backgroundColor: '#1D1D1F',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
   },
   userInfo: {
     alignItems: 'center',
