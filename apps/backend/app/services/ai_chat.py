@@ -576,6 +576,9 @@ def _token_variants(token: str) -> List[str]:
     return variants
 
 
+_CATALOG_MATCH_LIMIT = 40
+
+
 async def _catalog_matches(tokens: List[str]) -> List[Watch]:
     """Catalog entries whose reference / WS code / OEM ref / alias matches."""
     if not tokens:
@@ -589,7 +592,9 @@ async def _catalog_matches(tokens: List[str]) -> List[Watch]:
             {"oem_references": {"$regex": pattern, "$options": "i"}},
             {"aliases": {"$regex": pattern, "$options": "i"}},
         ])
-    return await Watch.find({"$or": ors}).limit(12).to_list()
+    # Not 12: a reference family can hold more variants than that (228238 has
+    # 13), and a cut here hides a variant before its orders are ever queried.
+    return await Watch.find({"$or": ors}).limit(_CATALOG_MATCH_LIMIT).to_list()
 
 
 def _catalog_entry(w: Watch) -> dict:
@@ -609,8 +614,13 @@ def _catalog_entry(w: Watch) -> dict:
     }
 
 
-def _order_entry(o: Order) -> dict:
-    """One WTS listing or WTB search, exactly as WatchSphere holds it."""
+def _order_entry(o: Order, variants: Optional[Dict[str, Watch]] = None) -> dict:
+    """One WTS listing or WTB search, exactly as WatchSphere holds it.
+
+    `variants` maps ws_code -> catalog entry so each listing can carry its own
+    dial and model. Without them the only variant signal is a substring of the
+    ws_code, which is not enough to answer "the white one" reliably.
+    """
     month_year = None
     if o.watch_month and o.year:
         month_year = f"{o.watch_month:02d}/{o.year % 100:02d}"
@@ -619,9 +629,12 @@ def _order_entry(o: Order) -> dict:
     elif o.year_raw:
         month_year = o.year_raw
 
+    catalog = (variants or {}).get(o.ws_code or "")
     entry = {
         "ws_code": o.ws_code,
         "brand": o.brand,
+        "model": catalog.model if catalog else None,
+        "dial": catalog.dial if catalog else None,
         "reference": o.reference,
         "dealer_phone": o.whatsapp_phone or None,
         "dealer_name": o.user_name or None,
@@ -649,6 +662,62 @@ def _price_summary(entries: List[dict]) -> Optional[dict]:
     }
 
 
+# One reference can cover several catalog variants (126500LN Black vs White).
+# Cap per variant, never globally: a single price-sorted global cut silently
+# starves the pricier variant, which is usually the one being asked about.
+_PER_VARIANT_LIMIT = 30
+_TOTAL_LISTING_LIMIT = 90
+
+
+def _group_by_variant(
+    entries: List[dict], variants: Dict[str, Watch]
+) -> tuple[List[dict], Dict[str, dict]]:
+    """Split entries per ws_code, cheapest first, with per-variant totals.
+
+    Returns the capped flat list plus a per-variant summary. `total` is the true
+    count before capping, so the bot never understates availability.
+    """
+    buckets: Dict[str, List[dict]] = {}
+    for entry in entries:
+        buckets.setdefault(entry.get("ws_code") or "unknown", []).append(entry)
+
+    totals = {ws: len(b) for ws, b in buckets.items()}
+    capped: Dict[str, List[dict]] = {}
+    for ws_code, bucket in buckets.items():
+        bucket.sort(key=lambda e: e.get("price_eur_approx") or float("inf"))
+        capped[ws_code] = bucket[:_PER_VARIANT_LIMIT]
+
+    # Interleave variants round-robin up to the global cap. A global price sort
+    # here would re-introduce the starvation the per-variant cap just prevented:
+    # the dearest variant would be cut away wholesale.
+    flat: List[dict] = []
+    ordered = sorted(capped.values(), key=len, reverse=True)
+    for row in range(_PER_VARIANT_LIMIT):
+        if len(flat) >= _TOTAL_LISTING_LIMIT:
+            break
+        for bucket in ordered:
+            if row < len(bucket):
+                flat.append(bucket[row])
+    flat = flat[:_TOTAL_LISTING_LIMIT]
+
+    shown_counts: Dict[str, int] = {}
+    for entry in flat:
+        key = entry.get("ws_code") or "unknown"
+        shown_counts[key] = shown_counts.get(key, 0) + 1
+
+    summary: Dict[str, dict] = {}
+    for ws_code, bucket in buckets.items():
+        catalog = variants.get(ws_code)
+        summary[ws_code] = {
+            "dial": catalog.dial if catalog else None,
+            "model": catalog.model if catalog else None,
+            "total": totals[ws_code],
+            "shown": shown_counts.get(ws_code, 0),
+            "price_summary": _price_summary(bucket),
+        }
+    return flat, summary
+
+
 async def _orders_for(watches: List[Watch], tokens: List[str]) -> dict:
     """Active WTS listings and WTB searches for the watches in question."""
     ors: List[dict] = []
@@ -662,17 +731,33 @@ async def _orders_for(watches: List[Watch], tokens: List[str]) -> dict:
         ors.append({"reference": {"$regex": f"^{re.escape(token)}", "$options": "i"}})
         ors.append({"ws_code": {"$regex": f"^{re.escape(token)}", "$options": "i"}})
     if not ors:
-        return {"wts_listings": [], "wtb_searches": []}
+        return {
+            "wts_listings": [],
+            "wtb_searches": [],
+            "wts_by_variant": {},
+            "wtb_by_variant": {},
+        }
 
+    variants = {w.ws_code: w for w in watches if w.ws_code}
     orders = await Order.find({
         "status": OrderStatus.ACTIVE.value,
         "$or": ors,
-    }).limit(200).to_list()
+    }).limit(500).to_list()
 
-    wts = [_order_entry(o) for o in orders if o.order_type == OrderType.SELL]
-    wtb = [_order_entry(o) for o in orders if o.order_type == OrderType.BUY]
-    wts.sort(key=lambda e: e.get("price_eur_approx") or float("inf"))
-    return {"wts_listings": wts[:60], "wtb_searches": wtb[:60]}
+    wts, wts_by_variant = _group_by_variant(
+        [_order_entry(o, variants) for o in orders if o.order_type == OrderType.SELL],
+        variants,
+    )
+    wtb, wtb_by_variant = _group_by_variant(
+        [_order_entry(o, variants) for o in orders if o.order_type == OrderType.BUY],
+        variants,
+    )
+    return {
+        "wts_listings": wts,
+        "wtb_searches": wtb,
+        "wts_by_variant": wts_by_variant,
+        "wtb_by_variant": wtb_by_variant,
+    }
 
 
 async def build_watchsphere_context(user_message: str, history: List[Dict[str, str]]) -> str:
@@ -713,13 +798,15 @@ async def build_watchsphere_context(user_message: str, history: List[Dict[str, s
         "recognized_tokens": tokens,
         "catalog_matches": [_catalog_entry(w) for w in watches],
         "active_wts_listings": {
-            "total": len(wts),
+            "total": sum(v["total"] for v in orders["wts_by_variant"].values()),
+            "by_variant": orders["wts_by_variant"],
             "by_country": countries_selling,
             "price_summary": _price_summary(wts),
             "listings": wts,
         },
         "active_wtb_searches": {
-            "total": len(wtb),
+            "total": sum(v["total"] for v in orders["wtb_by_variant"].values()),
+            "by_variant": orders["wtb_by_variant"],
             "by_country": countries_buying,
             "target_price_summary": _price_summary(wtb),
             "searches": wtb,
@@ -767,7 +854,16 @@ anything unrelated — reply with EXACTLY this text and nothing else:
    For a location-specific request also ask: preferred year/date, condition, full set or
    watch only, local deal only or worldwide.
 
-2. Answering with data. Report what the network actually holds, e.g.
+2. Variants. One reference often covers several catalog variants that differ only
+   by dial (e.g. "126500LN Black" and "126500LN White"). When the user names a
+   variant, select on the `dial` field of each listing, or on `by_variant`, which
+   is already keyed by ws_code and carries `dial` plus the true `total`. Report
+   that variant's own total and price range, not the combined figure. Only say
+   nothing is available when the matching variant's `total` is 0 — never because
+   the listings were hard to tell apart. `shown` may be lower than `total` when
+   the list was capped; always quote `total`.
+
+3. Answering with data. Report what the network actually holds, e.g.
    "Based on current WatchSphere data, I can currently find 8 dealers searching for this
    exact configuration." Give target prices in the dealer's own currency with the EUR
    equivalent in brackets when the data provides `price_eur_approx`, and give listing
@@ -775,7 +871,7 @@ anything unrelated — reply with EXACTLY this text and nothing else:
    Then offer the next step: "Would you like me to provide you with the contact details
    of some dealers currently searching for this watch?"
 
-3. Contact details. When the user says yes, list up to 3 entries in this shape:
+4. Contact details. When the user says yes, list up to 3 entries in this shape:
 
    Dealer 1 🇭🇰
    +852 6103 6278
@@ -790,10 +886,10 @@ anything unrelated — reply with EXACTLY this text and nothing else:
    Use the country flag emoji matching the dealer's country. When a WTB dealer has no
    target, write "No target price specified." Close with an offer to show more options.
 
-4. Cheapest / filtered requests. Answer from the data: cheapest listing, Europe only,
+5. Cheapest / filtered requests. Answer from the data: cheapest listing, Europe only,
    Hong Kong only, margin scheme / wire, unworn 2026 only, and so on.
 
-5. Remarks filter with no hit. If listings exist but none carry the requested remarks
+6. Remarks filter with no hit. If listings exist but none carry the requested remarks
    (e.g. "Margin Scheme", "Wire"), say so explicitly, note that many dealers do not
    always include payment or invoice conditions in their listings so the user can still
    contact them directly, then show the available listings without those remarks.
