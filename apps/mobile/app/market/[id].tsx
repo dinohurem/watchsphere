@@ -408,6 +408,21 @@ function PriceChart({ data, width, height, selectedIndex, onSelectIndex }: Price
 // Time period selector
 const TIME_PERIODS = ['1d', '7d', '1m', '3m', '1y'];
 
+// Remarks arrive from the parser joined by more than one delimiter: keyword
+// remarks are comma-joined ("only watch, USDT"), location remarks are appended
+// after a semicolon, and an import price flag is appended after a pipe. A
+// location remark carries its own commas ("Need in HK, US, AE"), so it is kept
+// whole instead of being split on them.
+const LOCATION_REMARK_RE = /^(?:watch|need)\s+in\b/i;
+
+function splitRemarks(raw: string): string[] {
+  return raw
+    .split(/\s*[;|]\s*/)
+    .flatMap((part) => (LOCATION_REMARK_RE.test(part.trim()) ? [part] : part.split(/\s*,\s*/)))
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 interface WatchDetails {
   id: string;
   brand: string;
@@ -1633,7 +1648,7 @@ export default function WatchDetailsScreen() {
                   {hasRemarks && (
                     <View style={[styles.tableCell, { flex: 0.8, alignItems: 'center' }]}>
                       {order.remarks ? (() => {
-                        const parts = order.remarks.split(/\s*;\s*/).filter(Boolean);
+                        const parts = splitRemarks(order.remarks);
                         const isMulti = parts.length > 1;
                         let seeAllRef: any = null;
                         return (
@@ -2563,7 +2578,7 @@ export default function WatchDetailsScreen() {
             const tailLeft = measured
               ? Math.max(sp(14), Math.min(w - sp(14) - tailSize * 2, anchorCenterX - left - tailSize))
               : 0;
-            const parts = remarksBubble.text.split(/\s*;\s*/).filter(Boolean);
+            const parts = splitRemarks(remarksBubble.text);
             return (
               <View
                 pointerEvents="box-none"
