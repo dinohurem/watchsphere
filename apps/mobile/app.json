@@ -15,7 +15,7 @@
       "**/*"
     ],
     "ios": {
-      "buildNumber": "36",
+      "buildNumber": "38",
       "supportsTablet": true,
       "bundleIdentifier": "com.watchsphere.watchsphere",
       "infoPlist": {
@@ -29,7 +29,7 @@
       "appleTeamId": "7QQ957QVBN"
     },
     "android": {
-      "versionCode": 35,
+      "versionCode": 37,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1A1A1A"
