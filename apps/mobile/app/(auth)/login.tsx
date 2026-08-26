@@ -34,15 +34,16 @@ function BackArrow() {
 }
 
 export default function LoginScreen() {
-  // Two login modes: the existing email + password, and passwordless
-  // WhatsApp where a code is sent to the dealer's number.
-  const [mode, setMode] = useState<'password' | 'whatsapp'>('password');
+  // Two login modes: email + password, and passwordless. The WhatsApp number
+  // identifies the account; the code itself is emailed, so the number is an
+  // identifier, never a destination.
+  const [mode, setMode] = useState<'password' | 'code'>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [whatsappPhone, setWhatsappPhone] = useState('');
   const [whatsappCode, setWhatsappCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
-  // Matches WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS on the server.
+  // Matches EMAIL_OTP_RESEND_COOLDOWN_SECONDS on the server.
   const RESEND_COOLDOWN_SECONDS = 60;
   const [resendTimer, setResendTimer] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -118,12 +119,12 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      await api.post('/auth/whatsapp/request-code', { whatsapp_phone: whatsappPhone });
+      await api.post('/auth/passwordless/request-code', { whatsapp_phone: whatsappPhone });
       setCodeSent(true);
       setResendTimer(RESEND_COOLDOWN_SECONDS);
-      // The response is deliberately identical for unknown numbers, so this
-      // message must not imply the account exists.
-      Alert.alert('Check WhatsApp', 'If that number has an account, we have sent it a code.');
+      // The response is deliberately identical for unknown numbers and never
+      // names the address, so this message must leak neither.
+      Alert.alert('Check your email', 'If that number has an account, we have emailed it a code.');
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Could not send the code');
     } finally {
@@ -138,7 +139,7 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      const response = await api.post('/auth/whatsapp/verify-code', {
+      const response = await api.post('/auth/passwordless/verify-code', {
         whatsapp_phone: whatsappPhone,
         code: whatsappCode,
       });
@@ -171,7 +172,7 @@ export default function LoginScreen() {
       ? 'Sign in'
       : codeSent
         ? 'Verify & sign in'
-        : 'Send code on WhatsApp';
+        : 'Email me a code';
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -198,7 +199,7 @@ export default function LoginScreen() {
           </Text>
 
           <View style={styles.form}>
-            {/* Mode switch: password vs passwordless WhatsApp */}
+            {/* Mode switch: password vs emailed sign-in code */}
             <View style={styles.modeToggle}>
               <TouchableOpacity
                 style={[styles.modeOption, mode === 'password' && styles.modeOptionActive]}
@@ -209,16 +210,16 @@ export default function LoginScreen() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modeOption, mode === 'whatsapp' && styles.modeOptionActive]}
-                onPress={() => setMode('whatsapp')}
+                style={[styles.modeOption, mode === 'code' && styles.modeOptionActive]}
+                onPress={() => setMode('code')}
               >
-                <Text style={[styles.modeText, mode === 'whatsapp' && styles.modeTextActive]}>
-                  WhatsApp code
+                <Text style={[styles.modeText, mode === 'code' && styles.modeTextActive]}>
+                  Sign-in code
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {mode === 'whatsapp' ? (
+            {mode === 'code' ? (
               <>
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>

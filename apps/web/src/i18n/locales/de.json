@@ -60,7 +60,19 @@
       "failed": "Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
       "pendingApproval": "Ihr Konto wartet auf Genehmigung. Bitte warten Sie, bis ein Administrator Ihr Konto freigegeben hat.",
       "googleFailed": "Google-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
-      "appleFailed": "Apple-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut."
+      "appleFailed": "Apple-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+      "modePassword": "E-Mail & Passwort",
+      "modeCode": "Anmeldecode",
+      "whatsappLabel": "WhatsApp-Nummer",
+      "whatsappHint": "Die Nummer Ihres Kontos. Den Anmeldecode senden wir per E-Mail.",
+      "codeLabel": "Anmeldecode",
+      "sendCode": "Code per E-Mail senden",
+      "verifyAndSignIn": "Bestätigen & anmelden",
+      "codeSentNotice": "Falls für diese Nummer ein Konto besteht, haben wir einen Code per E-Mail gesendet.",
+      "codeSendFailed": "Der Code konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+      "resendCode": "Code erneut senden",
+      "resendIn": "Erneut senden in {{seconds}}s",
+      "changeNumber": "Andere Nummer verwenden"
     },
     "register": {
       "title": "Registrieren",
@@ -77,7 +89,8 @@
       "successMessage": "Ihr Konto wurde erfolgreich erstellt. Bitte warten Sie, bis ein Administrator Ihr Konto freigegeben hat.",
       "goToLogin": "Zur Anmeldung",
       "whatsappLabel": "WhatsApp-Nummer",
-      "whatsappHint": "Mit Landesvorwahl angeben. Ihr Bestätigungscode kommt per WhatsApp."
+      "whatsappHint": "Mit Landesvorwahl angeben. So erreichen Sie andere Händler.",
+      "emailHint": "Ihr Bestätigungscode wird hierhin gesendet."
     },
     "forgotPassword": {
       "title": "Passwort vergessen?",

@@ -31,24 +31,13 @@ class Settings(BaseSettings):
     # Override via env if a newer vision-capable model should be used.
     OPENAI_VISION_MODEL: str = "gpt-4o"
 
-    # WhatsApp OTP delivery
-    # Driver selects the outbound transport: "log" (dev - code is logged, never
-    # sent), "whapi" or "twilio". Auth must never hard-depend on an unofficial
-    # paired session, so the driver is swappable by configuration.
-    WHATSAPP_OTP_DRIVER: str = "log"
-    WHATSAPP_OTP_EXPIRY_MINUTES: int = 10
-    # Minimum gap between code requests for the same number.
-    WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS: int = 60
-    # whapi.cloud
-    WHAPI_BASE_URL: str = "https://gate.whapi.cloud"
-    WHAPI_TOKEN: str = ""
-    # Twilio WhatsApp Business (driver "twilio")
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_WHATSAPP_FROM: str = ""
-    # Twilio Verify (driver "twilio_verify"): Twilio generates, delivers and
-    # checks the code, so no local VerificationCode record is created.
-    TWILIO_VERIFY_SERVICE_SID: str = ""
+    # One-time codes. Email is the only delivery channel - the WhatsApp number
+    # identifies the account but never receives anything, so Postmark
+    # (POSTMARK_API_KEY below) is the single dependency for signup and
+    # passwordless login.
+    EMAIL_OTP_EXPIRY_MINUTES: int = 10
+    # Minimum gap between code requests for the same account.
+    EMAIL_OTP_RESEND_COOLDOWN_SECONDS: int = 60
 
     # Monri Payments
     MONRI_MERCHANT_KEY: str = "key-944bc24cd123fa7403da6278825114f1"

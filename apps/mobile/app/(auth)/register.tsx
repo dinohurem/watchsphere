@@ -60,7 +60,7 @@ export default function RegisterScreen() {
   const [repeatPassword, setRepeatPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [loading, setLoading] = useState(false);
-  // Matches WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS on the server.
+  // Matches EMAIL_OTP_RESEND_COOLDOWN_SECONDS on the server.
   const RESEND_COOLDOWN_SECONDS = 60;
   const [resendTimer, setResendTimer] = useState(0);
 
@@ -182,7 +182,7 @@ export default function RegisterScreen() {
     try {
       // Verify the WhatsApp code. This both confirms the number and returns
       // session tokens, so no follow-up password login is needed.
-      const verifyResponse = await api.post('/auth/whatsapp/verify-code', {
+      const verifyResponse = await api.post('/auth/passwordless/verify-code', {
         whatsapp_phone: whatsappPhone,
         code: verificationCode,
       });
@@ -213,7 +213,7 @@ export default function RegisterScreen() {
     if (resendTimer > 0) return;
 
     try {
-      await api.post('/auth/whatsapp/request-code', { whatsapp_phone: whatsappPhone });
+      await api.post('/auth/passwordless/request-code', { whatsapp_phone: whatsappPhone });
       setResendTimer(RESEND_COOLDOWN_SECONDS);
       Alert.alert('Success', 'Verification code resent!');
     } catch (error: any) {
@@ -261,7 +261,7 @@ export default function RegisterScreen() {
             onBlur={() => setWhatsappFocused(false)}
           />
           <Text style={styles.fieldHint}>
-            Include your country code. Your verification code arrives on WhatsApp.
+            Include your country code. This is how dealers reach you.
           </Text>
         </View>
 
@@ -385,10 +385,10 @@ export default function RegisterScreen() {
 
   const renderStep2 = () => (
     <View style={styles.stepContent}>
-      <Text style={styles.title}>Verify your WhatsApp</Text>
+      <Text style={styles.title}>Verify your email</Text>
       <Text style={styles.subtitle}>
-        Enter the 6 digit code we sent on WhatsApp to{'\n'}
-        <Text style={styles.emailHighlight}>{whatsappPhone}</Text>
+        Enter the 6 digit code we sent to{'\n'}
+        <Text style={styles.emailHighlight}>{email}</Text>
       </Text>
 
       <View style={styles.codeContainer}>
