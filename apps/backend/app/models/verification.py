@@ -9,8 +9,9 @@ import string
 class VerificationCode(Document):
     """Verification codes for signup and passwordless login.
 
-    A code is addressed to either an email or a WhatsApp phone number, so both
-    fields are optional and exactly one is set per document.
+    Codes are addressed to an email address - the only delivery channel. The
+    phone column is retained, unwritten, so rows created before codes moved to
+    email still parse.
     """
     email: Optional[EmailStr] = Field(default=None, index=True)
     phone: Optional[str] = Field(default=None, index=True)
@@ -56,34 +57,13 @@ class VerificationCode(Document):
         return verification
 
     @classmethod
-    async def create_for_phone(
-        cls,
-        phone: str,
-        code: Optional[str] = None,
-        expires_minutes: int = 10
-    ) -> "VerificationCode":
-        """Create a code for a WhatsApp number, invalidating any existing ones."""
-        await cls.find(
-            cls.phone == phone,
-            cls.used == False
-        ).update({"$set": {"used": True}})
-
-        verification = cls(
-            phone=phone,
-            code=code or cls.generate_code(),
-            expires_at=datetime.utcnow() + timedelta(minutes=expires_minutes),
-        )
-        await verification.insert()
-        return verification
-
-    @classmethod
-    async def seconds_since_last_for_phone(cls, phone: str) -> Optional[int]:
-        """Whole seconds since the most recent code for this number, or None.
+    async def seconds_since_last_for_email(cls, email: str) -> Optional[int]:
+        """Whole seconds since the most recent code for this address, or None.
 
         Used to throttle resends. Looks at every code, used or not, so burning
         a code cannot be used to bypass the cooldown.
         """
-        last = await cls.find(cls.phone == phone).sort("-created_at").first_or_none()
+        last = await cls.find(cls.email == email).sort("-created_at").first_or_none()
         if not last:
             return None
         return int((datetime.utcnow() - last.created_at).total_seconds())
