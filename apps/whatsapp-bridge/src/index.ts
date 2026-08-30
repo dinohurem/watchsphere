@@ -97,13 +97,14 @@ async function runLive(config: BridgeConfig, usePairingCode: boolean, phoneNumbe
   }
 
   if (config.groupAllowlist.length === 0) {
-    log('WARN BRIDGE_GROUPS is empty — no group is in scope, nothing will be captured.');
+    log('WARN BRIDGE_GROUPS is empty — no chat is in scope, nothing will be captured.');
   }
 
   let currentState: BridgeState = 'starting';
   let phone: string | null = null;
   let lastError: string | null = null;
   let pairingQr: string | null = null;
+  let backlogDelivered = false;
 
   // Hoisted so onState can report a state change immediately rather than
   // waiting for the next heartbeat tick — a pairing QR rotates every ~20s and
@@ -137,7 +138,52 @@ async function runLive(config: BridgeConfig, usePairingCode: boolean, phoneNumbe
       void sendHeartbeat();
     },
     onLog: log,
+    onBacklogComplete: () => {
+      backlogDelivered = true;
+    },
   });
+
+  // A scheduled run exits once WhatsApp says the backlog is delivered — or
+  // after a timeout, because that signal is not contractual. Railway skips the
+  // next cron firing if the previous run is still alive, so hanging here would
+  // silently stop the daily ingest rather than fail it.
+  if (config.runOnce) {
+    let backlogSettled = false;
+    const finishOnce = async (reason: string) => {
+      if (backlogSettled) return;
+      backlogSettled = true;
+      log(`Run-once complete (${reason}) — flushing and exiting`);
+      clearInterval(heartbeatTimer);
+      clearInterval(backlogPoll);
+      flusher.stop();
+      const result = await flusher.flush();
+      await bridge.stop();
+      currentState = 'disconnected';
+      await sendHeartbeat();
+      log(`Delivered ${result.sent} message(s), ${result.inserted} new`);
+      // Anything still queued was not accepted. It survives on disk and the
+      // next run retries it, but the exit code has to say so or a failing
+      // ingest looks like a clean run in Railway's history.
+      const undelivered = outbox.size();
+      if (undelivered > 0) {
+        log(`WARN ${undelivered} message(s) left in the outbox for the next run`);
+        process.exitCode = 1;
+      }
+      process.exit(process.exitCode ?? 0);
+    };
+
+    const backlogPoll = setInterval(() => {
+      // Give the flusher one interval to drain after the backlog lands.
+      if (backlogDelivered) void finishOnce('backlog delivered');
+    }, 2_000);
+    backlogPoll.unref?.();
+
+    const deadline = setTimeout(
+      () => void finishOnce(`timed out after ${Math.round(config.onceTimeoutMs / 1000)}s`),
+      config.onceTimeoutMs
+    );
+    deadline.unref?.();
+  }
 
   flusher.start();
   const heartbeatTimer = setInterval(() => void sendHeartbeat(), config.heartbeatIntervalMs);

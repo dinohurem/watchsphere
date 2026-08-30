@@ -18,15 +18,64 @@ export interface BridgeConfig {
   /** JSONL file buffering captures that have not been accepted yet. */
   outboxPath: string;
   /**
-   * Group names or JIDs to capture from. Case-insensitive substring match on
-   * the group subject, or exact match on the JID. Empty captures nothing.
+   * Chat names or JIDs to capture from. Case-insensitive substring match on
+   * the chat subject, or exact match on the JID. Empty captures nothing.
    */
   groupAllowlist: string[];
+  /**
+   * Which chat kinds are eligible at all, before the allowlist is consulted.
+   * Groups only by default: a one-to-one conversation is private in a way a
+   * dealer broadcast group is not, so widening this is a deliberate act.
+   */
+  chatKinds: ChatKind[];
+  /**
+   * Run once and exit (for a scheduled daily run) instead of staying
+   * connected. The session is reused, so a run receives everything sent since
+   * the previous one.
+   */
+  runOnce: boolean;
+  /** How long a --once run listens for backfill before giving up. */
+  onceTimeoutMs: number;
   flushIntervalMs: number;
   maxBatchSize: number;
   heartbeatIntervalMs: number;
   /** Capture messages sent from the bridge's own number. Off by default. */
   captureOwnMessages: boolean;
+}
+
+/** The chat kinds a WhatsApp JID can denote. */
+export type ChatKind = 'group' | 'dm' | 'newsletter' | 'broadcast';
+
+export function classifyJid(jid: string): ChatKind | 'unsupported' {
+  if (jid.endsWith('@g.us')) return 'group';
+  if (jid.endsWith('@newsletter')) return 'newsletter';
+  // status@broadcast is the "stories" feed, never a dealer listing.
+  if (jid === 'status@broadcast') return 'unsupported';
+  if (jid.endsWith('@broadcast')) return 'broadcast';
+  if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) return 'dm';
+  return 'unsupported';
+}
+
+const ALL_CHAT_KINDS: ChatKind[] = ['group', 'dm', 'newsletter', 'broadcast'];
+
+function parseChatKinds(raw: string | undefined): ChatKind[] {
+  const value = (raw ?? '').trim();
+  if (!value) return ['group'];
+  if (value.toLowerCase() === 'all') return [...ALL_CHAT_KINDS];
+
+  const kinds = value
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const kind of kinds) {
+    if (!ALL_CHAT_KINDS.includes(kind as ChatKind)) {
+      throw new ConfigError(
+        `BRIDGE_CHAT_KINDS: unknown kind "${kind}" — use ${ALL_CHAT_KINDS.join(', ')} or "all"`
+      );
+    }
+  }
+  return kinds as ChatKind[];
 }
 
 export class ConfigError extends Error {}
@@ -64,6 +113,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BridgeConfig {
     authDir: (env.BRIDGE_AUTH_DIR ?? './auth').trim(),
     outboxPath: (env.BRIDGE_OUTBOX_PATH ?? './data/outbox.jsonl').trim(),
     groupAllowlist: parseAllowlist(env.BRIDGE_GROUPS),
+    chatKinds: parseChatKinds(env.BRIDGE_CHAT_KINDS),
+    runOnce: (env.BRIDGE_RUN_ONCE ?? '').trim() === 'true',
+    onceTimeoutMs: integer(env, 'BRIDGE_ONCE_TIMEOUT_MS', 180_000),
     flushIntervalMs: integer(env, 'BRIDGE_FLUSH_INTERVAL_MS', 10_000),
     maxBatchSize: integer(env, 'BRIDGE_MAX_BATCH_SIZE', 500),
     heartbeatIntervalMs: integer(env, 'BRIDGE_HEARTBEAT_INTERVAL_MS', 60_000),
@@ -78,10 +130,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BridgeConfig {
 }
 
 /**
- * Decide whether a group is in scope.
+ * Decide whether a chat is in scope.
  *
  * Matching on the subject is what makes this usable — an operator knows the
- * group by name, not by its numeric JID.
+ * chat by name, not by its numeric JID. Still fail-closed on an empty list.
  */
 export function isGroupAllowed(
   allowlist: string[],
