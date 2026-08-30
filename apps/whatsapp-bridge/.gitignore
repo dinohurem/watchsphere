@@ -9,3 +9,7 @@ data/
 dist/
 node_modules/
 .env
+
+# Throwaway spike artefacts: a paired session and an observation log
+spike-auth/
+spike-observations.jsonl
