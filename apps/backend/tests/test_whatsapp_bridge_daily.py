@@ -110,21 +110,37 @@ async def test_empty_window_is_a_clean_no_op(db, app_client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_only_captures_inside_the_window_are_considered(db, app_client, monkeypatch):
+async def test_window_is_on_ingestion_so_a_missed_run_catches_up(db, app_client, monkeypatch):
+    """A skipped run must not strand the messages it would have covered.
+
+    Captures only reach us when the bridge connects. If the cron is missed for a
+    day, the backlog arrives late carrying old send times — windowing on those
+    would step straight over it and no run would ever pick it up.
+    """
     _stub_admin(monkeypatch)
     from app.api.v1.endpoints import whatsapp_bridge
+    from app.models.whatsapp_bridge import BridgeMessage
 
     seen: dict = {}
 
-    async def fake_generation(*, txt_content, mode, ref_month, ref_year, group_name, **kw):
+    async def fake_generation(*, txt_content, **kw):
         seen["txt"] = txt_content
         return {"matched_count": 0, "needs_review_count": 0,
                 "not_in_database_count": 0, "matched_csv": ""}
 
     monkeypatch.setattr(whatsapp_bridge, "process_generation", fake_generation)
 
-    await _capture("111@g.us", "HK Dealers", "INSIDE the window", minutes_ago=60)
-    await _capture("111@g.us", "HK Dealers", "OUTSIDE the window", minutes_ago=60 * 40)
+    now = datetime.utcnow()
+    # Sent three days ago, but only reached us minutes ago — a late backlog.
+    await BridgeMessage(
+        message_id="late-1",
+        group_jid="111@g.us",
+        group_name="HK Dealers",
+        sender="4915112345678@s.whatsapp.net",
+        content="LATE arrival from a missed run",
+        timestamp=now - timedelta(days=3),
+        ingested_at=now - timedelta(minutes=5),
+    ).insert()
 
     async with await _client(app_client) as client:
         response = await client.post(
@@ -132,8 +148,43 @@ async def test_only_captures_inside_the_window_are_considered(db, app_client, mo
         )
 
     assert response.status_code == 200
+    assert "LATE arrival from a missed run" in seen["txt"]
+
+
+@pytest.mark.asyncio
+async def test_captures_ingested_before_the_window_are_excluded(db, app_client, monkeypatch):
+    _stub_admin(monkeypatch)
+    from app.api.v1.endpoints import whatsapp_bridge
+    from app.models.whatsapp_bridge import BridgeMessage
+
+    seen: dict = {}
+
+    async def fake_generation(*, txt_content, **kw):
+        seen["txt"] = txt_content
+        return {"matched_count": 0, "needs_review_count": 0,
+                "not_in_database_count": 0, "matched_csv": ""}
+
+    monkeypatch.setattr(whatsapp_bridge, "process_generation", fake_generation)
+
+    now = datetime.utcnow()
+    await BridgeMessage(
+        message_id="in-1", group_jid="111@g.us", group_name="HK Dealers",
+        sender="4915112345678@s.whatsapp.net", content="INSIDE the window",
+        timestamp=now - timedelta(hours=1), ingested_at=now - timedelta(hours=1),
+    ).insert()
+    await BridgeMessage(
+        message_id="out-1", group_jid="111@g.us", group_name="HK Dealers",
+        sender="4915112345678@s.whatsapp.net", content="ALREADY ingested last run",
+        timestamp=now - timedelta(hours=40), ingested_at=now - timedelta(hours=40),
+    ).insert()
+
+    async with await _client(app_client) as client:
+        response = await client.post(
+            "/whatsapp-bridge/daily-ingest", json={"hours": 24}, headers=TOKEN_HEADER
+        )
+
     assert "INSIDE the window" in seen["txt"]
-    assert "OUTSIDE the window" not in seen["txt"]
+    assert "ALREADY ingested last run" not in seen["txt"]
     assert response.json()["groups"][0]["messages"] == 1
 
 

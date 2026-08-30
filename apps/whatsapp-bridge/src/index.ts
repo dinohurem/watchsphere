@@ -105,6 +105,7 @@ async function runLive(config: BridgeConfig, usePairingCode: boolean, phoneNumbe
   let lastError: string | null = null;
   let pairingQr: string | null = null;
   let backlogDelivered = false;
+  let lastCaptureAt = Date.now();
 
   // Hoisted so onState can report a state change immediately rather than
   // waiting for the next heartbeat tick — a pairing QR rotates every ~20s and
@@ -125,6 +126,7 @@ async function runLive(config: BridgeConfig, usePairingCode: boolean, phoneNumbe
 
   const bridge = new WhatsAppBridge(config, {
     onMessages: async (messages) => {
+      lastCaptureAt = Date.now();
       const added = await outbox.add(messages);
       if (added > 0) log(`Captured ${added} message(s)`);
     },
@@ -172,9 +174,18 @@ async function runLive(config: BridgeConfig, usePairingCode: boolean, phoneNumbe
       process.exit(process.exitCode ?? 0);
     };
 
+    // receivedPendingNotifications marks the end of the offline *notification*
+    // queue, not the end of history sync — and with syncFullHistory the bulk of
+    // a scheduled run arrives through the latter, asynchronously, often after
+    // that flag flips. Exiting on the signal alone truncates the sync, and
+    // WhatsApp will not re-deliver what was missed. So also require a quiet
+    // period with no new message.
     const backlogPoll = setInterval(() => {
-      // Give the flusher one interval to drain after the backlog lands.
-      if (backlogDelivered) void finishOnce('backlog delivered');
+      if (!backlogDelivered) return;
+      const quietFor = Date.now() - lastCaptureAt;
+      if (quietFor >= config.onceSettleMs) {
+        void finishOnce(`backlog delivered, quiet for ${Math.round(quietFor / 1000)}s`);
+      }
     }, 2_000);
     backlogPoll.unref?.();
 

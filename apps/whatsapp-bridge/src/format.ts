@@ -146,6 +146,25 @@ export function isGroupJid(jid: string | null | undefined): boolean {
   return typeof jid === 'string' && jid.endsWith('@g.us');
 }
 
+/**
+ * A JID this bridge is willing to convert.
+ *
+ * Scope is decided upstream by BRIDGE_CHAT_KINDS plus the allowlist — by the
+ * time a message reaches conversion the decision is already made. This only
+ * rejects what is never a conversation: the stories feed and malformed JIDs.
+ */
+export function isCapturableJid(jid: string | null | undefined): boolean {
+  if (typeof jid !== 'string' || jid.length === 0) return false;
+  if (jid === 'status@broadcast') return false;
+  return (
+    jid.endsWith('@g.us') ||
+    jid.endsWith('@s.whatsapp.net') ||
+    jid.endsWith('@lid') ||
+    jid.endsWith('@newsletter') ||
+    jid.endsWith('@broadcast')
+  );
+}
+
 export interface ConvertOptions {
   groupName: string;
   captureOwnMessages?: boolean;
@@ -154,13 +173,14 @@ export interface ConvertOptions {
 /**
  * Convert one raw message, or null when it should not be captured.
  *
- * Dropped: non-group messages (the bridge never touches private chats),
- * system/stub messages, and anything with no text — a bare photo carries no
- * parseable listing, and an empty capture would only add noise to the export.
+ * Dropped: JIDs that are never a conversation, system/stub messages, and
+ * anything with no text — a bare photo carries no parseable listing, and an
+ * empty capture would only add noise to the export. Which *chats* are in scope
+ * is decided before this, by BRIDGE_CHAT_KINDS and the allowlist.
  */
 export function toCapturedMessage(raw: RawMessage, options: ConvertOptions): CapturedMessage | null {
   const groupJid = raw.key?.remoteJid ?? '';
-  if (!isGroupJid(groupJid)) return null;
+  if (!isCapturableJid(groupJid)) return null;
 
   const messageId = raw.key?.id ?? '';
   if (!messageId) return null;
@@ -177,7 +197,11 @@ export function toCapturedMessage(raw: RawMessage, options: ConvertOptions): Cap
   const { text, hasMedia, attachments } = extractContent(raw.message);
   if (!text.trim()) return null;
 
-  const { sender, senderPhone } = senderIdentity(raw.key?.participant, raw.pushName);
+  // In a group the author is key.participant; in a 1:1 chat there is no
+  // participant and the counterparty is remoteJid itself. Falling back keeps
+  // the phone number, which the pipeline uses to derive country and currency.
+  const authorJid = raw.key?.participant ?? (isGroupJid(groupJid) ? null : groupJid);
+  const { sender, senderPhone } = senderIdentity(authorJid, raw.pushName);
 
   return {
     message_id: messageId,

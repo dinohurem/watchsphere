@@ -168,9 +168,28 @@ describe('toCapturedMessage', () => {
     assert.equal(captured?.content, stockList);
   });
 
-  it('never captures private chats', () => {
+  // Scope used to be enforced here, by rejecting every non-group JID. It moved
+  // upstream to BRIDGE_CHAT_KINDS plus the allowlist, which default to groups
+  // only — see the chat kinds tests in config.test.ts. Keeping the old rule
+  // here would have made that feature dead code.
+  it('converts a private chat, because scope is decided before conversion', () => {
     const message = raw({ key: { remoteJid: '85265472648@s.whatsapp.net' } });
-    assert.equal(toCapturedMessage(message, options), null);
+    const captured = toCapturedMessage(message, options);
+
+    assert.ok(captured);
+    // No key.participant in a 1:1 chat — the counterparty is remoteJid, and
+    // the phone must survive because country and currency are derived from it.
+    assert.equal(captured?.sender_phone, '+85265472648');
+  });
+
+  it('still refuses what is never a conversation', () => {
+    // The stories feed, and anything malformed.
+    assert.equal(
+      toCapturedMessage(raw({ key: { remoteJid: 'status@broadcast' } }), options),
+      null
+    );
+    assert.equal(toCapturedMessage(raw({ key: { remoteJid: 'nonsense' } }), options), null);
+    assert.equal(toCapturedMessage(raw({ key: { remoteJid: '' } }), options), null);
   });
 
   it('drops system/stub messages', () => {

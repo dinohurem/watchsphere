@@ -21,6 +21,8 @@ export class Flusher {
   private readonly options: FlusherOptions;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  /** The flush currently in flight, so a caller can await it instead of racing it. */
+  private inFlight: Promise<{ sent: number; inserted: number }> | null = null;
 
   constructor(outbox: Outbox, api: ApiClient, options: FlusherOptions) {
     this.outbox = outbox;
@@ -51,6 +53,21 @@ export class Flusher {
    * or the same messages would be in flight twice.
    */
   async flush(): Promise<{ sent: number; inserted: number }> {
+    // Joining an in-flight flush rather than returning a no-op: a shutdown
+    // flush that reports {0,0} while a batch is still in the air looks like a
+    // failed delivery, and exiting on it would kill that request.
+    if (this.inFlight) return this.inFlight;
+
+    const run = this.runFlush();
+    this.inFlight = run;
+    try {
+      return await run;
+    } finally {
+      this.inFlight = null;
+    }
+  }
+
+  private async runFlush(): Promise<{ sent: number; inserted: number }> {
     if (this.running) return { sent: 0, inserted: 0 };
     this.running = true;
 

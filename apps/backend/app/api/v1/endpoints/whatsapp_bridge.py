@@ -13,6 +13,7 @@ manual export.
 import asyncio
 import hmac
 import logging
+from urllib.parse import quote
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
@@ -322,6 +323,10 @@ async def bridge_groups(
 ) -> Any:
     """Groups the bridge has captured from, with coverage windows."""
     pipeline = [
+        # $last takes the last document the stage happened to see, which without
+        # an explicit sort is natural order — so a renamed group could keep
+        # showing its old name indefinitely. Sort first so "last" means newest.
+        {"$sort": {"timestamp": 1}},
         {
             "$group": {
                 "_id": "$group_jid",
@@ -369,12 +374,24 @@ async def export_group_txt(
 
     content = render_export_txt(messages, tz_offset_minutes=tz_offset_minutes)
     group_name = messages[-1].group_name or group_jid
-    safe_name = "".join(c for c in group_name if c.isalnum() or c in " -_").strip() or "bridge"
+
+    # str.isalnum() is Unicode-aware, so a group named "香港錶商" or "Händler EU"
+    # used to survive this filter and then fail to encode: Starlette writes
+    # response headers as latin-1, turning the download into a 500. Keep the
+    # ASCII form for the plain filename and carry the real name in filename*.
+    ascii_name = "".join(c for c in group_name if (c.isascii() and c.isalnum()) or c in " -_").strip()
+    ascii_name = ascii_name or "bridge"
+    encoded_name = quote(f"{group_name}.txt", safe="")
 
     return Response(
         content=content,
         media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}.txt"'},
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{ascii_name}.txt"; '
+                f"filename*=UTF-8''{encoded_name}"
+            )
+        },
     )
 
 
@@ -546,7 +563,13 @@ async def daily_ingest(
     end = datetime.utcnow()
     start = end - timedelta(hours=payload.hours)
 
-    query: dict = _timestamp_filter(start, end)
+    # Windowed on ingested_at, not the message's send time. A message only
+    # reaches us when the bridge connects, so if a run is skipped — cron missed,
+    # bridge down — the backlog arrives late with old send times. Filtering on
+    # those would step straight over it and no run would ever pick it up. The
+    # generator still reads dates from the message content, so late arrivals are
+    # dated correctly regardless.
+    query: dict = {"ingested_at": {"$gte": start, "$lte": end}}
     if payload.group_jid:
         query["group_jid"] = payload.group_jid
     captured = await BridgeMessage.find(query).sort("+timestamp").to_list()
@@ -572,6 +595,7 @@ async def daily_ingest(
             price_quarantined=0,
         )
 
+        import_record: Optional[WhatsAppImport] = None
         try:
             txt_content = render_export_txt(
                 messages, tz_offset_minutes=payload.tz_offset_minutes
@@ -611,6 +635,13 @@ async def daily_ingest(
         except Exception as exc:  # one bad group must not abort the whole run
             logger.exception("daily-ingest failed for %s: %s", group_name, exc)
             result.error = str(exc)[:300]
+            # Otherwise the record sits in PROCESSING forever and shows in the
+            # admin list as an import that never finished.
+            if import_record is not None:
+                import_record.status = ImportStatus.FAILED
+                import_record.error_message = result.error
+                import_record.completed_at = datetime.utcnow()
+                await import_record.save()
 
         total_orders += result.orders_created
         total_held += result.needs_review + result.not_in_database + result.price_quarantined

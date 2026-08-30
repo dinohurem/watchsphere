@@ -36,6 +36,11 @@ export interface BridgeConfig {
   runOnce: boolean;
   /** How long a --once run listens for backfill before giving up. */
   onceTimeoutMs: number;
+  /**
+   * Quiet period, after the backlog signal, with no new message before a
+   * --once run considers the sync finished.
+   */
+  onceSettleMs: number;
   flushIntervalMs: number;
   maxBatchSize: number;
   heartbeatIntervalMs: number;
@@ -116,6 +121,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BridgeConfig {
     chatKinds: parseChatKinds(env.BRIDGE_CHAT_KINDS),
     runOnce: (env.BRIDGE_RUN_ONCE ?? '').trim() === 'true',
     onceTimeoutMs: integer(env, 'BRIDGE_ONCE_TIMEOUT_MS', 180_000),
+    onceSettleMs: integer(env, 'BRIDGE_ONCE_SETTLE_MS', 20_000),
     flushIntervalMs: integer(env, 'BRIDGE_FLUSH_INTERVAL_MS', 10_000),
     maxBatchSize: integer(env, 'BRIDGE_MAX_BATCH_SIZE', 500),
     heartbeatIntervalMs: integer(env, 'BRIDGE_HEARTBEAT_INTERVAL_MS', 60_000),
