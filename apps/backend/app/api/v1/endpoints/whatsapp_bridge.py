@@ -23,7 +23,8 @@ from pymongo import UpdateOne
 
 from app.core.config import settings
 from app.core.deps import get_current_admin_user
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.models.whatsapp_import import ImportStatus, WhatsAppImport
 from app.models.whatsapp_bridge import BridgeMessage, BridgeState, BridgeStatus
 from app.models.wtb_wts import GenerationMode, RunStatus, WtbWtsRun
 from app.services.whatsapp_bridge_export import render_export_txt
@@ -36,6 +37,8 @@ from app.api.v1.endpoints.wtb_wts import (
     _run_processing,
     _run_to_response,
 )
+from app.api.v1.endpoints.whatsapp import process_csv_import
+from app.services.wtb_wts_service import process_generation
 
 logger = logging.getLogger(__name__)
 
@@ -472,3 +475,151 @@ async def purge_messages(
     result = await BridgeMessage.get_motor_collection().delete_many(query)
     logger.info(f"bridge purge: query={query} deleted={result.deleted_count}")
     return {"deleted": result.deleted_count}
+
+
+# --- Scheduled daily ingest ---
+
+class DailyIngestRequest(BaseModel):
+    """Window and mode for an unattended run. Defaults suit a daily cron."""
+
+    hours: int = Field(24, ge=1, le=168)
+    mode: str = "wts"
+    tz_offset_minutes: int = 0
+    #: Restrict to one chat. Omitted means every chat captured in the window.
+    group_jid: Optional[str] = None
+
+
+class DailyIngestGroupResult(BaseModel):
+    group_jid: str
+    group_name: str
+    messages: int
+    matched: int
+    needs_review: int
+    not_in_database: int
+    orders_created: int
+    price_quarantined: int
+    quarantine_reasons: List[str] = []
+    run_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+class DailyIngestResponse(BaseModel):
+    window_start: datetime
+    window_end: datetime
+    groups: List[DailyIngestGroupResult]
+    orders_created: int
+    held_for_review: int
+
+
+@router.post("/daily-ingest", response_model=DailyIngestResponse)
+async def daily_ingest(
+    payload: DailyIngestRequest,
+    _token: str = Depends(require_bridge_token),
+) -> Any:
+    """Generate over the last N hours of captures and import what matched.
+
+    Bridge-token authenticated: the caller is the scheduled bridge run, not a
+    person, so this deliberately does not require an admin session.
+
+    Only *matched* rows are published. Rows that needed review, rows whose watch
+    is not in the catalogue, and anything the import's price check quarantines
+    are left for a human — an unattended path must not be able to put a price
+    into the order book that contradicts its peers.
+    """
+    try:
+        gen_mode = GenerationMode(payload.mode.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mode must be 'wts' or 'wtb'",
+        )
+
+    # Orders need an owner. There is no user behind a cron run, so attribute it
+    # to an admin and label the import so the audit trail is not misleading.
+    admin = await User.find_one({"role": UserRole.ADMIN.value})
+    if not admin:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No admin user exists to attribute the automated import to",
+        )
+
+    end = datetime.utcnow()
+    start = end - timedelta(hours=payload.hours)
+
+    query: dict = _timestamp_filter(start, end)
+    if payload.group_jid:
+        query["group_jid"] = payload.group_jid
+    captured = await BridgeMessage.find(query).sort("+timestamp").to_list()
+
+    by_group: dict[str, List[BridgeMessage]] = {}
+    for message in captured:
+        by_group.setdefault(message.group_jid, []).append(message)
+
+    results: List[DailyIngestGroupResult] = []
+    total_orders = 0
+    total_held = 0
+
+    for group_jid, messages in by_group.items():
+        group_name = messages[-1].group_name or group_jid
+        result = DailyIngestGroupResult(
+            group_jid=group_jid,
+            group_name=group_name,
+            messages=len(messages),
+            matched=0,
+            needs_review=0,
+            not_in_database=0,
+            orders_created=0,
+            price_quarantined=0,
+        )
+
+        try:
+            txt_content = render_export_txt(
+                messages, tz_offset_minutes=payload.tz_offset_minutes
+            )
+            generated = await process_generation(
+                txt_content=txt_content,
+                mode=gen_mode.value.upper(),
+                ref_month=end.month,
+                ref_year=end.year,
+                group_name=group_name,
+            )
+
+            result.matched = generated.get("matched_count", 0)
+            result.needs_review = generated.get("needs_review_count", 0)
+            result.not_in_database = generated.get("not_in_database_count", 0)
+
+            matched_csv = generated.get("matched_csv") or ""
+            if result.matched > 0 and matched_csv.strip():
+                import_record = WhatsAppImport(
+                    filename=f"bridge-daily-{group_jid.split('@')[0]}.csv",
+                    group_name=group_name,
+                    imported_by=str(admin.id),
+                    imported_by_name="WhatsApp bridge (scheduled)",
+                    status=ImportStatus.PROCESSING,
+                )
+                await import_record.insert()
+
+                stats = await process_csv_import(matched_csv, import_record, admin)
+                result.orders_created = stats.get("matched_orders", 0)
+                result.price_quarantined = stats.get("price_quarantined_rows", 0)
+                result.quarantine_reasons = stats.get("price_quarantine_reasons", [])
+        except Exception as exc:  # one bad group must not abort the whole run
+            logger.exception("daily-ingest failed for %s: %s", group_name, exc)
+            result.error = str(exc)[:300]
+
+        total_orders += result.orders_created
+        total_held += result.needs_review + result.not_in_database + result.price_quarantined
+        results.append(result)
+
+    logger.info(
+        "daily-ingest: %d group(s), %d order(s) created, %d row(s) held for review",
+        len(results), total_orders, total_held,
+    )
+
+    return DailyIngestResponse(
+        window_start=start,
+        window_end=end,
+        groups=results,
+        orders_created=total_orders,
+        held_for_review=total_held,
+    )

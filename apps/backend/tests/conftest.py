@@ -37,11 +37,13 @@ async def db():
     from mongomock_motor import AsyncMongoMockClient
 
     from app.models.whatsapp_bridge import BridgeMessage, BridgeStatus
+    # The scheduled ingest writes a WhatsAppImport record for its audit trail.
+    from app.models.whatsapp_import import WhatsAppImport
 
     client = AsyncMongoMockClient()
     await init_beanie(
         database=client["watchsphere_test"],
-        document_models=[BridgeMessage, BridgeStatus],
+        document_models=[BridgeMessage, BridgeStatus, WhatsAppImport],
     )
     yield client
 

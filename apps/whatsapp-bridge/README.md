@@ -14,10 +14,10 @@ accept deliberately, not discover later:
 - **It is against WhatsApp's Terms of Service.** The number can be banned.
 - **Use a dedicated number.** Never pair a personal or business-critical
   account. A ban costs you that number and nothing else.
-- **It cannot run on Vercel.** The backend is serverless; this process is
-  stateful and must stay connected. It needs a small always-on host
-  (Railway, Fly, a VPS — anything that keeps a process alive with a persistent
-  disk).
+- **It cannot run inside the backend.** Baileys is a JavaScript library and the
+  API is Python, so this is a separate service. It also must not share a
+  process with the API: one number allows one session, so a second API replica
+  would fight over it, and every backend redeploy would drop the connection.
 - **It captures other people's messages.** Only point it at groups you are
   legitimately a member of, and check what your jurisdiction requires of you as
   a processor of that data.
@@ -151,7 +151,56 @@ cd apps/backend && ./venv/bin/python -m pytest tests/
 - **Text only.** Image captions are captured; the images themselves are not, so
   the image-based variant disambiguation layer still needs a manual
   "export with media" `.zip`.
-- **No history.** Capture starts when the bridge connects; it does not backfill
-  messages sent before that.
+- **History reaches back only as far as WhatsApp will sync.** A run receives
+  what was sent while it was offline, but how far back that reaches is decided
+  by WhatsApp, not by us. Verify it for your own gap before relying on a
+  schedule — `spike/whatsapp-daily-sync` has a harness that measures it.
 - **One number, one session.** Running two bridges on the same number will fight
   over the session. Use separate numbers or a single instance.
+
+## Scheduled mode (Railway cron)
+
+The bridge does not have to stay connected. With `BRIDGE_RUN_ONCE=true` it
+connects, takes everything sent since the previous run, hands it to the backend
+and exits — so it can be a Railway **cron service** that wakes once a day.
+
+That shape is cheaper and safer than an always-on process: less exposure to
+behavioural detection, no socket to lose on redeploy, and a ban blast radius of
+exactly one service.
+
+1. Add a second service in the Railway project, root directory
+   `apps/whatsapp-bridge`.
+2. Attach a **volume**, and point `BRIDGE_AUTH_DIR` and `BRIDGE_OUTBOX_PATH`
+   inside it. Without this the pairing is lost on every deploy.
+3. Set **Cron Schedule** to the hour you want, e.g. `0 8 * * *` (Railway
+   evaluates crontab expressions in UTC).
+4. Set `BRIDGE_RUN_ONCE=true`.
+
+The run must exit or Railway skips the next firing — it does, either when
+WhatsApp reports the backlog delivered or after `BRIDGE_ONCE_TIMEOUT_MS`.
+Messages the backend did not accept stay in the outbox for the next run and the
+process exits non-zero, so a failing ingest is visible in the run history
+instead of looking clean.
+
+### Turning captures into orders
+
+`POST /whatsapp-bridge/daily-ingest` runs the generator over the last N hours
+and imports what matched. It is bridge-token authenticated, so the scheduled run
+can call it with no admin session:
+
+```bash
+curl -X POST "$BRIDGE_API_BASE_URL/whatsapp-bridge/daily-ingest" \
+  -H "X-Bridge-Token: $BRIDGE_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"hours": 24, "mode": "wts"}'
+```
+
+**Only matched rows are published.** Rows that needed review, rows whose watch
+is not in the catalogue, and anything the import's price check quarantines are
+left for a human. An unattended path must not be able to put a price into the
+order book that contradicts its peers — which is exactly the slip that
+motivated that check.
+
+The response reports per chat: messages seen, matched / needs-review /
+not-in-database counts, orders created, and every quarantine reason. One chat
+failing does not abort the others.
