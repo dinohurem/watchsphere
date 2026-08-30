@@ -234,3 +234,47 @@ async def test_one_failing_group_does_not_abort_the_run(db, app_client, monkeypa
     groups = {g["group_name"]: g for g in response.json()["groups"]}
     assert "parser exploded" in groups["Broken Group"]["error"]
     assert groups["Healthy Group"]["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_reference_month_comes_from_the_messages_not_the_clock(
+    db, app_client, monkeypatch
+):
+    """A run just after midnight on the 1st covers the previous month.
+
+    Dating the generation "today" would resolve every relative date in the
+    window against a month the messages were not sent in.
+    """
+    _stub_admin(monkeypatch)
+    from app.api.v1.endpoints import whatsapp_bridge
+
+    seen: dict = {}
+
+    async def fake_generation(*, ref_month, ref_year, **kwargs):
+        seen["ref_month"] = ref_month
+        seen["ref_year"] = ref_year
+        return {"matched_count": 0, "needs_review_count": 0,
+                "not_in_database_count": 0, "matched_csv": ""}
+
+    monkeypatch.setattr(whatsapp_bridge, "process_generation", fake_generation)
+
+    from app.models.whatsapp_bridge import BridgeMessage
+
+    captured_at = datetime.utcnow() - timedelta(hours=2)
+    await BridgeMessage(
+        message_id="ref-1",
+        group_jid="111@g.us",
+        group_name="HK Dealers",
+        sender="4915112345678@s.whatsapp.net",
+        content="Rolex 126610LN HKD 942k",
+        timestamp=captured_at,
+    ).insert()
+
+    async with await _client(app_client) as client:
+        response = await client.post(
+            "/whatsapp-bridge/daily-ingest", json={"hours": 24}, headers=TOKEN_HEADER
+        )
+
+    assert response.status_code == 200
+    assert seen["ref_month"] == captured_at.month
+    assert seen["ref_year"] == captured_at.year

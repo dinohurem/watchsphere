@@ -576,11 +576,16 @@ async def daily_ingest(
             txt_content = render_export_txt(
                 messages, tz_offset_minutes=payload.tz_offset_minutes
             )
+            # Reference month comes from the newest captured message, not the
+            # run's clock. A 08:00 run on the 1st covers the previous day —
+            # often the previous month — and dating it "today" would resolve
+            # every relative date in the window against the wrong month.
+            reference = messages[-1].timestamp or end
             generated = await process_generation(
                 txt_content=txt_content,
                 mode=gen_mode.value.upper(),
-                ref_month=end.month,
-                ref_year=end.year,
+                ref_month=reference.month,
+                ref_year=reference.year,
                 group_name=group_name,
             )
 

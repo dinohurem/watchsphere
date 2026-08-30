@@ -39,6 +39,14 @@ export class WhatsAppBridge {
   private reconnectAttempts = 0;
   /** group JID -> subject, so allowlist checks don't re-fetch metadata per message. */
   private groupNames = new Map<string, string>();
+  /**
+   * Resolves once the group cache has been populated for this connection.
+   *
+   * History backfill lands within seconds of connecting, while
+   * groupFetchAllParticipating is still in flight. Resolving a message against
+   * an empty cache would silently drop it, so captures wait on this first.
+   */
+  private groupsReady: Promise<void> | null = null;
 
   constructor(config: BridgeConfig, handlers: WhatsAppBridgeHandlers) {
     this.config = config;
@@ -114,7 +122,7 @@ export class WhatsAppBridge {
         const self = socket.user?.id?.split(':')[0] ?? null;
         this.handlers.onState('connected', { phoneNumber: self ? `+${self}` : null });
         this.handlers.onLog(`Connected as ${socket.user?.id ?? 'unknown'}`);
-        void this.refreshGroups();
+        this.groupsReady = this.refreshGroups();
       }
 
       if (connection === 'close') {
@@ -165,7 +173,7 @@ export class WhatsAppBridge {
     });
 
     socket.ev.on('groups.update', () => {
-      void this.refreshGroups();
+      this.groupsReady = this.refreshGroups();
     });
   }
 
@@ -231,6 +239,9 @@ export class WhatsAppBridge {
   }
 
   private async handleMessages(messages: RawMessage[]): Promise<void> {
+    // Never resolve against a cold cache — see groupsReady.
+    if (this.groupsReady) await this.groupsReady;
+
     const captured: CapturedMessage[] = [];
 
     for (const raw of messages) {
