@@ -19,6 +19,16 @@ from app.services.socketio_manager import socket_app, sio as socketio_server, ma
 # Import unified broadcast service
 from app.services.broadcast import broadcast_service
 
+# uvicorn configures its own loggers but leaves the root logger without a
+# handler, so anything an application module logs below WARNING is dropped.
+# That is how a failed verification email left no trace at all: the diagnostics
+# were print() to a container's block-buffered stdout, and the levels that did
+# survive had nowhere to go. Log to stderr, which is not block-buffered.
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format="%(levelname)s %(name)s: %(message)s",
+)
+
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app

@@ -1,6 +1,9 @@
+import logging
 import httpx
 from typing import Optional
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class EmailService:
@@ -21,8 +24,16 @@ class EmailService:
     ) -> bool:
         """Send email via Postmark API"""
         if not self.api_key:
-            print(f"[WARNING] No Postmark API key configured. Email not sent to {to_email}")
-            return True  # Return True in dev mode
+            # Only development may treat "not configured" as success. Reporting
+            # success in production made a missing key indistinguishable from a
+            # delivered email: signup returned 201 and no code was ever sent.
+            if settings.ENVIRONMENT == "development":
+                logger.warning("No Postmark API key; email to %s not sent (development)", to_email)
+                return True
+            logger.error(
+                "POSTMARK_API_KEY is not configured - email to %s was NOT sent", to_email
+            )
+            return False
 
         try:
             async with httpx.AsyncClient() as client:
@@ -46,13 +57,23 @@ class EmailService:
 
                 if response.status_code == 200:
                     result = response.json()
-                    return result.get("ErrorCode") == 0
+                    if result.get("ErrorCode") == 0:
+                        return True
+                    # A 200 with a non-zero ErrorCode is still a refusal.
+                    logger.error(
+                        "Postmark refused the email to %s: ErrorCode=%s %s",
+                        to_email, result.get("ErrorCode"), result.get("Message"),
+                    )
+                    return False
 
-                print(f"[ERROR] Failed to send email: {response.text}")
+                logger.error(
+                    "Postmark rejected the email to %s: HTTP %s %s",
+                    to_email, response.status_code, response.text[:300],
+                )
                 return False
 
         except Exception as e:
-            print(f"[ERROR] Email sending error: {str(e)}")
+            logger.exception("Email transport failure sending to %s: %s", to_email, e)
             return False
 
     def _get_email_template(self, content: str) -> str:
@@ -113,7 +134,7 @@ class EmailService:
 
         # In development/testing mode, just log and return success
         if settings.ENVIRONMENT == "development" and not self.api_key:
-            print(f"[DEV] Verification email to {to_email}: Code is {verification_code}")
+            logger.info(f"[DEV] Verification email to {to_email}: Code is {verification_code}")
             return True
 
         subject = f"Your WatchSphere Verification Code: {verification_code}"
@@ -158,7 +179,7 @@ This code will expire in 15 minutes. If you didn't request this code, please ign
         """Send welcome email after user completes onboarding"""
 
         if settings.ENVIRONMENT == "development" and not self.api_key:
-            print(f"[DEV] Welcome email to {to_email}")
+            logger.info(f"[DEV] Welcome email to {to_email}")
             return True
 
         subject = "Welcome to WatchSphere!"
@@ -198,7 +219,7 @@ Start exploring watches, track your favorites, and connect with fellow collector
         """Send password reset code email to user"""
 
         if settings.ENVIRONMENT == "development" and not self.api_key:
-            print(f"[DEV] Password reset email to {to_email}: Code is {reset_code}")
+            logger.info(f"[DEV] Password reset email to {to_email}: Code is {reset_code}")
             return True
 
         subject = "Reset Your WatchSphere Password"
@@ -247,7 +268,7 @@ This code will expire in 15 minutes. If you didn't request a password reset, ple
         """Send account confirmation email when admin approves user"""
 
         if settings.ENVIRONMENT == "development" and not self.api_key:
-            print(f"[DEV] Account confirmation email to {to_email}")
+            logger.info(f"[DEV] Account confirmation email to {to_email}")
             return True
 
         subject = "Your WatchSphere Account Has Been Approved!"
@@ -297,7 +318,7 @@ Visit https://watchsphere.io to get started.
         """Send admin invitation email with temporary credentials"""
 
         if settings.ENVIRONMENT == "development" and not self.api_key:
-            print(f"[DEV] Admin invite email to {to_email}: Password is {temp_password}")
+            logger.info(f"[DEV] Admin invite email to {to_email}: Password is {temp_password}")
             return True
 
         subject = "You've Been Invited as a WatchSphere Admin"
@@ -368,7 +389,7 @@ Visit https://watchsphere.io to access the admin panel.
         """Send subscription confirmation email after successful payment"""
 
         if settings.ENVIRONMENT == "development" and not self.api_key:
-            print(f"[DEV] Subscription confirmation email to {to_email}")
+            logger.info(f"[DEV] Subscription confirmation email to {to_email}")
             return True
 
         subject = f"Your WatchSphere {plan_name} Subscription is {'Renewed' if is_renewal else 'Active'}!"
@@ -455,7 +476,7 @@ Your subscription will automatically renew. You can manage your subscription set
         """Send email to seller when a buy order is placed on their listing"""
 
         if settings.ENVIRONMENT == "development" and not self.api_key:
-            print(f"[DEV] Buy order received email to {to_email}")
+            logger.info(f"[DEV] Buy order received email to {to_email}")
             return True
 
         subject = f"New Buy Offer: {watch_brand} {watch_model}"

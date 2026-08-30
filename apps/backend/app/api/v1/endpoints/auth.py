@@ -101,11 +101,13 @@ class CompleteOnboardingRequest(BaseModel):
     notifications_enabled: bool = False
 
 
-async def _issue_email_code(email: str, user_name: Optional[str] = None) -> None:
-    """Generate a one-time code and email it.
+async def _issue_email_code(email: str, user_name: Optional[str] = None) -> bool:
+    """Generate a one-time code and email it. Returns whether it was sent.
 
     Email is the only channel: the WhatsApp number identifies the account but
-    never receives anything.
+    never receives anything. Callers must not discard the result — a swallowed
+    failure leaves the user waiting for a code that was never sent, which is
+    indistinguishable from success.
     """
     code = VerificationCode.generate_code()
     await VerificationCode.create_for_email(
@@ -113,11 +115,18 @@ async def _issue_email_code(email: str, user_name: Optional[str] = None) -> None
         code=code,
         expires_minutes=settings.EMAIL_OTP_EXPIRY_MINUTES,
     )
-    await email_service.send_verification_email(
+    sent = await email_service.send_verification_email(
         to_email=email,
         verification_code=code,
         user_name=user_name,
     )
+    if not sent:
+        logger.error(
+            "Verification code for %s was generated but NOT delivered - check "
+            "POSTMARK_API_KEY and the sender signature for %s",
+            email, settings.EMAIL_FROM,
+        )
+    return sent
 
 
 @router.post("/register", response_model=TokenData, status_code=status.HTTP_201_CREATED)
@@ -178,7 +187,9 @@ async def register(user_in: UserCreate) -> Any:
     # Assign default watchlist items to the new user
     await assign_default_watchlist_to_user(user)
 
-    # Generate and email the verification code
+    # Generate and email the verification code. The account exists regardless,
+    # so a delivery failure is logged rather than failing the request - the user
+    # can still resend from the verification screen.
     await _issue_email_code(user.email, user.name)
 
     # Create access and refresh tokens
@@ -234,7 +245,11 @@ async def resend_verification(
             detail=f"Please wait {cooldown - elapsed} seconds before requesting another code",
         )
 
-    await _issue_email_code(current_user.email, current_user.name)
+    if not await _issue_email_code(current_user.email, current_user.name):
+        raise HTTPException(
+            status_code=502,
+            detail="We could not send the code right now. Please try again shortly.",
+        )
     return {"message": "Verification code sent", "channel": "email"}
 
 
