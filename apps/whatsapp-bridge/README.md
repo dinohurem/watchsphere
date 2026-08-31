@@ -1,5 +1,12 @@
 # @watchsphere/whatsapp-bridge
 
+> **This is the backup path.** Prefer the local reader
+> (`apps/backend/scripts/whatsapp_local_sync.py`): it reads WhatsApp for Mac's
+> own database, so there is no number to ban, no pairing, and years of history
+> are already on disk. See [docs/WHATSAPP_CAPTURE.md](../../docs/WHATSAPP_CAPTURE.md).
+> Use this bridge when the Mac cannot be relied on to stay awake. Both feed the
+> same endpoint, which deduplicates, so they can run together.
+
 A long-running WhatsApp client that captures messages from dealer groups and
 streams them into the WTS/WTB pipeline. It exists for groups where **"Export
 chat" is unavailable** — the ones with Advanced Chat Privacy enabled — which the
