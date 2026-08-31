@@ -50,7 +50,11 @@ class Settings(BaseSettings):
 
     # Email (Postmark)
     POSTMARK_API_KEY: str = ""
-    EMAIL_FROM: str = "noreply@watchsphere.io"
+    # Must be an address with a confirmed Postmark sender signature. An
+    # unconfirmed From is rejected by Postmark, and that rejection is only
+    # visible in the logs — signup still returns 201 and the user waits for a
+    # code that was never sent.
+    EMAIL_FROM: str = "dev@watchsphere.io"
     EMAIL_FROM_NAME: str = "WatchSphere"
 
     # Verification
