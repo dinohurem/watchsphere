@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-WatchSphere is a premium watch trading platform (marketplace, real-time chat, inventory management, AI assistant). It is a **Turborepo monorepo** with three apps and one shared package.
+WatchSphere is a premium watch trading platform (marketplace, real-time chat, inventory management, AI assistant). It is a **Turborepo monorepo** with four apps and one shared package.
 
 ## Architecture
 
@@ -11,7 +11,8 @@ watchsphere/
 ├── apps/
 │   ├── backend/       # FastAPI (Python) — REST API, WebSocket, Socket.IO
 │   ├── web/           # React 18 + Vite + TypeScript — Web application
-│   └── mobile/        # Expo 52 + React Native 0.76 — iOS/Android app
+│   ├── mobile/        # Expo 52 + React Native 0.76 — iOS/Android app
+│   └── whatsapp-bridge/  # Node + Baileys — live capture from export-locked dealer groups
 ├── packages/
 │   └── shared/        # @watchsphere/shared — Zustand stores, types, utils
 ├── turbo.json         # Turborepo task orchestration
@@ -125,6 +126,28 @@ npm run android      # Android emulator
 - Zustand stores persisted via AsyncStorage
 - ChatService is a singleton with event emitter pattern
 - Environment variables prefixed with `EXPO_PUBLIC_`
+
+## WhatsApp Bridge (apps/whatsapp-bridge)
+
+Node service (TypeScript + Baileys) paired to a **dedicated** WhatsApp number. It
+captures messages from allow-listed dealer groups that cannot be exported (Advanced
+Chat Privacy) and streams them to `/api/v1/whatsapp-bridge/messages`.
+
+- **Entry**: `src/index.ts` — live mode, `--pair <number>`, `--replay <fixture>`
+- **Modules**: `format.ts` (raw → captured, no Baileys import so it stays testable),
+  `outbox.ts` (disk-backed queue, captures survive outages), `flusher.ts`, `api.ts`,
+  `whatsapp.ts` (the only Baileys-aware module)
+- **Backend side**: `app/api/v1/endpoints/whatsapp_bridge.py`, `BridgeMessage` /
+  `BridgeStatus` models, `services/whatsapp_bridge_export.py`
+- **Admin UI**: `apps/web/src/features/admin/pages/AdminWhatsAppBridge.tsx`
+  (`/admin/whatsapp-bridge`) — status, pairing QR, groups, generation, retention
+- Captures are stored raw and rendered back into WhatsApp export format on demand,
+  so the existing WTS/WTB generator runs unchanged — **nothing reaches the order book
+  without an admin generating and reviewing the CSVs**
+- Auth: shared secret `WHATSAPP_BRIDGE_TOKEN` (backend) / `BRIDGE_API_TOKEN` (bridge);
+  unset means the endpoints return 503, never open access
+- Group allowlist is fail-closed — empty `BRIDGE_GROUPS` captures nothing
+- Runs on Baileys, an unofficial library: ToS risk, needs an always-on host (not Vercel)
 
 ## Shared Package (@watchsphere/shared)
 

@@ -1,0 +1,13 @@
+# Test-only dependencies. Kept out of requirements.txt so the deployed image
+# does not carry them.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest tests/
+
+-r requirements.txt
+
+pytest==9.1.1
+pytest-asyncio==1.4.0
+# In-memory Motor stand-in: the suite exercises real Beanie documents without
+# needing a MongoDB instance.
+mongomock-motor==0.0.36

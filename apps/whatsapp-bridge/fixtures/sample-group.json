@@ -1,0 +1,96 @@
+{
+  "groupName": "HK Dealers",
+  "messages": [
+    {
+      "key": {
+        "remoteJid": "120363999@g.us",
+        "fromMe": false,
+        "id": "REPLAY001",
+        "participant": "85265472648@s.whatsapp.net"
+      },
+      "message": { "conversation": "WTS 126610LN unworn N2/26 12,000 USD" },
+      "messageTimestamp": 1772707200,
+      "pushName": "HK Dealer"
+    },
+    {
+      "key": {
+        "remoteJid": "120363999@g.us",
+        "fromMe": false,
+        "id": "REPLAY002",
+        "participant": "85252034944@s.whatsapp.net"
+      },
+      "message": {
+        "conversation": "*5/3/2026 Stock List*\nPatek Used\n5968A N2 1.17m hkd\n5712/1A blue N1 1.52m hkd"
+      },
+      "messageTimestamp": 1772710800,
+      "pushName": "PP Stock"
+    },
+    {
+      "key": {
+        "remoteJid": "120363999@g.us",
+        "fromMe": false,
+        "id": "REPLAY003",
+        "participant": "491701234567@s.whatsapp.net"
+      },
+      "message": { "imageMessage": { "caption": "126334G Black Jub N12 138,000" } },
+      "messageTimestamp": 1772714400,
+      "pushName": "DE Dealer"
+    },
+    {
+      "key": {
+        "remoteJid": "120363999@g.us",
+        "fromMe": false,
+        "id": "REPLAY004",
+        "participant": "85265472648@s.whatsapp.net"
+      },
+      "message": {
+        "ephemeralMessage": { "message": { "conversation": "WTB 5711/1A any year" } }
+      },
+      "messageTimestamp": 1772718000,
+      "pushName": "HK Dealer"
+    },
+    {
+      "key": {
+        "remoteJid": "120363999@g.us",
+        "fromMe": false,
+        "id": "REPLAY005",
+        "participant": "85265472648@s.whatsapp.net"
+      },
+      "message": { "imageMessage": {} },
+      "messageTimestamp": 1772721600,
+      "pushName": "HK Dealer"
+    },
+    {
+      "key": {
+        "remoteJid": "120363999@g.us",
+        "fromMe": false,
+        "id": "REPLAY006",
+        "participant": "85265472648@s.whatsapp.net"
+      },
+      "messageStubType": 27,
+      "messageTimestamp": 1772725200
+    },
+    {
+      "key": {
+        "remoteJid": "85265472648@s.whatsapp.net",
+        "fromMe": false,
+        "id": "REPLAY007",
+        "participant": null
+      },
+      "message": { "conversation": "private chat — must never be captured" },
+      "messageTimestamp": 1772728800,
+      "pushName": "HK Dealer"
+    },
+    {
+      "key": {
+        "remoteJid": "120363999@g.us",
+        "fromMe": true,
+        "id": "REPLAY008",
+        "participant": "38761111111@s.whatsapp.net"
+      },
+      "message": { "conversation": "message from the bridge account itself" },
+      "messageTimestamp": 1772732400,
+      "pushName": "WatchSphere Bridge"
+    }
+  ]
+}

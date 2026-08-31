@@ -22,6 +22,7 @@ import {
   Headphones,
   Settings,
   FileOutput,
+  Radio,
 } from 'lucide-react'
 
 interface NavItem {
@@ -70,6 +71,7 @@ const adminNavigationConfig: NavSection[] = [
     items: [
       { nameKey: 'sidebar.wtbWtsGenerator', to: '/admin/wtb-wts', icon: FileOutput },
       { nameKey: 'sidebar.whatsappImport', to: '/admin/whatsapp', icon: Upload },
+      { nameKey: 'sidebar.whatsappBridge', to: '/admin/whatsapp-bridge', icon: Radio },
       { nameKey: 'sidebar.activity', to: '/admin/activity', icon: Activity },
       { nameKey: 'sidebar.billing', to: '/admin/billing', icon: CreditCard },
     ]

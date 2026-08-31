@@ -1,0 +1,11 @@
+# WhatsApp session credentials — pairing this account grants full message
+# access. Committing these would hand over the account.
+auth/
+*.auth.json
+
+# Buffered captures awaiting delivery (contains dealer message content)
+data/
+
+dist/
+node_modules/
+.env
