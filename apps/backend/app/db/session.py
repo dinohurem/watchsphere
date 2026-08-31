@@ -34,6 +34,7 @@ async def connect_to_mongo():
     from app.models.app_settings import AppSettings
     from app.models.watch_alert import WatchAlert
     from app.models.wtb_wts import WtbWtsRun
+    from app.models.whatsapp_bridge import BridgeMessage, BridgeStatus
 
     await init_beanie(
         database=mongodb_client[settings.MONGODB_DB_NAME],
@@ -47,7 +48,7 @@ async def connect_to_mongo():
             ListingField, Filter,
             Dispute, Issue, Report, Review, AuthHandoffToken,
             Notification, AppSettings, WatchAlert,
-            WtbWtsRun
+            WtbWtsRun, BridgeMessage, BridgeStatus
         ]
     )
 

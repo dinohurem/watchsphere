@@ -4,7 +4,7 @@ from app.api.v1.endpoints import (
     chat_groups, billing, watchlist_admin, default_watchlist_admin,
     activity, whatsapp, ai_insights, upload, orders, assistant, ai_chat,
     listing_fields, filters, support, reviews, notifications, app_settings,
-    watch_alerts, wtb_wts
+    watch_alerts, wtb_wts, whatsapp_bridge
 )
 
 api_router = APIRouter()
@@ -36,6 +36,7 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(app_settings.router, prefix="/settings", tags=["settings"])
 api_router.include_router(watch_alerts.router, prefix="/watch-alerts", tags=["watch-alerts"])
 api_router.include_router(wtb_wts.router, prefix="/wtb-wts", tags=["wtb-wts"])
+api_router.include_router(whatsapp_bridge.router, prefix="/whatsapp-bridge", tags=["whatsapp-bridge"])
 
 
 @api_router.get("/status")
