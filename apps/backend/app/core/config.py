@@ -50,7 +50,11 @@ class Settings(BaseSettings):
 
     # Email (Postmark)
     POSTMARK_API_KEY: str = ""
-    EMAIL_FROM: str = "noreply@watchsphere.io"
+    # No default on purpose. A wrong From is rejected by Postmark and that
+    # rejection is only visible in the logs, so a baked-in fallback turns a
+    # forgotten variable into silently undelivered mail — or into user-facing
+    # mail addressed from a dev account. Empty is checked at startup instead.
+    EMAIL_FROM: str = ""
     EMAIL_FROM_NAME: str = "WatchSphere"
 
     # Verification

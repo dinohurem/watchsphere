@@ -31,6 +31,22 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Outbound mail carries the one-time codes for signup and passwordless login,
+# and a misconfiguration there is invisible from the outside: Postmark refuses
+# the message, the API still answers 200, and the user waits for a code that was
+# never sent. Say so at boot rather than one failed signup at a time.
+if settings.ENVIRONMENT != "development":
+    if not settings.POSTMARK_API_KEY:
+        logger.error(
+            "POSTMARK_API_KEY is not set — signup and passwordless login cannot "
+            "deliver their one-time codes"
+        )
+    if not settings.EMAIL_FROM:
+        logger.error(
+            "EMAIL_FROM is not set — outbound mail has no sender address and "
+            "Postmark will refuse it"
+        )
+
 # Create FastAPI app
 fastapi_app = FastAPI(
     title=settings.APP_NAME,
