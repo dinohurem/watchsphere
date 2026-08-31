@@ -23,6 +23,12 @@ class EmailService:
         text_content: str,
     ) -> bool:
         """Send email via Postmark API"""
+        if not self.from_email:
+            logger.error(
+                "EMAIL_FROM is not configured - email to %s was NOT sent", to_email
+            )
+            return False
+
         if not self.api_key:
             # Only development may treat "not configured" as success. Reporting
             # success in production made a missing key indistinguishable from a

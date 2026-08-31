@@ -38,11 +38,13 @@ $15/month for 10,000. You only pay for what you send.
 2. Enter `watchsphere.io`.
 3. Postmark shows you a **DKIM** record and a **Return-Path** record. Add both
    to the DNS for `watchsphere.io` at your registrar.
-4. Click **Verify**. This is what lets mail leave as `dev@watchsphere.io`
+4. Click **Verify**. This is what lets mail leave as any `@watchsphere.io`
    without landing in spam.
 
 Verify the domain rather than a single address — otherwise every address you
-ever send from has to be confirmed by clicking a link in its own inbox.
+ever send from has to be confirmed by clicking a link in its own inbox. With the
+domain verified, any `@watchsphere.io` sender is valid, so `EMAIL_FROM` only has
+to be an address on it.
 
 ## Step 3 — Copy the Server API token
 
@@ -64,7 +66,7 @@ In the Railway project for the backend, set:
 | Variable | Value |
 |---|---|
 | `POSTMARK_API_KEY` | the Server API token from Step 3 |
-| `EMAIL_FROM` | `dev@watchsphere.io` (an address with a confirmed sender signature) |
+| `EMAIL_FROM` | `dev@watchsphere.io` — any address on the verified domain. **Required**: there is no default, and an unset value means no mail goes out. |
 | `EMAIL_FROM_NAME` | `WatchSphere` |
 
 Railway redeploys on save. Nothing needs rebuilding in the mobile or web apps —
