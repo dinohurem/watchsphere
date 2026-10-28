@@ -40,13 +40,22 @@ class Settings(BaseSettings):
     EMAIL_OTP_RESEND_COOLDOWN_SECONDS: int = 60
 
     # Monri Payments
-    MONRI_MERCHANT_KEY: str = "key-944bc24cd123fa7403da6278825114f1"
-    MONRI_AUTHENTICITY_TOKEN: str = "d515632967fe9eb24cf3dcc04c1fe895b4ca3583"
+    # No credential defaults: the merchant key also verifies payment
+    # signatures, so it must never be a value that ships in the repo. Unset
+    # means subscribing returns 503 and no payment can be verified.
+    MONRI_MERCHANT_KEY: str = ""
+    MONRI_AUTHENTICITY_TOKEN: str = ""
     MONRI_API_URL: str = "https://ipgtest.monri.com"  # Test environment
     MONRI_FORM_ENDPOINT: str = "https://ipgtest.monri.com/v2/form"
     MONRI_SUBSCRIPTION_PRICE: float = 150.0  # 150€/month
     MONRI_CURRENCY: str = "EUR"
     MONRI_DEBUG: bool = True
+
+    # Public HTTPS base URL of this API (no path), e.g.
+    # https://watchsphere-backend-production.up.railway.app. Monri posts
+    # payment callbacks to <API_PUBLIC_URL>/api/v1/billing/webhook/monri; unset
+    # means the callback URL from the Monri merchant settings is used.
+    API_PUBLIC_URL: str = ""
 
     # Email (Postmark)
     POSTMARK_API_KEY: str = ""

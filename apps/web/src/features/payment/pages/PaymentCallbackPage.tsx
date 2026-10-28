@@ -13,9 +13,11 @@ export function PaymentCallbackPage() {
     setStatus('verifying');
 
     try {
-      // First, try to verify and activate the subscription via the verify endpoint
-      // This will process the pending billing record if webhook hasn't fired
-      const verifyResponse = await api.post('/billing/subscription/verify');
+      // Send the exact URL Monri redirected to: the backend checks its digest
+      // before activating anything, in case Monri's callback hasn't arrived.
+      const verifyResponse = await api.post('/billing/subscription/verify', {
+        return_url: window.location.href,
+      });
 
       if (verifyResponse.data.status === 'activated' || verifyResponse.data.status === 'already_processed') {
         // Check if subscription is now active
@@ -47,8 +49,8 @@ export function PaymentCallbackPage() {
       }
     }
 
-    // If we get here, show success anyway and let user check billing page
-    setStatus('approved');
+    // Never claim success we couldn't confirm.
+    setStatus('error');
   }, []);
 
   useEffect(() => {
@@ -167,7 +169,8 @@ export function PaymentCallbackPage() {
           Something Went Wrong
         </h1>
         <p className="text-gray-500 mt-2">
-          We couldn't process your payment. Please try again or contact support.
+          We couldn't confirm your payment. If you were charged, your subscription will be
+          activated shortly. Check your subscription page or contact support.
         </p>
 
         <div className="mt-8 space-y-3">
