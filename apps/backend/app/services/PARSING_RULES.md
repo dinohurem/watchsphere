@@ -887,7 +887,7 @@ If a bare numeric token is found, currency defaults by sender country:
 | `polished` | Polished |
 | `used`, `worn`, `pre-owned`, `preowned` | Used |
 
-Keywords are matched longest-first to ensure `"brand new"` matches before `"new"`, and `"like new"` matches before `"new"`.
+Keywords are matched longest-first to ensure `"brand new"` matches before `"new"`, and `"like new"` matches before `"new"`. Each keyword must stand as a whole word (`new` does not fire inside `renew`), and replaced-part phrases such as `new clasp`, `new papers` or `new bracelet` are removed before matching, so they never make a watch Unworn.
 
 ### 9.2 WTB Conditions Mapping
 
@@ -1160,12 +1160,20 @@ The AI pass runs AFTER the main processing loop, specifically on rows that ended
 ### 13.2 Caps and Timeouts
 
 - Maximum items: 3,000 (first N items kept; excess skipped)
-- Batch size: 1,500 lines per API call
-- Max concurrent API calls: 5
-- Overall timeout: 180 seconds (3 minutes)
-- Model: `gpt-5.2`
+- Batch size: 150 lines per API call (`AI_BATCH_SIZE`), so a full reply fits in max tokens
+- Max concurrent API calls: 8 (`AI_MAX_CONCURRENT`)
+- Per-request timeout: 150 seconds; overall timeout: 180 seconds. At the overall
+  timeout, unfinished batches are cancelled and finished ones are kept.
+- Model: `settings.OPENAI_TEXT_MODEL` (default `gpt-5.2`)
 - Temperature: 0.1
 - Max tokens per call: 16,384
+
+### 13.2a Failures and Truncation
+
+- A failed call, or a reply that is not a JSON array, is retried once after 2 seconds.
+  A second failure leaves the batch's rows with their deterministic result.
+- A reply cut off at max tokens (`finish_reason == "length"`) is salvaged element by
+  element; the items it left out are sent once more, in two halves.
 
 ### 13.3 The Prompt Structure
 
@@ -1193,16 +1201,17 @@ Expected response: JSON array of objects with `index`, `ws_code`, `brand`, `mode
 |-----------|--------|
 | < 1 | Ignored entirely |
 | 1-79 | Row promoted from `not_in_database` to `needs_review` with AI suggestion |
-| 80-100 | Row moved to `matched` with AI-determined data |
+| 80-100, ws_code in catalog | Row moved to `matched` with the catalog watch's data |
+| 80-100, ws_code not in catalog | Row moved to `needs_review` (`AI identified X (NN%), not in catalog`) and listed as a suggested catalog addition |
 
 ### 13.5 in_catalog vs suggested
 
 - **`in_catalog = true`**: AI matched to an existing ws_code in the watch catalog. The matched watch data is used directly.
-- **`in_catalog = false`**: AI identified the watch (brand + model) but it is not in the catalog. The `ai_ws_code` and `ai_brand` are used. These are also collected as **suggested catalog additions** and output as a separate CSV.
+- **`in_catalog = false`**: AI identified the watch (brand + model) but it is not in the catalog. The row goes to `needs_review` (never `matched`, since the import could not match it) and the watch is collected as a **suggested catalog addition** in a separate CSV. `in_catalog` is derived from whether the returned ws_code resolves in the index; the model's own flag is ignored.
 
 ### 13.6 Handling Hallucinated ws_codes
 
-If AI returns a `ws_code` that does not exist in the catalog index, `watch` will be `None` and `in_catalog` will be `False`. The system falls back to using `ai_brand` and `ai_ws_code` from the AI response. This prevents hallucinated codes from causing lookup failures.
+If AI returns a `ws_code` that does not exist in the catalog index, `watch` will be `None` and `in_catalog` will be `False`. The row is treated as not in catalog (§13.5): it goes to `needs_review` and never into the matched CSV under an invented code.
 
 ### 13.7 Suggested Catalog Additions
 
@@ -1236,7 +1245,7 @@ Per row the verifier receives:
 2. Color words decide between variants. `blk`/`black` → Black variant; never silently return Green when Black exists in short-list.
 3. Never merge variants. `5167A` ≠ `5167A Black`.
 4. Never cross brands.
-5. Price verification: `k` = thousands, `m` = millions, European `17,5€` = `17,500 EUR`, integer `125€` = `125 EUR`.
+5. Price verification: `k` = thousands, `m` = millions, currency-adjacent amounts are thousands as in §8.4.1 (`17,5€` = `17,500 EUR`, `125€` = `125,000 EUR`). When the text quotes several currencies, the current price is kept; the AI never flips only to switch currency.
 6. Currency precedence for bare amounts: phone-country default (§8.4.2).
 7. Symbol `$` = HKD for HK/CN/MO/SG senders, USD otherwise. `USDT` normalizes to `USD`.
 
@@ -1256,8 +1265,11 @@ A flip below 95 confidence on an already-matched row is **ignored** — the cost
 - Only if `OPENAI_API_KEY` is configured.
 - After the §13 unmatched-line AI pass.
 - Capped at `AI_MATCHING_CAP` (default 3,000) items total.
-- Batches of 800, up to 5 concurrent, `gpt-5.2`, temp 0.05.
-- Timeout enforced (`AI_MATCHING_TIMEOUT`); on timeout, deterministic results are preserved.
+- Same batching, retry and truncation handling as §13.2/§13.2a, temp 0.05.
+- Timeout enforced (`AI_MATCHING_TIMEOUT`); rows without a verdict keep their deterministic result.
+- A `flip` (or a review-row update) is applied only when the new ws_code exists in the
+  catalog. The CSV import matches ws_codes strictly, so a code outside the catalog
+  would make the row unimportable.
 
 ## 13B. Cross-Currency Normalization
 

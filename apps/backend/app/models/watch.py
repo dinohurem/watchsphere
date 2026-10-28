@@ -81,6 +81,8 @@ class Watch(Document):
             "serial_number",
             "status",
             "reference",
+            # Join key for CSV import, the order book, watchlists and alerts.
+            "ws_code",
             "order_count",
             "trending",
             "featured",

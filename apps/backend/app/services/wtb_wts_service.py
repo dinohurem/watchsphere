@@ -1422,9 +1422,140 @@ def fuzzy_match_ref(
     return result
 
 
+# --- OpenAI JSON-array calls -------------------------------------------------
+# Both text passes ask for a bare JSON array. A reply that hits max_tokens is
+# cut off mid-array, so a plain json.loads() used to drop every verdict in the
+# batch. Batches are kept small enough that a full reply fits, truncated
+# replies are salvaged element by element, and the items they left out are
+# sent again.
+
+AI_MAX_TOKENS = 16384
+AI_REQUEST_TIMEOUT = 150.0  # seconds per request
+AI_RETRY_DELAY = 2.0        # seconds before the single retry of a failed call
+AI_BATCH_SIZE = 150         # ~60-80 output tokens per element keeps a reply under AI_MAX_TOKENS
+AI_MAX_CONCURRENT = 8
+
+
+def _strip_code_fence(content: str) -> str:
+    content = (content or "").strip()
+    if content.startswith("```"):
+        content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+    return content.strip()
+
+
+def _parse_json_array(content: str) -> list[dict]:
+    """Parse a JSON array of objects. When the array is cut off, return the
+    elements that are complete. Returns [] when nothing usable is found."""
+    text = _strip_code_fence(content)
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, dict)]
+    if parsed is not None:
+        return []
+
+    start = text.find("[")
+    if start == -1:
+        return []
+    decoder = json.JSONDecoder()
+    items: list[dict] = []
+    pos = start + 1
+    while True:
+        while pos < len(text) and text[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(text) or text[pos] != "{":
+            break
+        try:
+            obj, pos = decoder.raw_decode(text, pos)
+        except json.JSONDecodeError:
+            break  # the truncated tail
+        if isinstance(obj, dict):
+            items.append(obj)
+    return items
+
+
+async def _request_json_array(client, prompt: str, temperature: float, label: str) -> tuple[list[dict], bool]:
+    """One chat completion that must answer with a JSON array, retried once
+    when the call fails or the reply is not an array.
+    Returns (elements, truncated)."""
+    from app.core.config import settings
+
+    for attempt in (1, 2):
+        try:
+            response = await client.chat.completions.create(
+                model=settings.OPENAI_TEXT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=AI_MAX_TOKENS,
+            )
+        except Exception as e:
+            logger.warning(f"{label}: OpenAI call failed (attempt {attempt}): {type(e).__name__}: {e}")
+            if attempt == 1:
+                await asyncio.sleep(AI_RETRY_DELAY)
+            continue
+
+        choice = response.choices[0]
+        truncated = choice.finish_reason == "length"
+        items = _parse_json_array(choice.message.content or "")
+        if truncated:
+            logger.warning(f"{label}: reply hit max_tokens, salvaged {len(items)} elements")
+        if items or truncated:
+            return items, truncated
+        logger.warning(f"{label}: reply was not a JSON array (attempt {attempt})")
+    return [], False
+
+
+async def _run_ai_batches(items: list[dict], request, label: str, timeout: Optional[float]) -> list[dict]:
+    """Send `items` (each carrying a unique "index") through `request(batch)` in
+    concurrent batches. Items a truncated reply left out are sent once more, in
+    two halves. Batches still running at `timeout` are cancelled, but results of
+    the batches that finished are kept."""
+    semaphore = asyncio.Semaphore(AI_MAX_CONCURRENT)
+
+    async def run(batch: list[dict], resend_missing: bool = True) -> list[dict]:
+        async with semaphore:
+            results, truncated = await request(batch)
+        if truncated and resend_missing:
+            answered = {r.get("index") for r in results}
+            missing = [it for it in batch if it["index"] not in answered]
+            if missing:
+                logger.info(f"{label}: re-sending {len(missing)} items left out by a truncated reply")
+                half = (len(missing) + 1) // 2
+                for part in (missing[:half], missing[half:]):
+                    if part:
+                        results.extend(await run(part, resend_missing=False))
+        return results
+
+    batches = [items[i:i + AI_BATCH_SIZE] for i in range(0, len(items), AI_BATCH_SIZE)]
+    if not batches:
+        return []
+    logger.info(f"{label}: {len(items)} items in {len(batches)} batches (max {AI_MAX_CONCURRENT} concurrent)")
+
+    tasks = [asyncio.create_task(run(b)) for b in batches]
+    done, pending = await asyncio.wait(tasks, timeout=timeout)
+    for task in pending:
+        task.cancel()
+    if pending:
+        logger.warning(f"{label}: {len(pending)}/{len(tasks)} batches unfinished after {timeout}s "
+                       f"— keeping the {len(done)} that finished")
+
+    results: list[dict] = []
+    for task in done:
+        if task.exception() is not None:
+            logger.error(f"{label}: batch failed: {task.exception()}")
+            continue
+        results.extend(task.result())
+    return results
+
+
 async def batch_ai_match(
     unmatched_lines: list[dict],
     watch_index: dict,
+    timeout: Optional[float] = None,
 ) -> list[dict]:
     """Use OpenAI GPT-5.2 to match unmatched lines against the watch catalog.
     Processes ALL unmatched lines in batches (no cap).
@@ -1457,14 +1588,9 @@ async def batch_ai_match(
 
     catalog_text = "\n".join(catalog_entries) if catalog_entries else "CATALOG IS EMPTY - identify watches by your knowledge"
 
-    # Process in batches
-    BATCH_SIZE = 1500
-    MAX_CONCURRENT = 5
-    all_results = []
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=AI_REQUEST_TIMEOUT)
 
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=120.0)
-
-    async def process_batch(batch_lines: list[dict]) -> list[dict]:
+    async def process_batch(batch_lines: list[dict]) -> tuple[list[dict], bool]:
         lines_text = "\n".join(
             f"[{item['index']}] {item['content'][:400]}"
             for item in batch_lines
@@ -1524,80 +1650,33 @@ Respond with ONLY a JSON array. Each element:
 
 JSON array:"""
 
-        try:
-            response = await client.chat.completions.create(
-                model="gpt-5.2",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=16384,
-            )
+        return await _request_json_array(client, prompt, 0.1, "AI matching")
 
-            content = response.choices[0].message.content.strip()
-            # Strip markdown code fences if present
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                content = content.strip()
+    ai_results = await _run_ai_batches(unmatched_lines, process_batch, "AI matching", timeout)
 
-            ai_results = json.loads(content)
-            batch_matched = []
+    all_results = []
+    for item in ai_results:
+        ws_code = item.get("ws_code")
+        idx = item.get("index")
+        confidence = item.get("confidence", 0)
+        if idx is None or not isinstance(confidence, (int, float)) or confidence < 1:
+            continue
 
-            for item in ai_results:
-                ws_code = item.get("ws_code")
-                idx = item.get("index")
-                confidence = item.get("confidence", 0)
-                ai_brand = item.get("brand", "")
-                ai_model = item.get("model", "")
-                suggested_ws_code = item.get("suggested_ws_code", "")
-                in_catalog = item.get("in_catalog", False)
+        # The model's in_catalog flag is not trusted: a ws_code counts as in the
+        # catalog only when it actually resolves to a catalog watch.
+        watch = ws_code_to_watch.get(ws_code.lower()) if isinstance(ws_code, str) and ws_code else None
+        all_results.append({
+            "index": idx,
+            "ws_code": ws_code,
+            "watch": watch,
+            "ai_brand": item.get("brand") or "",
+            "ai_model": item.get("model") or "",
+            "ai_ws_code": item.get("suggested_ws_code") or ws_code or "",
+            "confidence": confidence,
+            "in_catalog": watch is not None,
+        })
 
-                if idx is None or confidence < 1:
-                    continue
-
-                watch = None
-                if ws_code:
-                    ws_lower = ws_code.lower()
-                    watch = ws_code_to_watch.get(ws_lower)
-                    if watch:
-                        in_catalog = True
-
-                batch_matched.append({
-                    "index": idx,
-                    "ws_code": ws_code,
-                    "watch": watch,
-                    "ai_brand": ai_brand,
-                    "ai_model": ai_model,
-                    "ai_ws_code": suggested_ws_code or ws_code or "",
-                    "confidence": confidence,
-                    "in_catalog": in_catalog,
-                })
-
-            return batch_matched
-
-        except Exception as e:
-            logger.error(f"AI matching batch failed: {e}")
-            return []
-
-    # Split into batches and process with concurrency limit
-    batches = []
-    for i in range(0, len(unmatched_lines), BATCH_SIZE):
-        batches.append(unmatched_lines[i:i + BATCH_SIZE])
-
-    logger.info(f"batch_ai_match: processing {len(unmatched_lines)} lines in {len(batches)} batches "
-                f"(max {MAX_CONCURRENT} concurrent)")
-
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-
-    async def limited_batch(batch):
-        async with semaphore:
-            return await process_batch(batch)
-
-    batch_results = await asyncio.gather(*[limited_batch(b) for b in batches])
-    for result in batch_results:
-        all_results.extend(result)
-
-    logger.info(f"AI matching: {len(all_results)}/{len(unmatched_lines)} lines matched")
+    logger.info(f"AI matching: {len(all_results)}/{len(unmatched_lines)} lines answered")
     return all_results
 
 
@@ -1605,6 +1684,7 @@ async def batch_ai_verify(
     items: list[dict],
     watch_index: dict,
     mode: str,
+    timeout: Optional[float] = None,
 ) -> list[dict]:
     """Use OpenAI GPT-5.2 to VERIFY deterministic matches and prices.
 
@@ -1651,10 +1731,7 @@ async def batch_ai_verify(
     for ws_lower, watch in watch_index["by_ws_code"].items():
         ws_to_watch[ws_lower] = watch
 
-    BATCH_SIZE = 800
-    MAX_CONCURRENT = 5
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=120.0)
-    all_results: list[dict] = []
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=AI_REQUEST_TIMEOUT)
 
     def _format_item(it: dict) -> str:
         cand_block = ""
@@ -1677,7 +1754,7 @@ async def batch_ai_verify(
             f"  candidates:\n{cand_block}"
         )
 
-    async def process_batch(batch_items: list[dict]) -> list[dict]:
+    async def process_batch(batch_items: list[dict]) -> tuple[list[dict], bool]:
         items_text = "\n".join(_format_item(it) for it in batch_items)
 
         prompt = f"""You are an expert luxury watch dealer verifying WhatsApp dealer messages against a catalog.
@@ -1693,11 +1770,11 @@ MATCHING RULES (enforce strictly):
 
 PRICE VERIFICATION:
 - Dealer shorthand: 'k' = thousands, 'm' = millions. '850k' = 850,000. '1.815m' = 1,815,000. '2.05m' = 2,050,000.
-- European notation '17,5€' or '17.5€' (1-2 digits before AND after the decimal) means 17,500 EUR. But '125€' (integer) means 125 EUR, and '125.00€' (3-digit decimal) is 125 EUR.
+- A number written directly next to a currency is in thousands unless it is already a full amount: '17,5€' and '17.5€' = 17,500 EUR, '125€' and '125.00€' = 125,000 EUR, '435.000€' = 435,000 EUR. Integers of 4+ digits are full amounts: '10000€' = 10,000 EUR.
 - Currency precedence for bare amounts (no currency symbol): HK/CN/MO/SG -> HKD; DE/FR/IT/ES/NL/BE/AT/PT/IE/FI/GR/LU/SK/SI/EE/LV/LT/MT/CY/HR -> EUR; UK/GB -> GBP; CH -> CHF; US/JP/AE/others -> USD.
 - Symbol '$' means HKD for HK/CN/MO/SG senders, USD otherwise.
 - USDT should be normalized to USD in the currency field.
-- If the text contains multiple prices (e.g. 'hkd1.815m usd235.5k'), prefer USDT > USD > EUR > GBP > CHF > HKD.
+- If the text quotes the same watch in several currencies (e.g. 'hkd1.815m usd235.5k'), each is correct: keep the current price and currency. Never flip only to switch to another currency the text also quotes.
 
 DECISION:
 - action='keep': current ws_code and price are correct. Set confidence 80-100.
@@ -1714,36 +1791,9 @@ Respond with ONLY a JSON array, one element per item:
 
 JSON array:"""
 
-        try:
-            response = await client.chat.completions.create(
-                model="gpt-5.2",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.05,
-                max_tokens=16384,
-            )
-            content = response.choices[0].message.content.strip()
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                content = content.strip()
-            return json.loads(content)
-        except Exception as e:
-            logger.error(f"AI verification batch failed: {e}")
-            return []
+        return await _request_json_array(client, prompt, 0.05, "AI verification")
 
-    batches = [items[i:i + BATCH_SIZE] for i in range(0, len(items), BATCH_SIZE)]
-    logger.info(f"batch_ai_verify: verifying {len(items)} rows in {len(batches)} batches")
-
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-
-    async def limited(b):
-        async with semaphore:
-            return await process_batch(b)
-
-    batch_results = await asyncio.gather(*[limited(b) for b in batches])
-    for r in batch_results:
-        all_results.extend(r)
+    all_results = await _run_ai_batches(items, process_batch, "AI verification", timeout)
     logger.info(f"batch_ai_verify: returned {len(all_results)} verdicts")
     return all_results
 
@@ -2648,15 +2698,31 @@ def _format_price(raw: str) -> Optional[str]:
         return None
 
 
+# Remarks that contain the word "new" but describe a replaced part, not the
+# watch's condition ("New Clasp" on a used watch). Removed before condition
+# keywords are matched.
+_NEW_PART_RE = re.compile(
+    r'(?<![a-z0-9])new\s+(?:clasps?|buckles?|papers?|certificates?|cards?|calibers?|calibres?|straps?|bracelets?|bezels?|dials?|hands|crystals?|movements?)(?![a-z0-9])'
+)
+
+
+def _find_condition(text: str, conditions: dict[str, str]) -> Optional[str]:
+    """Return the condition of the longest keyword found as a whole word.
+    Word boundaries keep 'new' from firing inside 'renew' or 'news'."""
+    text_lower = _NEW_PART_RE.sub(' ', text.lower())
+    for keyword in sorted(conditions.keys(), key=len, reverse=True):
+        if re.search(r'(?<![a-z0-9])' + re.escape(keyword) + r'(?![a-z0-9])', text_lower):
+            return conditions[keyword]
+    return None
+
+
 def extract_condition(content: str, mode: str, month_year: Optional[str] = None, ref_month: int = 1, ref_year: int = 2026) -> Optional[str]:
     """Extract and normalize condition from message text.
     For WTS: defaults to 'Unworn' when no explicit condition keyword is found."""
-    content_lower = content.lower()
     conditions = WTS_CONDITIONS if mode == "WTS" else WTB_CONDITIONS
-
-    for keyword in sorted(conditions.keys(), key=len, reverse=True):
-        if keyword in content_lower:
-            return conditions[keyword]
+    found = _find_condition(content, conditions)
+    if found:
+        return found
 
     # WTS posts default to Unworn when no explicit condition is stated
     if mode == "WTS":
@@ -2672,12 +2738,10 @@ def extract_condition_from_line(line: str, section_condition: Optional[str] = No
     typically unworn). For WTB, condition vocabulary is different ('Only Unworn' /
     'Can be Used') and there is no per-line default — fall back to section_condition
     or None."""
-    line_lower = line.lower()
     conditions = WTS_CONDITIONS if mode == "WTS" else WTB_CONDITIONS
-
-    for keyword in sorted(conditions.keys(), key=len, reverse=True):
-        if keyword in line_lower:
-            return conditions[keyword]
+    found = _find_condition(line, conditions)
+    if found:
+        return found
 
     if mode == "WTS":
         return section_condition or "Unworn"
@@ -2838,17 +2902,16 @@ def _detect_section_condition(line: str, mode: str = "WTS") -> Optional[str]:
     used_label = "Can be Used" if is_wtb else "Used"
     unworn_label = "Only Unworn" if is_wtb else "Unworn"
 
-    if 'like new' in cleaned:
+    def has(*words: str) -> bool:
+        return any(re.search(r'(?<![a-z0-9])' + re.escape(w) + r'(?![a-z0-9])', cleaned) for w in words)
+
+    if has('like new'):
         return used_label
     if re.match(r'^like\s*$', cleaned):
         return used_label
-    if 'unworn' in cleaned or 'brand new' in cleaned or 'bnib' in cleaned:
+    if has('unworn', 'brand new', 'bnib', 'nos', 'stickered', 'sealed', 'new'):
         return unworn_label
-    if 'nos' in cleaned or 'stickered' in cleaned or 'sealed' in cleaned:
-        return unworn_label
-    if re.search(r'\bnew\b', cleaned):
-        return unworn_label
-    if 'used' in cleaned or 'pre-owned' in cleaned or 'preowned' in cleaned:
+    if has('used', 'pre-owned', 'preowned'):
         return used_label
     return None
 
@@ -3740,16 +3803,13 @@ async def process_generation(
         await _report("ai_matching", 80, f"AI matching {ai_count:,} unmatched items with GPT-5.2...{skip_msg}")
         logger.info(f"process_generation: starting AI matching for {ai_count} lines (timeout={AI_MATCHING_TIMEOUT}s)...")
         t_ai_start = time.time()
-        try:
-            ai_results = await asyncio.wait_for(
-                batch_ai_match(unmatched_for_ai, watch_index),
-                timeout=AI_MATCHING_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            ai_results = []
-            logger.warning(f"process_generation: AI matching timed out after {AI_MATCHING_TIMEOUT}s — skipping")
-            await _report("ai_matching", 85, f"AI matching timed out after {AI_MATCHING_TIMEOUT}s — continuing without AI results")
+        # Batches still running at the timeout are cancelled inside
+        # batch_ai_match; the ones that finished are kept.
+        ai_results = await batch_ai_match(unmatched_for_ai, watch_index, timeout=AI_MATCHING_TIMEOUT)
         logger.info(f"process_generation: AI matching done in {time.time()-t_ai_start:.1f}s — {len(ai_results)} results")
+        if len(ai_results) < ai_count:
+            await _report("ai_matching", 85,
+                          f"AI answered {len(ai_results):,} of {ai_count:,} items — the rest keep their parsed result")
 
         # Build lookup: ai line index -> match result
         ai_lookup = {r["index"]: r for r in ai_results}
@@ -3777,9 +3837,31 @@ async def process_generation(
                     continue
 
                 watch = result.get("watch")
-                in_catalog = result.get("in_catalog", False)
                 row = not_in_database_rows[nid_idx]
                 original_content = row.get("_original_content", "")
+
+                if watch is None:
+                    # Identified, but not a catalog watch. The CSV import matches
+                    # ws_codes strictly, so a matched row under this code could
+                    # never reach the order book. Review it instead, and offer the
+                    # watch as a catalog addition.
+                    ai_ws = result.get("ai_ws_code", "")
+                    ai_info = f"AI identified {ai_ws or '?'} ({confidence}%), not in catalog"
+                    row["Review Reason"] = (
+                        f"{row.get('Review Reason', '')}; {ai_info}"
+                        if row.get("Review Reason") else ai_info
+                    )
+                    indices_to_move_to_review.append(nid_idx)
+                    if ai_ws and result.get("ai_brand"):
+                        ai_suggested_additions.append({
+                            "brand": result.get("ai_brand", ""),
+                            "suggested_ws_code": ai_ws,
+                            "model": result.get("ai_model", ""),
+                            "reference": ai_ws.split()[0],
+                            "confidence": confidence,
+                            "example_line": original_content[:200],
+                        })
+                    continue
 
                 # Re-extract fields for the matched row
                 raw_month_year, month_year_val = _resolve_month_year(original_content, mode, ref_month, ref_year)
@@ -3796,14 +3878,10 @@ async def process_generation(
                     remarks_val = f"{remarks_val}; {loc_remarks}" if remarks_val else loc_remarks
                 price_str_val = f"{price_val} {currency_val}" if price_val and currency_val else (price_val or "")
 
-                # Use catalog watch data if available, otherwise AI-determined data
-                ws_code_val = watch["ws_code"] if watch else result.get("ai_ws_code", "")
-                brand_val = watch["brand"] if watch else result.get("ai_brand", "")
-
                 matched_rows.append({
                     "Nachrichten Art": mode,
-                    "Marke": brand_val,
-                    "WS-Code": ws_code_val,
+                    "Marke": watch["brand"],
+                    "WS-Code": watch["ws_code"],
                     "Monat/Jahr": month_year_val,
                     "Standort": location_val or "",
                     "Zustand": condition_val or "",
@@ -3816,17 +3894,6 @@ async def process_generation(
                 })
                 indices_to_remove.append(nid_idx)
                 ai_matched_count += 1
-
-                # Track suggested catalog additions (watches not in catalog)
-                if not in_catalog and ws_code_val and brand_val:
-                    ai_suggested_additions.append({
-                        "brand": brand_val,
-                        "suggested_ws_code": ws_code_val,
-                        "model": result.get("ai_model", ""),
-                        "reference": result.get("ai_ws_code", "").split()[0] if result.get("ai_ws_code") else "",
-                        "confidence": confidence,
-                        "example_line": original_content[:200],
-                    })
 
         # Apply moves/removals to not_in_database_rows. Process in reverse index
         # order so earlier indices stay valid while we splice.
@@ -3900,14 +3967,9 @@ async def process_generation(
             verify_items = verify_items[:verify_cap]
             verify_sources = verify_sources[:verify_cap]
 
-        try:
-            verify_results = await asyncio.wait_for(
-                batch_ai_verify(verify_items, watch_index, mode),
-                timeout=AI_MATCHING_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            verify_results = []
-            logger.warning("process_generation: AI verification timed out — keeping deterministic results")
+        # Rows without a verdict (timeout, failed batch) keep their
+        # deterministic result.
+        verify_results = await batch_ai_verify(verify_items, watch_index, mode, timeout=AI_MATCHING_TIMEOUT)
 
         verdict_lookup = {v.get("index"): v for v in verify_results if v.get("index") is not None}
 
@@ -3924,16 +3986,16 @@ async def process_generation(
             new_currency = verdict.get("currency")
             reason = verdict.get("reason") or ""
 
+            # A ws_code the catalog does not know would leave the row
+            # unimportable (the CSV import matches ws_codes strictly), so the AI
+            # may only move a row to a catalog watch.
+            cat_watch = watch_index["by_ws_code"].get(new_ws.lower()) if new_ws else None
+
             if tier == "matched":
                 row = matched_rows[row_idx]
-                if action == "flip" and conf >= 95 and new_ws:
-                    # Look up catalog watch for the new ws_code
-                    cat_watch = watch_index["by_ws_code"].get(new_ws.lower())
-                    if cat_watch:
-                        row["WS-Code"] = cat_watch["ws_code"]
-                        row["Marke"] = cat_watch["brand"]
-                    else:
-                        row["WS-Code"] = new_ws
+                if action == "flip" and conf >= 95 and cat_watch:
+                    row["WS-Code"] = cat_watch["ws_code"]
+                    row["Marke"] = cat_watch["brand"]
                     if new_price and new_currency:
                         row["Preis"] = f"{new_price} {new_currency}"
                     elif new_price:
@@ -3947,13 +4009,9 @@ async def process_generation(
                 # 'keep' → do nothing; ignore flips below threshold (too risky)
             else:  # tier == "review"
                 row = needs_review_rows[row_idx]
-                if action in ("keep", "flip") and conf >= 80 and new_ws:
-                    cat_watch = watch_index["by_ws_code"].get(new_ws.lower())
-                    if cat_watch:
-                        row["WS-Code"] = cat_watch["ws_code"]
-                        row["Marke"] = cat_watch["brand"]
-                    else:
-                        row["WS-Code"] = new_ws
+                if action in ("keep", "flip") and conf >= 80 and cat_watch:
+                    row["WS-Code"] = cat_watch["ws_code"]
+                    row["Marke"] = cat_watch["brand"]
                     if new_price and new_currency:
                         row["Preis"] = f"{new_price} {new_currency}"
                     # Leave it in needs_review unless action asks for promote — keep conservative
