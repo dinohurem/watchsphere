@@ -1,9 +1,12 @@
+import json
 from typing import Any, List, Optional
+from urllib.parse import parse_qsl, urlsplit
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from datetime import datetime
 from beanie import PydanticObjectId
 
+from app.core.config import settings
 from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
 from app.models.billing import (
@@ -12,7 +15,6 @@ from app.models.billing import (
     Transaction, TransactionStatus, SubscriptionHistory
 )
 from app.services.payment import monri_service, check_subscription_status, log_payment_activity
-from app.services.email import email_service
 from app.models.activity_log import ActivityType, EntityType
 
 router = APIRouter()
@@ -576,6 +578,16 @@ class SubscribeRequest(BaseModel):
     cancel_url: str
 
 
+class VerifyPaymentRequest(BaseModel):
+    # The full URL Monri redirected the buyer to, including its digest.
+    return_url: str
+
+
+def _is_allowed_origin(url: str) -> bool:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}" in settings.cors_origins
+
+
 class UserSubscriptionResponse(BaseModel):
     has_subscription: bool
     status: Optional[str] = None
@@ -607,6 +619,19 @@ async def initiate_subscription(
     Initiate subscription payment.
     Returns payment form data for Monri hosted payment page.
     """
+    if not monri_service.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payments are not configured"
+        )
+
+    # Monri sends the buyer back to these URLs, so they must be ours.
+    if not (_is_allowed_origin(data.return_url) and _is_allowed_origin(data.cancel_url)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid return URL"
+        )
+
     # Check if user already has an active non-trial subscription
     status_info = await check_subscription_status(str(current_user.id))
 
@@ -654,126 +679,66 @@ async def initiate_subscription(
 
 @router.post("/subscription/verify")
 async def verify_subscription_payment(
+    data: VerifyPaymentRequest,
     current_user: User = Depends(get_current_user),
 ) -> Any:
     """
-    Verify and activate subscription after payment return.
-    This endpoint is called when the user returns from Monri with approved status,
-    in case the webhook hasn't processed yet.
-    """
-    from dateutil.relativedelta import relativedelta
+    Activate a subscription from Monri's success redirect.
 
-    # Find the most recent pending billing record for this user
+    Called by the payment callback page in case Monri's server callback has
+    not arrived yet. The redirect URL is only trusted once its digest checks
+    out and it names an approved payment for one of this user's records.
+    """
+    if not monri_service.verify_return_url(data.return_url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment could not be verified"
+        )
+
+    params = dict(parse_qsl(urlsplit(data.return_url).query, keep_blank_values=True))
+
+    if params.get("response_code") != "0000":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment was not approved"
+        )
+
     billing = await Billing.find_one(
+        Billing.invoice_number == params.get("order_number"),
         Billing.user_id == str(current_user.id),
         Billing.type == BillingType.SUBSCRIPTION,
-        Billing.status == BillingStatus.PENDING,
     )
 
     if not billing:
-        # Check if there's already a paid billing record (webhook already processed)
-        recent_paid = await Billing.find_one(
-            Billing.user_id == str(current_user.id),
-            Billing.type == BillingType.SUBSCRIPTION,
-            Billing.status == BillingStatus.PAID,
-        )
-        if recent_paid:
-            # Check subscription status
-            status_info = await check_subscription_status(str(current_user.id))
-            return {
-                "status": "already_processed",
-                "subscription": status_info,
-            }
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No pending payment found"
+            detail="No matching payment found"
         )
 
-    # Process the payment as approved (simulate webhook for development)
-    now = datetime.utcnow()
+    # Monri only includes the amount when it differs from the order's
+    # (e.g. a discount), so check it when present.
+    if "amount" in params and not monri_service.amount_matches(
+        billing, params["amount"], params.get("currency")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment does not match the order"
+        )
 
-    # Update billing record
-    billing.status = BillingStatus.PAID
-    billing.paid_at = now
-    billing.updated_at = now
-    await billing.save()
-
-    # Update or create subscription
-    subscription = await Subscription.find_one(
-        Subscription.user_id == str(current_user.id)
-    )
-
-    if subscription:
-        # Activate/renew existing subscription
-        subscription.status = SubscriptionStatus.ACTIVE
-        subscription.plan = SubscriptionPlan.PREMIUM
-        subscription.price_monthly = monri_service.subscription_price
-
-        # Set new expiration (1 month from now or from current expiration)
-        if subscription.expires_at and subscription.expires_at > now:
-            subscription.expires_at = subscription.expires_at + relativedelta(months=1)
-        else:
-            subscription.expires_at = now + relativedelta(months=1)
-
-        subscription.next_billing_date = subscription.expires_at
-        subscription.auto_renew = True
-        subscription.updated_at = now
-        await subscription.save()
+    if billing.status == BillingStatus.PENDING:
+        activated = await monri_service.activate_subscription(billing, source="return")
+    elif billing.status == BillingStatus.PAID:
+        activated = None
     else:
-        # Create new subscription record
-        subscription = Subscription(
-            user_id=str(current_user.id),
-            user_name=current_user.name,
-            user_email=current_user.email,
-            plan=SubscriptionPlan.PREMIUM,
-            status=SubscriptionStatus.ACTIVE,
-            price_monthly=monri_service.subscription_price,
-            currency=monri_service.currency,
-            started_at=now,
-            expires_at=now + relativedelta(months=1),
-            next_billing_date=now + relativedelta(months=1),
-            auto_renew=True,
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment was not completed"
         )
-        await subscription.insert()
 
-    # Log the payment activity
-    await log_payment_activity(
-        activity_type=ActivityType.PAYMENT_COMPLETED,
-        description=f"Payment of {billing.amount} {billing.currency} completed for Premium subscription (verified)",
-        user_id=str(current_user.id),
-        user_name=current_user.name,
-        user_email=current_user.email,
-        entity_type=EntityType.PAYMENT,
-        entity_id=str(billing.id),
-        metadata={
-            "amount": billing.amount,
-            "currency": billing.currency,
-            "order_number": billing.invoice_number,
-            "verified_manually": True,
-        }
-    )
-
-    # Send subscription confirmation email
-    try:
-        expires_at_str = subscription.expires_at.strftime('%B %d, %Y') if subscription.expires_at else "N/A"
-        await email_service.send_subscription_confirmation_email(
-            to_email=current_user.email,
-            user_name=current_user.name,
-            plan_name="Premium",
-            amount=billing.amount,
-            currency=billing.currency,
-            expires_at=expires_at_str,
-            is_renewal=False,
-        )
-    except Exception as e:
-        # Don't fail the payment flow if email fails
-        print(f"Failed to send subscription confirmation email: {e}")
-
-    # Get updated subscription status
     status_info = await check_subscription_status(str(current_user.id))
 
     return {
-        "status": "activated",
+        "status": "activated" if activated else "already_processed",
         "subscription": status_info,
     }
 
@@ -827,11 +792,23 @@ async def cancel_subscription(
 
 @router.post("/webhook/monri")
 async def monri_webhook(request: Request) -> Any:
-    """Handle Monri payment webhook callbacks"""
+    """Handle Monri payment callbacks, signed with the merchant key."""
+    raw_body = await request.body()
+    authorization = request.headers.get("authorization") or request.headers.get("http_authorization")
+
+    if not monri_service.verify_callback(raw_body, authorization):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid callback signature"
+        )
+
     try:
-        payload = await request.json()
-    except Exception:
-        payload = dict(await request.form())
+        payload = json.loads(raw_body)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid callback body"
+        )
 
     result = await monri_service.process_webhook(payload)
 
