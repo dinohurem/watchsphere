@@ -142,8 +142,9 @@ Chat Privacy) and streams them to `/api/v1/whatsapp-bridge/messages`.
 - **Admin UI**: `apps/web/src/features/admin/pages/AdminWhatsAppBridge.tsx`
   (`/admin/whatsapp-bridge`) — status, pairing QR, groups, generation, retention
 - Captures are stored raw and rendered back into WhatsApp export format on demand,
-  so the existing WTS/WTB generator runs unchanged — **nothing reaches the order book
-  without an admin generating and reviewing the CSVs**
+  so the existing WTS/WTB generator runs unchanged. Manual generation needs an admin to
+  review and import the CSVs; the scheduled `daily-ingest` imports the **matched** CSV
+  automatically (needs-review, not-in-database and price-quarantined rows are held back)
 - Auth: shared secret `WHATSAPP_BRIDGE_TOKEN` (backend) / `BRIDGE_API_TOKEN` (bridge);
   unset means the endpoints return 503, never open access
 - Group allowlist is fail-closed — empty `BRIDGE_GROUPS` captures nothing

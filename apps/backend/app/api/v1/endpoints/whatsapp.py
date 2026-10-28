@@ -568,10 +568,15 @@ async def process_csv_import(
         unworn_keywords = (
             "unworn", "new", "brand new", "nos", "bnib", "fresh",
             "stickered", "sealed", "unsized", "un-worn",
-            "like new", "retail ready",
+            "retail ready",
         )
         used_keywords = ("used", "pre-owned", "preowned", "worn", "polished")
-        if any(kw in cond_lower for kw in unworn_keywords):
+        if "like new" in cond_lower:
+            # The generator classes "like new" as Used; checked first because
+            # it also contains the unworn keyword "new".
+            condition = "Used"
+            condition_raw = condition_str
+        elif any(kw in cond_lower for kw in unworn_keywords):
             condition = "Unworn"
             if cond_lower not in ("unworn", "new", "brand new", "nos", "bnib"):
                 condition_raw = condition_str

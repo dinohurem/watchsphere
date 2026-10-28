@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     # AI Services (OpenAI for AI chat)
     OPENAI_API_KEY: str = ""
+    # Model used for the WTS/WTB text matching and verification passes.
+    OPENAI_TEXT_MODEL: str = "gpt-5.2"
     # Model used for the WTS/WTB image-based variant disambiguation layer.
     # Override via env if a newer vision-capable model should be used.
     OPENAI_VISION_MODEL: str = "gpt-4o"
