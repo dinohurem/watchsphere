@@ -13,6 +13,7 @@ export interface SubscriptionStatus {
   price_monthly: number | null;
   currency: string | null;
   auto_renew: boolean | null;
+  paywall_enabled?: boolean;
 }
 
 export function useSubscription() {

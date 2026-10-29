@@ -4,6 +4,7 @@ import { useV2 } from '@/contexts/V2Context'
 
 export function AdminSettings() {
   const [v2Enabled, setV2Enabled] = useState(false)
+  const [paywallEnabled, setPaywallEnabled] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const { refetch: refetchV2 } = useV2()
@@ -16,6 +17,7 @@ export function AdminSettings() {
     try {
       const response = await api.get('/settings/app')
       setV2Enabled(response.data.v2_enabled ?? false)
+      setPaywallEnabled(response.data.paywall_enabled ?? false)
     } catch (error) {
       console.error('Failed to fetch settings:', error)
     } finally {
@@ -31,6 +33,19 @@ export function AdminSettings() {
       setV2Enabled(newValue)
       // Update the global V2 context so all consumers reflect the change immediately
       await refetchV2()
+    } catch (error) {
+      console.error('Failed to update settings:', error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleTogglePaywall = async () => {
+    const newValue = !paywallEnabled
+    setSaving(true)
+    try {
+      await api.patch('/settings/app', { paywall_enabled: newValue })
+      setPaywallEnabled(newValue)
     } catch (error) {
       console.error('Failed to update settings:', error)
     } finally {
@@ -78,6 +93,38 @@ export function AdminSettings() {
               <span
                 className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                   v2Enabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border shadow-sm mt-6">
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold text-gray-900">Subscriptions</h2>
+        </div>
+        <div className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-900">Enable Paywall</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                When off, every user has full access and no upgrade prompt is shown
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleTogglePaywall}
+              disabled={saving}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${
+                paywallEnabled ? 'bg-primary' : 'bg-gray-200'
+              }`}
+              role="switch"
+              aria-checked={paywallEnabled}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  paywallEnabled ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
             </button>
