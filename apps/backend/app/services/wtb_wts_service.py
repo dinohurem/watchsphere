@@ -1423,7 +1423,7 @@ def fuzzy_match_ref(
 
 
 # --- OpenAI JSON-array calls -------------------------------------------------
-# Both text passes ask for a bare JSON array. A reply that hits max_tokens is
+# Both text passes ask for a bare JSON array. A reply that hits the token budget is
 # cut off mid-array, so a plain json.loads() used to drop every verdict in the
 # batch. Batches are kept small enough that a full reply fits, truncated
 # replies are salvaged element by element, and the items they left out are
@@ -1478,7 +1478,7 @@ def _parse_json_array(content: str) -> list[dict]:
     return items
 
 
-async def _request_json_array(client, prompt: str, temperature: float, label: str) -> tuple[list[dict], bool]:
+async def _request_json_array(client, prompt: str, label: str) -> tuple[list[dict], bool]:
     """One chat completion that must answer with a JSON array, retried once
     when the call fails or the reply is not an array.
     Returns (elements, truncated)."""
@@ -1489,8 +1489,7 @@ async def _request_json_array(client, prompt: str, temperature: float, label: st
             response = await client.chat.completions.create(
                 model=settings.OPENAI_TEXT_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
-                max_tokens=AI_MAX_TOKENS,
+                max_completion_tokens=AI_MAX_TOKENS,
             )
         except Exception as e:
             logger.warning(f"{label}: OpenAI call failed (attempt {attempt}): {type(e).__name__}: {e}")
@@ -1502,7 +1501,7 @@ async def _request_json_array(client, prompt: str, temperature: float, label: st
         truncated = choice.finish_reason == "length"
         items = _parse_json_array(choice.message.content or "")
         if truncated:
-            logger.warning(f"{label}: reply hit max_tokens, salvaged {len(items)} elements")
+            logger.warning(f"{label}: reply hit the token budget, salvaged {len(items)} elements")
         if items or truncated:
             return items, truncated
         logger.warning(f"{label}: reply was not a JSON array (attempt {attempt})")
@@ -1650,7 +1649,7 @@ Respond with ONLY a JSON array. Each element:
 
 JSON array:"""
 
-        return await _request_json_array(client, prompt, 0.1, "AI matching")
+        return await _request_json_array(client, prompt, "AI matching")
 
     ai_results = await _run_ai_batches(unmatched_lines, process_batch, "AI matching", timeout)
 
@@ -1791,7 +1790,7 @@ Respond with ONLY a JSON array, one element per item:
 
 JSON array:"""
 
-        return await _request_json_array(client, prompt, 0.05, "AI verification")
+        return await _request_json_array(client, prompt, "AI verification")
 
     all_results = await _run_ai_batches(items, process_batch, "AI verification", timeout)
     logger.info(f"batch_ai_verify: returned {len(all_results)} verdicts")

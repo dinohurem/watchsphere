@@ -1164,7 +1164,7 @@ The AI pass runs AFTER the main processing loop, specifically on rows that ended
 - Max concurrent API calls: 8 (`AI_MAX_CONCURRENT`)
 - Per-request timeout: 150 seconds; overall timeout: 180 seconds. At the overall
   timeout, unfinished batches are cancelled and finished ones are kept.
-- Model: `settings.OPENAI_TEXT_MODEL` (default `gpt-5.2`)
+- Model: `settings.OPENAI_TEXT_MODEL` (default `gpt-6-luna`)
 - Temperature: 0.1
 - Max tokens per call: 16,384
 

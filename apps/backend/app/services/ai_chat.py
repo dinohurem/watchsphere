@@ -944,10 +944,9 @@ async def generate_ai_response(
         messages.append({"role": "user", "content": user_message})
 
         response = await openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=settings.OPENAI_TEXT_MODEL,
             messages=messages,
-            max_tokens=1500,
-            temperature=0.3,
+            max_completion_tokens=4000,
         )
 
         return response.choices[0].message.content
