@@ -27,11 +27,13 @@ class Settings(BaseSettings):
 
     # AI Services (OpenAI for AI chat)
     OPENAI_API_KEY: str = ""
-    # Model used for the WTS/WTB text matching and verification passes.
-    OPENAI_TEXT_MODEL: str = "gpt-5.2"
+    # Model used for the AI assistant and the WTS/WTB text matching and
+    # verification passes. gpt-6-luna is a reasoning model: it only accepts the
+    # default temperature, and its reasoning tokens count against
+    # max_completion_tokens, so budgets need headroom beyond the reply itself.
+    OPENAI_TEXT_MODEL: str = "gpt-6-luna"
     # Model used for the WTS/WTB image-based variant disambiguation layer.
-    # Override via env if a newer vision-capable model should be used.
-    OPENAI_VISION_MODEL: str = "gpt-4o"
+    OPENAI_VISION_MODEL: str = "gpt-6-luna"
 
     # One-time codes. Email is the only delivery channel - the WhatsApp number
     # identifies the account but never receives anything, so Postmark

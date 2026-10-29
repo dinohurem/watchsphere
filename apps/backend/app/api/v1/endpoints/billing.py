@@ -9,6 +9,7 @@ from beanie import PydanticObjectId
 from app.core.config import settings
 from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
+from app.models.app_settings import AppSettings
 from app.models.billing import (
     Billing, BillingType, BillingStatus,
     Subscription, SubscriptionPlan, SubscriptionStatus,
@@ -599,14 +600,22 @@ class UserSubscriptionResponse(BaseModel):
     price_monthly: Optional[float] = None
     currency: Optional[str] = None
     auto_renew: Optional[bool] = None
+    paywall_enabled: bool = True
 
 
 @router.get("/subscription/status", response_model=UserSubscriptionResponse)
 async def get_subscription_status(
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    """Get current user's subscription status"""
+    """Get current user's subscription status.
+
+    Clients gate features on has_subscription alone, including mobile builds
+    already in the stores, so with the paywall off it reports access for
+    everyone. The rest of the record stays the user's real subscription.
+    """
     status_info = await check_subscription_status(str(current_user.id))
+    if not (await AppSettings.get_global()).paywall_enabled:
+        status_info = {**status_info, "has_subscription": True, "paywall_enabled": False}
     return status_info
 
 

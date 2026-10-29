@@ -283,8 +283,7 @@ async def _vision_call(client, prompt: str, images: list[str],
         response = await client.chat.completions.create(
             model=settings.OPENAI_VISION_MODEL,
             messages=[{"role": "user", "content": parts}],
-            temperature=0.1,
-            max_tokens=600,
+            max_completion_tokens=2000,
         )
     except Exception as e:
         logger.warning(f"vision: OpenAI call failed: {type(e).__name__}: {e}")

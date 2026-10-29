@@ -12,26 +12,25 @@ router = APIRouter()
 
 class AppSettingsResponse(BaseModel):
     v2_enabled: bool
+    paywall_enabled: bool
 
 
 class AppSettingsUpdate(BaseModel):
     v2_enabled: Optional[bool] = None
+    paywall_enabled: Optional[bool] = None
 
 
-async def get_or_create_settings() -> AppSettings:
-    """Get the global settings singleton, creating it if it doesn't exist."""
-    settings = await AppSettings.find_one(AppSettings.key == "global")
-    if not settings:
-        settings = AppSettings(key="global", v2_enabled=False)
-        await settings.insert()
-    return settings
+def _response(settings: AppSettings) -> AppSettingsResponse:
+    return AppSettingsResponse(
+        v2_enabled=settings.v2_enabled,
+        paywall_enabled=settings.paywall_enabled,
+    )
 
 
 @router.get("/app", response_model=AppSettingsResponse)
 async def get_app_settings():
     """Get app settings. Public endpoint, no auth required."""
-    settings = await get_or_create_settings()
-    return AppSettingsResponse(v2_enabled=settings.v2_enabled)
+    return _response(await AppSettings.get_global())
 
 
 @router.patch("/app", response_model=AppSettingsResponse)
@@ -40,9 +39,11 @@ async def update_app_settings(
     current_user: User = Depends(get_current_admin_user),
 ):
     """Update app settings. Admin only."""
-    settings = await get_or_create_settings()
+    settings = await AppSettings.get_global()
     if data.v2_enabled is not None:
         settings.v2_enabled = data.v2_enabled
+    if data.paywall_enabled is not None:
+        settings.paywall_enabled = data.paywall_enabled
     settings.updated_at = datetime.utcnow()
     await settings.save()
-    return AppSettingsResponse(v2_enabled=settings.v2_enabled)
+    return _response(settings)
