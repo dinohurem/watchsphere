@@ -7,7 +7,7 @@ import '@/i18n';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, usePathname } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@watchsphere/shared/stores';
@@ -20,6 +20,7 @@ import { ConfigProvider } from '@/contexts/ConfigContext';
 import { GuideProvider, useGuide } from '@/contexts/GuideContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { V2Provider } from '@/contexts/V2Context';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { AnimatedSplashScreen } from '@/components/AnimatedSplashScreen';
 import { NotificationBanner } from '@/components/NotificationBanner';
 import { useFonts } from 'expo-font';
@@ -33,7 +34,8 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api } from '@/services/api';
+import { api, onAccountPendingApproval } from '@/services/api';
+import { useAlertPushHandling } from '@/hooks/useAlertPushHandling';
 
 // Keep splash screen visible while fonts load
 SplashScreen.preventAutoHideAsync();
@@ -112,6 +114,10 @@ function RootLayoutNav({ onSessionRestoreDone }: { onSessionRestoreDone: () => v
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
   const login = useAuthStore((state) => state.login);
+  const updateUser = useAuthStore((state) => state.updateUser);
+  // Spec 10.2: unapproved accounts only ever see the pending-approval screen.
+  const isPending = useAuthStore((state) => state.isAuthenticated && state.user?.approved === false);
+  const pathname = usePathname();
   const { colorScheme } = useTheme();
   const { checkFirstLogin, startGuide } = useGuide();
   const insets = useSafeAreaInsets();
@@ -136,6 +142,15 @@ function RootLayoutNav({ onSessionRestoreDone }: { onSessionRestoreDone: () => v
         sessionRestoreHandledRef.current = true;
         isFreshLoginRef.current = false;
         setIsRestoringSession(false);
+        // Refresh the approval state in the background (every launch while pending).
+        api
+          .get('/auth/me')
+          .then((res) => {
+            if (typeof res.data?.approved === 'boolean') {
+              updateUser({ approved: res.data.approved });
+            }
+          })
+          .catch(() => {});
         return;
       }
 
@@ -226,7 +241,9 @@ function RootLayoutNav({ onSessionRestoreDone }: { onSessionRestoreDone: () => v
         hasNavigatedRef.current = true;
 
         const notificationPromptShown = await AsyncStorage.getItem('notification_prompt_shown');
-        if (isFreshLoginRef.current && !notificationPromptShown) {
+        if (useAuthStore.getState().user?.approved === false) {
+          router.replace('/pending' as never);
+        } else if (isFreshLoginRef.current && !notificationPromptShown) {
           router.replace('/(auth)/notifications');
         } else {
           router.replace('/(tabs)');
@@ -263,6 +280,23 @@ function RootLayoutNav({ onSessionRestoreDone }: { onSessionRestoreDone: () => v
     }
   }, [isAuthenticated, hasHydrated, isRestoringSession]);
 
+  // Any 403 "account_pending_approval" flips the account back to pending.
+  useEffect(
+    () =>
+      onAccountPendingApproval(() => {
+        if (useAuthStore.getState().user?.approved !== false) updateUser({ approved: false });
+      }),
+    [updateUser]
+  );
+
+  useEffect(() => {
+    if (!hasHydrated || isRestoringSession || !isPending) return;
+    if (pathname !== '/pending' && pathname !== '/contact') router.replace('/pending' as never);
+  }, [isPending, pathname, hasHydrated, isRestoringSession]);
+
+  // Alert-match push: iOS categories, tap / "View listing(s)" → detail page, Activity badge.
+  useAlertPushHandling(hasHydrated && !isRestoringSession && isAuthenticated && !isPending);
+
   return (
     <>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
@@ -273,6 +307,7 @@ function RootLayoutNav({ onSessionRestoreDone }: { onSessionRestoreDone: () => v
       >
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+        <Stack.Screen name="pending" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen
           name="search"
           options={{
@@ -339,11 +374,13 @@ export default function RootLayout() {
                 <AIButtonProvider>
                   <NotificationProvider>
                     <ChatProvider>
-                      <GuideProvider>
-                        <RootLayoutNav onSessionRestoreDone={handleSessionRestoreDone} />
-                        {/* In-app notification banner - must be inside NotificationProvider */}
-                        <NotificationHandler />
-                      </GuideProvider>
+                      <CurrencyProvider>
+                        <GuideProvider>
+                          <RootLayoutNav onSessionRestoreDone={handleSessionRestoreDone} />
+                          {/* In-app notification banner - must be inside NotificationProvider */}
+                          <NotificationHandler />
+                        </GuideProvider>
+                      </CurrencyProvider>
                     </ChatProvider>
                   </NotificationProvider>
                 </AIButtonProvider>

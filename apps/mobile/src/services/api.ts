@@ -42,10 +42,27 @@ api.interceptors.request.use(
   }
 );
 
+// Unapproved accounts get 403 {"detail": "account_pending_approval"} on every endpoint except
+// auth / profile/me / support / fx (spec 10.2). The root layout listens and shows the pending screen.
+type PendingApprovalListener = () => void;
+const pendingApprovalListeners = new Set<PendingApprovalListener>();
+export function onAccountPendingApproval(listener: PendingApprovalListener): () => void {
+  pendingApprovalListeners.add(listener);
+  return () => {
+    pendingApprovalListeners.delete(listener);
+  };
+}
+
 // Response interceptor for handling errors and token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
+    if (error.response?.status === 403 && detail === 'account_pending_approval') {
+      pendingApprovalListeners.forEach((listener) => listener());
+      return Promise.reject(error);
+    }
+
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     // If 401 and we haven't retried yet

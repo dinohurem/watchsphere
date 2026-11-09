@@ -136,7 +136,12 @@ export function SearchPage() {
       });
 
       const response = await api.get('/market/search', { params });
-      setResults(response.data || []);
+      // /market/search returns {items} (mobile card search); older shape was a bare list.
+      const data = response.data;
+      const items = Array.isArray(data) ? data : data?.items ?? [];
+      setResults(
+        items.map((w: any) => ({ ...w, image_url: w.image_url ?? w.thumbnail ?? w.image ?? null }))
+      );
     } catch (error) {
       console.error('Search failed:', error);
       // Fallback to market data

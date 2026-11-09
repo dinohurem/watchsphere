@@ -1,5 +1,6 @@
 from beanie import Document
 from pydantic import Field, EmailStr
+from pymongo import IndexModel, ASCENDING
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
@@ -48,6 +49,18 @@ class User(Document):
     notify_price_changes: bool = True  # Price alerts
     notify_buy_offers: bool = True  # New buy order offers
     notify_messages: bool = True  # Chat messages
+    # Redesign v3 (P4): "WTS & WTB alerts" toggle – alert matches create Activity entries + push
+    notify_alert_matches: bool = True
+
+    # Redesign v3 (0.2): one app currency, synced across devices (EUR, HKD, AED, GBP, CHF,
+    # USD, CNY, JPY, SGD). None until the app sends the region default.
+    preferred_currency: Optional[str] = None
+
+    # Redesign v3 (13): not used yet; unique when set, introduced with Trade.
+    username: Optional[str] = None
+
+    # Redesign v3 (H1): last opened references, newest first (max 5 WS codes).
+    recently_viewed: List[str] = Field(default_factory=list)
 
     # Review stats (cached for performance)
     average_rating: float = 0.0
@@ -60,6 +73,13 @@ class User(Document):
         name = "users"
         indexes = [
             "email",
+            # unique only among users that actually have a username
+            IndexModel(
+                [("username", ASCENDING)],
+                name="username_unique",
+                unique=True,
+                partialFilterExpression={"username": {"$type": "string"}},
+            ),
         ]
 
     class Config:

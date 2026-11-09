@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { NotificationData } from '@/components/NotificationBanner';
 import { chatService } from '@/services/chatService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQueryClient } from '@tanstack/react-query';
+import { ACTIVITY_UNREAD_KEY } from '@/hooks/useActivityUnread';
+import { emitAlertMatch } from '@/hooks/useAlertPushHandling';
 
 interface NotificationContextType {
   currentNotification: NotificationData | null;
@@ -14,6 +17,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [currentNotification, setCurrentNotification] = useState<NotificationData | null>(null);
   const [notificationQueue, setNotificationQueue] = useState<NotificationData[]>([]);
+  const queryClient = useQueryClient();
 
   // Use ref to track current notification in callbacks without causing re-registration
   const currentNotificationRef = useRef<NotificationData | null>(null);
@@ -43,6 +47,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Listen for real-time notifications via Socket.IO
   useEffect(() => {
     const handleNotification = (data: any) => {
+      // Alert matches (spec 7 / 11) live in Activity: refresh the badge and an open list.
+      // The OS push already informs the user, so no in-app banner for them.
+      if (data?.type === 'alert_match') {
+        queryClient.invalidateQueries({ queryKey: ACTIVITY_UNREAD_KEY });
+        emitAlertMatch();
+        return;
+      }
       console.log('=== NotificationContext: Received notification:new event ===');
       console.log('NotificationContext: data.type:', data.type);
       console.log('NotificationContext: data.title:', data.title);
@@ -81,7 +92,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       chatService.off('notification:new', handleNotification);
       console.log('NotificationContext: Unregistered notification:new listener');
     };
-  }, [showNotification]);
+  }, [showNotification, queryClient]);
 
   const dismissNotification = useCallback(() => {
     setCurrentNotification(null);

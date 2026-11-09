@@ -35,6 +35,9 @@ class WtbWtsRun(Document):
     suggested_csv_gridfs_id: Optional[str] = None
     # Rows that could only be assigned correctly through image analysis
     matched_via_image_csv_gridfs_id: Optional[str] = None
+    # Structured per-row JSON (all buckets incl. discarded / aftermarket, with
+    # _meta) for the pipeline and the approval page. Not removed by the CSV TTL.
+    rows_json_gridfs_id: Optional[str] = None
     files_expire_at: Optional[datetime] = None
 
     # Stats
@@ -50,6 +53,8 @@ class WtbWtsRun(Document):
     matched_via_image_count: int = 0
     image_analyzed_count: int = 0
     image_enriched_count: int = 0
+    aftermarket_count: int = 0
+    discarded_count: int = 0
 
     # Progress tracking
     progress_percent: int = 0

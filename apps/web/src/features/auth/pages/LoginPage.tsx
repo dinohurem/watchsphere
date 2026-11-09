@@ -59,6 +59,11 @@ export function LoginPage() {
     });
 
     const { user, access_token, refresh_token } = response.data;
+    // Unapproved accounts may sign in on mobile (pending screen); the web keeps them out.
+    if (user && user.approved === false && user.role !== 'admin') {
+      setError(t('auth.login.pendingApproval'));
+      return;
+    }
     finishLogin(user, access_token, refresh_token);
   };
 
@@ -77,6 +82,11 @@ export function LoginPage() {
       code: signInCode,
     });
     const { user, access_token, refresh_token } = response.data;
+    // Unapproved accounts may sign in on mobile (pending screen); the web keeps them out.
+    if (user && user.approved === false && user.role !== 'admin') {
+      setError(t('auth.login.pendingApproval'));
+      return;
+    }
     finishLogin(user, access_token, refresh_token);
   };
 

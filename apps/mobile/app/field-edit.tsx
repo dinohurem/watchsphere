@@ -25,7 +25,7 @@ export default function FieldEditScreen() {
       case 'email':
         return 'Email Address';
       case 'whatsapp_phone':
-        return 'WhatsApp Info';
+        return 'WhatsApp';
       case 'telegram_username':
         return 'Telegram Info';
       default:
@@ -59,7 +59,7 @@ export default function FieldEditScreen() {
       case 'email':
         return 'email@example.com';
       case 'whatsapp_phone':
-        return '+1 234 567 8900';
+        return '+852 9123 4567';
       case 'telegram_username':
         return '@username';
       default:

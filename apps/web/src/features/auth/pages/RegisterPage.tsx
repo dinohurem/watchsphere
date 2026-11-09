@@ -33,7 +33,12 @@ export function RegisterPage() {
       });
 
       // If registration returns user and token, go to onboarding
-      if (response.data.user && response.data.access_token) {
+      // New accounts need approval first; show the pending message instead of logging in.
+      if (
+        response.data.user &&
+        response.data.access_token &&
+        response.data.user.approved !== false
+      ) {
         // Store tokens
         localStorage.setItem('auth_token', response.data.access_token);
         if (response.data.refresh_token) {

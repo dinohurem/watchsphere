@@ -35,6 +35,13 @@ async def connect_to_mongo():
     from app.models.watch_alert import WatchAlert
     from app.models.wtb_wts import WtbWtsRun
     from app.models.whatsapp_bridge import BridgeMessage, BridgeStatus
+    from app.models.fx_rate import FxRate, FxRateHistory
+    from app.models.market_stats import WatchMarketStats
+    from app.models.pipeline import (
+        PipelineUpload, PipelineGroupState, PipelineItem, AliasSuggestion, PipelineReportState,
+    )
+    from app.models.change_batch import ChangeBatch, ChangeBatchEntry
+    from app.models.remark_rule import RemarkRule, RemarkPlace
 
     await init_beanie(
         database=mongodb_client[settings.MONGODB_DB_NAME],
@@ -48,7 +55,11 @@ async def connect_to_mongo():
             ListingField, Filter,
             Dispute, Issue, Report, Review, AuthHandoffToken,
             Notification, AppSettings, WatchAlert,
-            WtbWtsRun, BridgeMessage, BridgeStatus
+            WtbWtsRun, BridgeMessage, BridgeStatus,
+            FxRate, FxRateHistory, WatchMarketStats,
+            PipelineUpload, PipelineGroupState, PipelineItem, AliasSuggestion, PipelineReportState,
+            ChangeBatch, ChangeBatchEntry,
+            RemarkRule, RemarkPlace,
         ]
     )
 

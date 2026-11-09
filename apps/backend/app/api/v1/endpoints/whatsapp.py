@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from beanie import PydanticObjectId
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from bson import ObjectId
-import asyncio
 import logging
 import re
 import zipfile
@@ -334,82 +333,18 @@ def extract_reference_from_ws_code(ws_code: str) -> str:
     return ws_code.strip().split()[0].upper() if ws_code.strip() else ""
 
 
-async def _trigger_alerts_for_imported_orders(orders: list):
-    """Trigger watch alerts for bulk-imported orders"""
+async def dispatch_new_listings_safe(order_ids: list[str], orders: Optional[list] = None) -> int:
+    """Alerts/push for really new listings (UI §11) via app.services.alert_dispatch.
+    Never raises."""
+    if not order_ids:
+        return 0
+    from app.services.alert_dispatch import dispatch_new_listings
+
     try:
-        from app.models.watch_alert import WatchAlert
-        from app.services.notifications import send_push_to_user
-        from app.models.notification import Notification, NotificationType as NotifType
-
-        orders_by_ws_code: dict[str, list] = {}
-        for order in orders:
-            ws_code = getattr(order, 'ws_code', None)
-            if ws_code:
-                orders_by_ws_code.setdefault(ws_code, []).append(order)
-
-        if not orders_by_ws_code:
-            return
-
-        ws_codes = list(orders_by_ws_code.keys())
-        alerts = await WatchAlert.find(
-            {"ws_code": {"$in": ws_codes}, "is_active": True}
-        ).to_list()
-
-        for alert in alerts:
-            matching_orders = orders_by_ws_code.get(alert.ws_code, [])
-            for order in matching_orders:
-                order_type_str = "WTS" if order.order_type == OrderType.SELL else "WTB"
-
-                if order.order_type == OrderType.SELL and not alert.notify_wts:
-                    continue
-                if order.order_type == OrderType.BUY and not alert.notify_wtb:
-                    continue
-                if alert.target_year:
-                    order_year = getattr(order, 'year', None)
-                    if order_year is None:
-                        continue
-                    year_dir = getattr(alert, 'year_direction', 'exactly')
-                    if year_dir == "exactly" and order_year != alert.target_year:
-                        continue
-                    if year_dir == "newer" and order_year < alert.target_year:
-                        continue
-                    if year_dir == "older" and order_year > alert.target_year:
-                        continue
-                if alert.price_threshold and order.price:
-                    if alert.price_direction == "below" and order.price > alert.price_threshold:
-                        continue
-                    if alert.price_direction == "above" and order.price < alert.price_threshold:
-                        continue
-
-                user = await User.get(PydanticObjectId(alert.user_id))
-                if not user:
-                    continue
-
-                title = f"New {order_type_str} for {alert.ws_code}"
-                body = f"{order.price} {order.currency}" if order.price else f"New {order_type_str} order"
-
-                notification = Notification(
-                    user_id=alert.user_id,
-                    type=NotifType.WATCHLIST_ALERT,
-                    title=title,
-                    body=body,
-                    reference=order.reference,
-                    order_id=str(order.id),
-                    price=order.price,
-                    currency=order.currency or "EUR",
-                )
-                await notification.insert()
-
-                await send_push_to_user(user, title=title, body=body, data={
-                    "type": "watch_alert",
-                    "ws_code": alert.ws_code,
-                    "reference": order.reference or "",
-                })
-                break
-
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Error triggering alerts for imported orders: {e}", exc_info=True)
+        return await dispatch_new_listings(order_ids)
+    except Exception as exc:
+        logger.exception("alert dispatch failed for %d order(s): %s", len(order_ids), exc)
+        return 0
 
 
 async def process_csv_import(
@@ -424,7 +359,44 @@ async def process_csv_import(
 
     reader = csv.DictReader(io.StringIO(csv_content))
     # Preserve headers for unmatched CSV output
-    fieldnames = reader.fieldnames or []
+    fieldnames = list(reader.fieldnames or [])
+    return await import_order_rows(list(reader), fieldnames, import_record, admin)
+
+
+def _row_import_meta(row: dict) -> dict:
+    """Per-row extras set by the pipeline (match method, source text, ...)."""
+    meta = row.get("_import")
+    return meta if isinstance(meta, dict) else {}
+
+
+async def import_order_rows(
+    reader: list[dict],
+    fieldnames: list[str],
+    import_record: WhatsAppImport,
+    admin: User,
+    *,
+    require_phone: bool = False,
+    dispatch_alerts: bool = True,
+) -> dict:
+    """Turn generator/CSV rows into orders. Shared by the manual CSV import, the
+    bridge daily-ingest and the automatic pipeline (generator spec §1).
+
+    Each row is a dict with the generator's German CSV headers. A row may carry an
+    ``_import`` dict with ``match_method``, ``ai_reason``, ``source_text``,
+    ``source_image``, ``source_group`` and ``source_run_id``.
+
+    A repost (same dealer phone + WS code + price + currency + card date +
+    condition as an active order) only refreshes that order — it is not new and
+    triggers no alert. Returns stats plus ``new_order_ids``,
+    ``refreshed_order_ids``, ``unmatched_row_list`` and ``quarantined_row_list``.
+    """
+    from app.services import fx as fx_service
+
+    fx_rates = await fx_service.load_rates()
+    fieldnames = [f for f in (fieldnames or []) if not str(f).startswith("_")]
+    now = datetime.utcnow()
+    refreshed_ids: list[str] = []
+    no_phone_rows: list[dict] = []
 
     # Build cache for strict ws_code matching.
     all_watches = await Watch.find(Watch.status == "active").to_list()
@@ -467,8 +439,9 @@ async def process_csv_import(
             eo_month_year = f"{eo.watch_month:02d}/{eo.year % 100:02d}"
         elif eo.year_raw:
             eo_month_year = eo.year_raw.strip().lower()
+        eo_condition = eo.condition.value if eo.condition else ""
         if eo_ws and eo_phone:
-            existing_order_map[(eo_ws, eo_phone, eo_price, eo_currency, eo_month_year)] = eo
+            existing_order_map[(eo_ws, eo_phone, eo_price, eo_currency, eo_month_year, eo_condition)] = eo
 
     for row in reader:
         total_rows += 1
@@ -555,6 +528,12 @@ async def process_csv_import(
             unmatched_count += 1
             unmatched_raw_rows.append(row)
             continue
+
+        # Generator spec §1.8: no listing without a phone number goes into the app.
+        if require_phone and not phone:
+            no_phone_rows.append(row)
+            continue
+        row_meta = _row_import_meta(row)
 
         # Resolve country
         country_code = location if location else None
@@ -649,19 +628,27 @@ async def process_csv_import(
                 dup_month_year = f"{watch_month:02d}/{watch_year % 100:02d}"
             elif year_raw:
                 dup_month_year = year_raw.strip().lower()
-            dup_key = (dup_ws, dup_phone, dup_price, dup_currency, dup_month_year)
+            dup_key = (
+                dup_ws, dup_phone, dup_price, dup_currency, dup_month_year, order_condition.value,
+            )
 
             existing_order = existing_order_map.get(dup_key)
             if existing_order is not None:
                 # Existing DB order — freshness update: bump timestamp so "28d"
                 # becomes "1d", and backfill remarks if the existing row is
                 # missing them (older imports dropped the Bemerkungen column).
-                existing_order.created_at = message_timestamp or datetime.utcnow()
-                existing_order.updated_at = datetime.utcnow()
+                # A repost (same dealer in another group) is not new: only
+                # last_seen_at moves, and no alert is sent (spec §1.11).
+                existing_order.created_at = message_timestamp or now
+                existing_order.updated_at = now
+                existing_order.last_seen_at = now
+                if not existing_order.first_seen_at:
+                    existing_order.first_seen_at = existing_order.created_at
                 if remarks and not existing_order.remarks:
                     existing_order.remarks = remarks
                 await existing_order.save()
                 refreshed_count += 1
+                refreshed_ids.append(str(existing_order.id))
                 continue
             elif dup_key in existing_order_map:
                 # Intra-batch duplicate (key exists but value is None)
@@ -684,21 +671,12 @@ async def process_csv_import(
 
             matched_count += 1
 
-            # Calculate usd_price at import time (None if no price — valid for WTB)
+            # usd_price from the central FX table (None if no price — valid for
+            # WTB — or an unknown currency; never assume USD).
             usd_price = None
             if price:
-                if currency in ("USD", "USDT"):
-                    usd_price = price
-                elif currency == "HKD":
-                    usd_price = round(price / 7.8, 2)
-                elif currency == "EUR":
-                    usd_price = round(price / 0.92, 2)
-                elif currency == "GBP":
-                    usd_price = round(price / 0.79, 2)
-                elif currency == "CHF":
-                    usd_price = round(price / 0.88, 2)
-                else:
-                    usd_price = price  # Default: assume USD
+                usd_value = fx_service.convert(price, currency, "USD", fx_rates)
+                usd_price = round(usd_value, 2) if usd_value is not None else None
 
             order_source_rows.append(row)
             order_docs.append(Order(
@@ -726,7 +704,15 @@ async def process_csv_import(
                 notes=f"Imported from {group or 'CSV'}. {remarks}".strip() if remarks else f"Imported from {group or 'CSV'}",
                 description=ws_code if ws_code != order_reference else None,
                 status=OrderStatus.ACTIVE,
-                created_at=message_timestamp or datetime.utcnow(),
+                created_at=message_timestamp or now,
+                first_seen_at=now,
+                last_seen_at=now,
+                match_method=row_meta.get("match_method"),
+                ai_reason=row_meta.get("ai_reason"),
+                source_text=row_meta.get("source_text"),
+                source_image=row_meta.get("source_image"),
+                source_group=row_meta.get("source_group") or group or None,
+                source_run_id=row_meta.get("source_run_id"),
             ))
 
     # Cross-record price sanity. validate_price above only knows brand minimums,
@@ -784,9 +770,16 @@ async def process_csv_import(
         for i in range(0, len(listing_docs), BATCH_SIZE):
             await ExtractedWatchListing.insert_many(listing_docs[i:i + BATCH_SIZE])
 
+    new_order_ids: list[str] = []
     if order_docs:
         for i in range(0, len(order_docs), BATCH_SIZE):
-            await Order.insert_many(order_docs[i:i + BATCH_SIZE])
+            batch = order_docs[i:i + BATCH_SIZE]
+            result = await Order.insert_many(batch)
+            inserted = list(getattr(result, "inserted_ids", []) or [])
+            for doc, oid in zip(batch, inserted):
+                if doc.id is None:
+                    doc.id = oid
+            new_order_ids.extend(str(oid) for oid in inserted)
 
         # Update order counts on matched watches
         ref_counts: dict[str, int] = {}
@@ -795,7 +788,8 @@ async def process_csv_import(
         for ref, count in ref_counts.items():
             await Watch.find(Watch.reference == ref).update_many({"$inc": {"order_count": count}})
 
-        asyncio.create_task(_trigger_alerts_for_imported_orders(order_docs))
+        if dispatch_alerts:
+            await dispatch_new_listings_safe(new_order_ids, order_docs)
 
     # Build unmatched CSV and store in GridFS (expires after 30 min)
     unmatched_gridfs_id = None
@@ -803,7 +797,7 @@ async def process_csv_import(
     files_expire_at = None
     if unmatched_raw_rows and fieldnames:
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for urow in unmatched_raw_rows:
             writer.writerow(urow)
@@ -826,6 +820,17 @@ async def process_csv_import(
             output.getvalue(), f"price-flagged-{import_record.filename}"
         )
         files_expire_at = datetime.utcnow() + timedelta(minutes=FILES_TTL_MINUTES)
+
+    # Medians / counts for every touched watch (generator spec §9).
+    touched_ws = {o.ws_code for o in order_docs if o.ws_code}
+    if refreshed_ids:
+        touched_ws.update(
+            (eo.ws_code for eo in existing_orders if str(eo.id) in set(refreshed_ids) and eo.ws_code)
+        )
+    if touched_ws:
+        from app.services.market_stats import recompute_for_safe
+
+        await recompute_for_safe(sorted(touched_ws))
 
     # Update import record
     import_record.group_name = group_name or "CSV Import"
@@ -852,6 +857,12 @@ async def process_csv_import(
         "flagged_prices": flagged_price_count,
         "price_quarantined_rows": len(quarantined_rows),
         "price_quarantine_reasons": [o.reason for o in outliers[:20]],
+        "no_phone_rows": len(no_phone_rows),
+        "new_order_ids": new_order_ids,
+        "refreshed_order_ids": refreshed_ids,
+        "unmatched_row_list": unmatched_raw_rows,
+        "quarantined_row_list": quarantined_rows,
+        "no_phone_row_list": no_phone_rows,
     }
 
 

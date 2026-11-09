@@ -815,3 +815,83 @@ export function Flag({ size = 24, color = '#000', fill = 'none' }: IconProps) {
     </Svg>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Redesign v3 (Nov 2026) – tab bar and shell icons (spec 0.5)
+// ---------------------------------------------------------------------------
+
+/** Trade tab: two horizontal arrows in opposite directions (arrow.left.arrow.right). */
+export function TradeArrows({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M4 8h16M16 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M20 16H4M8 12l-4 4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** Checks tab: shield with a checkmark. */
+export function ShieldCheckmark({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path
+        d="M12 2.5l7.5 2.8v6.2c0 4.6-3.1 8.3-7.5 10-4.4-1.7-7.5-5.4-7.5-10V5.3L12 2.5z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M8.6 12.1l2.4 2.4 4.4-4.6" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** Activity tab: inbox tray (tray). */
+export function InboxTray({ size = 24, color = '#000', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path
+        d="M3 13.5l2.4-7.2A2 2 0 0 1 7.3 5h9.4a2 2 0 0 1 1.9 1.3l2.4 7.2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4.5z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M3 13.5h5l1.5 2.5h5l1.5-2.5h5" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** Neutral round speech bubble with two text lines (never the WhatsApp logo, spec 0.1). */
+export function ChatBubbleLines({ size = 24, color = '#1C1C1E', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={1.8}>
+      <Path
+        d="M12 3.5c-4.97 0-9 3.58-9 8 0 1.64.55 3.16 1.5 4.43L3.8 20l4.3-1.2c1.17.47 2.48.7 3.9.7 4.97 0 9-3.58 9-8s-4.03-8-9-8z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M8.5 10h7M8.5 13.5h4.5" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Pending approval: hourglass. */
+export function Hourglass({ size = 24, color = '#FFFFFF', fill = 'none' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={2}>
+      <Path d="M6.5 3h11M6.5 21h11" strokeLinecap="round" />
+      <Path
+        d="M7.5 3v3.2c0 1.3.6 2.5 1.7 3.3L12 12l2.8-2.5c1.1-.8 1.7-2 1.7-3.3V3M7.5 21v-3.2c0-1.3.6-2.5 1.7-3.3L12 12l2.8 2.5c1.1.8 1.7 2 1.7 3.3V21"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Watch outline used as image placeholder on cards. */
+export function WatchOutline({ size = 24, color = '#AEAEB2' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.4}>
+      <Path d="M9 2.5h6l.6 4M9 2.5l-.6 4M9 21.5h6l.6-4M9 21.5l-.6-4" strokeLinejoin="round" />
+      <Path d="M12 17.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11z" />
+    </Svg>
+  );
+}

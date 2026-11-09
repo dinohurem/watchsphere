@@ -1,6 +1,25 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X, Download, Upload, PlusCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Eye, Star, StarOff, BookOpen, X, Download, Upload, PlusCircle, ChevronDown, ChevronUp, FileEdit, ImagePlus, History } from 'lucide-react'
 import { api } from '@/services/api'
+import {
+  BulkAction,
+  BulkImagesModal,
+  CatalogFilterBar,
+  CatalogFilters,
+  EditImportModal,
+  ListPriceFields,
+  RecentChangesModal,
+  Selection,
+  SelectionBar,
+  SelectionMode,
+  UndoToast,
+  UndoTarget,
+  apiErrorMessage,
+  exportWatches,
+  filtersToParams,
+  listPricesToForm,
+  listPricesToPayload,
+} from '@/features/admin/components/catalog'
 import { ActionMenu, ActionMenuItem } from '@/components/ui/ActionMenu'
 import { ImageUpload } from '@/components/ui/ImageUpload'
 
@@ -30,6 +49,8 @@ interface Watch {
   dealer_name: string | null
   views: number
   created_at: string
+  list_prices?: Record<string, number>
+  discontinued?: boolean
 }
 
 interface Order {
@@ -143,6 +164,8 @@ interface WatchFormData {
   cover_image: string
   status: string
   featured: boolean
+  list_prices: Record<string, string>
+  discontinued: boolean
 }
 
 const emptyForm: WatchFormData = {
@@ -160,6 +183,8 @@ const emptyForm: WatchFormData = {
   cover_image: '',
   status: 'draft',
   featured: false,
+  list_prices: {},
+  discontinued: false,
 }
 
 const CURRENCIES = [
@@ -280,19 +305,138 @@ export function AdminWatches() {
   const [pageSize, setPageSize] = useState(25)
   const [totalCount, setTotalCount] = useState(0)
 
+  // Catalog admin: extra filters, selection, bulk actions, edit import, bulk images, undo
+  const [catalogFilters, setCatalogFilters] = useState<CatalogFilters>({})
+  const [brands, setBrands] = useState<string[]>([])
+  const [allCount, setAllCount] = useState(0)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>('ids')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [showEditImport, setShowEditImport] = useState(false)
+  const [showBulkImages, setShowBulkImages] = useState(false)
+  const [showRecentChanges, setShowRecentChanges] = useState(false)
+  const [undoTarget, setUndoTarget] = useState<UndoTarget | null>(null)
+
   useEffect(() => {
     fetchWatches()
     fetchTotalCount()
-  }, [page, pageSize, searchTerm, statusFilter])
+  }, [page, pageSize, searchTerm, statusFilter, catalogFilters])
 
-  // Reset to first page when search or filter changes
+  // Reset to first page (and drop the selection) when search or filter changes
   useEffect(() => {
     setPage(0)
-  }, [searchTerm, statusFilter])
+    clearSelection()
+  }, [searchTerm, statusFilter, catalogFilters])
+
+  useEffect(() => {
+    fetchCatalogMeta()
+  }, [])
+
+  const currentFilters = (): CatalogFilters => ({
+    ...catalogFilters,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    search: searchTerm || undefined,
+  })
+
+  const hasActiveFilters = Object.values(filtersToParams(currentFilters())).length > 0
+
+  const fetchCatalogMeta = async () => {
+    try {
+      const [brandsRes, countRes] = await Promise.all([
+        api.get('/catalog-admin/brands'),
+        api.get('/market/admin/count'),
+      ])
+      setBrands(brandsRes.data)
+      setAllCount(countRes.data.total)
+    } catch (error) {
+      console.error('Failed to load catalog filters:', error)
+    }
+  }
+
+  const refreshAll = () => {
+    fetchWatches()
+    fetchTotalCount()
+    fetchCatalogMeta()
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setSelectionMode('ids')
+  }
+
+  const toggleSelected = (id: string) => {
+    setSelectionMode('ids')
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const pageFullySelected = watches.length > 0 && watches.every((w) => selectedIds.has(w.id))
+
+  const togglePageSelected = () => {
+    setSelectionMode('ids')
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (pageFullySelected) watches.forEach((w) => next.delete(w.id))
+      else watches.forEach((w) => next.add(w.id))
+      return next
+    })
+  }
+
+  const isRowSelected = (id: string) => selectionMode !== 'ids' || selectedIds.has(id)
+
+  const selectionCount =
+    selectionMode === 'all' ? allCount : selectionMode === 'filtered' ? totalCount : selectedIds.size
+
+  const buildSelection = (): Selection => ({
+    mode: selectionMode,
+    ids: selectionMode === 'ids' ? Array.from(selectedIds) : [],
+    filters: currentFilters(),
+  })
+
+  const runBulkAction = async (bulk: BulkAction) => {
+    const n = selectionCount
+    const noun = `${n} watch${n === 1 ? '' : 'es'}`
+    if (bulk.action === 'delete' && !confirm(`Delete ${noun}? You can undo this under Recent changes.`)) return
+    if (selectionMode === 'all' && bulk.action !== 'delete' && !confirm(`Apply to all ${noun}?`)) return
+    setBulkBusy(true)
+    try {
+      const res = await api.post(
+        '/catalog-admin/watches/bulk-action',
+        { action: bulk.action, value: 'value' in bulk ? bulk.value : undefined, selection: buildSelection() },
+        { timeout: 0 }
+      )
+      const summary = res.data.summary || (bulk.action === 'delete' ? `Deleted ${noun}` : 'Done')
+      setUndoTarget(res.data.batch_id ? { batchId: res.data.batch_id, summary } : null)
+      if (!res.data.batch_id) alert('Nothing to change')
+      clearSelection()
+      refreshAll()
+    } catch (err) {
+      alert(apiErrorMessage(err, 'Bulk action failed'))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const runExport = async (format: 'jsonl' | 'csv', selection?: Selection) => {
+    try {
+      await exportWatches(selection ?? { mode: 'filtered', ids: [], filters: currentFilters() }, format)
+    } catch (err) {
+      alert(apiErrorMessage(err, 'Export failed'))
+    }
+  }
+
+  const handleSaved = (undo: UndoTarget | null) => {
+    if (undo) setUndoTarget(undo)
+    refreshAll()
+  }
 
   const fetchWatches = async () => {
     try {
-      const params: Record<string, any> = { skip: page * pageSize, limit: pageSize }
+      const params: Record<string, any> = { skip: page * pageSize, limit: pageSize, ...filtersToParams(catalogFilters) }
       if (searchTerm) params.search = searchTerm
       if (statusFilter !== 'all') params.status_filter = statusFilter
       const response = await api.get('/market/admin/all', { params })
@@ -306,7 +450,7 @@ export function AdminWatches() {
 
   const fetchTotalCount = async () => {
     try {
-      const params: Record<string, any> = {}
+      const params: Record<string, any> = { ...filtersToParams(catalogFilters) }
       if (searchTerm) params.search = searchTerm
       if (statusFilter !== 'all') params.status_filter = statusFilter
       const response = await api.get('/market/admin/count', { params })
@@ -353,6 +497,8 @@ export function AdminWatches() {
       cover_image: watch.cover_image || '',
       status: watch.status,
       featured: watch.featured,
+      list_prices: listPricesToForm(watch.list_prices),
+      discontinued: Boolean(watch.discontinued),
     })
     setShowModal(true)
     setActionMenuOpen(null)
@@ -450,6 +596,7 @@ export function AdminWatches() {
   const handleExportJsonl = async () => {
     try {
       const response = await api.get('/market/admin/export', {
+        params: filtersToParams(currentFilters()),
         responseType: 'blob',
       })
       const url = window.URL.createObjectURL(new Blob([response.data]))
@@ -492,29 +639,38 @@ export function AdminWatches() {
   const runImport = async (dryRun: boolean) => {
     setImportParseError('')
     setImportResult(null)
-    let rows: any[]
-    try {
-      rows = parseImportText(importText)
-    } catch (err: any) {
-      setImportParseError(err.message)
-      return
-    }
-    if (rows.length === 0) {
-      setImportParseError('No rows found')
-      return
+    // CSV is parsed server-side; JSON / JSONL is parsed here so syntax errors show immediately.
+    const isCsv = !/^[\s\uFEFF]*[[{]/.test(importText)
+    let rows: any[] = []
+    if (!isCsv) {
+      try {
+        rows = parseImportText(importText)
+      } catch (err: any) {
+        setImportParseError(err.message)
+        return
+      }
+      if (rows.length === 0) {
+        setImportParseError('No rows found')
+        return
+      }
     }
 
     setImporting(true)
     try {
       const response = await api.post('/market/admin/import', {
-        watches: rows,
+        ...(isCsv ? { text: importText, format: 'csv' } : { watches: rows }),
         on_duplicate: importOnDuplicate,
         dry_run: dryRun,
-      })
+      }, { timeout: 0 })
       setImportResult(response.data)
       if (!dryRun) {
-        fetchWatches()
-        fetchTotalCount()
+        if (response.data.batch_id) {
+          setUndoTarget({
+            batchId: response.data.batch_id,
+            summary: `Bulk import · ${response.data.created} created · ${response.data.updated} updated`,
+          })
+        }
+        refreshAll()
       }
     } catch (err: any) {
       const detail = err.response?.data?.detail
@@ -767,6 +923,8 @@ export function AdminWatches() {
         aliases: formData.aliases.length > 0 ? formData.aliases : undefined,
         description: formData.description || undefined,
         cover_image: formData.cover_image || undefined,
+        list_prices: listPricesToPayload(formData.list_prices),
+        discontinued: formData.discontinued,
       }
 
       if (editingWatch) {
@@ -804,7 +962,7 @@ export function AdminWatches() {
           <h1 className="text-2xl font-bold text-gray-900">Market (Watches)</h1>
           <p className="text-gray-600">Manage watch listings ({totalCount} total)</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <button
             onClick={async () => {
               if (!confirm('Generate missing thumbnails for all watches? This may take a moment.')) return
@@ -819,21 +977,6 @@ export function AdminWatches() {
             className="flex items-center gap-2 px-4 py-2 border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors"
           >
             Generate Thumbnails
-          </button>
-          <button
-            onClick={async () => {
-              if (!confirm('Populate USD prices for all orders without one? This uses the Frankfurter API for conversion.')) return
-              try {
-                const res = await api.post('/orders/admin/bulk-update-usd-prices')
-                alert(res.data.message || 'USD prices updated')
-              } catch (error) {
-                console.error('Failed to update USD prices:', error)
-                alert('Failed to update USD prices')
-              }
-            }}
-            className="flex items-center gap-2 px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors"
-          >
-            Populate USD Prices
           </button>
           <button
             onClick={async () => {
@@ -856,10 +999,19 @@ export function AdminWatches() {
           </button>
           <button
             onClick={handleExportJsonl}
+            title="Exports the watches matching the current filters (draft included)"
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Download size={18} />
             Export JSONL
+          </button>
+          <button
+            onClick={() => runExport('csv')}
+            title="Exports the watches matching the current filters (draft included)"
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download size={18} />
+            Export CSV
           </button>
           <button
             onClick={() => { setShowImportModal(true); setImportText(''); setImportResult(null); setImportParseError('') }}
@@ -867,6 +1019,27 @@ export function AdminWatches() {
           >
             <Upload size={18} />
             Bulk Import
+          </button>
+          <button
+            onClick={() => setShowEditImport(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileEdit size={18} />
+            Edit Import
+          </button>
+          <button
+            onClick={() => setShowBulkImages(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <ImagePlus size={18} />
+            Bulk Images
+          </button>
+          <button
+            onClick={() => setShowRecentChanges(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <History size={18} />
+            Recent changes
           </button>
           <button
             onClick={handleCreate}
@@ -907,12 +1080,42 @@ export function AdminWatches() {
             <option value="active">Active</option>
           </select>
         </div>
+        <div className="px-4 py-3 border-b">
+          <CatalogFilterBar filters={catalogFilters} brands={brands} onChange={setCatalogFilters} />
+        </div>
+
+        {(selectionMode !== 'ids' || selectedIds.size > 0) && (
+          <SelectionBar
+            mode={selectionMode}
+            selectedCount={selectionCount}
+            pageCount={watches.length}
+            pageFullySelected={pageFullySelected}
+            filteredTotal={totalCount}
+            allTotal={allCount}
+            hasFilters={hasActiveFilters}
+            busy={bulkBusy}
+            onSelectFiltered={() => setSelectionMode('filtered')}
+            onSelectAll={() => setSelectionMode('all')}
+            onClear={clearSelection}
+            onAction={runBulkAction}
+            onExport={(format) => runExport(format, buildSelection())}
+          />
+        )}
 
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
+                <th className="pl-4 pr-0 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="Select this page"
+                    checked={selectionMode !== 'ids' || pageFullySelected}
+                    onChange={() => (selectionMode !== 'ids' ? clearSelection() : togglePageSelected())}
+                    className="h-4 w-4 border-gray-300 rounded"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image + Brand/Model</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WS-Code</th>
@@ -923,7 +1126,17 @@ export function AdminWatches() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredWatches.map((watch) => (
-                <tr key={watch.id} className="hover:bg-gray-50">
+                <tr key={watch.id} className={isRowSelected(watch.id) ? 'bg-gray-50' : 'hover:bg-gray-50'}>
+                  <td className="pl-4 pr-0 py-4 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${watch.brand} ${watch.model}`}
+                      checked={isRowSelected(watch.id)}
+                      disabled={selectionMode !== 'ids'}
+                      onChange={() => toggleSelected(watch.id)}
+                      className="h-4 w-4 border-gray-300 rounded"
+                    />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden bg-gray-100">
@@ -954,6 +1167,11 @@ export function AdminWatches() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <StatusBadge status={watch.status} />
+                      {watch.discontinued && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-600 border border-gray-200">
+                          Discontinued
+                        </span>
+                      )}
                       {watch.featured && (
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200">
                           <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
@@ -1230,6 +1448,14 @@ export function AdminWatches() {
                   placeholder="Describe the watch..."
                 />
               </div>
+
+              {/* List prices (13 countries) + discontinued */}
+              <ListPriceFields
+                value={formData.list_prices}
+                onChange={(list_prices) => setFormData({ ...formData, list_prices })}
+                discontinued={formData.discontinued}
+                onDiscontinuedChange={(discontinued) => setFormData({ ...formData, discontinued })}
+              />
 
               {/* Row 8: Status, Featured */}
               <div className="grid grid-cols-2 gap-4">
@@ -2187,7 +2413,8 @@ export function AdminWatches() {
                   <em> Export JSONL</em> produces) or a <strong>JSON array</strong>.
                   Every field from the Add Watch form is supported.
                 </p>
-                <p><code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">brand</code> and <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">model</code> are required. Everything else is optional.</p>
+                <p><code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">brand</code> and <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">model</code> are required. Everything else is optional. <strong>CSV</strong> works too (same columns; lists separated by <code>|</code>).</p>
+                <p>List prices: <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{'"list_prices": {"HK": 599000, "DE": 69500}'}</code> or <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">list_price_HK</code> columns; <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">discontinued</code> true/false.</p>
               </div>
 
               <details className="text-sm">
@@ -2200,7 +2427,7 @@ export function AdminWatches() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Paste data, or choose a file</label>
                 <input
                   type="file"
-                  accept=".jsonl,.json,.txt"
+                  accept=".jsonl,.json,.csv,.txt"
                   onChange={async (e) => {
                     const file = e.target.files?.[0]
                     if (!file) return
@@ -2230,7 +2457,7 @@ export function AdminWatches() {
                   <option value="skip">Skip it</option>
                   <option value="update">Update it</option>
                 </select>
-                <span className="text-xs text-gray-500">Matched on ws_code, or reference when absent.</span>
+                <span className="text-xs text-gray-500">Matched on WS code or OEM reference (never on reference alone).</span>
               </div>
 
               {importParseError && (
@@ -2247,12 +2474,12 @@ export function AdminWatches() {
                   <p className="text-gray-700">
                     Created {importResult.created} · Updated {importResult.updated} · Skipped {importResult.skipped} · Errors {importResult.errors}
                   </p>
-                  {importResult.results?.some((r: any) => r.action === 'error' || r.action === 'skipped') && (
+                  {importResult.results?.some((r: any) => r.action === 'error' || r.action === 'skipped' || r.warnings?.length) && (
                     <ul className="mt-2 max-h-40 overflow-y-auto text-xs space-y-0.5">
                       {importResult.results
-                        .filter((r: any) => r.action === 'error' || r.action === 'skipped')
+                        .filter((r: any) => r.action === 'error' || r.action === 'skipped' || r.warnings?.length)
                         .map((r: any) => (
-                          <li key={r.row} className={r.action === 'error' ? 'text-red-700' : 'text-gray-600'}>
+                          <li key={r.row} className={r.action === 'error' ? 'text-red-700' : r.warnings?.length ? 'text-amber-800' : 'text-gray-600'}>
                             Line {r.row} — {r.action}
                             {r.ws_code ? ` (${r.ws_code})` : r.reference ? ` (${r.reference})` : ''}
                             {r.message ? `: ${r.message}` : ''}
@@ -2290,6 +2517,10 @@ export function AdminWatches() {
         </div>
       )}
 
+      <EditImportModal open={showEditImport} onClose={() => setShowEditImport(false)} onSaved={handleSaved} />
+      <BulkImagesModal open={showBulkImages} onClose={() => setShowBulkImages(false)} onSaved={handleSaved} />
+      <RecentChangesModal open={showRecentChanges} onClose={() => setShowRecentChanges(false)} onUndone={refreshAll} />
+      <UndoToast target={undoTarget} onClose={() => setUndoTarget(null)} onUndone={refreshAll} />
     </div>
   )
 }

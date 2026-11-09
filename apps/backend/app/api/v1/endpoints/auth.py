@@ -154,7 +154,7 @@ async def register(user_in: UserCreate) -> Any:
             detail="A user with this WhatsApp number already exists",
         )
 
-    # Create new user (unverified but approved)
+    # Create new user (unverified, pending approval by the team – redesign v3 §10.2)
     user = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
@@ -162,7 +162,7 @@ async def register(user_in: UserCreate) -> Any:
         whatsapp_phone=phone,
         role=user_in.role,
         verified=False,
-        approved=True,
+        approved=False,
         auth_provider=AuthProvider.EMAIL,
     )
     await user.insert()
@@ -227,9 +227,14 @@ async def verify_email(
 
     await verification.mark_used()
     current_user.verified = True
-    current_user.approved = True
+    # Verifying the email no longer approves the account: approval is a manual team
+    # decision (redesign v3 §10.2), see POST /admin/users/{id}/approve.
     await current_user.save()
-    return {"message": "Verified successfully", "verified": True, "approved": True}
+    return {
+        "message": "Verified successfully",
+        "verified": True,
+        "approved": current_user.approved,
+    }
 
 
 @router.post("/resend-verification")
@@ -318,12 +323,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
-    # Check approval status (skip for admin users)
-    if not user.approved and user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account pending approval. Please wait for admin approval.",
-        )
+    # Unapproved accounts may sign in (redesign v3 §10.2): the response carries
+    # `approved: false`, the app shows the pending screen, and every endpoint outside the
+    # pending allowlist answers 403 `account_pending_approval` (app.core.deps).
 
     # Create access and refresh tokens
     access_token, refresh_token = create_tokens(str(user.id))

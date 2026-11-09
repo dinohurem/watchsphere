@@ -1,8 +1,8 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from datetime import datetime, timedelta
+from pydantic import BaseModel, field_serializer
+from datetime import datetime, timedelta, timezone
 from beanie import PydanticObjectId
 import asyncio
 import csv
@@ -20,6 +20,7 @@ from app.models.notification import Notification, NotificationType as NotifType
 from app.services.email import email_service
 from app.services.notifications import notify_buy_offer, send_notification_to_multiple
 from app.services.broadcast import broadcast_service
+from app.services.fx import to_usd as fx_to_usd
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,23 @@ class OrderBookEntry(BaseModel):
     whatsapp_phone: Optional[str] = None
     remarks: Optional[str] = None
     created_at: Optional[datetime] = None
+    # Redesign v3 detail page: raw fields for client-side formatting / highlighting
+    ws_code: Optional[str] = None
+    year: Optional[int] = None
+    watch_month: Optional[int] = None
+    year_raw: Optional[str] = None
+    condition_raw: Optional[str] = None
+    usd_price: Optional[float] = None
+    first_seen_at: Optional[datetime] = None
+
+    @field_serializer("created_at", "first_seen_at")
+    def _iso_utc(self, v: Optional[datetime]) -> Optional[str]:
+        # Stored as naive UTC; emit an explicit "Z" so clients don't parse it as local time.
+        if v is None:
+            return None
+        if v.tzinfo is not None:
+            v = v.astimezone(timezone.utc).replace(tzinfo=None)
+        return v.isoformat() + "Z"
 
 
 class OrderBookResponse(BaseModel):
@@ -117,6 +135,9 @@ class OrderBookResponse(BaseModel):
     lowest_ask: Optional[float] = None
     highest_bid: Optional[float] = None
     spread: Optional[float] = None
+    # All-time active listing counts (redesign v3 §0.4) – same numbers as the cards
+    wts_count_all_time: int = 0
+    wtb_count_all_time: int = 0
 
 
 class MarketPriceInfo(BaseModel):
@@ -473,6 +494,13 @@ async def get_order_book(
             whatsapp_phone=whatsapp_phone,
             remarks=remarks,
             created_at=order.created_at,
+            ws_code=order.ws_code,
+            year=order.year,
+            watch_month=order.watch_month,
+            year_raw=year_raw,
+            condition_raw=condition_raw,
+            usd_price=order.usd_price,
+            first_seen_at=order.first_seen_at,
         )
 
     formatted_buy = [format_order(o) for o in buy_orders]
@@ -485,6 +513,17 @@ async def get_order_book(
     if lowest_ask and highest_bid:
         spread = lowest_ask - highest_bid
 
+    wts_all_time, wtb_all_time = total_sell_count, total_buy_count
+    if watch and watch.ws_code:
+        try:
+            from app.services.market_cards import stats_for
+
+            st = (await stats_for([watch.ws_code])).get(watch.ws_code) or {}
+            wts_all_time = int(st.get("wts_count", wts_all_time) or 0)
+            wtb_all_time = int(st.get("wtb_count", wtb_all_time) or 0)
+        except Exception as e:
+            logger.warning("order book all-time counts fell back to totals: %s", e)
+
     return OrderBookResponse(
         reference=reference,
         brand=brand,
@@ -496,6 +535,8 @@ async def get_order_book(
         lowest_ask=lowest_ask,
         highest_bid=highest_bid,
         spread=spread,
+        wts_count_all_time=wts_all_time,
+        wtb_count_all_time=wtb_all_time,
     )
 
 
@@ -873,85 +914,19 @@ async def notify_sellers_of_lower_price(
 
 
 async def trigger_watch_alerts(order: Order, creator: User):
-    """Check WatchAlerts matching this order's ws_code and send notifications"""
+    """Alert matching for a manually created order – delegates to the shared dispatcher
+    (Activity entry + bundled push, redesign v3 §7/§11). The creator is never alerted about
+    their own listing."""
     try:
-        from app.models.watch_alert import WatchAlert
-        from app.services.notifications import send_push_to_user
+        from app.services.alert_dispatch import dispatch_new_listings
 
-        ws_code = getattr(order, 'ws_code', None)
-        if not ws_code and order.reference:
+        if not getattr(order, "ws_code", None) and order.reference:
             watch = await Watch.find_one(Watch.reference == order.reference)
-            if watch:
-                ws_code = watch.ws_code
-
-        if not ws_code:
-            return
-
-        alerts = await WatchAlert.find(
-            WatchAlert.ws_code == ws_code,
-            WatchAlert.is_active == True,
-        ).to_list()
-
-        order_type_str = "WTS" if order.order_type == OrderType.SELL else "WTB"
-
-        for alert in alerts:
-            if alert.user_id == str(creator.id):
-                continue
-
-            if order.order_type == OrderType.SELL and not alert.notify_wts:
-                continue
-            if order.order_type == OrderType.BUY and not alert.notify_wtb:
-                continue
-
-            if alert.target_year:
-                order_year = getattr(order, 'year', None)
-                if order_year is None:
-                    continue
-                year_dir = getattr(alert, 'year_direction', 'exactly')
-                if year_dir == "exactly" and order_year != alert.target_year:
-                    continue
-                if year_dir == "newer" and order_year < alert.target_year:
-                    continue
-                if year_dir == "older" and order_year > alert.target_year:
-                    continue
-
-            if alert.price_threshold and order.price:
-                if alert.price_direction == "below" and order.price > alert.price_threshold:
-                    continue
-                if alert.price_direction == "above" and order.price < alert.price_threshold:
-                    continue
-
-            user = await User.get(PydanticObjectId(alert.user_id))
-            if not user:
-                continue
-
-            title = f"New {order_type_str} for {ws_code}"
-            body = f"{order.price} {order.currency}" if order.price else f"New {order_type_str} order"
-
-            notification = Notification(
-                user_id=alert.user_id,
-                type=NotifType.WATCHLIST_ALERT,
-                title=title,
-                body=body,
-                reference=order.reference,
-                order_id=str(order.id),
-                price=order.price,
-                currency=order.currency or "EUR",
-            )
-            await notification.insert()
-
-            await send_push_to_user(
-                user,
-                title=title,
-                body=body,
-                data={
-                    "type": "watch_alert",
-                    "ws_code": ws_code,
-                    "reference": order.reference or "",
-                    "order_id": str(order.id),
-                },
-            )
-
+            if watch and watch.ws_code:
+                order.ws_code = watch.ws_code
+                await order.save()
+        if order.id:
+            await dispatch_new_listings([str(order.id)], exclude_user_ids=[str(creator.id)])
     except Exception as e:
         logger.error(f"Error triggering watch alerts: {e}", exc_info=True)
 
@@ -1009,6 +984,7 @@ async def create_order(
         clasp_type=order_data.clasp_type,
         clasp_material=order_data.clasp_material,
     )
+    order.usd_price = await fx_to_usd(order.price, order.currency)
 
     await order.insert()
 
@@ -1326,6 +1302,8 @@ async def update_order(
     update_data = order_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(order, field, value)
+    if "price" in update_data or "currency" in update_data:
+        order.usd_price = await fx_to_usd(order.price, order.currency)
 
     order.updated_at = datetime.utcnow()
     await order.save()
@@ -1947,6 +1925,7 @@ async def admin_create_order(
     if order_data.created_at:
         order_kwargs["created_at"] = order_data.created_at
     order = Order(**order_kwargs)
+    order.usd_price = await fx_to_usd(order.price, order.currency)
 
     await order.insert()
 
@@ -1981,102 +1960,8 @@ async def admin_create_order(
     )
 
 
-# Fallback exchange rates (updated periodically)
-FALLBACK_EXCHANGE_RATES = {
-    "USD": 1.0,
-    "USDT": 1.0,  # Stablecoin, always ~1 USD
-    "HKD": 7.8,
-    "EUR": 0.92,
-    "GBP": 0.79,
-    "CHF": 0.88,
-    "SGD": 1.34,
-    "JPY": 150.0,
-    "AED": 3.67,
-    "CAD": 1.36,
-    "AUD": 1.55,
-    "CNY": 7.25,
-}
-
-
-async def _fetch_exchange_rates(currencies: set[str]) -> dict[str, float]:
-    """Fetch exchange rates with fallback to hardcoded values.
-    Returns dict of currency -> rate (units per 1 USD)."""
-    import httpx
-
-    rates = {"USD": 1.0, "USDT": 1.0}
-
-    # Remove currencies we already know
-    to_fetch = {c for c in currencies if c not in rates}
-    if not to_fetch:
-        return rates
-
-    # Try exchangerate-api.com (supports HKD)
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get("https://open.er-api.com/v6/latest/USD")
-            if resp.status_code == 200:
-                data = resp.json()
-                for cur in to_fetch:
-                    rate = data.get("rates", {}).get(cur)
-                    if rate and rate > 0:
-                        rates[cur] = rate
-                return rates
-    except Exception as e:
-        logger.warning(f"Exchange rate API failed, using fallbacks: {e}")
-
-    # Fallback to hardcoded rates
-    for cur in to_fetch:
-        if cur in FALLBACK_EXCHANGE_RATES:
-            rates[cur] = FALLBACK_EXCHANGE_RATES[cur]
-
-    return rates
-
-
-@router.post("/admin/bulk-update-usd-prices")
-async def admin_bulk_update_usd_prices(
-    current_admin: User = Depends(get_current_admin_user),
-) -> Any:
-    """Bulk update usd_price for all orders that don't have it set."""
-
-    # Fetch all orders without usd_price
-    orders = await Order.find(
-        {"$or": [{"usd_price": None}, {"usd_price": {"$exists": False}}]}
-    ).to_list()
-
-    if not orders:
-        return {"message": "No orders need USD price update", "updated": 0}
-
-    # Collect unique currencies
-    currencies = set(o.currency for o in orders if o.currency and o.currency not in ("USD", "USDT"))
-
-    # Fetch rates (with fallback)
-    rates = await _fetch_exchange_rates(currencies)
-
-    # Update orders in batches
-    updated = 0
-    failed = 0
-    BATCH_SIZE = 500
-    for i in range(0, len(orders), BATCH_SIZE):
-        batch = orders[i:i + BATCH_SIZE]
-        for order in batch:
-            cur = order.currency or "USD"
-            if cur in ("USD", "USDT"):
-                order.usd_price = order.price
-            elif cur in rates and rates[cur] > 0:
-                order.usd_price = round(order.price / rates[cur], 2)
-            else:
-                # Unknown currency — skip (don't set bad data)
-                failed += 1
-                continue
-            await order.save()
-            updated += 1
-
-    return {
-        "message": f"Updated {updated} orders with USD prices ({failed} skipped - unknown currency)",
-        "updated": updated,
-        "failed": failed,
-        "rates": rates,
-    }
+# USD prices come from the central FX table (app.services.fx); every order's usd_price
+# is recomputed after each daily rate refresh, so there is no manual populate endpoint.
 
 
 @router.patch("/admin/{order_id}", response_model=OrderResponse)
@@ -2099,6 +1984,8 @@ async def admin_update_order(
     update_data = order_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(order, field, value)
+    if "price" in update_data or "currency" in update_data:
+        order.usd_price = await fx_to_usd(order.price, order.currency)
 
     order.updated_at = datetime.utcnow()
     await order.save()

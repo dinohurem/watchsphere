@@ -11,6 +11,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="orders-menu" />
       <Stack.Screen name="orders" />
       <Stack.Screen name="general" />
+      <Stack.Screen name="change-password" />
     </Stack>
   );
 }

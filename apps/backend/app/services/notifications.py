@@ -22,6 +22,7 @@ class NotificationType:
     OFFER_REJECTED = "offer_rejected"
     LISTING_SOLD = "listing_sold"
     WATCHLIST_ALERT = "watchlist_alert"
+    ALERT_MATCH = "alert_match"
 
 
 def is_expo_token(token: str) -> bool:
@@ -96,10 +97,13 @@ async def send_expo_notifications_batch(
     title: str,
     body: str,
     data: Optional[Dict[str, str]] = None,
-    sound: str = "default"
+    sound: str = "default",
+    category_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Send push notifications to multiple Expo tokens in batch.
+
+    ``category_id`` selects the iOS notification category (actions such as "View listing").
 
     Returns:
         Dict with 'success_count' and 'failure_count'
@@ -114,7 +118,8 @@ async def send_expo_notifications_batch(
                 "title": title,
                 "body": body,
                 "sound": sound,
-                "data": data or {}
+                "data": data or {},
+                **({"categoryId": category_id} if category_id else {}),
             }
             for token in tokens
         ]
@@ -150,7 +155,8 @@ async def send_fcm_notification(
     body: str,
     data: Optional[Dict[str, str]] = None,
     image_url: Optional[str] = None,
-    badge: Optional[int] = None
+    badge: Optional[int] = None,
+    category_id: Optional[str] = None,
 ) -> bool:
     """
     Send push notification via Firebase Cloud Messaging.
@@ -182,7 +188,8 @@ async def send_fcm_notification(
                 aps=messaging.Aps(
                     sound='default',
                     badge=badge,
-                    content_available=True
+                    content_available=True,
+                    category=category_id,
                 )
             )
         )
@@ -259,7 +266,8 @@ async def send_notification_to_multiple(
     body: str,
     data: Optional[Dict[str, str]] = None,
     notification_type: Optional[str] = None,
-    image_url: Optional[str] = None
+    image_url: Optional[str] = None,
+    category_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Send a push notification to multiple devices.
@@ -289,7 +297,8 @@ async def send_notification_to_multiple(
             tokens=expo_tokens,
             title=title,
             body=body,
-            data=payload
+            data=payload,
+            category_id=category_id,
         )
         total_success += result['success_count']
         total_failure += result['failure_count']
@@ -301,7 +310,8 @@ async def send_notification_to_multiple(
             title=title,
             body=body,
             data=payload,
-            image_url=image_url
+            image_url=image_url,
+            category_id=category_id,
         )
         if success:
             total_success += 1
@@ -491,7 +501,8 @@ async def send_push_to_user(
     title: str,
     body: str,
     data: Optional[Dict[str, str]] = None,
-    notification_type: Optional[str] = None
+    notification_type: Optional[str] = None,
+    category_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Send push notification to all devices of a user.
@@ -519,5 +530,6 @@ async def send_push_to_user(
         title=title,
         body=body,
         data=data,
-        notification_type=notification_type
+        notification_type=notification_type,
+        category_id=category_id,
     )

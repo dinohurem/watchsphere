@@ -1,332 +1,241 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Keyboard } from 'react-native';
+/**
+ * Search (spec 0.3): "Search reference, model or brand". Uses GET /market/search?q=, which
+ * resolves aliases and dealer slang ("Pepsi Jubilee", "Pikachu") to WS codes. Results are shown as
+ * Market cards; an empty query shows the recent searches.
+ */
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  FlatList,
+  Keyboard,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useTranslation } from 'react-i18next';
-import { BackArrow, Magnifier } from '@/components/icons';
-import { api } from '@/services/api';
-import { wp, hp, sp, fp } from '@/utils/responsive';
-import Svg, { Path } from 'react-native-svg';
-import { setGlobalSearchQuery } from '@/utils/searchState';
 
-// Close/X icon for clearing search
-function CloseIcon({ size = 16, color = '#212121' }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-      <Path
-        d="M4 4L12 12M12 4L4 12"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
+import { BackArrow, Magnifier, X } from '@/components/icons';
+import { SEARCH_PLACEHOLDER } from '@/components/market/AppHeader';
+import { MarketCard, MarketCardSkeleton, openCard } from '@/components/market/MarketCard';
+import { UI } from '@/components/market/tokens';
+import { MarketCardData, toCards } from '@/components/market/types';
+import { useTheme } from '@/contexts/ThemeContext';
+import { api } from '@/services/api';
+import { fp, hp, sp, wp, SCREEN_WIDTH } from '@/utils/responsive';
 
 const RECENT_SEARCHES_KEY = 'recent_searches';
 const MAX_RECENT_SEARCHES = 10;
-
-// Fallback popular searches (used while API loads or if API fails)
-const FALLBACK_POPULAR_SEARCHES = [
-  'Rolex Daytona',
-  'Rolex Submariner',
-  'Rolex Datejust',
-  'Rolex GMT-Master II',
-  'Omega Seamaster',
-  'Omega Speedmaster',
-  'Audemars Piguet Royal Oak',
-  'Patek Philippe Nautilus',
-  'Tudor Black Bay',
-  'Breitling Navitimer',
-];
+const H_PADDING = wp(16);
+const GAP = wp(12);
+const CARD_WIDTH = (SCREEN_WIDTH - H_PADDING * 2 - GAP) / 2;
 
 export default function SearchScreen() {
-  const { colors, fonts } = useTheme();
-  const { t } = useTranslation();
+  const { fonts } = useTheme();
   const { initialQuery } = useLocalSearchParams<{ initialQuery?: string }>();
-  const [searchQuery, setSearchQuery] = useState(initialQuery || '');
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const [popularSearches, setPopularSearches] = useState<string[]>(FALLBACK_POPULAR_SEARCHES);
-  const [loadingPopular, setLoadingPopular] = useState(true);
-  const [isFocused, setIsFocused] = useState(true);
+  const [query, setQuery] = useState(initialQuery || '');
+  const [results, setResults] = useState<MarketCardData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [recent, setRecent] = useState<string[]>([]);
+  const [focused, setFocused] = useState(true);
+  const requestId = useRef(0);
 
   useEffect(() => {
-    loadRecentSearches();
-    loadPopularSearches();
+    AsyncStorage.getItem(RECENT_SEARCHES_KEY)
+      .then((raw) => {
+        if (raw) setRecent(JSON.parse(raw));
+      })
+      .catch(() => {});
   }, []);
 
-  const loadPopularSearches = async () => {
-    try {
-      const response = await api.get('/market/popular-searches?limit=10');
-      if (response.data && response.data.length > 0) {
-        setPopularSearches(response.data.map((item: any) =>
-          `${item.brand} ${item.model}`
-        ));
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      setSearched(false);
+      setLoading(false);
+      return;
+    }
+    const id = ++requestId.current;
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get('/market/search', { params: { q } });
+        if (id === requestId.current) setResults(toCards(res.data));
+      } catch {
+        if (id === requestId.current) setResults([]);
+      } finally {
+        if (id === requestId.current) {
+          setLoading(false);
+          setSearched(true);
+        }
       }
-    } catch (error) {
-      // Keep fallback popular searches
-    } finally {
-      setLoadingPopular(false);
-    }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const saveRecent = (value: string) => {
+    const q = value.trim();
+    if (!q) return;
+    const next = [q, ...recent.filter((s) => s.toLowerCase() !== q.toLowerCase())].slice(
+      0,
+      MAX_RECENT_SEARCHES
+    );
+    setRecent(next);
+    AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)).catch(() => {});
   };
 
-  const loadRecentSearches = async () => {
-    try {
-      const saved = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
-      if (saved) {
-        setRecentSearches(JSON.parse(saved));
-      }
-    } catch (error) {
-      console.error('Error loading recent searches:', error);
-    }
+  const clearRecent = () => {
+    setRecent([]);
+    AsyncStorage.removeItem(RECENT_SEARCHES_KEY).catch(() => {});
   };
 
-  const saveRecentSearch = async (query: string) => {
-    try {
-      const trimmedQuery = query.trim();
-      if (!trimmedQuery) return;
-
-      // Add to beginning, remove duplicates, limit to MAX
-      const updated = [
-        trimmedQuery,
-        ...recentSearches.filter(s => s.toLowerCase() !== trimmedQuery.toLowerCase())
-      ].slice(0, MAX_RECENT_SEARCHES);
-
-      setRecentSearches(updated);
-      await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
-    } catch (error) {
-      console.error('Error saving recent search:', error);
-    }
-  };
-
-  const handleSearch = useCallback((query: string) => {
-    const trimmedQuery = query.trim();
-    if (!trimmedQuery) return;
-
-    saveRecentSearch(trimmedQuery);
+  const onCardPress = (card: MarketCardData) => {
+    saveRecent(query);
     Keyboard.dismiss();
-
-    // Set global search and go back, then navigate to market
-    setGlobalSearchQuery(trimmedQuery);
-    router.dismiss();
-    // Navigate to market tab (in case we came from home)
-    setTimeout(() => router.navigate('/(tabs)/market'), 50);
-  }, [recentSearches]);
-
-  const handleSearchSubmit = () => {
-    handleSearch(searchQuery);
+    openCard(card);
   };
 
-  const handleSearchItemPress = (query: string) => {
-    setSearchQuery(query);
-    handleSearch(query);
-  };
-
-  const clearRecentSearches = async () => {
-    try {
-      setRecentSearches([]);
-      await AsyncStorage.removeItem(RECENT_SEARCHES_KEY);
-    } catch (error) {
-      console.error('Error clearing recent searches:', error);
-    }
-  };
-
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: wp(8),
-      paddingVertical: hp(10),
-      gap: wp(8),
-    },
-    backButton: {
-      width: sp(44),
-      height: sp(44),
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    searchInputContainer: {
-      flex: 1,
-      height: sp(43),
-      backgroundColor: '#F4F4F4',
-      borderRadius: sp(99),
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: wp(24),
-      overflow: 'hidden',
-    },
-    searchInputContainerFocused: {
-      borderWidth: 1,
-      borderColor: '#212121',
-    },
-    searchCursor: {
-      width: 1,
-      height: fp(20),
-      backgroundColor: '#212121',
-      marginRight: wp(2),
-    },
-    searchInput: {
-      flex: 1,
-      fontSize: fp(15),
-      fontFamily: fonts.regular,
-      color: '#212121',
-      letterSpacing: 0.075,
-      lineHeight: fp(20),
-      padding: 0,
-    },
-    clearButton: {
-      padding: sp(4),
-      marginLeft: wp(8),
-    },
-    scrollView: {
-      flex: 1,
-    },
-    scrollContent: {
-      paddingHorizontal: wp(24),
-      paddingTop: hp(24),
-      paddingBottom: hp(40),
-    },
-    section: {
-      marginBottom: hp(24),
-    },
-    sectionHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: hp(24),
-    },
-    sectionTitle: {
-      fontSize: fp(18),
-      fontFamily: fonts.semiBold,
-      color: '#212121',
-      letterSpacing: 0.09,
-      lineHeight: fp(20),
-    },
-    clearAllButton: {
-      paddingVertical: hp(4),
-      paddingHorizontal: wp(8),
-    },
-    clearAllText: {
-      fontSize: fp(13),
-      fontFamily: fonts.medium,
-      color: colors.textSecondary,
-    },
-    searchList: {
-      gap: hp(16),
-    },
-    searchItem: {
-      paddingVertical: hp(2),
-    },
-    searchItemText: {
-      fontSize: fp(15),
-      fontFamily: fonts.regular,
-      color: 'rgba(33, 33, 33, 0.8)',
-      letterSpacing: 0.075,
-      lineHeight: fp(20),
-    },
-    emptyText: {
-      fontSize: fp(15),
-      fontFamily: fonts.regular,
-      color: colors.textTertiary,
-      lineHeight: fp(20),
-    },
-  });
+  const showRecent = !query.trim();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header with Search */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.back}
           onPress={() => router.back()}
+          accessibilityLabel="Back"
         >
-          <BackArrow size={24} color="#1D1D1F" />
+          <BackArrow size={24} color={UI.text} />
         </TouchableOpacity>
-
-        <View style={[
-          styles.searchInputContainer,
-          isFocused && styles.searchInputContainerFocused
-        ]}>
+        <View style={[styles.inputWrap, focused && styles.inputWrapFocused]}>
+          <Magnifier size={sp(17)} color={UI.grey} />
           <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder={t('search.searchPlaceholder')}
-            placeholderTextColor="rgba(33, 33, 33, 0.5)"
+            style={[styles.input, { fontFamily: fonts.regular }]}
+            value={query}
+            onChangeText={setQuery}
+            placeholder={SEARCH_PLACEHOLDER}
+            placeholderTextColor={UI.grey}
             autoFocus
+            autoCorrect={false}
+            autoCapitalize="none"
             returnKeyType="search"
-            onSubmitEditing={handleSearchSubmit}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
+            onSubmitEditing={() => saveRecent(query)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              style={styles.clearButton}
-              onPress={() => setSearchQuery('')}
-            >
-              <CloseIcon size={16} color="rgba(33, 33, 33, 0.5)" />
+          {query.length > 0 ? (
+            <TouchableOpacity onPress={() => setQuery('')} accessibilityLabel="Clear">
+              <X size={sp(16)} color={UI.grey} />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Recent Searches */}
-        {recentSearches.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{t('search.recentSearches')}</Text>
-              <TouchableOpacity
-                style={styles.clearAllButton}
-                onPress={clearRecentSearches}
-              >
-                <Text style={styles.clearAllText}>{t('search.clearAll')}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.searchList}>
-              {recentSearches.map((search, index) => (
+      {showRecent ? (
+        <View style={styles.recent}>
+          {recent.length > 0 ? (
+            <>
+              <View style={styles.recentHeader}>
+                <Text style={[styles.sectionTitle, { fontFamily: fonts.semiBold }]}>
+                  Recent searches
+                </Text>
+                <TouchableOpacity onPress={clearRecent}>
+                  <Text style={[styles.link, { fontFamily: fonts.medium }]}>Clear</Text>
+                </TouchableOpacity>
+              </View>
+              {recent.map((item) => (
                 <TouchableOpacity
-                  key={`recent-${index}`}
-                  style={styles.searchItem}
-                  onPress={() => handleSearchItemPress(search)}
+                  key={item}
+                  style={styles.recentRow}
+                  onPress={() => setQuery(item)}
                 >
-                  <Text style={styles.searchItemText}>{search}</Text>
+                  <Text style={[styles.recentText, { fontFamily: fonts.regular }]}>{item}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
-          </View>
-        )}
-
-        {/* Popular Searches */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('search.popularSearches')}</Text>
-          </View>
-          <View style={styles.searchList}>
-            {popularSearches.map((search, index) => (
-              <TouchableOpacity
-                key={`popular-${index}`}
-                style={styles.searchItem}
-                onPress={() => handleSearchItemPress(search)}
-              >
-                <Text style={styles.searchItemText}>{search}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+            </>
+          ) : null}
         </View>
-      </ScrollView>
+      ) : loading && results.length === 0 ? (
+        <View style={styles.skeletonGrid}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <MarketCardSkeleton key={i} width={CARD_WIDTH} />
+          ))}
+        </View>
+      ) : (
+        <FlatList
+          data={results}
+          keyExtractor={(item, i) => `${item.id}-${i}`}
+          numColumns={2}
+          columnWrapperStyle={{ gap: GAP }}
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          renderItem={({ item }) => (
+            <MarketCard card={item} width={CARD_WIDTH} onPress={onCardPress} />
+          )}
+          ListEmptyComponent={
+            searched ? (
+              <Text style={[styles.empty, { fontFamily: fonts.regular }]}>
+                No watches found for “{query.trim()}”
+              </Text>
+            ) : null
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: UI.white },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(8),
+    gap: wp(8),
+  },
+  back: { padding: sp(4) },
+  inputWrap: {
+    flex: 1,
+    height: sp(40),
+    borderRadius: sp(20),
+    backgroundColor: UI.fill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(12),
+    gap: wp(8),
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  inputWrapFocused: { borderColor: UI.blue, backgroundColor: UI.white },
+  input: { flex: 1, fontSize: fp(15), color: UI.text, padding: 0 },
+  recent: { paddingHorizontal: H_PADDING, paddingTop: hp(12) },
+  recentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: hp(6),
+  },
+  sectionTitle: { fontSize: fp(17), color: UI.text },
+  link: { fontSize: fp(14), color: UI.blue },
+  recentRow: {
+    paddingVertical: hp(12),
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: UI.line,
+  },
+  recentText: { fontSize: fp(15), color: UI.text },
+  list: { paddingHorizontal: H_PADDING, paddingTop: hp(8), paddingBottom: hp(40), gap: GAP },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: GAP,
+    paddingHorizontal: H_PADDING,
+    paddingTop: hp(8),
+  },
+  empty: { textAlign: 'center', color: UI.grey, fontSize: fp(14), marginTop: hp(40) },
+});

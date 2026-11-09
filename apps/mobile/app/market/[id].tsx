@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, FlatList, Keyboard, InputAccessoryView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, Dimensions, Animated, Easing } from 'react-native';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -13,6 +13,32 @@ import { LogoIcon } from '@/components/LogoIcon';
 import { useGuide } from '@/contexts/GuideContext';
 import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCH_DETAILS, GUIDE_MOCK_BUY_ORDERS, GUIDE_MOCK_SELL_ORDERS } from '@/data/guideMockData';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { useTrackRecentlyViewed } from '@/hooks/useTrackRecentlyViewed';
+import { convertAmount, formatAge, formatApprox, formatCount, formatPrice } from '@/utils/marketFormat';
+import {
+  ChipMenu,
+  CurrencyPickerSheet,
+  RetailChip,
+  ToolbarChip,
+  TrendChip,
+  useChipMenu,
+} from '@/components/detail/DetailChips';
+import { ChatBubbleIcon, DetailBellIcon, DetailStarIcon } from '@/components/detail/DetailIcons';
+import {
+  DETAIL_PERIODS,
+  DetailPeriod,
+  PERIOD_DAYS,
+  PriceTrend,
+  RetailComparison,
+  SortMode,
+  periodLabel,
+} from '@/components/detail/detailTypes';
+import { CountUpText, PopIcon, useReduceMotion } from '@/components/detail/motion';
+import { PriceTrendSheet } from '@/components/detail/PriceTrendSheet';
+import { RetailPricesSheet } from '@/components/detail/RetailPricesSheet';
+import { AlertsSheet, AlertsSheetStart } from '@/components/alerts/AlertsSheet';
+import { WatchAlert, fetchAlertsForWatch } from '@/components/alerts/alertModel';
 
 // Country flag component using flag CDN
 function countryCodeToEmoji(code: string): string {
@@ -130,22 +156,6 @@ function FilterIcon() {
       <Path d="M1.8335 4.58325H20.1668" stroke="#1D1D1F" strokeWidth={1.83333} strokeMiterlimit={10} strokeLinecap="square" />
       {/* Bottom bar (shortest) */}
       <Path d="M9.16699 17.4167H12.8337" stroke="#1D1D1F" strokeWidth={1.83333} strokeMiterlimit={10} strokeLinecap="square" />
-    </Svg>
-  );
-}
-
-// WhatsApp Icon
-function WhatsAppIcon({ size = 18 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"
-        fill="#1D1D1F"
-      />
-      <Path
-        d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.963 7.963 0 01-4.113-1.14l-.287-.172-2.978.78.795-2.898-.188-.299A7.963 7.963 0 014 12c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z"
-        fill="#1D1D1F"
-      />
     </Svg>
   );
 }
@@ -474,16 +484,29 @@ interface OrderBookItem {
   whatsapp_phone?: string;
   remarks?: string;
   created_at?: string;
+  usd_price?: number | null;
 }
 
 export default function WatchDetailsScreen() {
-  const { id: rawId, reference, brand, model, ws_code: wsCodeParam, fromUserWatchlist } = useLocalSearchParams<{
+  const {
+    id: rawId,
+    reference,
+    brand,
+    model,
+    ws_code: wsCodeParam,
+    fromUserWatchlist,
+    highlight: highlightParam,
+    side: sideParam,
+  } = useLocalSearchParams<{
     id: string;
     reference?: string;
     brand?: string;
     model?: string;
     ws_code?: string;
     fromUserWatchlist?: string;
+    /** Comma-separated order ids to highlight (push / Activity, spec N2 / M4). */
+    highlight?: string;
+    side?: 'wts' | 'wtb';
   }>();
   // Decode the ID to handle references with special characters (e.g., 5711/1A-010)
   const id = rawId ? decodeURIComponent(rawId) : rawId;
@@ -496,7 +519,7 @@ export default function WatchDetailsScreen() {
   const [buyOrders, setBuyOrders] = useState<OrderBookItem[]>([]);
   const [sellOrders, setSellOrders] = useState<OrderBookItem[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('1m');
-  const [selectedTab, setSelectedTab] = useState<'Buy' | 'Sell'>('Sell');
+  const [selectedTab, setSelectedTab] = useState<'Buy' | 'Sell'>(sideParam === 'wtb' ? 'Buy' : 'Sell');
 
   // Make an Offer modal state
   const [showMakeOfferModal, setShowMakeOfferModal] = useState(false);
@@ -509,9 +532,9 @@ export default function WatchDetailsScreen() {
   const [isInWatchlist, setIsInWatchlist] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
 
-  // Watch alert state
-  const [watchAlerts, setWatchAlerts] = useState<any[]>([]);
-  const [showAlertModal, setShowAlertModal] = useState(false);
+  // Watch alert state (spec v3, section 8)
+  const [watchAlerts, setWatchAlerts] = useState<WatchAlert[]>([]);
+  const [alertsSheet, setAlertsSheet] = useState<AlertsSheetStart | null>(null);
   const [remarksBubble, setRemarksBubble] = useState<{
     text: string;
     anchorX: number;
@@ -520,28 +543,40 @@ export default function WatchDetailsScreen() {
     anchorHeight: number;
   } | null>(null);
   const [remarksBubbleSize, setRemarksBubbleSize] = useState<{ width: number; height: number } | null>(null);
-  const [alertLoading, setAlertLoading] = useState(false);
-  const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
-  const [alertListMode, setAlertListMode] = useState(true);
-  const [alertConfig, setAlertConfig] = useState({
-    notify_wts: false,
-    notify_wtb: false,
-    target_month: '',
-    target_year: '',
-    year_direction: 'exactly',
-    condition: 'any',
-    locations: [] as string[],
-    price_threshold: '',
-    price_direction: 'below',
-    currency: 'USD',
-  });
-  const [alertLocationSearch, setAlertLocationSearch] = useState('');
   const [locationSearchFocused, setLocationSearchFocused] = useState(false);
-  const [alertLocationSearchFocused, setAlertLocationSearchFocused] = useState(false);
 
   // ScrollView refs for scrolling to inputs
   const locationFilterScrollRef = useRef<ScrollView>(null);
-  const alertScrollRef = useRef<ScrollView>(null);
+
+  // Detail redesign (spec v3, section 1): period / sort / currency chips, trend + retail chips
+  const { currency, setCurrency, rates } = useCurrency();
+  const [tablePeriod, setTablePeriod] = useState<DetailPeriod>('1M');
+  const [sortMode, setSortMode] = useState<SortMode>('cheapest');
+  const sortMenu = useChipMenu();
+  const periodMenu = useChipMenu();
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [trend, setTrend] = useState<PriceTrend | null>(null);
+  const [retail, setRetail] = useState<RetailComparison | null>(null);
+  const [showTrendSheet, setShowTrendSheet] = useState(false);
+  const [showRetailSheet, setShowRetailSheet] = useState(false);
+  const [allTimeCounts, setAllTimeCounts] = useState<{ wts: number; wtb: number } | null>(null);
+  // M2: count-up only on the first appearance of the page
+  const [countUp, setCountUp] = useState(true);
+
+  // N2 / M4: highlighted listings when opened from push / Activity
+  const highlightIds = useMemo(
+    () => (highlightParam ? String(highlightParam).split(',').map((s) => s.trim()).filter(Boolean) : []),
+    [highlightParam]
+  );
+  const [highlightActive, setHighlightActive] = useState(highlightIds.length > 0);
+  const highlightOpacity = useRef(new Animated.Value(1)).current;
+  const highlightArmed = useRef(false);
+  const highlightScrolled = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const tableY = useRef(0);
+  const orderSectionY = useRef(0);
+  const rowYs = useRef<Record<string, number>>({});
+  const reduceMotion = useReduceMotion();
 
   // Chart interaction state
   const [selectedChartIndex, setSelectedChartIndex] = useState<number | null>(null);
@@ -804,19 +839,11 @@ export default function WatchDetailsScreen() {
     checkWatchlistStatus();
   }, [id, reference, isAuthenticated]);
 
-  // Fetch watch alert config
+  // Alerts of this watch (GET /watch-alerts/{ws_code})
   const fetchAlerts = async () => {
-    if (!watch?.ws_code) return;
+    if (!watch?.ws_code || !isAuthenticated || isGuideActive) return;
     try {
-      const res = await api.get(`/watch-alerts/${encodeURIComponent(watch.ws_code)}`);
-      // Handle both old (single object/null) and new (array) backend response
-      if (Array.isArray(res.data)) {
-        setWatchAlerts(res.data);
-      } else if (res.data && res.data.id) {
-        setWatchAlerts([res.data]);
-      } else {
-        setWatchAlerts([]);
-      }
+      setWatchAlerts(await fetchAlertsForWatch(watch.ws_code));
     } catch {
       setWatchAlerts([]);
     }
@@ -825,6 +852,136 @@ export default function WatchDetailsScreen() {
   useEffect(() => {
     fetchAlerts();
   }, [watch?.ws_code]);
+
+  const detailWsCode = watch.ws_code || wsCodeParam || null;
+  // Home "Recently viewed" (H1)
+  useTrackRecentlyViewed(isAuthenticated && !isGuideActive ? detailWsCode : null);
+
+  // Trend chip: WTS median change over the table period (GET /market/detail/{ws}/trend)
+  useEffect(() => {
+    if (!detailWsCode || isGuideActive) return;
+    let cancelled = false;
+    api
+      .get(`/market/detail/${encodeURIComponent(detailWsCode)}/trend`, {
+        params: { period: tablePeriod, currency },
+      })
+      .then((res) => {
+        if (!cancelled) setTrend(res.data as PriceTrend);
+      })
+      .catch(() => {
+        if (!cancelled) setTrend(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailWsCode, tablePeriod, currency, isGuideActive]);
+
+  // Retail chip: average market vs. retail (GET /market/detail/{ws}/retail)
+  useEffect(() => {
+    if (!detailWsCode || isGuideActive) return;
+    let cancelled = false;
+    api
+      .get(`/market/detail/${encodeURIComponent(detailWsCode)}/retail`, { params: { currency } })
+      .then((res) => {
+        if (!cancelled) setRetail(res.data as RetailComparison);
+      })
+      .catch(() => {
+        if (!cancelled) setRetail(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailWsCode, currency, isGuideActive]);
+
+  // M2: numbers count up only on the first appearance – switch it off once data is shown.
+  useEffect(() => {
+    if (!loading && countUp) {
+      const t = setTimeout(() => setCountUp(false), 700);
+      return () => clearTimeout(t);
+    }
+  }, [loading, countUp]);
+
+  /** Price of a listing converted into the app currency (falls back to usd_price). */
+  const convertedPrice = useCallback(
+    (order: OrderBookItem): number | null => {
+      if (order.price == null) return null;
+      const direct = convertAmount(order.price, order.currency || 'EUR', currency, rates);
+      if (direct !== null) return direct;
+      if (order.usd_price != null) return convertAmount(order.usd_price, 'USD', currency, rates);
+      return null;
+    },
+    [currency, rates]
+  );
+
+  /** Period filter (listing age) + sort for the listing table (spec 1.1, items 1 and 2). */
+  const arrangeOrders = useCallback(
+    (orders: OrderBookItem[]): OrderBookItem[] => {
+      const days = PERIOD_DAYS[tablePeriod];
+      const now = Date.now();
+      const inPeriod =
+        days === null
+          ? orders
+          : orders.filter((order) => {
+              // Highlighted listings (push / Activity) always stay visible.
+              if (highlightIds.includes(order.id)) return true;
+              if (!order.created_at) return true;
+              const t = new Date(order.created_at).getTime();
+              return !Number.isFinite(t) || now - t <= days * 86400000;
+            });
+      const sorted = [...inPeriod];
+      if (sortMode === 'newest') {
+        sorted.sort((a, b) => {
+          const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return tb - ta;
+        });
+      } else {
+        sorted.sort((a, b) => {
+          const pa = convertedPrice(a);
+          const pb = convertedPrice(b);
+          if (pa === null && pb === null) return 0;
+          if (pa === null) return 1;
+          if (pb === null) return -1;
+          return pa - pb;
+        });
+      }
+      return sorted;
+    },
+    [tablePeriod, sortMode, convertedPrice, highlightIds]
+  );
+
+  // N2 / M4: scroll to the first highlighted listing once the table has rendered.
+  const scrollToHighlight = useCallback(
+    (firstId: string) => {
+      if (highlightScrolled.current) return;
+      const rowY = rowYs.current[firstId];
+      if (rowY === undefined) return;
+      highlightScrolled.current = true;
+      const y = Math.max(0, tableY.current + rowY - hp(160));
+      scrollRef.current?.scrollTo({ y, animated: !reduceMotion });
+      // Arm the "fade on first interaction" only after the programmatic scroll has settled.
+      setTimeout(() => {
+        highlightArmed.current = true;
+      }, 700);
+    },
+    [reduceMotion]
+  );
+
+  /** The mark stays until the user scrolls or taps, then fades out over ≈1 s (no timer). */
+  const dismissHighlight = useCallback(() => {
+    if (!highlightActive || !highlightArmed.current) return;
+    highlightArmed.current = false;
+    if (reduceMotion) {
+      setHighlightActive(false);
+      return;
+    }
+    Animated.timing(highlightOpacity, {
+      toValue: 0,
+      duration: 1000,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start(() => setHighlightActive(false));
+  }, [highlightActive, reduceMotion, highlightOpacity]);
 
   const checkWatchlistStatus = async () => {
     if (isGuideActive) return;
@@ -892,87 +1049,14 @@ export default function WatchDetailsScreen() {
     }
   };
 
-  const defaultAlertConfig = { notify_wts: false, notify_wtb: false, target_month: '', target_year: '', year_direction: 'exactly', condition: 'any', locations: [] as string[], price_threshold: '', price_direction: 'below', currency: 'USD' };
-
-  const handleSaveAlert = async () => {
-    if (!watch?.ws_code) return;
-    setAlertLoading(true);
-    try {
-      const payload = {
-        ws_code: watch.ws_code,
-        notify_wts: alertConfig.notify_wts,
-        notify_wtb: alertConfig.notify_wtb,
-        target_month: alertConfig.target_month ? parseInt(alertConfig.target_month) : null,
-        target_year: alertConfig.target_year ? parseInt(alertConfig.target_year) : null,
-        year_direction: alertConfig.year_direction,
-        condition: alertConfig.condition,
-        locations: alertConfig.locations,
-        price_threshold: alertConfig.price_threshold ? parseFloat(alertConfig.price_threshold) : null,
-        price_direction: alertConfig.price_direction,
-        currency: alertConfig.currency,
-      };
-      if (editingAlertId) {
-        // Try new PUT endpoint; fall back to POST (old backend does upsert)
-        try {
-          await api.put(`/watch-alerts/${editingAlertId}`, payload);
-        } catch {
-          await api.post('/watch-alerts', payload);
-        }
-      } else {
-        await api.post('/watch-alerts', payload);
-      }
-      await fetchAlerts();
-      setAlertListMode(true);
-      setEditingAlertId(null);
-    } catch (error) {
-      console.error('Failed to save alert:', error);
-    } finally {
-      setAlertLoading(false);
+  /** Bell: AL8 list when the watch has alerts, otherwise AL1 (new alert). */
+  const openAlerts = () => {
+    if (!isAuthenticated) {
+      router.push('/(auth)/login');
+      return;
     }
-  };
-
-  const handleRemoveAlert = async () => {
-    if (!editingAlertId || !watch?.ws_code) return;
-    setAlertLoading(true);
-    try {
-      // Try new endpoint (delete by ID); fall back to old (delete by ws_code)
-      try {
-        await api.delete(`/watch-alerts/${editingAlertId}`);
-      } catch {
-        await api.delete(`/watch-alerts/${encodeURIComponent(watch.ws_code)}`);
-      }
-      await fetchAlerts();
-      setEditingAlertId(null);
-      setAlertConfig(defaultAlertConfig);
-      setAlertListMode(true);
-    } catch (error) {
-      console.error('Failed to remove alert:', error);
-    } finally {
-      setAlertLoading(false);
-    }
-  };
-
-  const openAlertForEdit = (alert: any) => {
-    setEditingAlertId(alert.id);
-    setAlertConfig({
-      notify_wts: alert.notify_wts,
-      notify_wtb: alert.notify_wtb,
-      target_month: alert.target_month ? String(alert.target_month) : '',
-      target_year: alert.target_year ? String(alert.target_year) : '',
-      year_direction: alert.year_direction || 'exactly',
-      condition: alert.condition || 'any',
-      locations: alert.locations || [],
-      price_threshold: alert.price_threshold ? String(alert.price_threshold) : '',
-      price_direction: alert.price_direction || 'below',
-      currency: alert.currency || 'USD',
-    });
-    setAlertListMode(false);
-  };
-
-  const openNewAlert = () => {
-    setEditingAlertId(null);
-    setAlertConfig(defaultAlertConfig);
-    setAlertListMode(false);
+    if (!detailWsCode) return;
+    setAlertsSheet(watchAlerts.length > 0 ? { mode: 'list' } : { mode: 'new' });
   };
 
   const loadWatchDetails = async () => {
@@ -1108,6 +1192,7 @@ export default function WatchDetailsScreen() {
           whatsapp_phone: order.whatsapp_phone,
           remarks: order.remarks,
           created_at: order.created_at,
+          usd_price: order.usd_price ?? null,
         }));
 
         // Transform sell orders
@@ -1126,10 +1211,25 @@ export default function WatchDetailsScreen() {
           whatsapp_phone: order.whatsapp_phone,
           remarks: order.remarks,
           created_at: order.created_at,
+          usd_price: order.usd_price ?? null,
         }));
 
         setBuyOrders(formattedBuyOrders);
         setSellOrders(formattedSellOrders);
+        if (
+          typeof response.data.wts_count_all_time === 'number' ||
+          typeof response.data.wtb_count_all_time === 'number'
+        ) {
+          setAllTimeCounts({
+            wts: response.data.wts_count_all_time ?? formattedSellOrders.length,
+            wtb: response.data.wtb_count_all_time ?? formattedBuyOrders.length,
+          });
+        }
+        // Opened from a push / Activity without a side: open the tab that holds the listing.
+        if (highlightIds.length > 0 && !sideParam && !highlightScrolled.current) {
+          if (formattedBuyOrders.some((o) => highlightIds.includes(o.id))) setSelectedTab('Buy');
+          else if (formattedSellOrders.some((o) => highlightIds.includes(o.id))) setSelectedTab('Sell');
+        }
 
         // Calculate best bid/ask from orders
         if (formattedBuyOrders.length > 0) {
@@ -1266,11 +1366,13 @@ export default function WatchDetailsScreen() {
   }, [isAuthenticated, watch]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onTouchStart={highlightActive ? dismissHighlight : undefined}>
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={highlightActive ? dismissHighlight : undefined}
       >
         {/* Hero Image with gradient background that extends to price section */}
         <View style={styles.heroContainer}>
@@ -1321,16 +1423,44 @@ export default function WatchDetailsScreen() {
                 </View>
               </>
             ) : (
-              <>
+              <View style={{ gap: hp(10) }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
                   <View style={{ backgroundColor: 'rgba(74,160,120,0.1)', paddingHorizontal: wp(12), paddingVertical: hp(6), borderRadius: sp(99) }}>
-                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#4AA078' }}>WTS {watch.wtsCount ?? sellOrders.length}</Text>
+                    <CountUpText
+                      value={allTimeCounts?.wts ?? watch.wtsCount ?? sellOrders.length}
+                      format={(v) => `WTS ${formatCount(v)}`}
+                      animate={countUp}
+                      style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#4AA078' }}
+                    />
                   </View>
                   <View style={{ backgroundColor: 'rgba(91,155,213,0.1)', paddingHorizontal: wp(12), paddingVertical: hp(6), borderRadius: sp(99) }}>
-                    <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#5B9BD5' }}>WTB {watch.wtbCount ?? buyOrders.length}</Text>
+                    <CountUpText
+                      value={allTimeCounts?.wtb ?? watch.wtbCount ?? buyOrders.length}
+                      format={(v) => `WTB ${formatCount(v)}`}
+                      animate={countUp}
+                      style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(14), color: '#5B9BD5' }}
+                    />
                   </View>
                 </View>
-              </>
+                {/* Trend chip (4) + retail chip (5) – spec 1.1 */}
+                <View style={styles.insightRow}>
+                  <TrendChip
+                    change={trend?.enough_data === false ? null : trend?.wts_change_pct}
+                    series={
+                      trend
+                        ? (trend.fresh?.series?.length ?? 0) >= 2
+                          ? trend.fresh.series
+                          : trend.used?.series ?? null
+                        : null
+                    }
+                    onPress={() => setShowTrendSheet(true)}
+                  />
+                  <RetailChip
+                    pct={retail && retail.status === 'ok' ? retail.avg_vs_retail_pct : null}
+                    onPress={() => setShowRetailSheet(true)}
+                  />
+                </View>
+              </View>
             )}
           </View>
         </View>
@@ -1434,25 +1564,23 @@ export default function WatchDetailsScreen() {
               </ScrollView>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(12), marginLeft: wp(10) }}>
                 <TouchableOpacity
-                  onPress={() => { setAlertListMode(watchAlerts.length > 0); if (watchAlerts.length === 0) openNewAlert(); setShowAlertModal(true); }}
+                  onPress={openAlerts}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel="Alerts"
                 >
-                  <Svg width={22} height={22} viewBox="0 0 24 24" fill={watchAlerts.length > 0 ? '#212121' : 'none'}>
-                    <Path
-                      d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"
-                      stroke="#212121"
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </Svg>
+                  <PopIcon active={watchAlerts.length > 0} wiggle>
+                    <DetailBellIcon filled={watchAlerts.length > 0} />
+                  </PopIcon>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={toggleWatchlist}
                   disabled={watchlistLoading}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
                 >
-                  <StarIcon filled={isInWatchlist} />
+                  <PopIcon active={isInWatchlist}>
+                    <DetailStarIcon filled={isInWatchlist} />
+                  </PopIcon>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1589,7 +1717,12 @@ export default function WatchDetailsScreen() {
         </View>}
 
         {/* Order Book Section */}
-        <View style={styles.section}>
+        <View
+          style={styles.section}
+          onLayout={(e) => {
+            orderSectionY.current = e.nativeEvent.layout.y;
+          }}
+        >
           {v2Enabled && <Text style={styles.sectionTitle}>Order Book</Text>}
 
           {/* Tab Selector */}
@@ -1608,33 +1741,84 @@ export default function WatchDetailsScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Toolbar: sort (2) · period (1) · currency (3) – spec 1.1 */}
+          {!v2Enabled && (
+            <View style={styles.toolbarRow}>
+              <ToolbarChip
+                icon="sort"
+                label={sortMode === 'cheapest' ? 'Cheapest' : 'Newest'}
+                dark={sortMenu.isOpen}
+                onPress={sortMenu.open}
+                accessibilityLabel="Sort"
+              />
+              <ToolbarChip
+                icon="clock"
+                label={periodLabel(tablePeriod)}
+                dark={periodMenu.isOpen}
+                onPress={periodMenu.open}
+                accessibilityLabel="Period"
+              />
+              <ToolbarChip
+                icon="exchange"
+                label={currency}
+                onPress={() => setShowCurrencyPicker(true)}
+                accessibilityLabel="Currency"
+              />
+            </View>
+          )}
+
           {/* Order Book Table */}
           {(() => {
-            const currentOrders = selectedTab === 'Buy' ? v2OffFilteredBuyOrders : v2OffFilteredSellOrders;
+            const rawOrders = selectedTab === 'Buy' ? v2OffFilteredBuyOrders : v2OffFilteredSellOrders;
+            const currentOrders = v2Enabled ? rawOrders : arrangeOrders(rawOrders);
             const hasRemarks = !v2Enabled;
-            return (<View style={styles.orderBookTable}>
+            const firstHighlight = currentOrders.find((o) => highlightIds.includes(o.id))?.id;
+            return (<View
+              style={styles.orderBookTable}
+              onLayout={(e) => {
+                tableY.current = orderSectionY.current + e.nativeEvent.layout.y;
+              }}
+            >
             {/* Header */}
             <View style={styles.tableHeader}>
               <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>{v2Enabled ? 'Market' : 'Location'}</Text>
               <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 0.8, textAlign: 'center' }]}>Details</Text>
               {hasRemarks && <Text style={[styles.tableHeaderCell, { flex: 0.8, textAlign: 'center' }]}>Remarks</Text>}
               <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 1 : 1, textAlign: 'center' }]}>{!v2Enabled && selectedTab === 'Buy' ? 'Target' : 'Price'}</Text>
-              <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 0.7 : 0.5, textAlign: 'center' }]}>Chat</Text>
+              <Text style={[styles.tableHeaderCell, { flex: v2Enabled ? 0.7 : 0.55, textAlign: 'center' }]}>Chat</Text>
             </View>
 
             {/* Rows - use dynamic data from API with filters applied */}
             {currentOrders.length === 0 ? (
               <View style={styles.orderBookEmptyState}>
                 <Text style={styles.orderBookEmptyText}>
-                  No {selectedTab.toLowerCase()} orders available for this watch
+                  {rawOrders.length > 0
+                    ? 'No listings in this period'
+                    : `No ${selectedTab === 'Buy' ? 'WTB' : 'WTS'} listings for this watch yet`}
                 </Text>
               </View>
             ) : (
               (v2Enabled ? currentOrders.slice(0, 5) : currentOrders).map((order, index) => (
                 <View
-                  key={index}
+                  key={order.id || index}
                   style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}
+                  onLayout={(e) => {
+                    if (!order.id) return;
+                    rowYs.current[order.id] = e.nativeEvent.layout.y;
+                    if (order.id === firstHighlight && highlightActive) {
+                      setTimeout(() => scrollToHighlight(order.id), 60);
+                    }
+                  }}
                 >
+                  {/* N2 / M4 highlight: light blue row with a 4 pt blue bar on the left */}
+                  {highlightActive && highlightIds.includes(order.id) ? (
+                    <Animated.View
+                      pointerEvents="none"
+                      style={[styles.rowHighlight, { opacity: highlightOpacity }]}
+                    >
+                      <View style={styles.rowHighlightBar} />
+                    </Animated.View>
+                  ) : null}
                   <View style={[styles.tableCell, { flex: v2Enabled ? 1 : 0.8, alignItems: 'center' }]}>
                     <CountryFlag countryCode={order.country_code} size={14} />
                     <Text style={[styles.tableCellText, { fontSize: fp(11), textAlign: 'center', marginTop: hp(2), color: v2Enabled ? '#212121' : '#999999' }]}>
@@ -1688,36 +1872,46 @@ export default function WatchDetailsScreen() {
                       )}
                     </View>
                   )}
-                  <View style={[styles.tableCell, { flex: 1, alignItems: 'center', justifyContent: 'center' }]}>
+                  <View style={[styles.tableCell, { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: wp(4) }]}>
                     {order.price == null ? (
                       <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#CCCCCC' }]}>-</Text>
-                    ) : (
+                    ) : v2Enabled ? (
                       <Text style={[styles.tableCellTextBold, { textAlign: 'center' }]}>
                         {order.currency && order.currency !== 'EUR'
                           ? `${order.currency} ${order.price.toLocaleString('de-DE')}`
                           : formatPriceEurBefore(order.price)}
                       </Text>
+                    ) : (
+                      <>
+                        {/* Price column (6): original bold, converted small and grey */}
+                        <Text style={[styles.tableCellTextBold, { textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {formatPrice(order.price, order.currency || 'EUR')}
+                        </Text>
+                        {(order.currency || 'EUR').replace('USDT', 'USD') !== currency && convertedPrice(order) !== null ? (
+                          <Text style={styles.priceApprox} numberOfLines={1}>
+                            {formatApprox(convertedPrice(order), currency)}
+                          </Text>
+                        ) : null}
+                      </>
                     )}
                   </View>
-                  <View style={{ flex: v2Enabled ? 0.7 : 0.5, alignItems: 'center', justifyContent: 'center', paddingVertical: hp(6) }}>
+                  <View style={{ flex: v2Enabled ? 0.7 : 0.55, alignItems: 'center', justifyContent: 'center', paddingVertical: hp(6) }}>
+                    {/* Chat column (7): neutral speech bubble, opens WhatsApp with the dealer */}
                     <TouchableOpacity
                       onPress={() => handleWhatsAppChat(order)}
                       disabled={!order.whatsapp_phone}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel="Chat with dealer"
+                      style={!order.whatsapp_phone ? { opacity: 0.3 } : undefined}
                     >
-                      <WhatsAppIcon size={18} />
+                      <ChatBubbleIcon size={v2Enabled ? sp(22) : sp(28)} />
                     </TouchableOpacity>
-                    {!v2Enabled && order.created_at && (() => {
-                      const daysAgo = Math.floor((Date.now() - new Date(order.created_at).getTime()) / (1000 * 60 * 60 * 24));
-                      const dotColor = daysAgo <= 7 ? '#4AA078' : daysAgo <= 14 ? '#E8A838' : '#D35741';
-                      const label = daysAgo === 0 ? 'today' : `${daysAgo}d`;
-                      return (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(3), marginTop: hp(4) }}>
-                          <View style={{ width: sp(6), height: sp(6), borderRadius: sp(3), backgroundColor: dotColor }} />
-                          <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(9), color: dotColor }}>{label}</Text>
-                        </View>
-                      );
-                    })()}
+                    {!v2Enabled && order.created_at && formatAge(order.created_at) ? (
+                      <View style={styles.ageTag}>
+                        <View style={styles.ageDot} />
+                        <Text style={styles.ageText}>{formatAge(order.created_at)}</Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
               ))
@@ -1767,11 +1961,13 @@ export default function WatchDetailsScreen() {
         ) : (
           <View style={{ height: sp(42) }} />
         )}
-        <TouchableOpacity style={styles.aiButtonOuter} onPress={() => router.push('/chat/ai')}>
-          <View style={styles.aiButtonInner}>
-            <SparkleIcon />
-          </View>
-        </TouchableOpacity>
+        {v2Enabled && (
+          <TouchableOpacity style={styles.aiButtonOuter} onPress={() => router.push('/chat/ai')}>
+            <View style={styles.aiButtonInner}>
+              <SparkleIcon />
+            </View>
+          </TouchableOpacity>
+        )}
       </LinearGradient>
 
       {/* Make an Offer Modal */}
@@ -2029,439 +2225,54 @@ export default function WatchDetailsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Watch Alert List Modal (compact bottom sheet) */}
-      <Modal
-        visible={showAlertModal && alertListMode}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => { setShowAlertModal(false); }}
-      >
-        <TouchableOpacity
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' }}
-          activeOpacity={1}
-          onPress={() => setShowAlertModal(false)}
-        >
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <SafeAreaView style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: sp(16), borderTopRightRadius: sp(16) }} edges={['bottom']}>
-              {/* Header */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: wp(16), paddingTop: hp(16), paddingBottom: hp(12), position: 'relative' }}>
-                <View style={{ width: wp(36), height: hp(4), borderRadius: sp(2), backgroundColor: '#D1D1D6', position: 'absolute', top: hp(8) }} />
-                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(18), color: '#212121' }}>Price Alerts</Text>
-                <TouchableOpacity onPress={() => setShowAlertModal(false)} style={{ position: 'absolute', right: wp(16), padding: hp(8) }}>
-                  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                    <Path d="M18 6L6 18M6 6l12 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" />
-                  </Svg>
-                </TouchableOpacity>
-              </View>
-
-              {/* Alert cards */}
-              <View style={{ paddingHorizontal: wp(16), paddingBottom: hp(8), gap: hp(10) }}>
-                {watchAlerts.map((alert) => {
-                  const typeLabel = alert.notify_wts ? 'WTS' : alert.notify_wtb ? 'WTB' : '';
-                  const priceLabel = alert.price_threshold
-                    ? `${alert.price_direction === 'below' ? 'Below' : 'Above'} ${Number(alert.price_threshold).toLocaleString()} ${alert.currency}`
-                    : 'Any price';
-                  const condLabel = alert.condition && alert.condition !== 'any' ? (alert.condition === 'unworn' ? 'Unworn' : 'Used') : '';
-                  const locCount = alert.locations?.length || 0;
-                  return (
-                    <TouchableOpacity
-                      key={alert.id}
-                      onPress={() => openAlertForEdit(alert)}
-                      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F8F8', borderRadius: sp(12), paddingHorizontal: wp(14), paddingVertical: hp(14) }}
-                    >
-                      <View style={{ flex: 1, gap: hp(4) }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
-                          {typeLabel ? (
-                            <View style={{ backgroundColor: typeLabel === 'WTS' ? '#4AA078' : '#3B82F6', borderRadius: sp(6), paddingHorizontal: wp(8), paddingVertical: hp(2) }}>
-                              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(12), color: '#FFF' }}>{typeLabel}</Text>
-                            </View>
-                          ) : null}
-                          <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121', flex: 1 }}>{priceLabel}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(8) }}>
-                          {condLabel ? <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#8E8E93' }}>{condLabel}</Text> : null}
-                          {locCount > 0 ? <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#8E8E93' }}>{locCount} location{locCount > 1 ? 's' : ''}</Text> : null}
-                        </View>
-                      </View>
-                      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                        <Path d="M9 18l6-6-6-6" stroke="#8E8E93" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                      </Svg>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Add button */}
-              <View style={{ paddingHorizontal: wp(16), paddingTop: hp(8), paddingBottom: hp(16) }}>
-                <TouchableOpacity
-                  onPress={openNewAlert}
-                  style={{ paddingVertical: hp(14), borderRadius: sp(99), backgroundColor: '#212121', alignItems: 'center' }}
-                >
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#FFFFFF' }}>Add New Alert</Text>
-                </TouchableOpacity>
-              </View>
-            </SafeAreaView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Watch Alert Form Modal (full page sheet) */}
-      <Modal
-        visible={showAlertModal && !alertListMode}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => { setShowAlertModal(false); setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top']}>
-          {/* Header */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: wp(16), paddingVertical: hp(12), borderBottomWidth: 1, borderBottomColor: '#F0F0F0', position: 'relative' }}>
-            <TouchableOpacity onPress={() => { if (watchAlerts.length > 0) { setAlertListMode(true); setEditingAlertId(null); } else { setShowAlertModal(false); } setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }} style={{ position: 'absolute', left: wp(16), padding: hp(8) }}>
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M19 12H5M12 19l-7-7 7-7" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            </TouchableOpacity>
-            <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(18), color: '#212121' }}>
-              {editingAlertId ? 'Edit Alert' : 'New Alert'}
-            </Text>
-            <TouchableOpacity onPress={() => { setShowAlertModal(false); setAlertLocationSearch(''); setAlertLocationSearchFocused(false); }} style={{ position: 'absolute', right: wp(16), padding: hp(8) }}>
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M18 6L6 18M6 6l12 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView ref={alertScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
-            {/* WTS / WTB Toggle — only one can be active */}
-            <View style={{ paddingHorizontal: wp(16), paddingTop: hp(20), paddingBottom: hp(12) }}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: hp(12) }}
-                onPress={() => setAlertConfig(c => ({ ...c, notify_wts: !c.notify_wts, notify_wtb: !c.notify_wts ? false : c.notify_wtb }))}
-              >
-                <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(16), color: '#212121' }}>WTS Notifications</Text>
-                <View style={{ width: wp(44), height: hp(24), borderRadius: sp(12), backgroundColor: alertConfig.notify_wts ? '#4AA078' : '#E5E5E5', justifyContent: 'center', paddingHorizontal: wp(2) }}>
-                  <View style={{ width: wp(20), height: wp(20), borderRadius: wp(10), backgroundColor: '#FFF', alignSelf: alertConfig.notify_wts ? 'flex-end' : 'flex-start' }} />
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: hp(12) }}
-                onPress={() => setAlertConfig(c => ({ ...c, notify_wtb: !c.notify_wtb, notify_wts: !c.notify_wtb ? false : c.notify_wts }))}
-              >
-                <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(16), color: '#212121' }}>WTB Notifications</Text>
-                <View style={{ width: wp(44), height: hp(24), borderRadius: sp(12), backgroundColor: alertConfig.notify_wtb ? '#4AA078' : '#E5E5E5', justifyContent: 'center', paddingHorizontal: wp(2) }}>
-                  <View style={{ width: wp(20), height: wp(20), borderRadius: wp(10), backgroundColor: '#FFF', alignSelf: alertConfig.notify_wtb ? 'flex-end' : 'flex-start' }} />
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            {/* Year Section — 3 columns: Direction | Month | Year */}
-            <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(12) }}>Year</Text>
-              <View style={{ flexDirection: 'row', gap: wp(12), height: hp(200) }}>
-                {/* Direction column */}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Direction</Text>
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                    {([{ key: 'exactly', label: '= Exactly' }, { key: 'older', label: '↓ Older' }, { key: 'newer', label: '↑ Newer' }] as const).map(dir => (
-                      <TouchableOpacity
-                        key={dir.key}
-                        onPress={() => setAlertConfig(c => ({ ...c, year_direction: dir.key }))}
-                        style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: alertConfig.year_direction === dir.key ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
-                      >
-                        <Text style={{ fontFamily: alertConfig.year_direction === dir.key ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{dir.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-                {/* Month column */}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Month</Text>
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                    <TouchableOpacity
-                      onPress={() => setAlertConfig(c => ({ ...c, target_month: '' }))}
-                      style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: !alertConfig.target_month ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
-                    >
-                      <Text style={{ fontFamily: !alertConfig.target_month ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>Any</Text>
-                    </TouchableOpacity>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                      <TouchableOpacity
-                        key={m}
-                        onPress={() => setAlertConfig(c => ({ ...c, target_month: String(m) }))}
-                        style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: alertConfig.target_month === String(m) ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
-                      >
-                        <Text style={{ fontFamily: alertConfig.target_month === String(m) ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>
-                          {String(m).padStart(2, '0')}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-                {/* Year column */}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Year</Text>
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                    <TouchableOpacity
-                      onPress={() => setAlertConfig(c => ({ ...c, target_year: '' }))}
-                      style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: !alertConfig.target_year ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
-                    >
-                      <Text style={{ fontFamily: !alertConfig.target_year ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>Any</Text>
-                    </TouchableOpacity>
-                    {Array.from({ length: 16 }, (_, i) => String(2026 - i)).map(y => (
-                      <TouchableOpacity
-                        key={y}
-                        onPress={() => setAlertConfig(c => ({ ...c, target_year: y }))}
-                        style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: alertConfig.target_year === y ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
-                      >
-                        <Text style={{ fontFamily: alertConfig.target_year === y ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{y}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
-            </View>
-
-            {/* Condition */}
-            <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(12) }}>Condition</Text>
-              <View style={{ flexDirection: 'row', gap: wp(8) }}>
-                {([{ key: 'any', label: 'Any' }, { key: 'unworn', label: 'Only Unworn' }, { key: 'used', label: 'Only Used' }] as const).map(item => (
-                  <TouchableOpacity
-                    key={item.key}
-                    onPress={() => setAlertConfig(c => ({ ...c, condition: item.key }))}
-                    style={{ paddingHorizontal: wp(16), paddingVertical: hp(10), borderRadius: sp(99), backgroundColor: alertConfig.condition === item.key ? '#212121' : '#F5F5F5' }}
-                  >
-                    <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: alertConfig.condition === item.key ? '#FFF' : '#666' }}>{item.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Location */}
-            <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(8) }}>Location</Text>
-
-              {/* Selected location chips */}
-              {alertConfig.locations.length > 0 && (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: wp(6), marginBottom: hp(8) }}>
-                  {alertConfig.locations.map(code => {
-                    const country = ALL_COUNTRIES.find(c => c.code === code);
-                    const label = code === 'EU' ? 'EU' : (country?.name || code);
-                    return (
-                      <TouchableOpacity
-                        key={code}
-                        onPress={() => setAlertConfig(c => ({ ...c, locations: c.locations.filter(l => l !== code) }))}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: wp(4), backgroundColor: '#F0F0F0', borderRadius: sp(99), paddingHorizontal: wp(10), paddingVertical: hp(5) }}
-                      >
-                        {code === 'EU' ? <Text style={{ fontSize: fp(13) }}>🇪🇺</Text> : <CountryFlag countryCode={code} size={13} />}
-                        <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(12), color: '#212121' }}>{label}</Text>
-                        <Svg width={10} height={10} viewBox="0 0 16 16" fill="none">
-                          <Path d="M4 4L12 12M12 4L4 12" stroke="#666" strokeWidth={1.5} strokeLinecap="round" />
-                        </Svg>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-
-              {/* Search input at top when focused */}
-              {alertLocationSearchFocused && (
-                <View style={{ marginBottom: hp(8) }}>
-                  <TextInput
-                    style={{ height: hp(40), borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}
-                    placeholder="Search country..."
-                    placeholderTextColor="#8E8E93"
-                    value={alertLocationSearch}
-                    onChangeText={setAlertLocationSearch}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoFocus
-                    onBlur={() => { setAlertLocationSearchFocused(false); setAlertLocationSearch(''); }}
-                  />
-                </View>
-              )}
-
-              {alertLocationSearchFocused ? (
-                /* Search results */
-                ALL_COUNTRIES
-                  .filter(c => alertLocationSearch.trim().length === 0 || c.name.toLowerCase().includes(alertLocationSearch.toLowerCase().trim()))
-                  .map(loc => {
-                    const isSelected = alertConfig.locations.includes(loc.code);
-                    return (
-                      <TouchableOpacity
-                        key={loc.code}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: wp(10), paddingVertical: hp(10), borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' }}
-                        onPress={() => {
-                          setAlertConfig(c => ({
-                            ...c,
-                            locations: c.locations.includes(loc.code)
-                              ? c.locations.filter(l => l !== loc.code)
-                              : [...c.locations, loc.code],
-                          }));
-                        }}
-                      >
-                        <CountryFlag countryCode={loc.code} size={18} />
-                        <Text style={{ flex: 1, fontFamily: isSelected ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{loc.name}</Text>
-                        {isSelected && (
-                          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                            <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                          </Svg>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })
-              ) : (
-                /* Main locations + search input below China */
-                <>
-                  {[
-                    { code: '', name: 'Worldwide', icon: '🌐' },
-                    { code: 'EU', name: 'EU', icon: '🇪🇺' },
-                    { code: 'HK', name: 'Hong Kong', icon: undefined },
-                    { code: 'AE', name: 'United Arab Emirates', icon: undefined },
-                    { code: 'GB', name: 'United Kingdom', icon: undefined },
-                    { code: 'US', name: 'United States', icon: undefined },
-                    { code: 'CH', name: 'Switzerland', icon: undefined },
-                    { code: 'CN', name: 'China', icon: undefined },
-                  ].map(loc => {
-                    const isWorldwide = loc.code === '';
-                    const isSelected = isWorldwide ? alertConfig.locations.length === 0 : alertConfig.locations.includes(loc.code);
-                    return (
-                      <TouchableOpacity
-                        key={loc.code || 'ww'}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: wp(10), paddingVertical: hp(10), borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' }}
-                        onPress={() => {
-                          if (isWorldwide) {
-                            setAlertConfig(c => ({ ...c, locations: [] }));
-                          } else {
-                            setAlertConfig(c => ({
-                              ...c,
-                              locations: c.locations.includes(loc.code)
-                                ? c.locations.filter(l => l !== loc.code)
-                                : [...c.locations, loc.code],
-                            }));
-                          }
-                        }}
-                      >
-                        {loc.icon ? (
-                          <Text style={{ fontSize: fp(18) }}>{loc.icon}</Text>
-                        ) : (
-                          <CountryFlag countryCode={loc.code} size={18} />
-                        )}
-                        <Text style={{ flex: 1, fontFamily: isSelected ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{loc.name}</Text>
-                        {isSelected && (
-                          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                            <Path d="M20 6L9 17L4 12" stroke="#212121" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                          </Svg>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-
-                  {/* Separator + Search placeholder below China */}
-                  <View style={{ height: 1, backgroundColor: '#E5E5E5', marginVertical: hp(8) }} />
-                  <TouchableOpacity
-                    style={{ height: hp(40), borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(10), paddingHorizontal: wp(12), justifyContent: 'center' }}
-                    onPress={() => setAlertLocationSearchFocused(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#8E8E93' }}>Search country...</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-
-            {/* Price Threshold — 3 column layout */}
-            <View style={{ paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#212121', marginBottom: hp(12) }}>Price Threshold</Text>
-
-              <View style={{ flexDirection: 'row', gap: wp(12), height: hp(200) }}>
-                {/* Direction column: Below / Above */}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Direction</Text>
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                    {[{ key: 'below', label: '↓ Below' }, { key: 'above', label: '↑ Above' }].map(dir => (
-                      <TouchableOpacity
-                        key={dir.key}
-                        onPress={() => setAlertConfig(c => ({ ...c, price_direction: dir.key }))}
-                        style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: alertConfig.price_direction === dir.key ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
-                      >
-                        <Text style={{ fontFamily: alertConfig.price_direction === dir.key ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{dir.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-
-                {/* Amount column */}
-                <View style={{ flex: 1, justifyContent: 'flex-start' }}>
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Amount</Text>
-                  <View style={{ borderWidth: 1, borderColor: '#E5E5E5', borderRadius: sp(8), paddingHorizontal: wp(8), height: hp(36), justifyContent: 'center' }}>
-                    <TextInput
-                      style={{ fontFamily: 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121', textAlign: 'center', padding: 0 }}
-                      value={alertConfig.price_threshold}
-                      onChangeText={(text) => setAlertConfig(c => ({ ...c, price_threshold: text.replace(/[^0-9]/g, '') }))}
-                      keyboardType="number-pad"
-                      returnKeyType="done"
-                      onSubmitEditing={Keyboard.dismiss}
-                      placeholder="0"
-                      placeholderTextColor="#8E8E93"
-                      inputAccessoryViewID="alertPriceDone"
-                      onFocus={() => { setTimeout(() => alertScrollRef.current?.scrollToEnd({ animated: true }), 300); }}
-                    />
-                  </View>
-                </View>
-
-                {/* Currency column */}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(13), color: '#8E8E93', marginBottom: hp(8), textAlign: 'center' }}>Currency</Text>
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                    {['USD', 'EUR', 'HKD', 'AED', 'GBP', 'CHF', 'CNY'].map(cur => (
-                      <TouchableOpacity
-                        key={cur}
-                        onPress={() => setAlertConfig(c => ({ ...c, currency: cur }))}
-                        style={{ paddingVertical: hp(8), alignItems: 'center', backgroundColor: alertConfig.currency === cur ? '#F0F0F0' : 'transparent', borderRadius: sp(8) }}
-                      >
-                        <Text style={{ fontFamily: alertConfig.currency === cur ? 'HankenGrotesk_600SemiBold' : 'HankenGrotesk_500Medium', fontSize: fp(14), color: '#212121' }}>{cur}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
-            </View>
-
-            <View style={{ height: hp(100) }} />
-          </ScrollView>
-
-          {/* Action buttons */}
-          <View style={{ flexDirection: 'row', gap: wp(8), paddingHorizontal: wp(16), paddingVertical: hp(16), borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
-            {editingAlertId && (
-              <TouchableOpacity
-                onPress={handleRemoveAlert}
-                disabled={alertLoading}
-                style={{ flex: 1, paddingVertical: hp(14), borderRadius: sp(99), borderWidth: 1.5, borderColor: '#D35741', alignItems: 'center' }}
-              >
-                <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#D35741' }}>Delete</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              onPress={handleSaveAlert}
-              disabled={alertLoading}
-              style={{ flex: 1, paddingVertical: hp(14), borderRadius: sp(99), backgroundColor: '#212121', alignItems: 'center' }}
-            >
-              <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#FFFFFF' }}>
-                {alertLoading ? 'Saving...' : 'Save Alert'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {Platform.OS === 'ios' && (
-            <InputAccessoryView nativeID="alertPriceDone">
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', backgroundColor: '#F0F0F0', paddingHorizontal: wp(16), paddingVertical: hp(8), borderTopWidth: 0.5, borderTopColor: '#C8C8C8' }}>
-                <TouchableOpacity onPress={Keyboard.dismiss}>
-                  <Text style={{ fontFamily: 'HankenGrotesk_600SemiBold', fontSize: fp(16), color: '#007AFF' }}>Done</Text>
-                </TouchableOpacity>
-              </View>
-            </InputAccessoryView>
-          )}
-        </SafeAreaView>
-      </Modal>
+      {/* Detail redesign sheets: sort / period menus, currency, price trend, retail, alerts */}
+      <ChipMenu<SortMode>
+        anchor={sortMenu.anchor}
+        options={[
+          { value: 'cheapest', label: 'Cheapest first' },
+          { value: 'newest', label: 'Newest first' },
+        ]}
+        selected={sortMode}
+        onSelect={setSortMode}
+        onClose={sortMenu.close}
+      />
+      <ChipMenu<DetailPeriod>
+        anchor={periodMenu.anchor}
+        options={DETAIL_PERIODS.map((p) => ({ value: p.value, label: `${p.label} · ${p.long}` }))}
+        selected={tablePeriod}
+        onSelect={setTablePeriod}
+        onClose={periodMenu.close}
+      />
+      <CurrencyPickerSheet
+        visible={showCurrencyPicker}
+        selected={currency}
+        onClose={() => setShowCurrencyPicker(false)}
+        onSelect={(next) => {
+          setCurrency(next);
+        }}
+      />
+      <PriceTrendSheet
+        visible={showTrendSheet}
+        onClose={() => setShowTrendSheet(false)}
+        wsCode={detailWsCode}
+        initialPeriod={tablePeriod}
+      />
+      <RetailPricesSheet
+        visible={showRetailSheet}
+        onClose={() => setShowRetailSheet(false)}
+        wsCode={detailWsCode}
+        onLoaded={setRetail}
+      />
+      {alertsSheet && detailWsCode ? (
+        <AlertsSheet
+          visible={alertsSheet !== null}
+          onClose={() => setAlertsSheet(null)}
+          wsCode={detailWsCode}
+          alerts={watchAlerts}
+          start={alertsSheet}
+          onChanged={fetchAlerts}
+        />
+      ) : null}
 
       {/* Year Filter Modal */}
       <Modal
@@ -2695,6 +2506,54 @@ export default function WatchDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
+  insightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(8),
+  },
+  toolbarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(8),
+    marginTop: -hp(4),
+    marginBottom: hp(12),
+  },
+  rowHighlight: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#E4EEFB',
+  },
+  rowHighlightBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: '#3478F6',
+  },
+  priceApprox: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: fp(10),
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginTop: hp(2),
+  },
+  ageTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: hp(4),
+  },
+  ageDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#FF3B30',
+  },
+  ageText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 10,
+    color: '#D70015',
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -3014,7 +2873,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tableRowAlt: {
-    backgroundColor: '#FBFBFB',
+    backgroundColor: '#F2F2F4',
   },
   tableCell: {
     paddingVertical: hp(8),

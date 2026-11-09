@@ -23,10 +23,14 @@ import {
   Settings,
   FileOutput,
   Radio,
+  Tags,
+  ClipboardCheck,
+  Scale,
 } from 'lucide-react'
 
 interface NavItem {
   nameKey: string
+  label?: string
   to: string
   icon: React.ComponentType<{ className?: string }>
 }
@@ -70,6 +74,9 @@ const adminNavigationConfig: NavSection[] = [
     titleKey: 'sidebar.dataAnalytics',
     items: [
       { nameKey: 'sidebar.wtbWtsGenerator', to: '/admin/wtb-wts', icon: FileOutput },
+      { nameKey: 'sidebar.remarks', to: '/admin/remarks', icon: Tags, label: 'Remarks' },
+      { nameKey: 'sidebar.approval', to: '/admin/approval', icon: ClipboardCheck, label: 'Approval' },
+      { nameKey: 'sidebar.priceCheck', to: '/admin/price-check', icon: Scale, label: 'Price check' },
       { nameKey: 'sidebar.whatsappImport', to: '/admin/whatsapp', icon: Upload },
       { nameKey: 'sidebar.whatsappBridge', to: '/admin/whatsapp-bridge', icon: Radio },
       { nameKey: 'sidebar.activity', to: '/admin/activity', icon: Activity },
@@ -155,7 +162,7 @@ export function AdminSidebar() {
                     }
                   >
                     <item.icon className="w-5 h-5 mr-3" />
-                    {t(`admin.${item.nameKey}`)}
+                    {t(`admin.${item.nameKey}`, { defaultValue: item.label })}
                   </NavLink>
                 ))}
               </div>
