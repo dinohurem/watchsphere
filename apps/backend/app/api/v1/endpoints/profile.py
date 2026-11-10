@@ -10,6 +10,8 @@ from app.models.user import User
 from app.models.watchlist import WatchlistRecord, WatchlistItemType
 from app.models.watch import Watch, WatchStatus
 from app.models.order import Order, OrderType, OrderStatus
+from app.core.market_constants import APP_CURRENCIES
+from app.services.market_cards import cards_for_ws_codes, stats_for, watches_by_ws_codes, watch_image
 
 router = APIRouter()
 
@@ -35,6 +37,12 @@ class WatchlistItemResponse(BaseModel):
     image: Optional[str] = None  # Watch image URL
     wts_count: int = 0
     wtb_count: int = 0
+    # Card fields (redesign v3 §5; `id` stays the watchlist item id, the watch is `watch_id`)
+    watch_id: Optional[str] = None
+    collection: Optional[str] = None
+    thumbnail: Optional[str] = None
+    change_1m_pct: Optional[float] = None
+    retail_pct: Optional[float] = None
 
 
 class WatchlistCreateRequest(BaseModel):
@@ -67,7 +75,8 @@ class FCMTokenRequest(BaseModel):
 class NotificationPreferencesRequest(BaseModel):
     notifications_enabled: Optional[bool] = None  # Push notifications
     email_notifications_enabled: Optional[bool] = None  # Email notifications
-    notify_price_changes: Optional[bool] = None  # Price alerts
+    notify_alert_matches: Optional[bool] = None  # "WTS & WTB alerts" (redesign v3 P4)
+    notify_price_changes: Optional[bool] = None  # Price alerts (legacy builds)
     notify_buy_offers: Optional[bool] = None  # Buy order offers
     notify_messages: Optional[bool] = None  # Chat messages
 
@@ -77,6 +86,44 @@ class ProfileUpdateRequest(BaseModel):
     phone: Optional[str] = None
     whatsapp_phone: Optional[str] = None
     telegram_username: Optional[str] = None
+    # One of the 9 app currencies (redesign v3 §0.2)
+    preferred_currency: Optional[str] = None
+
+
+class RecentlyViewedRequest(BaseModel):
+    ws_code: str
+
+
+RECENTLY_VIEWED_MAX = 5
+
+
+def _profile_payload(user: User) -> dict:
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "name": user.name,
+        "username": user.username,
+        "phone": user.phone,
+        "whatsapp_phone": user.whatsapp_phone,
+        "telegram_username": user.telegram_username,
+        "role": user.role,
+        "is_active": user.is_active,
+        "verified": user.verified,
+        "approved": user.approved,
+        "auth_provider": user.auth_provider,
+        "preferred_currency": user.preferred_currency,
+        "profile_image_url": user.profile_image_url,
+        "profile_image_thumbnail_url": user.profile_image_thumbnail_url,
+        "notifications_enabled": user.notifications_enabled,
+        "email_notifications_enabled": user.email_notifications_enabled,
+        "notify_alert_matches": user.notify_alert_matches,
+        "notify_price_changes": user.notify_price_changes,
+        "notify_buy_offers": user.notify_buy_offers,
+        "notify_messages": user.notify_messages,
+        "average_rating": user.average_rating,
+        "review_count": user.review_count,
+        "created_at": user.created_at,
+    }
 
 
 class PasswordChangeRequest(BaseModel):
@@ -88,28 +135,8 @@ class PasswordChangeRequest(BaseModel):
 async def get_profile(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
-    """Get current user's profile"""
-    return {
-        "id": str(current_user.id),
-        "email": current_user.email,
-        "name": current_user.name,
-        "phone": current_user.phone,
-        "whatsapp_phone": current_user.whatsapp_phone,
-        "telegram_username": current_user.telegram_username,
-        "role": current_user.role,
-        "is_active": current_user.is_active,
-        "verified": current_user.verified,
-        "profile_image_url": current_user.profile_image_url,
-        "profile_image_thumbnail_url": current_user.profile_image_thumbnail_url,
-        "notifications_enabled": current_user.notifications_enabled,
-        "email_notifications_enabled": current_user.email_notifications_enabled,
-        "notify_price_changes": current_user.notify_price_changes,
-        "notify_buy_offers": current_user.notify_buy_offers,
-        "notify_messages": current_user.notify_messages,
-        "average_rating": current_user.average_rating,
-        "review_count": current_user.review_count,
-        "created_at": current_user.created_at,
-    }
+    """Get current user's profile (also reachable while the account is pending approval)."""
+    return _profile_payload(current_user)
 
 
 @router.get("/user/{user_id}")
@@ -151,21 +178,38 @@ async def update_profile(
 ) -> Any:
     """Update current user's profile"""
     update_data = data.model_dump(exclude_unset=True)
+
+    if "preferred_currency" in update_data:
+        cur = (update_data["preferred_currency"] or "").strip().upper()
+        if cur not in APP_CURRENCIES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"preferred_currency must be one of {', '.join(APP_CURRENCIES)}",
+            )
+        update_data["preferred_currency"] = cur
+
+    if "whatsapp_phone" in update_data and update_data["whatsapp_phone"]:
+        from app.services.phone import normalize_phone
+
+        phone = normalize_phone(update_data["whatsapp_phone"])
+        if not phone:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Enter a valid WhatsApp number including the country code",
+            )
+        clash = await User.find_one(User.whatsapp_phone == phone)
+        if clash and str(clash.id) != str(current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A user with this WhatsApp number already exists",
+            )
+        update_data["whatsapp_phone"] = phone
+
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         await current_user.set(update_data)
 
-    return {
-        "id": str(current_user.id),
-        "email": current_user.email,
-        "name": current_user.name,
-        "phone": current_user.phone,
-        "role": current_user.role,
-        "is_active": current_user.is_active,
-        "verified": current_user.verified,
-        "profile_image_url": current_user.profile_image_url,
-        "profile_image_thumbnail_url": current_user.profile_image_thumbnail_url,
-    }
+    return _profile_payload(current_user)
 
 
 @router.post("/change-password")
@@ -233,6 +277,7 @@ async def update_notification_preferences(
     return {
         "notifications_enabled": current_user.notifications_enabled,
         "email_notifications_enabled": current_user.email_notifications_enabled,
+        "notify_alert_matches": current_user.notify_alert_matches,
         "notify_price_changes": current_user.notify_price_changes,
         "notify_buy_offers": current_user.notify_buy_offers,
         "notify_messages": current_user.notify_messages,
@@ -259,50 +304,32 @@ async def get_my_watchlist(
 
     items = await WatchlistRecord.find(*query_conditions).sort([("created_at", -1)]).to_list()
 
-    # Build lookup for market data (price_change and image) by ws_code only
+    # Market data by ws_code only – distinct variants (e.g. 5205R Green vs 5205R Black)
+    # must stay separate. No reference fallback.
     ws_codes = [item.ws_code for item in items if item.ws_code]
-    market_data: Dict[str, dict] = {}
+    watches = await watches_by_ws_codes(ws_codes)
+    stats = await stats_for(watches.keys())
 
-    if ws_codes:
-        watches = await Watch.find(
-            In(Watch.ws_code, ws_codes),
-            Watch.status == WatchStatus.ACTIVE,
-        ).to_list()
+    # Lowest active WTS price per ws_code (legacy `price` field for older app builds)
+    lowest: Dict[str, float] = {}
+    if watches:
+        rows = await Order.get_motor_collection().aggregate([
+            {"$match": {
+                "ws_code": {"$in": list(watches.keys())},
+                "order_type": OrderType.SELL.value,
+                "status": OrderStatus.ACTIVE.value,
+                "price": {"$gt": 0},
+            }},
+            {"$group": {"_id": "$ws_code", "min_price": {"$min": "$price"}}},
+        ]).to_list(length=None)
+        lowest = {r["_id"]: r["min_price"] for r in rows}
 
-        for watch in watches:
-            if watch.ws_code:
-                count_field = watch.ws_code
-                count_key = "ws_code"
-
-                # Strict ws_code match — distinct variants (e.g. 5205R Green vs
-                # 5205R Black) must stay separate. No reference fallback.
-                sell_orders = await Order.find(
-                    Order.ws_code == watch.ws_code,
-                    Order.order_type == OrderType.SELL,
-                    Order.status == OrderStatus.ACTIVE,
-                ).sort([("price", 1)]).limit(1).to_list()
-
-                lowest_order_price = sell_orders[0].price if sell_orders else None
-                display_price = lowest_order_price if lowest_order_price else watch.price
-
-                # Count WTS/WTB orders for this specific watch variant
-                wts_count = await Order.find(
-                    {count_key: count_field, "order_type": OrderType.SELL.value, "status": OrderStatus.ACTIVE.value},
-                ).count()
-                wtb_count = await Order.find(
-                    {count_key: count_field, "order_type": OrderType.BUY.value, "status": OrderStatus.ACTIVE.value},
-                ).count()
-
-                market_data[watch.ws_code] = {
-                    "price_change": watch.price_change or 0.0,
-                    "image": watch.cover_image,
-                    "display_price": display_price,
-                    "wts_count": wts_count,
-                    "wtb_count": wtb_count,
-                }
-
-    return [
-        {
+    def to_payload(item: WatchlistRecord) -> dict:
+        watch = watches.get(item.ws_code or "")
+        st = stats.get(item.ws_code or "", {})
+        image, thumb = watch_image(watch) if watch else (None, None)
+        display_price = lowest.get(item.ws_code or "") or (watch.price if watch else None)
+        return {
             "id": str(item.id),
             "item_type": item.item_type,
             "brand": item.brand,
@@ -315,14 +342,48 @@ async def get_my_watchlist(
             "notes": item.notes,
             "is_active": item.is_active,
             "created_at": item.created_at,
-            "price": market_data.get(item.ws_code, {}).get("display_price") or item.target_price or 0,
-            "priceChange": market_data.get(item.ws_code, {}).get("price_change", 0.0),
-            "image": market_data.get(item.ws_code, {}).get("image"),
-            "wts_count": market_data.get(item.ws_code, {}).get("wts_count", 0),
-            "wtb_count": market_data.get(item.ws_code, {}).get("wtb_count", 0),
+            "price": display_price or item.target_price or 0,
+            "priceChange": (watch.price_change or 0.0) if watch else 0.0,
+            "image": image,
+            "wts_count": int(st.get("wts_count") or 0),
+            "wtb_count": int(st.get("wtb_count") or 0),
+            "watch_id": str(watch.id) if watch else None,
+            "collection": watch.collection if watch else None,
+            "thumbnail": thumb,
+            "change_1m_pct": st.get("change_1m_pct"),
+            "retail_pct": st.get("retail_pct"),
         }
-        for item in items
-    ]
+
+    return [to_payload(item) for item in items]
+
+
+# ============== Recently viewed (redesign v3 H1) ==============
+
+@router.post("/recently-viewed")
+async def add_recently_viewed(
+    data: RecentlyViewedRequest,
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Record that the user opened a watch. Keeps the last 5 WS codes, newest first."""
+    ws_code = (data.ws_code or "").strip()
+    if not ws_code:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ws_code is required")
+    watch = await Watch.find_one(Watch.ws_code == ws_code)
+    if not watch:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Watch not found")
+
+    current = [c for c in (current_user.recently_viewed or []) if c != ws_code]
+    updated = ([ws_code] + current)[:RECENTLY_VIEWED_MAX]
+    await current_user.set({"recently_viewed": updated, "updated_at": datetime.utcnow()})
+    return {"recently_viewed": updated}
+
+
+@router.get("/recently-viewed")
+async def get_recently_viewed(
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Cards for the last opened references (max 5, newest first). Empty list for new users."""
+    return await cards_for_ws_codes((current_user.recently_viewed or [])[:RECENTLY_VIEWED_MAX])
 
 
 @router.post("/watchlist", response_model=WatchlistItemResponse)

@@ -535,21 +535,15 @@ OUT_OF_SCOPE_REPLY = (
 
 # Static conversion table, used only to annotate WatchSphere prices with a rough
 # EUR equivalent so the bot never has to invent an exchange rate.
-FX_TO_EUR = {
-    "EUR": 1.0, "HKD": 0.119, "HK$": 0.119, "USD": 0.925, "USDT": 0.925,
-    "GBP": 1.17, "CHF": 1.06, "AED": 0.252, "SGD": 0.69, "JPY": 0.0059,
-    "CNY": 0.128, "RMB": 0.128,
-}
-
-
 def _to_eur(price: Optional[float], currency: Optional[str]) -> Optional[int]:
-    """Approximate EUR value of a price, or None when it can't be converted."""
+    """Approximate EUR value of a price from the central FX table, or None when it
+    can't be converted. Uses the last loaded table (refreshed by app.services.fx)."""
     if not price:
         return None
-    rate = FX_TO_EUR.get((currency or "EUR").strip().upper())
-    if rate is None:
-        return None
-    return int(round(price * rate))
+    from app.services.fx import cached_rates, convert
+
+    value = convert(price, currency or "EUR", "EUR", cached_rates())
+    return int(round(value)) if value is not None else None
 
 
 def _search_tokens(text: str) -> List[str]:
@@ -766,6 +760,10 @@ async def build_watchsphere_context(user_message: str, history: List[Dict[str, s
     Looks at the current message plus recent user turns, so a follow-up like
     "Yes" still resolves against the watch discussed earlier.
     """
+    # Warm the central FX table so _to_eur converts with today's rates.
+    from app.services.fx import load_rates
+
+    await load_rates()
     texts = [user_message]
     for msg in reversed(history[-8:]):
         if not msg.get("is_ai"):

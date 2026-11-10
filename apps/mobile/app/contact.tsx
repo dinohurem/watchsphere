@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { ChatBubbleLines } from '@/components/icons';
 
 // Back Arrow Icon (Chevron Left)
 function ChevronLeftIcon() {
@@ -141,6 +142,8 @@ function ChevronRightIcon() {
 
 const SUPPORT_EMAIL = 'info@watchsphere.io';
 const SUPPORT_PHONE = '+41 44 123 4567';
+// Support WhatsApp number (spec 10.1: WhatsApp contact option next to Email).
+const SUPPORT_WHATSAPP = process.env.EXPO_PUBLIC_SUPPORT_WHATSAPP || '';
 
 interface ContactItemProps {
   icon: React.ReactNode;
@@ -183,6 +186,15 @@ export default function ContactScreen() {
       await Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
     } catch (error) {
       Alert.alert(t('contact.error'), t('contact.couldNotOpenEmail'));
+    }
+  };
+
+  const handleWhatsApp = async () => {
+    const digits = SUPPORT_WHATSAPP.replace(/[^0-9]/g, '');
+    try {
+      await Linking.openURL(`https://wa.me/${digits}`);
+    } catch (error) {
+      Alert.alert('WhatsApp', 'Could not open WhatsApp');
     }
   };
 
@@ -252,6 +264,14 @@ export default function ContactScreen() {
             subtitle={SUPPORT_EMAIL}
             onPress={handleEmail}
           />
+          {SUPPORT_WHATSAPP ? (
+            <ContactItem
+              icon={<ChatBubbleLines size={sp(24)} color="#1D1D1F" />}
+              title="WhatsApp"
+              subtitle={SUPPORT_WHATSAPP}
+              onPress={handleWhatsApp}
+            />
+          ) : null}
           </View>
           {/* <ContactItem
             icon={<PhoneIcon />}

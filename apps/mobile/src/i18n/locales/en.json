@@ -52,7 +52,7 @@
     "inventory": "Inventory"
   },
   "home": {
-    "searchPlaceholder": "Search watches...",
+    "searchPlaceholder": "Search reference, model or brand",
     "latestActivity": "Latest activity",
     "noRecentActivity": "No recent activity",
     "watchlist": "Watchlist",
@@ -441,7 +441,7 @@
     "recentSearches": "Recent searches",
     "popularSearches": "Popular searches",
     "clearAll": "Clear all",
-    "searchPlaceholder": "Search WatchSphere"
+    "searchPlaceholder": "Search reference, model or brand"
   },
   "socialSearch": {
     "title": "Social Search",

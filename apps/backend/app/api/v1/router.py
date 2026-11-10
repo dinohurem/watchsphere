@@ -7,11 +7,21 @@ from app.api.v1.endpoints import (
     watch_alerts, wtb_wts, whatsapp_bridge
 )
 
+from app.api.v1.endpoints import catalog_admin
+
+from app.api.v1.endpoints import fx, pipeline, approval, price_check
+
+from app.api.v1.endpoints import remarks_admin
+
+from app.api.v1.endpoints import market_browse
+
 api_router = APIRouter()
 
 # Include routers
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+# market_browse must come before market: market.py ends with a /{watch_id:path} catch-all.
+api_router.include_router(market_browse.router, prefix="/market", tags=["market"])
 api_router.include_router(market.router, prefix="/market", tags=["market"])
 api_router.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
@@ -37,6 +47,14 @@ api_router.include_router(app_settings.router, prefix="/settings", tags=["settin
 api_router.include_router(watch_alerts.router, prefix="/watch-alerts", tags=["watch-alerts"])
 api_router.include_router(wtb_wts.router, prefix="/wtb-wts", tags=["wtb-wts"])
 api_router.include_router(whatsapp_bridge.router, prefix="/whatsapp-bridge", tags=["whatsapp-bridge"])
+api_router.include_router(catalog_admin.router, prefix="/catalog-admin", tags=["catalog-admin"])
+
+api_router.include_router(remarks_admin.router, prefix="/admin/remarks", tags=["remarks-admin"])
+
+api_router.include_router(fx.router, prefix="/fx", tags=["fx"])
+api_router.include_router(pipeline.router, prefix="/pipeline", tags=["pipeline"])
+api_router.include_router(approval.router, prefix="/approval", tags=["approval"])
+api_router.include_router(price_check.router, prefix="/price-check", tags=["price-check"])
 
 
 @api_router.get("/status")

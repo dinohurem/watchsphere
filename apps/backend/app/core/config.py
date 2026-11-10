@@ -78,6 +78,17 @@ class Settings(BaseSettings):
     # Empty means the bridge endpoints are disabled.
     WHATSAPP_BRIDGE_TOKEN: str = ""
 
+    # Generator pipeline (generator spec §1). The Mac mini presents this key in the
+    # X-Pipeline-Key header when it uploads chat exports; scheduled jobs (FX refresh,
+    # daily report) use it too. Empty means those endpoints return 503.
+    PIPELINE_API_KEY: str = ""
+    # Claude API for the needs-review pass (generator spec §1.5). Empty → every
+    # needs-review row goes to the approval page's "Unsure" tab.
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_REVIEW_MODEL: str = "claude-opus-5-5"
+    # Public web app URL, used for links in admin emails (approval page).
+    WEB_APP_URL: str = "https://watchsphere.io"
+
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:5177,http://localhost:8081"
 

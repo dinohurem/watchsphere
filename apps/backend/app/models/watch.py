@@ -2,7 +2,7 @@ from beanie import Document, Link
 from pydantic import Field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Dict
 from app.models.user import User
 
 
@@ -50,6 +50,13 @@ class Watch(Document):
     cover_image: Optional[str] = None  # Primary display image
     cover_image_thumbnail: Optional[str] = None
 
+    # Official list prices per country (bulk/edit spec §6). Keys are the 13 country codes in
+    # app.core.market_constants.LIST_PRICE_COUNTRIES (HK, DE, AE, US, GB, CN, CH, IT, ES, AT,
+    # FR, JP, SG); values are in that country's fixed currency. Missing key = "No data".
+    list_prices: Dict[str, float] = Field(default_factory=dict)
+    # Discontinued → app shows "Discontinued" for every country instead of a list price.
+    discontinued: bool = False
+
     # Status & Visibility
     status: WatchStatus = WatchStatus.DRAFT
     featured: bool = False
@@ -83,6 +90,8 @@ class Watch(Document):
             "reference",
             # Join key for CSV import, the order book, watchlists and alerts.
             "ws_code",
+            "oem_references",
+            "aliases",
             "order_count",
             "trending",
             "featured",

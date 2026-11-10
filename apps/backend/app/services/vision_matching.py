@@ -35,7 +35,11 @@ logger = logging.getLogger(__name__)
 # --- Tunables -------------------------------------------------------------
 
 MAX_IMAGES_PER_MESSAGE = 3       # dealer posts repeat the same watch; 3 is plenty
-MAX_REFERENCE_IMAGES = 4         # one catalog image per candidate variant
+MAX_REFERENCE_IMAGES = 4         # one catalog image per candidate variant (step 2 keeps ≤ 4 candidates)
+MAX_STEP2_CANDIDATES = 4
+# Reasoning models spend completion tokens on thinking; 2,000 left the answer
+# empty. Generous budget, the answer itself is a small JSON object.
+VISION_MAX_COMPLETION_TOKENS = 8000
 MAX_IMAGE_EDGE = 768             # px — downscale before upload to cut tokens
 VISION_CONCURRENCY = 4
 VISION_TIMEOUT = 90              # seconds per call
@@ -269,6 +273,11 @@ Answer with JSON only:
   "confidence": <0-100>, "source": "<where you read it>"}}"""
 
 
+def _is_reasoning_model(name: str) -> bool:
+    n = (name or "").lower()
+    return n.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
+
+
 async def _vision_call(client, prompt: str, images: list[str],
                        reference_pairs: list[tuple[str, str]]) -> Optional[dict]:
     parts: list[dict] = [{"type": "text", "text": prompt}]
@@ -279,17 +288,103 @@ async def _vision_call(client, prompt: str, images: list[str],
         parts.append({"type": "text", "text": f"Catalog reference photo for {ws_code}:"})
         parts.append({"type": "image_url", "image_url": {"url": url}})
 
+    kwargs: dict[str, Any] = {
+        "model": settings.OPENAI_VISION_MODEL,
+        "messages": [{"role": "user", "content": parts}],
+        "max_completion_tokens": VISION_MAX_COMPLETION_TOKENS,
+    }
+    if not _is_reasoning_model(settings.OPENAI_VISION_MODEL):
+        kwargs["temperature"] = 0.1
     try:
-        response = await client.chat.completions.create(
-            model=settings.OPENAI_VISION_MODEL,
-            messages=[{"role": "user", "content": parts}],
-            max_completion_tokens=2000,
-        )
+        response = await client.chat.completions.create(**kwargs)
     except Exception as e:
         logger.warning(f"vision: OpenAI call failed: {type(e).__name__}: {e}")
         return None
 
-    return _parse_json_response(response.choices[0].message.content)
+    choice = response.choices[0]
+    content = choice.message.content or ""
+    if not content.strip():
+        logger.warning(f"vision: empty answer (finish_reason={getattr(choice, 'finish_reason', None)})")
+        return None
+    return _parse_json_response(content)
+
+
+_DESCRIBE_PROMPT = """You are looking at dealer photo(s) of ONE luxury watch listing.
+Describe only what is clearly visible. Use null for anything you cannot see.
+
+Listing text:
+{text}
+
+Answer with JSON only:
+{{"dial_colour": "<e.g. blue, black, green, white, silver, champagne, or null>",
+  "dial_details": ["<any of: diamonds, baguette, roman, arabic, index, motif/fluted, ombre, meteorite, mother of pearl>"],
+  "bracelet": "<jubilee | oyster | president | leather | rubber | other | null>",
+  "bezel": "<fluted | smooth | diamond | ceramic colour(s) | null>",
+  "card_reference": "<reference printed on a warranty card, or null>",
+  "card_date": "<MM/YY printed on a warranty card, or null>",
+  "is_watch_photo": <true|false>}}"""
+
+_COLOUR_WORDS = ("black", "blue", "green", "white", "silver", "grey", "gray", "champagne", "gold",
+                 "brown", "chocolate", "pink", "red", "purple", "yellow", "turquoise", "slate",
+                 "rhodium", "mother of pearl", "meteorite", "olive", "ice blue")
+
+
+def _fold(s: Any) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(s or ""))
+    return "".join(c for c in t if not unicodedata.combining(c)).lower()
+
+
+def _digits(ref: str) -> str:
+    s = re.sub(r"\s+", "", (ref or "").lower())
+    s = re.split(r"[.\-]", s, maxsplit=1)[0]
+    return re.sub(r"\D", "", s)
+
+
+def filter_candidates_by_description(description: dict, candidates: list[dict]) -> list[dict]:
+    """Step 1 of §5: keep the candidates whose catalog dial / bracelet fields fit
+    what the photo shows. Best first, at most MAX_STEP2_CANDIDATES. Candidates
+    without data for an attribute are not penalised for it."""
+    if not description:
+        return candidates[:MAX_STEP2_CANDIDATES]
+    seen_colour = _fold(description.get("dial_colour"))
+    seen_colour_words = [c for c in _COLOUR_WORDS if c in seen_colour]
+    seen_bracelet = _fold(description.get("bracelet"))
+    seen_details = " ".join(_fold(d) for d in (description.get("dial_details") or []))
+
+    scored: list[tuple[int, int, dict]] = []
+    for i, c in enumerate(candidates):
+        hay = " ".join(_fold(c.get(k)) for k in ("ws_code", "dial", "bracelet", "index", "model"))
+        hay += " " + " ".join(_fold(a) for a in c.get("aliases") or [])
+        hay = hay.replace(" jub", " jubilee").replace(" oys", " oyster")
+        score = 0
+        dial = _fold(c.get("dial")) + " " + _fold(c.get("ws_code"))
+        if seen_colour_words:
+            cand_colours = [w for w in _COLOUR_WORDS if w in dial]
+            if cand_colours:
+                if any(w in dial for w in seen_colour_words):
+                    score += 10
+                else:
+                    continue  # the photo shows another dial colour
+        if seen_bracelet and seen_bracelet not in ("other", "null"):
+            cand_br = _fold(c.get("bracelet")) + " " + hay
+            if any(b in cand_br for b in ("jubilee", "oyster", "president", "leather", "rubber")):
+                if seen_bracelet in cand_br:
+                    score += 6
+                else:
+                    continue  # the photo shows another bracelet
+        for detail in ("diamond", "baguette", "roman", "motif", "fluted", "ombre", "meteorite", "mother of pearl"):
+            if detail in seen_details and detail in hay:
+                score += 4
+        scored.append((score, -i, c))
+    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return [c for _s, _i, c in scored][:MAX_STEP2_CANDIDATES]
+
+
+async def describe_listing_photo(client, text: str, images: list[str]) -> Optional[dict]:
+    """Step 1 of §5: what the photo shows (dial, bracelet, bezel, warranty card)."""
+    result = await _vision_call(client, _DESCRIBE_PROMPT.format(text=(text or "")[:400]), images, [])
+    return result if isinstance(result, dict) else None
 
 
 async def disambiguate_variant(
@@ -300,38 +395,76 @@ async def disambiguate_variant(
 ) -> Optional[dict]:
     """Pick the right same-reference variant from the listing photo(s).
 
-    Returns {"ws_code", "confidence", "observed", "reason"} or None when the
-    image analysis could not decide — in which case the caller must keep the row
-    in Needs Review.
+    Two steps (§5): the photo is described first and the description filters the
+    candidates on their catalog dial / bracelet fields (2–4 left); then the photo
+    is compared with the catalog images of only those candidates. A photo that
+    shows another watch (other reference on the warranty card, a dial no candidate
+    has) never produces a match.
+
+    Returns {"ws_code", "confidence", "observed", "reason", "card_month_year"} or
+    None when the image analysis could not decide — the caller keeps the row in
+    Needs Review.
     """
     variable = variable_attributes(candidates)
     if not variable:
-        # Nothing actually varies between the candidates in the data we hold —
-        # an image cannot resolve it either.
         return None
+
+    description = await describe_listing_photo(client, text, images)
+    if description is not None and description.get("is_watch_photo") is False:
+        return None
+    card_ref = (description or {}).get("card_reference")
+    if card_ref:
+        card_digits = _digits(str(card_ref))
+        cand_digits = {_digits(c.get("reference") or c.get("ws_code") or "") for c in candidates}
+        if card_digits and cand_digits and card_digits not in cand_digits:
+            logger.info(f"vision: warranty card shows {card_ref}, not one of the candidates — wrong photo")
+            return None
+
+    shortlist = filter_candidates_by_description(description or {}, candidates)
+    if not shortlist:
+        return None
+    if len(shortlist) == 1 and description:
+        # The description alone settled it; confirm against the catalog photo.
+        pass
+    variable = variable_attributes(shortlist) or variable
 
     prompt = _VARIANT_PROMPT.format(
         variable=", ".join(variable),
         text=(text or "")[:400],
-        candidates=json.dumps(candidate_payload(candidates, variable), indent=1),
+        candidates=json.dumps(candidate_payload(shortlist, variable), indent=1),
     )
-    result = await _vision_call(client, prompt, images, reference_images(candidates))
+    result = await _vision_call(client, prompt, images, reference_images(shortlist))
     if not result:
         return None
 
     ws_code = (result.get("ws_code") or "").strip()
     confidence = result.get("confidence") or 0
-    valid = {(c.get("ws_code") or "").lower() for c in candidates}
+    valid = {(c.get("ws_code") or "").lower() for c in shortlist}
     if not ws_code or ws_code.lower() not in valid:
         return None
     if not isinstance(confidence, (int, float)) or confidence < MIN_VARIANT_CONFIDENCE:
         return None
+    # The pick must agree with the step-1 description.
+    picked = next(c for c in shortlist if (c.get("ws_code") or "").lower() == ws_code.lower())
+    if description and not filter_candidates_by_description(description, [picked]):
+        return None
 
+    card_date = (description or {}).get("card_date") or ""
+    card_my = None
+    m = re.fullmatch(r"\s*(\d{1,2})\s*/\s*(\d{2,4})\s*", str(card_date))
+    if m and 1 <= int(m.group(1)) <= 12:
+        card_my = f"{int(m.group(1)):02d}/{m.group(2)[-2:]}"
+
+    observed = result.get("observed") or {}
+    if description:
+        observed = {**{k: description.get(k) for k in ("dial_colour", "bracelet", "bezel") if description.get(k)},
+                    **{k: v for k, v in observed.items() if v}}
     return {
-        "ws_code": ws_code,
+        "ws_code": picked.get("ws_code") or ws_code,
         "confidence": int(confidence),
-        "observed": result.get("observed") or {},
+        "observed": observed,
         "reason": result.get("reason") or "",
+        "card_month_year": card_my,
     }
 
 

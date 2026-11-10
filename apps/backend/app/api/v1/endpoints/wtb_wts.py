@@ -213,6 +213,7 @@ async def _run_processing(
             jsonl_content=jsonl_content,
             progress_callback=update_progress,
             media_archive=media_archive,
+            run_id=str(run.id),
         )
         logger.info(f"generate_wtb_wts: processing done — matched={result['matched_count']}, "
                      f"needs_review={result['needs_review_count']}, fuzzy={result.get('fuzzy_matched_count', 0)}, "

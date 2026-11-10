@@ -18,22 +18,20 @@ from dataclasses import dataclass
 from statistics import median
 from typing import Iterable, Optional
 
-# Approximate units of foreign currency per 1 USD. These only need to be right
-# to within a few percent: the checks below use ratio bands that are far wider
-# than any realistic FX drift.
-FX_PER_USD: dict[str, float] = {
-    "USD": 1.0,
-    "USDT": 1.0,
-    "HKD": 7.8,
-    "EUR": 0.92,
-    "GBP": 0.79,
-    "CHF": 0.88,
-    "CNY": 7.2,
-    "RMB": 7.2,
-    "SGD": 1.34,
-    "AED": 3.67,
-    "JPY": 155.0,
-}
+from app.services import fx as _fx
+
+# Units of currency per 1 USD from the central rate table (app.services.fx):
+# the last loaded table, or the seed table before the first load. Kept as a
+# module attribute for callers that read it directly; the checks below only need
+# to be right to within a few percent.
+FX_PER_USD: dict[str, float] = dict(_fx.SEED_RATES, RMB=_fx.SEED_RATES["CNY"])
+
+
+def _rates(rates: Optional[dict[str, float]] = None) -> dict[str, float]:
+    table = dict(rates or _fx.cached_rates())
+    table.setdefault("RMB", table.get("CNY", FX_PER_USD["CNY"]))
+    return table
+
 
 # A row must be this far from the peer median to be called an outlier. The band
 # is deliberately generous - condition, year and full-set all move real prices,
@@ -51,14 +49,13 @@ PLAUSIBLE_LOW = 0.6
 PLAUSIBLE_HIGH = 1.7
 
 
-def to_usd(price: Optional[float], currency: Optional[str]) -> Optional[float]:
-    """Convert an amount to USD. Unknown currencies are assumed to be USD."""
+def to_usd(price: Optional[float], currency: Optional[str],
+           rates: Optional[dict[str, float]] = None) -> Optional[float]:
+    """Convert an amount to USD with the central rate table. Unknown currencies
+    return None (never silently treated as USD)."""
     if price is None:
         return None
-    rate = FX_PER_USD.get((currency or "USD").strip().upper(), 1.0)
-    if not rate:
-        return None
-    return price / rate
+    return _fx.convert(price, (currency or "USD").strip().upper(), "USD", _rates(rates))
 
 
 @dataclass
@@ -106,7 +103,7 @@ def _currency_suggestion(
         candidate = candidate.strip().upper()
         if candidate in ("USDT",) or candidate == current or candidate in order:
             continue
-        if candidate in FX_PER_USD:
+        if candidate in _rates():
             order.append(candidate)
 
     for candidate in order:

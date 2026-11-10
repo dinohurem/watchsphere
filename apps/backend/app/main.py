@@ -351,6 +351,14 @@ async def startup():
         logger.info("Startup: cleaned up expired files")
     except Exception as e:
         logger.warning(f"Startup: failed to clean up expired files: {e}")
+    # Central FX table: refresh when older than a day (the daily cron calls
+    # POST /api/v1/fx/refresh; this covers restarts and a missed run).
+    try:
+        import asyncio as _asyncio
+        from app.services.fx import refresh_if_stale
+        _asyncio.create_task(refresh_if_stale())
+    except Exception as e:
+        logger.warning(f"Startup: FX refresh not scheduled: {e}")
 
 app = Starlette(
     routes=[

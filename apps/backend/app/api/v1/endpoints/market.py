@@ -91,6 +91,8 @@ class WatchResponse(BaseModel):
     bracelet: Optional[str] = None
     ws_code: Optional[str] = None
     aliases: List[str] = []
+    list_prices: dict = {}
+    discontinued: bool = False
 
     class Config:
         from_attributes = True
@@ -151,6 +153,8 @@ class WatchCreate(BaseModel):
     bracelet: Optional[str] = None
     ws_code: Optional[str] = None
     aliases: List[str] = []
+    list_prices: dict = {}
+    discontinued: bool = False
 
 
 class WatchUpdate(BaseModel):
@@ -177,6 +181,8 @@ class WatchUpdate(BaseModel):
     bracelet: Optional[str] = None
     ws_code: Optional[str] = None
     aliases: Optional[List[str]] = None
+    list_prices: Optional[dict] = None
+    discontinued: Optional[bool] = None
 
 
 # ============== PUBLIC ENDPOINTS ==============
@@ -847,6 +853,74 @@ async def get_aggregated_watch_by_reference(reference: str) -> Any:
 # NOTE: Admin routes MUST be defined before the catch-all /{watch_id:path} route below,
 # otherwise FastAPI's path matching will treat "admin/all" as a watch_id.
 
+def _admin_watch_dict(watch: Watch) -> dict:
+    """Admin response shape (WatchResponse) for one watch."""
+    return {
+        "id": str(watch.id),
+        "brand": watch.brand,
+        "model": watch.model,
+        "reference": watch.reference,
+        "price": watch.price,
+        "currency": watch.currency,
+        "condition": watch.condition,
+        "year": watch.year,
+        "serial_number": watch.serial_number,
+        "description": watch.description,
+        "images": watch.images,
+        "cover_image": watch.cover_image,
+        "cover_image_thumbnail": watch.cover_image_thumbnail,
+        "status": watch.status,
+        "featured": watch.featured,
+        "trending": watch.trending,
+        "is_popular_search": watch.is_popular_search,
+        "dealer_id": watch.dealer_id,
+        "dealer_name": watch.dealer_name,
+        "views": watch.views,
+        "created_at": watch.created_at,
+        "updated_at": watch.updated_at,
+        "published_at": watch.published_at,
+        "collection": watch.collection,
+        "oem_references": watch.oem_references,
+        "dial": watch.dial,
+        "bracelet": watch.bracelet,
+        "ws_code": watch.ws_code,
+        "aliases": watch.aliases,
+        "list_prices": watch.list_prices or {},
+        "discontinued": watch.discontinued,
+    }
+
+
+def _admin_list_query(
+    status_filter: Optional[WatchStatus],
+    brand: Optional[str],
+    dealer_id: Optional[str],
+    search: Optional[str],
+    no_image: bool,
+    no_ws_code: bool,
+    no_aliases: bool,
+    no_list_price: bool,
+) -> dict:
+    from app.services.catalog_admin import build_watch_query
+
+    return build_watch_query(
+        status=status_filter.value if status_filter else None, brand=brand, dealer_id=dealer_id,
+        search=search, no_image=no_image, no_ws_code=no_ws_code, no_aliases=no_aliases,
+        no_list_price=no_list_price,
+    )
+
+
+def _clean_list_prices(raw: Optional[dict]) -> dict:
+    """Form input → {country: price}; unknown countries are rejected, empty prices dropped."""
+    from app.services.catalog_admin import normalize_list_prices
+    from app.core.market_constants import LIST_PRICE_COUNTRY_CODES
+
+    mapping, errors = normalize_list_prices(raw or {})
+    if errors:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="; ".join(errors))
+    mapping = mapping or {}
+    return {c: mapping[c] for c in LIST_PRICE_COUNTRY_CODES if mapping.get(c) is not None}
+
+
 @router.get("/admin/all", response_model=List[WatchResponse])
 async def admin_list_all_watches(
     current_admin: User = Depends(get_current_admin_user),
@@ -856,66 +930,15 @@ async def admin_list_all_watches(
     brand: Optional[str] = None,
     dealer_id: Optional[str] = None,
     search: Optional[str] = None,
+    no_image: bool = False,
+    no_ws_code: bool = False,
+    no_aliases: bool = False,
+    no_list_price: bool = False,
 ) -> Any:
     """List all watches including drafts (Admin only)"""
-
-    query_conditions = []
-
-    if status_filter:
-        query_conditions.append(Watch.status == status_filter)
-    if brand:
-        query_conditions.append(Watch.brand == brand)
-    if dealer_id:
-        query_conditions.append(Watch.dealer_id == dealer_id)
-    if search:
-        import re as _re
-        escaped = _re.escape(search.strip())
-        flexible = _re.sub(r'(?:\\\s|\\-|\s|_)+', lambda _m: r'[\s\-_]+', escaped)
-        search_regex = {"$regex": flexible, "$options": "i"}
-        query_conditions.append({"$or": [
-            {"brand": search_regex},
-            {"model": search_regex},
-            {"reference": search_regex},
-            {"ws_code": search_regex},
-        ]})
-
-    if query_conditions:
-        watches = await Watch.find(*query_conditions).sort([("created_at", -1)]).skip(skip).limit(limit).to_list()
-    else:
-        watches = await Watch.find_all().sort([("created_at", -1)]).skip(skip).limit(limit).to_list()
-
-    return [
-        {
-            "id": str(watch.id),
-            "brand": watch.brand,
-            "model": watch.model,
-            "reference": watch.reference,
-            "price": watch.price,
-            "currency": watch.currency,
-            "condition": watch.condition,
-            "year": watch.year,
-            "serial_number": watch.serial_number,
-            "description": watch.description,
-            "images": watch.images,
-            "cover_image": watch.cover_image,
-            "status": watch.status,
-            "featured": watch.featured,
-            "dealer_id": watch.dealer_id,
-            "dealer_name": watch.dealer_name,
-            "views": watch.views,
-            "created_at": watch.created_at,
-            "updated_at": watch.updated_at,
-            "published_at": watch.published_at,
-            "collection": watch.collection,
-            "oem_references": watch.oem_references,
-            "dial": watch.dial,
-            "bracelet": watch.bracelet,
-            "ws_code": watch.ws_code,
-            "aliases": watch.aliases,
-            "is_popular_search": watch.is_popular_search,
-        }
-        for watch in watches
-    ]
+    query = _admin_list_query(status_filter, brand, dealer_id, search, no_image, no_ws_code, no_aliases, no_list_price)
+    watches = await Watch.find(query).sort([("created_at", -1)]).skip(skip).limit(limit).to_list()
+    return [_admin_watch_dict(watch) for watch in watches]
 
 
 @router.get("/admin/count")
@@ -925,66 +948,46 @@ async def admin_count_watches(
     brand: Optional[str] = None,
     dealer_id: Optional[str] = None,
     search: Optional[str] = None,
+    no_image: bool = False,
+    no_ws_code: bool = False,
+    no_aliases: bool = False,
+    no_list_price: bool = False,
 ) -> Any:
     """Count all watches with filters (Admin only)"""
-    query_conditions = []
-    if status_filter:
-        query_conditions.append(Watch.status == status_filter)
-    if brand:
-        query_conditions.append(Watch.brand == brand)
-    if dealer_id:
-        query_conditions.append(Watch.dealer_id == dealer_id)
-    if search:
-        import re as _re
-        escaped = _re.escape(search.strip())
-        flexible = _re.sub(r'(?:\\\s|\\-|\s|_)+', lambda _m: r'[\s\-_]+', escaped)
-        search_regex = {"$regex": flexible, "$options": "i"}
-        query_conditions.append({"$or": [
-            {"brand": search_regex},
-            {"model": search_regex},
-            {"reference": search_regex},
-            {"ws_code": search_regex},
-        ]})
-
-    if query_conditions:
-        total = await Watch.find(*query_conditions).count()
-    else:
-        total = await Watch.find_all().count()
-
+    query = _admin_list_query(status_filter, brand, dealer_id, search, no_image, no_ws_code, no_aliases, no_list_price)
+    total = await Watch.find(query).count()
     return {"total": total}
 
 
 @router.get("/admin/export")
 async def admin_export_watches(
     current_admin: User = Depends(get_current_admin_user),
+    format: str = "jsonl",
+    ids: Optional[str] = None,
+    status_filter: Optional[WatchStatus] = None,
+    brand: Optional[str] = None,
+    dealer_id: Optional[str] = None,
+    search: Optional[str] = None,
+    no_image: bool = False,
+    no_ws_code: bool = False,
+    no_aliases: bool = False,
+    no_list_price: bool = False,
 ) -> Any:
-    """Export all active watches as JSONL (Admin only)"""
-    import json
-    from fastapi.responses import StreamingResponse
+    """Export watches as JSONL (default) or CSV (Admin only).
 
-    watches = await Watch.find(Watch.status == WatchStatus.ACTIVE).sort([("created_at", -1)]).to_list()
+    Draft watches are included. ``ids`` (comma-separated) limits the export to a selection;
+    otherwise the list filters apply. The output is re-importable by the edit import. For
+    large selections use ``POST /catalog-admin/watches/export``.
+    """
+    from app.api.v1.endpoints.catalog_admin import export_response
+    from app.services.catalog_admin import build_watch_query
 
-    async def generate():
-        for watch in watches:
-            line = json.dumps({
-                "brand": watch.brand,
-                "model": watch.model,
-                "collection": getattr(watch, 'collection', None),
-                "reference": watch.reference,
-                "oem_references": getattr(watch, 'oem_references', None) or [],
-                "ws_code": watch.ws_code,
-                "dial": getattr(watch, 'dial', None),
-                "bracelet": getattr(watch, 'bracelet', None),
-                "aliases": getattr(watch, 'aliases', None) or [],
-                "description": watch.description,
-            }, ensure_ascii=False)
-            yield line + "\n"
-
-    return StreamingResponse(
-        generate(),
-        media_type="application/x-ndjson",
-        headers={"Content-Disposition": "attachment; filename=\"watches_export.jsonl\""},
-    )
+    if ids:
+        query = build_watch_query(ids=[i.strip() for i in ids.split(",") if i.strip()])
+    else:
+        query = _admin_list_query(status_filter, brand, dealer_id, search, no_image, no_ws_code, no_aliases, no_list_price)
+    watches = await Watch.find(query).sort([("created_at", -1)]).to_list()
+    return export_response(watches, "csv" if format.lower() == "csv" else "jsonl")
 
 
 @router.get("/admin/{watch_id}", response_model=WatchResponse)
@@ -1002,46 +1005,20 @@ async def admin_get_watch(
             detail="Watch not found"
         )
 
-    return {
-        "id": str(watch.id),
-        "brand": watch.brand,
-        "model": watch.model,
-        "reference": watch.reference,
-        "price": watch.price,
-        "currency": watch.currency,
-        "condition": watch.condition,
-        "year": watch.year,
-        "serial_number": watch.serial_number,
-        "description": watch.description,
-        "images": watch.images,
-        "cover_image": watch.cover_image,
-        "status": watch.status,
-        "featured": watch.featured,
-        "dealer_id": watch.dealer_id,
-        "dealer_name": watch.dealer_name,
-        "views": watch.views,
-        "created_at": watch.created_at,
-        "updated_at": watch.updated_at,
-        "published_at": watch.published_at,
-        "collection": watch.collection,
-        "oem_references": watch.oem_references,
-        "dial": watch.dial,
-        "bracelet": watch.bracelet,
-        "ws_code": watch.ws_code,
-        "aliases": watch.aliases,
-    }
+    return _admin_watch_dict(watch)
 
 
 class BulkImportRequest(BaseModel):
-    """A parsed batch of watches plus how to treat ones that already exist.
+    """A batch of new watches plus how to treat ones that already exist.
 
-    Rows stay untyped here on purpose. Declaring List[WatchCreate] would make
-    Pydantic reject the whole request over one bad row, so a single typo in a
-    200-row file would block all of it. Each row is validated individually
-    below and reported on its own line instead.
+    Rows stay untyped here on purpose: each row is validated individually and reported on its
+    own line, so one typo never blocks a 200-row file. Send either parsed ``watches`` or the raw
+    file ``text`` (JSONL or CSV, ``format`` auto-detected).
     """
-    watches: List[dict]
-    # "skip" leaves an existing watch untouched, "update" overwrites its fields.
+    watches: List[Any] = []
+    text: Optional[str] = None
+    format: str = "auto"
+    # "skip" leaves an existing watch untouched, "update" applies the row to it (edit-import rules).
     on_duplicate: str = "skip"
     # When true nothing is written; the caller gets the same per-row report.
     dry_run: bool = False
@@ -1049,10 +1026,12 @@ class BulkImportRequest(BaseModel):
 
 class BulkImportRowResult(BaseModel):
     row: int  # 1-based, matching the line number the admin sees
-    action: str  # created | updated | skipped | error
+    action: str  # created | updated | unchanged | skipped | error
+    id: Optional[str] = None
     ws_code: Optional[str] = None
     reference: Optional[str] = None
     message: Optional[str] = None
+    warnings: List[str] = []
 
 
 class BulkImportResponse(BaseModel):
@@ -1062,6 +1041,9 @@ class BulkImportResponse(BaseModel):
     updated: int
     skipped: int
     errors: int
+    unchanged: int = 0
+    warnings: int = 0
+    batch_id: Optional[str] = None
     results: List[BulkImportRowResult]
 
 
@@ -1070,111 +1052,100 @@ async def admin_bulk_import_watches(
     payload: BulkImportRequest,
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Bulk-create watches from a parsed JSONL/JSON batch (Admin only).
+    """Bulk-create watches from JSONL / JSON / CSV (Admin only).
 
-    Creates exactly what the single-watch admin form creates - same WatchCreate
-    validation, same fields, same dealer attribution. Every row is reported
-    individually so a bad row never silently disappears, and one bad row does
-    not abort the rest of the batch.
-
-    Duplicates are matched on ws_code, falling back to reference when a row has
-    no ws_code, which is how the rest of the admin identifies a catalog entry.
+    Duplicates are detected only by WS code or OEM reference — never by ``reference``, because
+    one reference can have many editions (RM67-02 has 11). Every string is trimmed; a WS code
+    already used by another watch (or earlier in the file) rejects the row; an alias already
+    used by another watch is reported as a warning. ``list_prices`` (object or ``list_price_XX``
+    columns) and ``discontinued`` are accepted. The write is recorded for undo.
     """
-    results: List[BulkImportRowResult] = []
-    created = updated = skipped = errors = 0
+    from app.services.catalog_admin import (
+        ParsedRows, load_catalog, parse_import_text, plan_bulk_import, write_update_plans,
+    )
+    from app.services.undo import ChangeBatchRecorder
 
-    for index, raw_item in enumerate(payload.watches, start=1):
-        try:
+    if payload.text is not None and payload.text.strip():
+        parsed = parse_import_text(payload.text, payload.format)
+    else:
+        parsed = ParsedRows(rows=list(enumerate(payload.watches, start=1)))
+
+    catalog = await load_catalog()
+    plan = plan_bulk_import(parsed, catalog, payload.on_duplicate)
+    results = plan["results"]
+    batch_id: Optional[str] = None
+
+    if not payload.dry_run and (plan["creates"] or plan["updates"]):
+        recorder = ChangeBatchRecorder(
+            "bulk_import",
+            f"Bulk import · {plan['created']} created · {plan['updated']} updated",
+            current_admin,
+        )
+        by_line = {r["line"]: r for r in results}
+        now = datetime.utcnow()
+        new_watches = []
+        for create in plan["creates"]:
+            # None = "not given" for a new watch; let the model defaults apply.
+            f = {k: v for k, v in create["fields"].items() if v is not None}
+            images = f.pop("images", None) or []
+            cover = f.pop("cover_image", None)
+            f.pop("dealer_id", None)
+            status_value = f.pop("status", None) or WatchStatus.DRAFT.value
             try:
-                item = WatchCreate(**raw_item)
-            except ValidationError as exc:
-                first = exc.errors()[0]
-                field = ".".join(str(p) for p in first.get("loc", ()))
-                errors += 1
-                results.append(BulkImportRowResult(
-                    row=index, action="error",
-                    ws_code=raw_item.get("ws_code") if isinstance(raw_item, dict) else None,
-                    reference=raw_item.get("reference") if isinstance(raw_item, dict) else None,
-                    message=f"{field}: {first.get('msg')}" if field else first.get("msg"),
-                ))
-                continue
-
-            existing = None
-            if item.ws_code:
-                existing = await Watch.find_one(Watch.ws_code == item.ws_code)
-            elif item.reference:
-                existing = await Watch.find_one(Watch.reference == item.reference)
-
-            if existing:
-                if payload.on_duplicate != "update":
-                    skipped += 1
-                    results.append(BulkImportRowResult(
-                        row=index, action="skipped", ws_code=item.ws_code,
-                        reference=item.reference, message="Already exists",
-                    ))
-                    continue
-
-                if not payload.dry_run:
-                    for field, value in item.model_dump(exclude_unset=True).items():
-                        if field in ("dealer_id",):
-                            continue
-                        setattr(existing, field, value)
-                    existing.updated_at = datetime.utcnow()
-                    await existing.save()
-                updated += 1
-                results.append(BulkImportRowResult(
-                    row=index, action="updated", ws_code=item.ws_code,
-                    reference=item.reference,
-                ))
-                continue
-
-            if not payload.dry_run:
                 watch = Watch(
-                    brand=item.brand,
-                    model=item.model,
-                    reference=item.reference,
-                    price=item.price or 0,
-                    currency=item.currency,
-                    condition=item.condition,
-                    year=item.year,
-                    serial_number=item.serial_number,
-                    description=item.description,
-                    images=item.images,
-                    cover_image=item.cover_image or (item.images[0] if item.images else None),
-                    status=item.status,
-                    featured=item.featured,
+                    **f,
+                    images=[cover] if cover and not images else images,
+                    cover_image=cover or (images[0] if images else None),
+                    status=status_value,
                     dealer_id=str(current_admin.id),
                     dealer_name=current_admin.name,
-                    published_at=datetime.utcnow() if item.status == WatchStatus.ACTIVE else None,
-                    collection=item.collection,
-                    oem_references=item.oem_references,
-                    dial=item.dial,
-                    bracelet=item.bracelet,
-                    ws_code=item.ws_code,
-                    aliases=item.aliases,
+                    published_at=now if status_value == WatchStatus.ACTIVE.value else None,
                 )
+            except (ValidationError, TypeError, ValueError) as exc:
+                res = by_line[create["line"]]
+                res["action"] = "error"
+                if isinstance(exc, ValidationError):
+                    first = exc.errors()[0]
+                    loc = ".".join(str(p) for p in first.get("loc", ()))
+                    res["message"] = f"{loc}: {first.get('msg')}" if loc else first.get("msg")
+                else:
+                    res["message"] = str(exc)[:200]
+                continue
+            watch.id = PydanticObjectId()
+            new_watches.append((create["line"], watch))
+            recorder.record_create(str(watch.id))
+
+        if plan["updates"]:
+            await write_update_plans(plan["updates"], catalog, recorder)
+        else:
+            await recorder.save()
+        for line, watch in new_watches:
+            try:
                 await watch.insert()
+                by_line[line]["id"] = str(watch.id)
+            except Exception as exc:
+                by_line[line]["action"] = "error"
+                by_line[line]["message"] = str(exc)[:200]
+        batch_id = str(recorder.batch.id) if recorder.batch else None
 
-            created += 1
-            results.append(BulkImportRowResult(
-                row=index, action="created", ws_code=item.ws_code,
-                reference=item.reference,
-            ))
-        except Exception as exc:
-            errors += 1
-            results.append(BulkImportRowResult(
-                row=index, action="error", ws_code=item.ws_code,
-                reference=item.reference, message=str(exc)[:200],
-            ))
-
+    out_rows = [
+        BulkImportRowResult(
+            row=r["line"], action=r["action"], id=r.get("id"), ws_code=r.get("ws_code"),
+            reference=r.get("reference"), message=r.get("message"), warnings=r.get("warnings", []),
+        )
+        for r in results
+    ]
     return BulkImportResponse(
         dry_run=payload.dry_run,
-        total=len(payload.watches),
-        created=created,
-        updated=updated,
-        skipped=skipped,
-        errors=errors,
-        results=results,
+        total=len(out_rows),
+        created=sum(1 for r in out_rows if r.action == "created"),
+        updated=sum(1 for r in out_rows if r.action == "updated"),
+        skipped=sum(1 for r in out_rows if r.action == "skipped"),
+        errors=sum(1 for r in out_rows if r.action == "error"),
+        unchanged=sum(1 for r in out_rows if r.action == "unchanged"),
+        warnings=sum(len(r.warnings) for r in out_rows),
+        batch_id=batch_id,
+        results=out_rows,
     )
 
 
@@ -1225,38 +1196,13 @@ async def admin_create_watch(
         bracelet=watch_data.bracelet,
         ws_code=watch_data.ws_code,
         aliases=watch_data.aliases,
+        list_prices=_clean_list_prices(watch_data.list_prices),
+        discontinued=watch_data.discontinued,
     )
 
     await watch.insert()
 
-    return {
-        "id": str(watch.id),
-        "brand": watch.brand,
-        "model": watch.model,
-        "reference": watch.reference,
-        "price": watch.price,
-        "currency": watch.currency,
-        "condition": watch.condition,
-        "year": watch.year,
-        "serial_number": watch.serial_number,
-        "description": watch.description,
-        "images": watch.images,
-        "cover_image": watch.cover_image,
-        "status": watch.status,
-        "featured": watch.featured,
-        "dealer_id": watch.dealer_id,
-        "dealer_name": watch.dealer_name,
-        "views": watch.views,
-        "created_at": watch.created_at,
-        "updated_at": watch.updated_at,
-        "published_at": watch.published_at,
-        "collection": watch.collection,
-        "oem_references": watch.oem_references,
-        "dial": watch.dial,
-        "bracelet": watch.bracelet,
-        "ws_code": watch.ws_code,
-        "aliases": watch.aliases,
-    }
+    return _admin_watch_dict(watch)
 
 
 @router.patch("/admin/{watch_id}", response_model=WatchResponse)
@@ -1277,6 +1223,11 @@ async def admin_update_watch(
 
     # Update fields if provided
     update_data = watch_update.model_dump(exclude_unset=True)
+    if "list_prices" in update_data:
+        # The form sends all 13 fields; the whole map is replaced.
+        update_data["list_prices"] = _clean_list_prices(update_data["list_prices"])
+    if "discontinued" in update_data and update_data["discontinued"] is None:
+        update_data["discontinued"] = False
 
     for field, value in update_data.items():
         setattr(watch, field, value)
@@ -1288,34 +1239,7 @@ async def admin_update_watch(
     watch.updated_at = datetime.utcnow()
     await watch.save()
 
-    return {
-        "id": str(watch.id),
-        "brand": watch.brand,
-        "model": watch.model,
-        "reference": watch.reference,
-        "price": watch.price,
-        "currency": watch.currency,
-        "condition": watch.condition,
-        "year": watch.year,
-        "serial_number": watch.serial_number,
-        "description": watch.description,
-        "images": watch.images,
-        "cover_image": watch.cover_image,
-        "status": watch.status,
-        "featured": watch.featured,
-        "dealer_id": watch.dealer_id,
-        "dealer_name": watch.dealer_name,
-        "views": watch.views,
-        "created_at": watch.created_at,
-        "updated_at": watch.updated_at,
-        "published_at": watch.published_at,
-        "collection": watch.collection,
-        "oem_references": watch.oem_references,
-        "dial": watch.dial,
-        "bracelet": watch.bracelet,
-        "ws_code": watch.ws_code,
-        "aliases": watch.aliases,
-    }
+    return _admin_watch_dict(watch)
 
 
 @router.delete("/admin/{watch_id}")

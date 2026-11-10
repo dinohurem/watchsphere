@@ -153,6 +153,7 @@ async def update_user(
     # Update fields if provided
     if user_update.verified is not None:
         user.verified = user_update.verified
+    newly_approved = bool(user_update.approved) and not user.approved
     if user_update.approved is not None:
         user.approved = user_update.approved
     if user_update.is_active is not None:
@@ -162,6 +163,10 @@ async def update_user(
 
     user.updated_at = datetime.utcnow()
     await user.save()
+
+    if newly_approved:
+        from app.services.whatsapp_sender import notify_account_approved
+        await notify_account_approved(user)
 
     return {
         "id": str(user.id),
@@ -275,14 +280,14 @@ async def approve_user(
     user.updated_at = datetime.utcnow()
     await user.save()
 
-    # Send account confirmation email
-    await email_service.send_account_confirmation_email(
-        to_email=user.email,
-        user_name=user.name
-    )
+    # Redesign v3 §10.2: the user hears about the approval on WhatsApp (email fallback
+    # when no WhatsApp provider is configured or the send fails).
+    from app.services.whatsapp_sender import notify_account_approved
+    channel = await notify_account_approved(user)
 
     return {
         "message": "User approved successfully",
+        "notified_via": channel,
         "user": {
             "id": str(user.id),
             "email": user.email,
@@ -301,11 +306,14 @@ async def approve_all_users(
         User.approved == False, User.role != UserRole.ADMIN
     ).to_list()
 
+    from app.services.whatsapp_sender import notify_account_approved
+
     count = 0
     for user in pending_users:
         user.approved = True
         user.updated_at = datetime.utcnow()
         await user.save()
+        await notify_account_approved(user)
         count += 1
 
     return {"message": f"Approved {count} users"}

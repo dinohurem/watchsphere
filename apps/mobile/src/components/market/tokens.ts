@@ -1,0 +1,20 @@
+/** Redesign v3 palette (spec 0.1 – no new colours). */
+export const UI = {
+  bg: '#F8F8F8',
+  white: '#FFFFFF',
+  text: '#1C1C1E',
+  grey: '#8E8E93',
+  greyLight: '#AEAEB2',
+  line: '#E9E9EB',
+  fill: '#F2F2F4',
+  border: '#ECECEF',
+  green: '#34C759',
+  greenText: '#2FA84F',
+  greenLight: '#E3F5E8',
+  red: '#FF3B30',
+  redText: '#D70015',
+  redLight: '#FDE8E7',
+  blue: '#3478F6',
+  blueLight: '#E4EEFB',
+  black: '#212121',
+} as const;

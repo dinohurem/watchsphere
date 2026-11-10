@@ -15,6 +15,7 @@ from app.services.vision_matching import (
     message_images,
     strip_attachment_markers,
 )
+from app.services import remark_rules
 from rapidfuzz import fuzz, process
 
 logger = logging.getLogger(__name__)
@@ -240,104 +241,19 @@ _SOLD_ONLY_RE = re.compile(r'^\s*[\w/\-\s\u0080-\uffff\*🏷️]*\s*-?\s*sold\s*
 # Compiled regex for structural skip detection (case-insensitive)
 _SKIP_RE = re.compile('|'.join(SKIP_PATTERNS), re.IGNORECASE)
 
+# Remarks (generator spec §6, appendix A). The editable source of truth is the
+# RemarkRule collection (admin panel), loaded at every run; this map mirrors the
+# built-in defaults for callers that only need the trigger → remark lookup.
 REMARKS_MAP = {
-    # only watch (variants) — longer phrases first so they win substring checks
-    "single watch": "only watch",
-    "watch only": "only watch",
-    "only watch": "only watch",
-    "no paper": "only watch",
-    "no papers": "only watch",
-    "naked": "only watch",
-
-    # white tag (both tag is an alias)
-    "white tag": "white tag",
-    "both tag": "white tag",
-    "both tags": "white tag",
-
-    # full sticker
-    "full sticker": "full sticker",
-    "fullsticker": "full sticker",
-    "fs": "full sticker",  # short, matched with word boundary below
-
-    # fullset
-    "full set": "fullset",
-    "fullset": "fullset",
-    "complete set": "fullset",
-
-    # NFC card
-    "nfc card": "NFC Card",
-    "nfc": "NFC Card",
-
-    # net price (ex-vat, intracom, netto)
-    "intracommunity": "net price",
-    "intracom": "net price",
-    "intra": "net price",
-    "ex-vat": "net price",
-    "ex vat": "net price",
-    "excluding vat": "net price",
-    "net price": "net price",
-    "netto": "net price",
-    "net": "net price",
-
-    # only export
-    "need export": "only export",
-    "only export": "only export",
-    "export only": "only export",
-    "export": "only export",
-
-    # misc single-word / phrase remarks
-    "margin scheme": "margin scheme",
-    "dial change": "dial change",
-    "retail ready": "retail ready",
-    "polished": "polished",
-
-    # legacy entries retained to avoid losing coverage from older chats
-    "card only": "Card Only",
-    "box only": "Box Only",
-    "no box": "No Box",
-
-    # "Can be Used" — per-user rule: applies to BOTH WTS and WTB so dealers who
-    # tag a listing as "used ok" / "used fine" / "worn" map to one canonical label.
-    "can be used": "Can be Used",
-    "used ok": "Can be Used",
-    "used okay": "Can be Used",
-    "used fine": "Can be Used",
-
-    # WTB-only "any year" sentinel — surfaces the buyer's "any year" intent in
-    # the remarks column so reviewers can see it at a glance.
-    "any year": "Any Year",
-
-    # service / component replacements
-    "new clasp": "New Clasp",
-    "new buckle": "New Buckle",
-    "new certificate": "New Paper",
-    "new paper": "New Paper",
-    "new papers": "New Paper",
-    "new caliber": "New Caliber",
-    "new calibre": "New Caliber",
-
-    # sticker/seal state
-    "double seal": "Double Seal",
-    "single seal": "Single Seal",
-
-    # warranty card without a filled-in date
-    "open date": "Open Date",
-
-    # payment / settlement terms
-    "wire": "Wire",
-    "wire transfer": "Wire",
-    "bh": "Cash",
-    "cash": "Cash",
-    "usdt": "USDT",
-
-    # trade-show / handover location
-    "wta": "WTA Munich",
-    "wta munich": "WTA Munich",
-
-    # dial details
-    "mercedes hands": "Mercedes Hands",
-    "mercedes": "Mercedes Hands",
+    trigger: remark
+    for remark, _category, _mode, triggers in remark_rules.DEFAULT_REMARK_RULES
+    for trigger in triggers
 }
+
+# Config used by normalize_remarks during a run (set by process_generation from
+# the database; None = built-in defaults).
+_ACTIVE_REMARK_CONFIG: Optional["remark_rules.RemarkConfig"] = None
+
 
 # Brand abbreviation/nickname mapping (lowercase -> canonical brand name)
 BRAND_ALIASES = {
@@ -452,6 +368,9 @@ WATCH_DESCRIPTOR_ALIASES = {
     # Additional abbreviations found in dealer messages
     "bk": "Black",       # "228238a bk" = Black variant
     "wh": "White",
+    "omb": "Ombre",
+    "motif": "Fluted",   # dealer "motif" = catalog "fluted"
+    "fluted": "Fluted",
     "ombre": "Ombre",    # "228239 ombré blue" — accent-stripped version
     "ombrè": "Ombre",
     "ombré": "Ombre",
@@ -622,6 +541,7 @@ def extract_phone_number(sender: str) -> Optional[str]:
     """Extract phone number from WhatsApp sender string.
     Handles formats like: '+852 5203 4944 WS', '+852 6547 2648', '+49 170 1234567'.
     Returns the full phone number with + prefix, or None if sender is a contact name."""
+    sender = _normalize_hyphens(_INVISIBLE_CHARS_RE.sub('', (sender or '').replace('\xa0', ' ')))
     # First try to extract a phone pattern from the sender string
     # This handles cases like "+852 5203 4944 WS" where there's a suffix
     m = re.match(r'(\+[\d\s\-\(\)]{7,20})', sender.strip())
@@ -658,11 +578,20 @@ _INVISIBLE_CHARS_RE = re.compile(
 )
 
 
+# Hyphen look-alikes (U+2010 hyphen, U+2011 non-breaking hyphen, U+2012 figure
+# dash, U+2013 en dash, U+2212 minus) — "+81 70‑9138‑7979" uses U+2011.
+_HYPHENS_RE = re.compile(r'[\u2010\u2011\u2012\u2013\u2212\ufe63\uff0d]')
+
+
+def _normalize_hyphens(s: str) -> str:
+    return _HYPHENS_RE.sub('-', s)
+
+
 def _strip_invisible(s: str) -> str:
     """Replace invisible Unicode marks with nothing (and \xa0 with space)."""
     # Replace non-breaking space with regular space, then strip other invisibles
-    s = s.replace('\xa0', ' ')
-    return _INVISIBLE_CHARS_RE.sub('', s)
+    s = s.replace('\xa0', ' ').replace('\u202f', ' ')
+    return _normalize_hyphens(_INVISIBLE_CHARS_RE.sub('', s))
 
 
 def parse_whatsapp_txt(content: str) -> list[dict]:
@@ -783,18 +712,34 @@ def should_skip_message(content: str) -> bool:
     return False
 
 
+# Aliases of 2-3 letters that also occur in ordinary dealer text ("both tag",
+# "AP" inside a sentence). They only count as a brand when directly followed by
+# a reference-like token or when they make up the whole line (a header).
+SHORT_BRAND_ALIASES = frozenset({"pp", "ap", "rm", "vc", "gp", "bp", "fm", "jlc", "fpj", "tag", "mbf", "mb&f"})
+
+
 def detect_brand_from_content(content: str) -> Optional[str]:
     """Detect brand mentioned in a message for brand-scoped matching.
-    Returns canonical brand name or None."""
-    content_lower = content.lower()
-    # Check for brand names/aliases in the content
-    # Sort by length (longest first) to match "patek philippe" before "patek"
+    Returns canonical brand name or None. Full brand names count anywhere;
+    short aliases ('ap', 'pp', 'tag', …) only in front of a reference or alone
+    on a line, so 'both tag' never means TAG Heuer."""
+    content_lower = remark_rules.fold(content)
     for alias, brand in sorted(BRAND_ALIASES.items(), key=lambda x: len(x[0]), reverse=True):
-        # Word boundary check to avoid partial matches
-        pattern = r'(?<![a-zA-Z])' + re.escape(alias) + r'(?![a-zA-Z])'
+        a = re.escape(alias)
+        if alias in SHORT_BRAND_ALIASES:
+            pattern = (r'(?:^|(?<=\n))\s*\W*' + a + r'\W*\s*$'
+                       r'|(?<![a-z0-9])' + a + r'\s*[:.\-]?\s*(?=[a-z]{0,5}\d{2,})')
+            if alias == "tag":
+                if re.search(r'(?:white|both)\s*tags?', content_lower):
+                    continue
+            if re.search(pattern, content_lower, re.MULTILINE):
+                return brand
+            continue
+        pattern = r'(?<![a-zA-Z])' + a + r'(?![a-zA-Z])'
         if re.search(pattern, content_lower):
             return brand
     return None
+
 
 
 def _find_keyword_pos(content_lower: str, keywords: list[str]) -> Optional[int]:
@@ -812,6 +757,15 @@ def _find_keyword_pos(content_lower: str, keywords: list[str]) -> Optional[int]:
     return earliest
 
 
+# A number tagged with a currency on either side: "€ 13.199", "69.000€", "46000€",
+# "4m hkd", "hkd1.763 m", "S$ 20k", "350k dhs".
+_CURRENCY_PRICE_RE = re.compile(
+    r'(?:\$|€|£|¥|hk\$|s\$|hkd|usdt|usd|eur|gbp|chf|aed|sgd|cny|rmb|jpy)\s*[\d][\d,.]*'
+    r'|\d[\d,.]*[ \t]?[kKmM]?[ \t]*(?:hkd|usdt|usd|eur|euro|gbp|chf|aed|dhs|sgd|cny|rmb|jpy|yen|€|£|¥|\$)(?![a-z])(?![ \t]*:?[ \t]*\d[\d,.]*(?:[ \t]?[kKmM])?(?![A-Za-z0-9]))',
+    re.IGNORECASE,
+)
+
+
 def detect_post_type(content: str) -> Optional[str]:
     """Detect if a message is WTS, WTB, or neither. Returns 'WTS', 'WTB', or None.
     Returns None for SOLD, deleted, media, and system messages.
@@ -826,6 +780,7 @@ def detect_post_type(content: str) -> Optional[str]:
     if should_skip_message(content):
         return None
 
+    content = _normalize_price_text(content)
     content_lower = content.lower()
 
     wts_pos = _find_keyword_pos(content_lower, WTS_KEYWORDS)
@@ -835,11 +790,7 @@ def detect_post_type(content: str) -> Optional[str]:
         """A message with multiple currency-tagged prices is a WTS stock list
         regardless of how it starts. Catches messages like 'Looking for USDT
         pay HKD cash' followed by 40 lines of priced inventory."""
-        price_hits = len(re.findall(
-            r'(?:\$|€|£|HKD|USD|EUR|GBP|CHF|USDT|HK\$)\s*[\d,.]+'
-            r'|[\d,.]+\s*(?:HKD|USD|EUR|GBP|CHF|AED|USDT)\b',
-            txt, re.IGNORECASE,
-        ))
+        price_hits = len(_CURRENCY_PRICE_RE.findall(txt))
         # 3+ priced lines → definitely a seller's stock list
         return price_hits >= 3
 
@@ -860,10 +811,8 @@ def detect_post_type(content: str) -> Optional[str]:
         return "WTB"
 
     # Currency-tagged price → clear WTS signal
-    has_currency_price = bool(re.search(
-        r'(?:\$|€|£|HKD|USD|EUR|GBP|CHF|AED|USDT)\s*[\d,.]+|[\d,.]+\s*(?:HKD|USD|EUR|GBP|CHF|AED|USDT|k\b)',
-        content, re.IGNORECASE
-    ))
+    has_currency_price = bool(_CURRENCY_PRICE_RE.search(content)) or bool(
+        re.search(r'\d\s?k\b', content, re.IGNORECASE))
     if has_currency_price:
         return "WTS"
 
@@ -885,6 +834,23 @@ def detect_post_type(content: str) -> Optional[str]:
         return "WTS"
 
     return None
+
+
+def ref_stem(ref: str) -> str:
+    """Reference stem: lower case, no spaces, cut at the first '.' or '-'.
+    Richard Mille keeps its dash part ('RM07-01' → 'rm07-01')."""
+    s = re.sub(r'\s+', '', _normalize_hyphens(ref or '').lower())
+    if not s:
+        return ""
+    m = re.match(r'^rm\d+(?:-\d+)?', s)
+    if m:
+        return m.group(0)
+    return re.split(r'[.\-]', s, maxsplit=1)[0]
+
+
+def digit_key(ref: str) -> str:
+    """All digits of the reference stem: '5980/1A' → '59801', 'RM07-01' → '0701'."""
+    return re.sub(r'\D', '', ref_stem(ref))
 
 
 async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
@@ -911,13 +877,16 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
                     "bracelet": (data.get("bracelet") or "").strip(),
                     "index": (data.get("index") or data.get("indexes") or "").strip(),
                     "cover_image": (data.get("cover_image") or "").strip(),
+                    "images": [i for i in (data.get("images") or []) if isinstance(i, str)],
+                    "list_prices": data.get("list_prices") or {},
+                    "status": (data.get("status") or "active"),
                 })
             except json.JSONDecodeError:
                 continue
     else:
-        db_watches = await Watch.find(Watch.status == "active").to_list()
-        if not db_watches:
-            db_watches = await Watch.find_all().to_list()
+        # Drafts are matched too (bulk spec §8.2): a watch added to the catalog as
+        # a draft must not leave its listings in "not in database".
+        db_watches = await Watch.find_all().to_list()
 
         for w in db_watches:
             watches.append({
@@ -934,6 +903,9 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
                 # it once it exists.
                 "index": (getattr(w, "index", None) or "").strip(),
                 "cover_image": (w.cover_image or (w.images[0] if w.images else "") or "").strip(),
+                "images": list(w.images or []),
+                "list_prices": dict(getattr(w, "list_prices", None) or {}),
+                "status": getattr(getattr(w, "status", None), "value", None) or str(getattr(w, "status", "") or ""),
             })
 
     by_ws_code = {}
@@ -977,6 +949,29 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
             "Chopard", "Girard-Perregaux", "Zenith", "Blancpain",
         }
 
+    # Reference stems (part before the first "." or "-") and digit keys, so
+    # '15210OR' finds '15210OR.OO.A056KB.01' and fuzzy matching stays within the
+    # same digit sequence.
+    by_stem: dict[str, list[dict]] = {}
+    by_digits: dict[str, list[dict]] = {}
+    for w in watches:
+        keys = [w["reference"]] + w["oem_references"]
+        if w["ws_code"]:
+            keys.append(w["ws_code"].split()[0])
+        seen_keys: set[str] = set()
+        for k in keys:
+            st = ref_stem(k)
+            if st and st not in seen_keys:
+                seen_keys.add(st)
+                lst = by_stem.setdefault(st, [])
+                if w not in lst:
+                    lst.append(w)
+            dk = digit_key(k)
+            if dk and len(dk) >= 3:
+                lst = by_digits.setdefault(dk, [])
+                if w not in lst:
+                    lst.append(w)
+
     # Build flat list of (searchable_string, watch_dict) for fuzzy matching
     fuzzy_candidates = []
     for w in watches:
@@ -984,6 +979,15 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
             s = s.strip()
             if s:
                 fuzzy_candidates.append((s.lower(), w))
+    fuzzy_by_digits: dict[str, list[tuple[str, dict]]] = {}
+    for s_, w in fuzzy_candidates:
+        dk = digit_key(s_)
+        if dk:
+            fuzzy_by_digits.setdefault(dk, []).append((s_, w))
+    fuzzy_by_prefix3: dict[str, list[tuple[str, dict]]] = {}
+    for dk, lst in fuzzy_by_digits.items():
+        if len(dk) >= 3:
+            fuzzy_by_prefix3.setdefault(dk[:3], []).extend(lst)
 
     # Pre-compile combined regex patterns for fast match_watch() lookups.
     # Instead of iterating every key and running re.search() per key,
@@ -1018,14 +1022,35 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
         "by_alias": by_alias,
         "by_reference": by_reference,
         "by_brand": by_brand,
+        "by_stem": by_stem,
+        "by_digits": by_digits,
         "brands": sorted(brands_set),
         "fuzzy_candidates": fuzzy_candidates,
+        "fuzzy_by_digits": fuzzy_by_digits,
+        "fuzzy_by_prefix3": fuzzy_by_prefix3,
         # Pre-compiled combined patterns for match_watch()
         "_ws_code_pattern": ws_code_pattern,
         "_reference_pattern": reference_pattern,
         "_oem_ref_pattern": oem_ref_pattern,
         "_alias_pattern": alias_pattern,
     }
+
+
+# Dealer typos of currency codes → canonical code (generator spec §4).
+_CURRENCY_TYPO_RE = re.compile(r'(?<![a-z])(?:hkld|khd|hkdd|hkkd|h\s+kd)(?![a-z])', re.IGNORECASE)
+# "HKD//390k", "usdt : 35k" → "HKD 390k", "usdt 35k"
+_CURRENCY_SEP_RE = re.compile(
+    r'(?<![a-z])(hk\$|hkd|usdt|usd|eur|gbp|chf|aed|sgd|cny|rmb|jpy)\s*(?:/{1,3}|:)\s*(?=\d)', re.IGNORECASE)
+
+
+def _normalize_price_text(text: str) -> str:
+    """Fix currency spellings before any price/currency regex runs."""
+    if not text:
+        return text
+    text = text.replace('💲', '$').replace('：', ':').replace('＄', '$')
+    text = _CURRENCY_TYPO_RE.sub('hkd', text)
+    text = _CURRENCY_SEP_RE.sub(lambda m: m.group(1) + ' ', text)
+    return text
 
 
 _EMOJI_RE = re.compile(
@@ -1037,6 +1062,10 @@ _EMOJI_RE = re.compile(
     r'\U00002600-\U000026FF'    # Misc symbols
     r'\U00002300-\U000023FF'    # Misc technical
     r'\U0000200B-\U0000200F'    # Zero-width spaces
+    r'\u2190-\u21FF'            # Arrows (→ ⇒ ➔ lists)
+    r'\u25A0-\u25FF'            # Geometric shapes (▶ ▪ ●)
+    r'\u2022\u2023\u2043\u00B7'  # Bullets (• ‣ ⁃ ·)
+    r'\uFF5C\u2502\u2503'       # Full-width / box-drawing vertical bars (｜ │)
     r']+'
 )
 
@@ -1051,7 +1080,9 @@ def _clean_text(text: str) -> str:
     cached = _clean_text_cache.get(text)
     if cached is not None:
         return cached
-    cleaned = _EMOJI_RE.sub(' ', text)
+    # 💲 is a dollar sign and ： a colon, not decoration — keep their meaning.
+    cleaned = text.replace('💲', '$').replace('：', ':')
+    cleaned = _EMOJI_RE.sub(' ', cleaned)
     # Collapse runs of whitespace created by emoji substitution
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     # Limit cache size to prevent memory issues
@@ -1065,7 +1096,9 @@ def detect_brand_header(line: str) -> Optional[str]:
     Returns the canonical brand name or None.
     Handles lines like: '🟥🟥Patek Philippe🟥🟥', 'Ap Used ✨✨', 'RM Used Fullset✨✨',
     '🟥 🟥 Rolex 🟥 🟥', 'Patek Used ✨ ✨', 'PP stock🍰🍰', 'Ap Stock 🍰',
-    'RM stock🍰🍰', 'All Brand new', 'BRAND NEW Rolex'"""
+    'RM stock🍰🍰', 'All Brand new', 'BRAND NEW Rolex'.
+    A line that carries a reference after the brand ('AP 15407ST …', 'PP 7014/1G …',
+    'Rolex 126610LN 150k') is a watch line, not a header."""
     cleaned = _clean_text(line).strip()
     if not cleaned:
         return None
@@ -1096,13 +1129,18 @@ def detect_brand_header(line: str) -> Optional[str]:
     if cleaned_lower in BRAND_ALIASES:
         return BRAND_ALIASES[cleaned_lower]
 
-    # Also try: "PP stock" -> after stripping "stock", "pp" matches
-    # Already handled above. Check partial starts for cases like "rolex watches"
     for alias, brand in sorted(BRAND_ALIASES.items(), key=lambda x: len(x[0]), reverse=True):
         if cleaned_lower == alias or cleaned_lower.startswith(alias + " "):
+            rest = cleaned_lower[len(alias):]
+            # A reference (or any long digit run that is not a year) after the
+            # brand makes this a watch line.
+            for tok in re.findall(r'[A-Za-z]{0,5}\d{3,}[A-Za-z0-9/\-.]*', rest):
+                if not _is_non_ref_token(tok):
+                    return None
             return brand
 
     return None
+
 
 
 def _is_section_header(line: str) -> bool:
@@ -1131,66 +1169,116 @@ def _is_section_header(line: str) -> bool:
     return False
 
 
+# Leading list decoration that survives _clean_text: "- ", "* ", "> ", ": ", "| ", "#1 " ...
+_LEADING_SYMBOLS_RE = re.compile(r'^[\s*\-–—>|:;,.~=_+#!]+')
+# "Ref 126333", "Ref. 126333", "ref: 126333", "Reference no. 5711/1A"
+_REF_LABEL_RE = re.compile(r'(?<![a-z])ref(?:erence)?\.?\s*(?:no\.?|nr\.?|number|#)?\s*[:#.]?\s*', re.IGNORECASE)
+# One complete reference token: '4300V/220G-H151', '228349rbr-0036', '15210OR.OO.A056KB.01'
+_REF_TOKEN_RE = re.compile(r'[A-Za-z]{0,5}\d{2,6}[A-Za-z]{0,8}(?:[/\-.][A-Za-z0-9]+)*')
+_CURRENCY_WORDS = r'(?:hkd|usdt|usd|eur|euro|gbp|chf|aed|sgd|jpy|cny|rmb|€|£|¥|\$)'
+_CURRENCY_AFTER_RE = re.compile(r'^[ \t]*(?:[kKmM]\b[ \t]*)?' + _CURRENCY_WORDS + r'(?![a-z])(?![ \t]*:?[ \t]*\d[\d,.]*(?:[ \t]?[kKmM])?(?![A-Za-z0-9]))', re.IGNORECASE)
+# Tokens that are dates, never references: 10-2026, 06/2026, 29/08/2026, N10/26, W10, 2025.
+_DATE_TOKEN_RE = re.compile(
+    r'^(?:\d{1,2}[/\-.]\d{2,4}|\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|[nNwW]\d{1,2}(?:[/\-.]\d{2,4})?y?'
+    r'|(?:19|20)\d\d(?:[/\-.]\d{1,2})?(?:y|year|years)?|\d{2}y)$'
+)
+# Tokens that are prices: 13.950 / 1,265,000 / 150k / 1.2m
+_PRICE_TOKEN_RE = re.compile(r'^(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d+)?[kKmM])$')
+# Brand words a line may start with before its reference ("AP 15407ST", "PP 7014/1G").
+_LINE_BRAND_PREFIX_RE = None  # built lazily from BRAND_ALIASES
+
+
+def _line_brand_prefix_re():
+    global _LINE_BRAND_PREFIX_RE
+    if _LINE_BRAND_PREFIX_RE is None:
+        # 'RM' is part of Richard Mille references ('RM 11-03'), never stripped.
+        aliases = sorted((a for a in BRAND_ALIASES if a != 'rm'), key=len, reverse=True)
+        _LINE_BRAND_PREFIX_RE = re.compile(
+            r'^(?:' + '|'.join(re.escape(a) for a in aliases) + r')\s+(?=[A-Za-z]{0,5}\d)', re.IGNORECASE)
+    return _LINE_BRAND_PREFIX_RE
+
+
+def _is_non_ref_token(token: str, following: str = "") -> bool:
+    """Dates, years, prices and currency-tagged numbers are never references."""
+    t = token.strip().rstrip('.-/')
+    if not t:
+        return True
+    if _DATE_TOKEN_RE.match(t) or _PRICE_TOKEN_RE.match(t):
+        return True
+    if re.match(r'^20[1-3]\d[a-zA-Z]{0,8}$', t):
+        suffix = re.sub(r'^20[1-3]\d', '', t).lower()
+        if suffix in ('', 'y', 'year', 'years', 'used', 'new', 'unworn', 'full', 'brand', 'bnib',
+                      'nos', 'mint', 'like', 'fresh', 'polished', 'worn'):
+            return True
+    # A bare number directly followed by a currency is a price ("35500 usdt").
+    if re.match(r'^[\d.,]+$', t) and _CURRENCY_AFTER_RE.match(following or ""):
+        return True
+    return False
+
+
 def _extract_ref_from_line(line: str) -> Optional[str]:
     """Extract the reference/model number from a watch line.
-    Strips emoji and leading condition/status words first.
-    Handles formats like: '5968A', 'RM037RG', '126334G', 'Used 5167A-001',
-    'New 124200 Pistachio', '5712/1A', '5139G-010', '7118/1200A',
-    'RM 11-03', 'RM07-01', 'V41 FR 2'.
-    Rejects year-only tokens like '2022y', '2019year', '2025'."""
-    cleaned = _clean_text(line).strip()
+    Strips emoji, leading list symbols (→ ▶ • - * |) and condition/status words,
+    a leading brand word ("AP 15407ST", "PP 7014/1G") and a "Ref"/"Ref."/"ref:" label.
+    Keeps the whole reference token: '4300V/220G-H151', '228349rbr-0036',
+    '15210OR.OO.A056KB.01', '5712/1A', '5139G-010', 'RM 11-03' → 'RM11-03'.
+    Rejects dates, years and prices: '10-2026', 'N10/26', 'W10', '2025', '150k', '35500 usdt'.
+    When the line does not start with a reference, a reference after "Ref" anywhere
+    in the line is used."""
+    cleaned = _normalize_hyphens(_clean_text(line)).strip()
     if not cleaned:
         return None
-    # Strip leading condition/status words and asterisks
-    cleaned = re.sub(r'^[*\s]*', '', cleaned)
+    cleaned = _LEADING_SYMBOLS_RE.sub('', cleaned)
     cleaned = re.sub(
         r'^(?:used|new|unworn|like\s*new|brand\s*new|bnib|nos|fresh|polished)\s+',
         '', cleaned, flags=re.IGNORECASE
     ).strip()
+    cleaned = _line_brand_prefix_re().sub('', cleaned, count=1)
+    cleaned = re.sub(r'^' + _REF_LABEL_RE.pattern, '', cleaned, flags=re.IGNORECASE)
     if not cleaned:
         return None
 
+    def _ref_after_label() -> Optional[str]:
+        for m in _REF_LABEL_RE.finditer(cleaned):
+            tm = _REF_TOKEN_RE.match(cleaned, m.end())
+            if tm:
+                tok = tm.group(0).rstrip('.-/')
+                if not _is_non_ref_token(tok, cleaned[tm.end():]):
+                    return tok
+        return None
+
     # Reject lines that start with a year-like token (e.g., "2022y HKD 570K" is a
-    # continuation line from a stock list — no reference here). Also handles
-    # condition words concatenated directly to the year: "2025used 180K",
-    # "2022new fullset", "2019full set", "2024year", "19y HKD 100k".
+    # continuation line from a stock list — no reference here).
     if re.match(
         r'^20[1-3]\d(?:y|year|used|new|unworn|full|brand|mint|like|fresh|polished)?\b',
         cleaned, re.IGNORECASE,
     ):
-        return None
+        return _ref_after_label()
     if re.match(r'^\d{2}y\b', cleaned, re.IGNORECASE):
-        return None
+        return _ref_after_label()
 
-    # Special handling for RM (Richard Mille) references with space: "RM 11-03", "RM 07-01"
+    # Richard Mille references with space: "RM 11-03", "RM 07-01"
     rm_match = re.match(r'^(RM\s*\d{2,4}(?:[/\-][A-Za-z0-9]+)*)\b', cleaned, re.IGNORECASE)
     if rm_match:
-        # Normalize: "RM 11-03" -> "RM11-03" (remove space for consistent matching)
-        ref = rm_match.group(1)
-        ref = re.sub(r'^(RM)\s+', r'\1', ref, flags=re.IGNORECASE)
-        return ref
+        return re.sub(r'^(RM)\s+', r'\1', rm_match.group(1), flags=re.IGNORECASE)
 
-    # Reject currency-prefixed price tokens like "hkd910k", "usd122k", "usdt470k",
-    # "eur5000". These are price lines that follow a ref line in stock lists, not refs.
+    # Currency-prefixed price tokens like "hkd910k", "usdt470k", "eur5000".
     if re.match(
-        r'^(?:hkd|usdt|usd|eur|gbp|chf|aed|sgd|jpy)\s*[\d.,]+\s*[kKmM]?\b',
+        r'^(?:hkd|usdt|usd|eur|gbp|chf|aed|sgd|jpy|cny|rmb)\s*[\d.,]+\s*[kKmM]?\b',
         cleaned, re.IGNORECASE,
     ):
         return None
 
-    # Match reference patterns at start: alphanumeric with optional /- separators
-    m = re.match(r'^([A-Za-z]{0,4}\d{2,6}(?:[/\-][A-Za-z0-9]+)*[A-Za-z]{0,4})\b', cleaned)
+    m = _REF_TOKEN_RE.match(cleaned)
     if m:
-        candidate = m.group(1)
-        # Reject year-shaped candidates: 2022, 2022y, 2025used, 2019full, etc.
-        if re.match(r'^20[1-3]\d[a-zA-Z]{0,8}$', candidate):
-            suffix = re.sub(r'^20[1-3]\d', '', candidate).lower()
-            if suffix in ('', 'y', 'year', 'years', 'used', 'new', 'unworn',
-                          'full', 'brand', 'bnib', 'nos', 'mint', 'like',
-                          'fresh', 'polished', 'worn'):
-                return None
-        return candidate
-    return None
+        candidate = m.group(0).rstrip('.-/')
+        rest = cleaned[m.end():]
+        # The token must end on a word boundary ("126610LN," ok, "126610LNx" n/a).
+        if candidate and not _is_non_ref_token(candidate, rest):
+            return candidate
+        return _ref_after_label()
+    return _ref_after_label()
+
 
 
 def _strip_diacritics(s: str) -> str:
@@ -1205,7 +1293,7 @@ def _resolve_descriptor(token: str) -> list[str]:
     Returns a list: [canonical_name] if the token is a known alias, else [token].
     E.g., 'blk' -> ['black'], 'jub' -> ['jubilee'], 'rom' -> ['roman'].
     Also strips diacritics so 'ombré' resolves via 'ombre'."""
-    t = token.lower()
+    t = token.lower().strip('.,;:!()[]')
     canonical = WATCH_DESCRIPTOR_ALIASES.get(t)
     if canonical:
         return [t, canonical.lower()]
@@ -1216,6 +1304,27 @@ def _resolve_descriptor(token: str) -> list[str]:
         if canonical:
             return [t, t_stripped, canonical.lower()]
     return [t]
+
+
+# Case metals are not dial colours: "White gold", "Rose gold", "Everose" must not
+# count as a white / rose dial.
+_METAL_PHRASE_RE = re.compile(
+    r'(?<![a-z])(?:(?:white|rose|yellow|pink|red|everose|sedna|king|honey|moonshine|beige)\s*-?\s*gold'
+    r'|everose|rolesor|sedna|wg|rg|yg)(?![a-z])',
+    re.IGNORECASE,
+)
+
+
+def _strip_metal_tokens(tokens: Optional[list[str]]) -> list[str]:
+    if not tokens:
+        return []
+    joined = " ".join(str(t) for t in tokens)
+    joined = _METAL_PHRASE_RE.sub(" ", joined)
+    return joined.split()
+
+
+def _fold(s: str) -> str:
+    return remark_rules.fold(s or "")
 
 
 def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[dict]:
@@ -1234,8 +1343,10 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
 
     # Build resolved tokens: expand abbreviations to canonical names
     resolved_tokens = []
-    for token in line_tokens:
-        t = token.lower()
+    for token in _strip_metal_tokens(line_tokens):
+        t = _fold(token).strip('.,;:!()[]')
+        if not t:
+            continue
         # Skip month codes, prices, years
         if re.match(r'^[nN]\d', t):
             continue
@@ -1260,11 +1371,11 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
     scored = []
     for w in matches:
         score = 0
-        ws_lower = w["ws_code"].lower()
-        model_lower = w.get("model", "").lower()
-        dial_lower = w.get("dial", "").lower()
-        bracelet_lower = w.get("bracelet", "").lower()
-        aliases_lower = [a.lower() for a in w.get("aliases", [])]
+        ws_lower = _fold(w["ws_code"])
+        model_lower = _fold(w.get("model", ""))
+        dial_lower = _fold(w.get("dial", ""))
+        bracelet_lower = _fold(w.get("bracelet", ""))
+        aliases_lower = [_fold(a) for a in w.get("aliases", [])]
 
         # Check each resolved token against ws_code, dial, bracelet, model, aliases
         for variants in resolved_tokens:
@@ -1301,7 +1412,7 @@ def _disambiguate_matches(matches: list[dict], line_tokens: list[str]) -> list[d
         # that distinguishes this variant? E.g., 'paul newman' in ws_code
         ws_parts = ws_lower.split()
         for part in ws_parts:
-            if part in tokens_str and part not in matches[0]["ws_code"].lower().split()[:1]:
+            if part in tokens_str and part not in _fold(matches[0]["ws_code"]).split()[:1]:
                 # Only count distinguishing parts (not the base reference)
                 score += 3
 
@@ -1367,7 +1478,17 @@ def fuzzy_match_ref(
     if cache_key in _fuzzy_match_cache:
         return _fuzzy_match_cache[cache_key]
 
-    candidates = watch_index.get("fuzzy_candidates", [])
+    # Fuzzy only within the same digit sequence: RM0701 ≠ RM7201,
+    # 5980/1A ≠ 5905/1A, 116613LN ≠ 126613LN. Letters may differ, digits may not.
+    ref_dk = digit_key(ref_lower)
+    if ref_dk:
+        by_dk = watch_index.get("fuzzy_by_digits")
+        if by_dk is None:
+            candidates = [(s, w) for s, w in watch_index.get("fuzzy_candidates", []) if digit_key(s) == ref_dk]
+        else:
+            candidates = list(by_dk.get(ref_dk, []))
+    else:
+        candidates = watch_index.get("fuzzy_candidates", [])
     if not candidates:
         _fuzzy_match_cache[cache_key] = ([], None)
         return [], None
@@ -1575,30 +1696,43 @@ async def batch_ai_match(
     if not unmatched_lines:
         return []
 
-    # Build compact catalog for the prompt
-    catalog_entries = []
-    ws_code_to_watch = {}
-    for ws_code, watch in watch_index["by_ws_code"].items():
-        refs = [watch["reference"]] + watch.get("oem_references", []) + watch.get("aliases", [])
-        refs = [r for r in refs if r]
-        entry = f"{watch['ws_code']} | {watch['brand']} {watch['model']} | refs: {', '.join(refs)}"
-        catalog_entries.append(entry)
-        ws_code_to_watch[watch["ws_code"].lower()] = watch
+    # Only 5–10 catalog candidates per line are sent (§4) — never the whole
+    # catalog. Callers pass them as item["candidates"]; otherwise a shortlist is
+    # built here.
+    ws_code_to_watch = {w["ws_code"].lower(): w for w in watch_index["by_ws_code"].values()}
+    allowed: dict[int, set[str]] = {}
+    for item in unmatched_lines:
+        cands = item.get("candidates")
+        if cands is None:
+            cands = [w["ws_code"] for w in shortlist_candidates(item.get("content", ""), watch_index,
+                                                                item.get("brand_hint"), limit=10)]
+        item["candidates"] = list(cands)[:10]
+        allowed[item["index"]] = {c.lower() for c in item["candidates"]}
 
-    catalog_text = "\n".join(catalog_entries) if catalog_entries else "CATALOG IS EMPTY - identify watches by your knowledge"
+    def _cand_line(ws: str) -> str:
+        w = ws_code_to_watch.get(ws.lower())
+        if not w:
+            return ""
+        refs = [r for r in [w["reference"]] + w.get("oem_references", []) + w.get("aliases", []) if r]
+        extra = " ".join(f"{k}={w.get(k)}" for k in ("dial", "bracelet") if w.get(k))
+        return f"    - {w['ws_code']} | {w['brand']} {w.get('model', '')} | refs: {', '.join(refs[:8])} {extra}".rstrip()
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=AI_REQUEST_TIMEOUT)
 
     async def process_batch(batch_lines: list[dict]) -> tuple[list[dict], bool]:
-        lines_text = "\n".join(
-            f"[{item['index']}] {item['content'][:400]}"
-            for item in batch_lines
-        )
+        parts = []
+        for item in batch_lines:
+            cand_lines = [c for c in (_cand_line(ws) for ws in item.get("candidates", [])) if c]
+            parts.append(
+                f"[{item['index']}] {item['content'][:400]}\n  candidates:\n"
+                + ("\n".join(cand_lines) if cand_lines else "    (none — identify by your knowledge, ws_code null)")
+            )
+        lines_text = "\n".join(parts)
 
         prompt = f"""You are an expert luxury watch dealer reference matcher. Match each WhatsApp dealer message line to the correct watch from the catalog.
 
-WATCH CATALOG (match against these if possible):
-{catalog_text}
+Each line comes with its own short list of catalog candidates. ws_code MUST be one
+of that line's candidates, or null when none of them is the watch.
 
 REFERENCE FORMAT GUIDE:
 Watch references follow brand-specific patterns:
@@ -1664,6 +1798,8 @@ JSON array:"""
         # The model's in_catalog flag is not trusted: a ws_code counts as in the
         # catalog only when it actually resolves to a catalog watch.
         watch = ws_code_to_watch.get(ws_code.lower()) if isinstance(ws_code, str) and ws_code else None
+        if watch is not None and allowed.get(idx) is not None and ws_code.lower() not in allowed[idx]:
+            watch = None  # outside this line's candidates → not trusted
         all_results.append({
             "index": idx,
             "ws_code": ws_code,
@@ -1815,7 +1951,7 @@ _DISCRIMINATING_DESCRIPTORS = frozenset({
     "roman", "rom", "roma", "sundust", "sun", "yml", "pikachu", "nadal",
     "diamond", "diamonds", "dia", "baguette",
     # Bracelet / style markers
-    "jubilee", "jub", "oyster", "oys", "leather",
+    "jubilee", "jub", "oyster", "oys", "leather", "fluted", "motif", "omb",
 })
 
 
@@ -1827,14 +1963,21 @@ def _has_descriptor_conflict(candidate: dict, line_tokens: Optional[list[str]]) 
     """
     if not line_tokens:
         return False
-    ws_lower = (candidate.get("ws_code") or "").lower()
-    dial_lower = (candidate.get("dial") or "").lower()
-    bracelet_lower = (candidate.get("bracelet") or "").lower()
-    aliases_lower = [(a or "").lower() for a in candidate.get("aliases", [])]
+    ws_lower = _fold(candidate.get("ws_code") or "")
+    dial_lower = _fold(candidate.get("dial") or "")
+    bracelet_lower = _fold(candidate.get("bracelet") or "")
+    aliases_lower = [_fold(a or "") for a in candidate.get("aliases", [])]
     haystack = " ".join([ws_lower, dial_lower, bracelet_lower] + aliases_lower)
+    # Expand the haystack's own abbreviations ('126300 Jub' also means jubilee).
+    expanded = []
+    for word in re.findall(r'[a-z]+', haystack):
+        canonical = WATCH_DESCRIPTOR_ALIASES.get(word)
+        if canonical:
+            expanded.append(canonical.lower())
+    haystack = haystack + " " + " ".join(expanded)
 
-    for raw in line_tokens:
-        t = raw.lower().strip()
+    for raw in _strip_metal_tokens(line_tokens):
+        t = _fold(raw).strip().strip('.,;:!()[]')
         if not t:
             continue
         # Skip month codes, prices, years, common non-descriptor words
@@ -1851,144 +1994,185 @@ def _has_descriptor_conflict(candidate: dict, line_tokens: Optional[list[str]]) 
     return False
 
 
+def _line_has_descriptor(tokens: Optional[list[str]]) -> bool:
+    for t in _strip_metal_tokens(tokens):
+        for v in _resolve_descriptor(_fold(str(t))):
+            if v in _DISCRIMINATING_DESCRIPTORS:
+                return True
+    return False
+
+
+def _unique_watches(candidates) -> list[dict]:
+    result, seen = [], set()
+    for w in candidates or []:
+        ws = (w.get("ws_code") or "").lower()
+        if ws not in seen:
+            result.append(w)
+            seen.add(ws)
+    return result
+
+
+def _soft_brand_filter(candidates: list[dict], brand_hint: Optional[str]) -> list[dict]:
+    """The brand hint narrows candidates, but never empties the list — a wrong
+    hint must not push a correct reference into "not in database"."""
+    if brand_hint:
+        filtered = [w for w in candidates if (w.get("brand") or "").lower() == brand_hint.lower()]
+        if filtered:
+            return filtered
+    return candidates
+
+
+def _set_diag(diag: Optional[dict], reason: str, candidates: list[dict]) -> None:
+    if diag is not None:
+        diag["unsure"] = True
+        diag["reason"] = reason
+        diag["candidates"] = list(candidates)
+
+
+def _resolve_family(family: list[dict], tokens: Optional[list[str]], brand_hint: Optional[str],
+                    diag: Optional[dict]) -> list[dict]:
+    """Pick the variant of one reference family (same reference or same stem).
+
+    Colour/bracelet words decide. No silent guessing: when the line has no
+    descriptor and several variants exist, or the descriptors fit none of them,
+    every variant is returned (→ needs review, no WS-Code pre-filled) and the
+    generic catalog entry is never used as a fallback.
+    """
+    cands = _soft_brand_filter(_unique_watches(family), brand_hint)
+    if not cands:
+        return []
+    has_desc = _line_has_descriptor(tokens)
+
+    if len(cands) == 1:
+        cand = cands[0]
+        if has_desc and _has_descriptor_conflict(cand, tokens):
+            return []  # line describes a variant the catalog does not have
+        ws_lower = _fold(cand.get("ws_code") or "")
+        ref_lower = _fold(cand.get("reference") or "")
+        ws_has_descriptor = bool(ref_lower) and ws_lower.replace(ref_lower, "", 1).strip() != ""
+        if ws_has_descriptor and not has_desc:
+            # Only one (descriptor-qualified) variant is known, but the line does
+            # not say which variant it is → unsure.
+            _set_diag(diag, f"Variant not stated (only {cand.get('ws_code')} in catalog)", cands)
+        return cands
+
+    if not has_desc:
+        _set_diag(diag, "Variant open: " + ", ".join(c["ws_code"] for c in cands if c.get("ws_code")), cands)
+        return cands
+
+    fitting = [c for c in cands if not _has_descriptor_conflict(c, tokens)]
+    if len(fitting) == 1:
+        return fitting
+    if not fitting:
+        _set_diag(diag, "No catalog variant fits the description: "
+                  + ", ".join(c["ws_code"] for c in cands if c.get("ws_code")), cands)
+        return cands
+    picked = _disambiguate_matches(fitting, list(tokens or []))
+    if len(picked) == 1:
+        return picked
+    _set_diag(diag, "Ambiguous variant: " + ", ".join(c["ws_code"] for c in picked if c.get("ws_code")), picked)
+    return picked
+
+
 def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = None,
                        line_tokens: Optional[list[str]] = None,
-                       return_fuzzy_score: bool = False):
+                       return_fuzzy_score: bool = False,
+                       diag: Optional[dict] = None):
     """Match a reference string against the watch index.
-    Uses brand_hint to filter by brand and line_tokens to disambiguate variants.
-    All comparisons are case-insensitive.
+    Uses brand_hint to narrow by brand (soft — never empties the result) and
+    line_tokens to disambiguate variants. All comparisons are case-insensitive.
+
+    Order: ws_code → alias → OEM reference → reference → alias/ws_code in the
+    whole line → reference stem (part before the first '.'/'-') → fuzzy within the
+    same digit sequence.
+
+    `diag` (optional dict) receives {"unsure": True, "reason", "candidates"} when
+    the variant cannot be decided; the caller must then route to needs review
+    without pre-filling a WS-Code.
 
     If return_fuzzy_score=True, returns (matches, fuzzy_score) where fuzzy_score
-    is the best fuzzy score (int) if the fuzzy path was used, else None. This lets
-    callers downgrade low-confidence fuzzy hits to needs_review.
-    Otherwise returns just the matches list (backward compatible).
+    is the best fuzzy score (int) if the fuzzy path was used, else None.
     """
-    ref_lower = ref.lower()
-    matches = []
-
-    def _collect(candidates):
-        result = []
-        s = set()
-        for w in candidates:
-            ws = w["ws_code"].lower()
-            if ws not in s:
-                result.append(w)
-                s.add(ws)
-        return result
-
-    def _brand_filter(candidates):
-        if brand_hint:
-            filtered = [w for w in candidates if w["brand"].lower() == brand_hint.lower()]
-            if filtered:
-                return filtered
-        return candidates
+    ref_lower = _normalize_hyphens(ref).lower().strip()
+    tokens = list(line_tokens or [])
 
     def _ret(m, score):
         if return_fuzzy_score:
             return m, score
         return m
 
-    def _apply_simple_conflict_guard(m):
-        """For oem_ref/alias paths — only descriptor conflict check. These hits
-        are specific enough that a missing descriptor on the line is acceptable."""
-        if len(m) == 1 and _has_descriptor_conflict(m[0], line_tokens):
-            return []
-        return m
+    def _family_of(watches: list[dict]) -> list[dict]:
+        fam: list[dict] = []
+        for w in watches:
+            r = (w.get("reference") or "").lower()
+            fam.extend(watch_index["by_reference"].get(r, []) if r else [w])
+        return _unique_watches(fam or watches)
 
-    def _apply_ref_only_guard(m):
-        """For reference-only paths — both descriptor conflict AND
-        descriptor-required check. If the catalog ws_code is descriptor-qualified
-        but the line has no descriptor, refuse the match."""
-        if len(m) != 1:
-            return m
-        cand = m[0]
-        if _has_descriptor_conflict(cand, line_tokens):
-            return []
-        ws_lower = (cand.get("ws_code") or "").lower()
-        ref_lower_cand = (cand.get("reference") or "").lower()
-        ws_has_descriptor = bool(ref_lower_cand) and ws_lower.replace(ref_lower_cand, "", 1).strip() != ""
-        if ws_has_descriptor and line_tokens:
-            line_has_descriptor = any(
-                v in _DISCRIMINATING_DESCRIPTORS
-                for t in line_tokens for v in _resolve_descriptor(str(t).lower())
-            )
-            if not line_has_descriptor:
-                return []
-        return m
+    # 1. ws_code exact. A literal descriptor-qualified ws_code is ground truth;
+    # a bare one equal to a reference shared with other variants is not — the
+    # generic entry must not swallow '126300 Green Ombré Jubilee'.
+    w = watch_index["by_ws_code"].get(ref_lower)
+    if w:
+        family = _family_of([w])
+        if len(family) <= 1:
+            return _ret([w], None)
+        return _ret(_resolve_family(family, tokens, brand_hint, diag), None)
 
-    # 1. Try ws_code exact match (most specific — ground truth, no guard).
-    if ref_lower in watch_index["by_ws_code"]:
-        return _ret([watch_index["by_ws_code"][ref_lower]], None)
-
-    # 2. Try aliases exact match (full alias hit = authoritative match per rule).
+    # 2. Alias exact (an alias names one watch authoritatively).
     if ref_lower in watch_index["by_alias"]:
-        candidates = _brand_filter(watch_index["by_alias"][ref_lower])
-        matches = _collect(candidates)
-        if matches:
-            if len(matches) > 1 and line_tokens:
-                matches = _disambiguate_matches(matches, line_tokens)
-            return _ret(matches, None)
+        matches = _soft_brand_filter(_unique_watches(watch_index["by_alias"][ref_lower]), brand_hint)
+        if len(matches) > 1:
+            matches = _resolve_family(matches, tokens, brand_hint, diag)
+        return _ret(matches, None)
 
-    # 3. Try oem_references exact match — apply only conflict guard.
+    # 3. OEM reference exact — specific enough, only the conflict guard.
     if ref_lower in watch_index["by_oem_ref"]:
-        candidates = _brand_filter(watch_index["by_oem_ref"][ref_lower])
-        matches = _collect(candidates)
-        if matches:
-            if len(matches) > 1 and line_tokens:
-                matches = _disambiguate_matches(matches, line_tokens)
-            matches = _apply_simple_conflict_guard(matches)
-            return _ret(matches, None)
+        matches = _soft_brand_filter(_unique_watches(watch_index["by_oem_ref"][ref_lower]), brand_hint)
+        if len(matches) > 1:
+            return _ret(_resolve_family(matches, tokens, brand_hint, diag), None)
+        if matches and _line_has_descriptor(tokens) and _has_descriptor_conflict(matches[0], tokens):
+            return _ret([], None)
+        return _ret(matches, None)
 
-    # 4. Try reference exact match — apply BOTH guards (descriptor conflict AND
-    # required-descriptor-when-catalog-has-one).
+    # 4. Reference exact.
     if ref_lower in watch_index["by_reference"]:
-        candidates = _brand_filter(watch_index["by_reference"][ref_lower])
-        matches = _collect(candidates)
-        if matches:
-            if len(matches) > 1 and line_tokens:
-                matches = _disambiguate_matches(matches, line_tokens)
-            matches = _apply_ref_only_guard(matches)
-            return _ret(matches, None)
+        return _ret(_resolve_family(watch_index["by_reference"][ref_lower], tokens, brand_hint, diag), None)
 
-    # 4b. Before fuzzy: try alias/ws_code pattern match against the reconstructed
-    # line (ref + remaining tokens). Multi-word aliases like "228238a black",
-    # "228238 onyx" only hit here — _extract_ref_from_line strips them to just
-    # "228238a" which is not a key in any dict. A full alias match is
-    # authoritative and should beat a fuzzy score.
-    if line_tokens:
-        reconstructed = ref + " " + " ".join(str(t) for t in line_tokens)
-        reconstructed_lower = reconstructed.lower()
+    # 4b. Alias / ws_code literal in the reconstructed line ("228238a black").
+    if tokens:
+        reconstructed_lower = (ref + " " + " ".join(str(t) for t in tokens)).lower()
         alias_pat = watch_index.get("_alias_pattern")
         ws_pat = watch_index.get("_ws_code_pattern")
-        alias_hits: list[dict] = []
-        seen_ws: set[str] = set()
-        # ws_code literal wins outright — check it first
+        hits: list[dict] = []
         if ws_pat:
             for m in ws_pat.finditer(reconstructed_lower):
-                w = watch_index["by_ws_code"].get(m.group(0))
-                if w and w["ws_code"].lower() not in seen_ws:
-                    alias_hits.append(w)
-                    seen_ws.add(w["ws_code"].lower())
-        if not alias_hits and alias_pat:
+                hw = watch_index["by_ws_code"].get(m.group(0))
+                if hw:
+                    hits.append(hw)
+        if not hits and alias_pat:
             for m in alias_pat.finditer(reconstructed_lower):
-                for w in watch_index["by_alias"].get(m.group(0), []):
-                    if w["ws_code"].lower() not in seen_ws:
-                        alias_hits.append(w)
-                        seen_ws.add(w["ws_code"].lower())
-        if alias_hits:
-            alias_hits = _brand_filter(alias_hits)
-            if len(alias_hits) > 1:
-                alias_hits = _disambiguate_matches(alias_hits, line_tokens)
-            return _ret(alias_hits, None)
+                hits.extend(watch_index["by_alias"].get(m.group(0), []))
+        hits = _soft_brand_filter(_unique_watches(hits), brand_hint)
+        if hits:
+            if len(hits) > 1:
+                hits = _resolve_family(hits, tokens, brand_hint, diag)
+            return _ret(hits, None)
 
-    # 5. Fuzzy matching fallback (brand-filtered only)
-    # (Substring matching removed — it causes cross-brand contamination)
+    # 4c. Reference stem: '15210OR' → '15210OR.OO.A056KB.01', '228349rbr-0036' →
+    # '228349RBR'. Several variants on one stem: colour word decides, else unsure.
+    stem = ref_stem(ref_lower)
+    by_stem = watch_index.get("by_stem") or {}
+    if stem and stem in by_stem:
+        return _ret(_resolve_family(by_stem[stem], tokens, brand_hint, diag), None)
+
+    # 5. Fuzzy matching fallback — only within the same digit sequence.
     global _fuzzy_match_count
     fuzzy_results, fuzzy_score = fuzzy_match_ref(ref, watch_index, brand_hint)
     if fuzzy_results:
-        if len(fuzzy_results) > 1 and line_tokens:
-            fuzzy_results = _disambiguate_matches(fuzzy_results, line_tokens)
-        fuzzy_results = _apply_simple_conflict_guard(fuzzy_results)
+        if len(fuzzy_results) > 1:
+            fuzzy_results = _resolve_family(fuzzy_results, tokens, brand_hint, diag)
+        elif _line_has_descriptor(tokens) and _has_descriptor_conflict(fuzzy_results[0], tokens):
+            fuzzy_results = []
         if len(fuzzy_results) == 1:
             _fuzzy_match_count += 1
         return _ret(fuzzy_results, fuzzy_score)
@@ -1996,116 +2180,94 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
     return _ret([], None)
 
 
-def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = None) -> list[dict]:
+
+# Spans that are prices or dates, never references ("$126000", "35500 usdt",
+# "10-2026", "29/08/2026"). Replaced by spaces before reference scans.
+_PRICE_SPAN_RE = re.compile(
+    r'(?:hk\$|us\$|s\$|\$|€|£|¥|(?<![a-z])(?:hkd|usdt|usd|eur|gbp|chf|aed|sgd|cny|rmb|jpy)(?![a-z]))'
+    r'[ \t]*:?[ \t]*\d[\d,.]*(?:[ \t]?[kKmMwW](?![a-z]))?'
+    r'|(?<![A-Za-z0-9/\-.])\d[\d,.]*[ \t]?[kKmM]?[ \t]*(?:hkd|usdt|usd|eur|euro|gbp|chf|aed|dhs|sgd|cny|rmb|jpy|€|£|¥|\$)(?![a-z])(?![ \t]*:?[ \t]*\d[\d,.]*(?:[ \t]?[kKmM])?(?![A-Za-z0-9]))'
+    r'|(?<![A-Za-z0-9/\-.])\d+(?:[.,]\d+)?[ \t]?[kKmM](?![a-z0-9])',
+    re.IGNORECASE,
+)
+_DATE_SPAN_RE = re.compile(
+    r'(?<![A-Za-z0-9/\-.])(?:\d{1,2}[/\-.]\d{1,2}[/\-.](?:19|20)?\d{2}|\d{1,2}[/\-](?:20)?\d{2}'
+    r'|[nNwW]\d{1,2}(?:[/\-](?:20)?\d{2})?y?)(?![A-Za-z0-9/\-])'
+)
+
+
+def _mask_prices_and_dates(text: str) -> str:
+    def blank(m):
+        return " " * (m.end() - m.start())
+    text = _PRICE_SPAN_RE.sub(blank, text)
+    return _DATE_SPAN_RE.sub(blank, text)
+
+
+def match_watch(content: str, watch_index: dict, brand_hint: Optional[str] = None,
+                diag: Optional[dict] = None) -> list[dict]:
     """Match a single-line or full message content against the watch index.
-    Uses pre-compiled combined regex patterns for fast matching instead of
-    iterating every key individually. brand_hint restricts matching to a specific brand."""
-    content_lower = content.lower()
-    matches = []
-    seen_ws_codes = set()
-    brand_hint_lower = brand_hint.lower() if brand_hint else None
+    Uses pre-compiled combined regex patterns. Prices and dates are masked first so
+    '$126000' or '35500 usdt' are never read as references. The brand hint is soft:
+    it narrows matches but never turns a real match into "not in database".
+    Same-reference variants are resolved with the message's descriptor words;
+    when the variant is open, all variants are returned (diag marks it unsure)."""
+    masked = _mask_prices_and_dates(_normalize_hyphens(content))
+    content_lower = masked.lower()
+    tokens = _clean_text(masked).lower().split()
 
-    def _add_match(watch: dict):
-        ws = watch["ws_code"].lower()
-        if ws not in seen_ws_codes:
-            if brand_hint_lower and watch["brand"].lower() != brand_hint_lower:
-                return
-            matches.append(watch)
-            seen_ws_codes.add(ws)
-
-    def _apply_ref_only_guard(m: list) -> list:
-        """Guard for reference-pattern matches (no ws_code/alias/oem hit).
-        Two checks:
-        (1) Reject sole candidate when the message contains a discriminating
-            descriptor that doesn't fit ('5205R white' vs catalog '5205R Green').
-        (2) Reject sole candidate when the catalog ws_code is descriptor-qualified
-            (e.g. '7010R Purple') but the message contains NO descriptor at all
-            ('7010R 2024used 480K'). Forces such cases to needs_review/AI rather
-            than guessing the wrong colour variant.
-        """
-        if len(m) != 1:
-            return m
-        cand = m[0]
-        tokens = _clean_text(content).lower().split()
-        # Check 1: descriptor conflict
-        if _has_descriptor_conflict(cand, tokens):
-            return []
-        # Check 2: catalog ws_code has descriptor, line has none
-        ws_lower = (cand.get("ws_code") or "").lower()
-        ref_lower = (cand.get("reference") or "").lower()
-        # Treat ws_code as "descriptor-qualified" if it's longer than just the reference
-        # (e.g. '7010R Purple' vs reference '7010R'). Also catches embedded suffixes
-        # like '5205R Green' vs '5205R'.
-        ws_has_descriptor = bool(ref_lower) and ws_lower.replace(ref_lower, "", 1).strip() != ""
-        if ws_has_descriptor:
-            line_has_descriptor = any(
-                v in _DISCRIMINATING_DESCRIPTORS
-                for t in tokens for v in _resolve_descriptor(t.lower())
-            )
-            if not line_has_descriptor:
-                return []
-        return m
-
-    def _apply_simple_conflict_guard(m: list) -> list:
-        """Guard for OEM-ref matches: only descriptor-conflict check (no
-        no-descriptor-on-line refusal). OEM refs are specific enough to keep
-        the match even without colour qualifiers on the line."""
-        if len(m) == 1:
-            tokens = _clean_text(content).lower().split()
-            if _has_descriptor_conflict(m[0], tokens):
-                return []
-        return m
-
-    # Try ws_code word-boundary match (most specific). Skip guards here —
-    # a literal ws_code match is ground truth.
-    pattern = watch_index.get("_ws_code_pattern")
-    if pattern:
+    def _collect(pattern, index_key, single=False) -> list[dict]:
+        found: list[dict] = []
+        if not pattern:
+            return found
         for m in pattern.finditer(content_lower):
-            matched_key = m.group(0)
-            watch = watch_index["by_ws_code"].get(matched_key)
-            if watch:
-                _add_match(watch)
+            hit = watch_index[index_key].get(m.group(0))
+            if hit is None:
+                continue
+            if single:
+                found.append(hit)
+            else:
+                found.extend(hit)
+        return _soft_brand_filter(_unique_watches(found), brand_hint)
 
-    if matches:
+    def _by_family(matches: list[dict]) -> list[dict]:
+        """Group by reference; a single family is resolved with the tokens."""
+        refs = {(w.get("reference") or w.get("ws_code") or "").lower() for w in matches}
+        if len(refs) == 1:
+            r = next(iter(refs))
+            family = _unique_watches(matches + watch_index["by_reference"].get(r, []))
+            return _resolve_family(family, tokens, brand_hint, diag)
         return matches
 
-    # Try alias exact token match BEFORE reference. Per matching rule: a full
-    # alias match is as authoritative as a ws_code match — return immediately
-    # without any descriptor-conflict guard.
-    pattern = watch_index.get("_alias_pattern")
-    if pattern:
-        for m in pattern.finditer(content_lower):
-            matched_key = m.group(0)
-            watch_list = watch_index["by_alias"].get(matched_key, [])
-            for w in watch_list:
-                _add_match(w)
-
+    # ws_code literal (most specific). A descriptor-qualified ws_code is ground
+    # truth; a bare one that is also a shared reference goes through the family.
+    matches = _collect(watch_index.get("_ws_code_pattern"), "by_ws_code", single=True)
     if matches:
-        return matches
+        qualified = [w for w in matches
+                     if _fold(w.get("ws_code") or "") != _fold(w.get("reference") or "")]
+        if qualified:
+            return qualified
+        return _by_family(matches)
 
-    # Try OEM reference exact token match — apply only conflict guard.
-    pattern = watch_index.get("_oem_ref_pattern")
-    if pattern:
-        for m in pattern.finditer(content_lower):
-            matched_key = m.group(0)
-            watch_list = watch_index["by_oem_ref"].get(matched_key, [])
-            for w in watch_list:
-                _add_match(w)
-
+    # Alias: authoritative.
+    matches = _collect(watch_index.get("_alias_pattern"), "by_alias")
     if matches:
-        return _apply_simple_conflict_guard(matches)
+        return matches if len(matches) == 1 else _by_family(matches)
 
-    # Try reference exact token match — apply BOTH guards (descriptor conflict
-    # AND no-descriptor-on-line-when-catalog-has-one).
-    pattern = watch_index.get("_reference_pattern")
-    if pattern:
-        for m in pattern.finditer(content_lower):
-            matched_key = m.group(0)
-            watch_list = watch_index["by_reference"].get(matched_key, [])
-            for w in watch_list:
-                _add_match(w)
+    # OEM reference: conflict guard only.
+    matches = _collect(watch_index.get("_oem_ref_pattern"), "by_oem_ref")
+    if matches:
+        if len(matches) == 1:
+            if _line_has_descriptor(tokens) and _has_descriptor_conflict(matches[0], tokens):
+                return []
+            return matches
+        return _by_family(matches)
 
-    return _apply_ref_only_guard(matches)
+    # Reference.
+    matches = _collect(watch_index.get("_reference_pattern"), "by_reference")
+    if matches:
+        return _by_family(matches)
+    return []
+
 
 
 def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) -> str:
@@ -2129,20 +2291,28 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
     # Strip trailing 'y' suffix (common in dealer messages: N2/26y, N9/2025y)
     text_clean = re.sub(r'y$', '', text).strip()
 
-    # N-month only: n1, n2, n12
-    m = re.match(r'^n(\d{1,2})$', text_clean)
+    def _mm_yy(month: int, year: int) -> str:
+        # Never a future card date (and never a month that does not exist).
+        if not 1 <= month <= 12 or not 1990 <= year <= 2099:
+            return ""
+        if (year, month) > (ref_year, ref_month):
+            return ""
+        return f"{month:02d}/{year % 100:02d}{suffix}"
+
+    # N-month / W-month only (W = wood card): n1, n12, w10
+    m = re.match(r'^[nw](\d{1,2})$', text_clean)
     if m:
         month = int(m.group(1))
         year = ref_year if month <= ref_month else ref_year - 1
-        return f"{month:02d}/{year % 100:02d}{suffix}"
+        return _mm_yy(month, year)
 
-    # N-month/year: n2/26, n9/2025
-    m = re.match(r'^n(\d{1,2})[/\-](\d{2,4})$', text_clean)
+    # N-month/year: n2/26, n9/2025, w10/26, w9-2026
+    m = re.match(r'^[nw](\d{1,2})[/\-](\d{2,4})$', text_clean)
     if m:
         month = int(m.group(1))
         yr = int(m.group(2))
         year = yr if yr > 99 else 2000 + yr
-        return f"{month:02d}/{year % 100:02d}{suffix}"
+        return _mm_yy(month, year)
 
     # MM/YY or MM/YYYY: 09/25, 02/26, 02/2026
     m = re.match(r'^(\d{1,2})[/\-](\d{2,4})$', text_clean)
@@ -2150,7 +2320,7 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
         month = int(m.group(1))
         yr = int(m.group(2))
         year = yr if yr > 99 else 2000 + yr
-        return f"{month:02d}/{year % 100:02d}{suffix}"
+        return _mm_yy(month, year)
 
     for name, num in month_names.items():
         if name in text_clean:
@@ -2161,12 +2331,14 @@ def normalize_month_year(text: str, ref_month: int, ref_year: int, mode: str) ->
                 year = yr if yr > 99 else 2000 + yr
             else:
                 year = ref_year if month <= ref_month else ref_year - 1
-            return f"{month:02d}/{year % 100:02d}{suffix}"
+            return _mm_yy(month, year)
 
     # Pure 4-digit year: 2024, 2025 — return as year only, not MM/YY
     m = re.match(r'^(\d{4})$', text_clean)
     if m:
         year = int(m.group(1))
+        if year > ref_year:
+            return ""
         return f"{year}{suffix}"
 
     # Pure 2-digit number: could be a year (19=2019, 25=2025)
@@ -2182,10 +2354,13 @@ def extract_month_year_from_text(content: str) -> Optional[str]:
     """Try to find month/year references in message text.
     Handles: N2/26y, N9/2025y, N3/2026, 09/25, 2024, 19y (=2019), 2025-6 (=06/2025).
     Scans ALL occurrences for each pattern before falling through to the next one."""
+    # Prices never hold a date; refs glued to digits ('81010-11-3153') neither.
+    content = _PRICE_SPAN_RE.sub(lambda m: " " * (m.end() - m.start()), _normalize_hyphens(content))
     content_lower = content.lower()
 
-    # 1. N-month/year with 'y' suffix (most specific): N2/26y, N9/2025y, N3/2026y
-    for m in re.finditer(r'\b[nN](\d{1,2})[/\-](\d{2,4})\s*y\b', content_lower):
+    # 1. N-month/year with 'y' suffix (most specific): N2/26y, N9/2025y, N3/2026y.
+    # W-month (wood card: W10, W10/26, W9-2026) is read exactly like N.
+    for m in re.finditer(r'\b[nNwW](\d{1,2})[/\-](\d{2,4})\s*y\b', content_lower):
         start = m.start()
         if start > 0 and content[start - 1] in ('$', '€', '£'):
             continue
@@ -2193,8 +2368,8 @@ def extract_month_year_from_text(content: str) -> Optional[str]:
         year = m.group(2)
         return f"n{month}/{year}"
 
-    # 2. N-month/year without y: N2/26, N3/2026
-    for m in re.finditer(r'\b[nN](\d{1,2})[/\-](\d{2,4})\b', content_lower):
+    # 2. N-month/year without y: N2/26, N3/2026, W10/26, W9-2026
+    for m in re.finditer(r'\b[nNwW](\d{1,2})[/\-](\d{2,4})\b', content_lower):
         start = m.start()
         if start > 0 and content[start - 1] in ('$', '€', '£'):
             continue
@@ -2211,8 +2386,14 @@ def extract_month_year_from_text(content: str) -> Optional[str]:
         year = m.group(2)
         return f"n{month}/{year}"
 
+    # 3b. Full dates DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY: 29/08/2026 → 08/26
+    for m in re.finditer(r'(?<![\w/\-.])(\d{1,2})[/.\-](\d{1,2})[/.\-]((?:19|20)\d{2})(?![\w/\-])', content_lower):
+        day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 1 <= day <= 31 and 1 <= month <= 12:
+            return f"{month:02d}/{year % 100:02d}"
+
     # 4. YYYY/MM or YYYY-MM format: 2025/11, 2025-6
-    for m in re.finditer(r'\b(\d{4})[/\-](\d{1,2})\b', content_lower):
+    for m in re.finditer(r'(?<![\w/\-.])(\d{4})[/\-](\d{1,2})(?![\w/\-])', content_lower):
         year = int(m.group(1))
         month = int(m.group(2))
         # Verify it's a valid year (not a reference like 5980/60)
@@ -2220,8 +2401,8 @@ def extract_month_year_from_text(content: str) -> Optional[str]:
             yr_short = year % 100
             return f"{month:02d}/{yr_short:02d}"
 
-    # 5. N-month only: N1, N2, N10, N12 (check ALL occurrences, skip model suffixes)
-    for m in re.finditer(r'\b[nN](\d{1,2})\b', content_lower):
+    # 5. N-month only: N1, N2, N10, N12, W10 (check ALL occurrences, skip model suffixes)
+    for m in re.finditer(r'\b[nNwW](\d{1,2})\b', content_lower):
         month_val = int(m.group(1))
         if 1 <= month_val <= 12:
             # Make sure this isn't part of a model ref (preceded by /)
@@ -2231,7 +2412,7 @@ def extract_month_year_from_text(content: str) -> Optional[str]:
             return m.group(0)
 
     # 6. MM/YY or MM/YYYY format: 09/25, 02/26
-    for m in re.finditer(r'\b(\d{1,2})[/\-](\d{2,4})\b', content_lower):
+    for m in re.finditer(r'(?<![\w/\-.])(\d{1,2})[/\-](\d{2}|(?:19|20)\d{2})(?![\w/\-])', content_lower):
         start = m.start()
         if start > 0 and content[start - 1] in ('$', '€', '£'):
             continue
@@ -2284,23 +2465,28 @@ def _canonicalize_currency(cur: Optional[str]) -> Optional[str]:
     return u
 
 
+# A price number: '850k', '110.5k', '1.763 m', '1,265,000', '13.950,-'
+_PRICE_NUM = r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-zA-Z]))?)'
+
+
 def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
     """Extract price and currency from message text.
     Returns (formatted_price, currency) or (None, None).
 
-    Price formats: 387k, 1.17m, 435,000, 138,000, 162k, 1.265m
-    Currency can follow (with/without space): 387k hkd, 435,000hkd, 300k usdt
-    Currency can precede: HK$387k, $300k, €5,000
+    Price formats: 387k, 1.17m, 1.763 m, 435,000, 138,000, 162k, 1.265m
+    Currency can follow (with/without space): 387k hkd, 435,000hkd, 300k usdt, 69.000€
+    Currency can precede: HK$387k, $300k, €5,000, hkd850k, S$20k, CHF 12.5k
+    Typos are fixed first: hkld/khd/hkdd/HKKD/h kd → HKD, 'HKD//390k', '💲 149k', 'usdt ：'.
+    'hkd850k usd110.5k' = 850,000 HKD (the first quote wins; the USD that follows
+    is a second price, not a suffix of the first).
     Chinese: '97w人民币' = 97 × 10,000 RMB = 970,000 CNY.
     If $ is used by HK/CN/MO/SG sender without USD/USDT qualifier -> HKD.
     """
+    content = _normalize_price_text(content)
     # Remove serial code prefixes that can interfere with price parsing
     # SC = Serial Code, SN = Serial Number, Ref = Reference
     content = re.sub(r'\b(?:SC|SN|REF|ser\.?)\s*[\d,]+', '', content, flags=re.IGNORECASE)
 
-    # Chinese-numeric pattern used in Chinese dealer messages. Fires only as a
-    # last resort (after HKD/USDT/etc prefix and suffix patterns) so messages
-    # that list HKD first ("678.000HKD / 86.500 USDT / 60w5人民币") pick HKD.
     def _extract_chinese_price() -> tuple[Optional[str], Optional[str]]:
         m = re.search(
             r'(\d+(?:[.,]\d+)?)\s*w\s*(\d)?\s*(?:人民币|rmb|cny)',
@@ -2321,74 +2507,70 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
             pass
         return None, None
 
-    # Currency-prefixed patterns (HK$, HKD, $, €, £, RMB)
-    # Allow [:;\s] separators (dealers use "HKD:950000", "HKD 300k", "hkd563k")
-    # Case-insensitive so mixed-case tokens like "Hkd", "HkD" also match — otherwise
-    # the suffix pattern below wins on stray digits before the currency tag (e.g.
-    # "4/26 Hkd 968k" would grab "26" instead of "968k").
+    num = _PRICE_NUM
     _sep = r'[:\s]*'
     prefix_patterns = [
-        (rf'hk\${_sep}([\d,.]+[kKmM]?)', "HKD"),
-        (rf'hkd{_sep}([\d,.]+[kKmM]?)', "HKD"),  # hkd563k, HKD 300k, HKD:950000
-        (rf'usdt{_sep}([\d,.]+[kKmM]?)', "USDT"),
-        (rf'usd{_sep}([\d,.]+[kKmM]?)', "USD"),
-        (rf'(?:rmb|cny){_sep}([\d,.]+[kKmM]?)', "CNY"),
-        (rf'€{_sep}([\d,.]+[kKmM]?)', "EUR"),
-        (rf'£{_sep}([\d,.]+[kKmM]?)', "GBP"),
-        (rf'¥{_sep}([\d,.]+[kKmM]?)', "CNY"),
-        (rf'\${_sep}([\d,.]+[kKmM]?)', None),  # $ — resolved by sender country
+        (rf'hk\${_sep}{num}', "HKD"),
+        (rf'(?:us\$|u\$){_sep}{num}', "USD"),
+        (rf'(?:s\$|sg\$|sgd){_sep}{num}', "SGD"),
+        (rf'(?<![a-z])hkd{_sep}{num}', "HKD"),
+        (rf'(?<![a-z])usdt{_sep}{num}', "USDT"),
+        (rf'(?<![a-z])usd{_sep}{num}', "USD"),
+        (rf'(?<![a-z])(?:eur|euro){_sep}{num}', "EUR"),
+        (rf'(?<![a-z])gbp{_sep}{num}', "GBP"),
+        (rf'(?<![a-z])chf{_sep}{num}', "CHF"),
+        (rf'(?<![a-z])(?:aed|dhs){_sep}{num}', "AED"),
+        (rf'(?<![a-z])jpy{_sep}{num}', "JPY"),
+        (rf'(?<![a-z])(?:rmb|cny){_sep}{num}', "CNY"),
+        (rf'€{_sep}{num}', "EUR"),
+        (rf'£{_sep}{num}', "GBP"),
+        (rf'¥{_sep}{num}', "CNY"),
+        (rf'\${_sep}{num}', None),  # $ — resolved by sender country
     ]
+    suffix_re = re.compile(
+        r'(?<![A-Za-z\d./\-])' + num
+        + r'[ \t]*(hkd|usdt|usd|eur|euro|gbp|chf|aed|dhs|sgd|jpy|yen|cny|rmb|€|£|¥|\$)(?![a-z])(?![ \t]*:?[ \t]*\d[\d,.]*(?:[ \t]?[kKmM])?(?![A-Za-z0-9]))',
+        re.IGNORECASE,
+    )
 
+    # Currency-prefixed forms first (in list order), then suffixed forms.
+    best: Optional[tuple[int, str, Optional[str], str]] = None  # (pos, raw, currency, kind)
     for pattern, currency in prefix_patterns:
         m = re.search(pattern, content, re.IGNORECASE)
-        if m:
-            raw_price = _normalize_adjacent_currency_price(m.group(1).strip())
-            formatted = _format_price(raw_price)
-            if formatted:
-                # If an explicit currency tag immediately follows the matched
-                # number (e.g. "$505,000 HKD" or "$880,000 HKD Bild weggelassen"),
-                # prefer the trailing tag over the symbol's default. Dealers who
-                # write both $ and HKD mean HKD — the $ is decorative.
-                tail = content[m.end():m.end() + 10].lstrip().lower()
-                suffix_cur = None
-                for tag in ("usdt", "hkd", "usd", "eur", "gbp", "chf", "cny", "rmb"):
-                    if tail.startswith(tag):
-                        suffix_cur = _canonicalize_currency(tag)
-                        break
-                if suffix_cur:
-                    return formatted, suffix_cur
-                if currency is None:
-                    currency = _default_currency_for_country(sender_country)
-                return formatted, _canonicalize_currency(currency)
+        if not m:
+            continue
+        raw = m.group(1).strip()
+        if not _format_price(_normalize_adjacent_currency_price(raw)):
+            continue
+        # '$505,000 HKD': a trailing tag names the currency of a bare '$' — but
+        # only when that tag is not itself the prefix of the next price
+        # ('hkd850k usd110.5k' stays HKD).
+        cur = currency
+        tail = content[m.end():m.end() + 12]
+        tm = re.match(r'\s*(usdt|hkd|usd|eur|gbp|chf|cny|rmb|sgd|aed|jpy)(?![a-z])(?!\s*:?\s*\d)',
+                      tail, re.IGNORECASE)
+        if tm and (cur is None or cur in ("USD",)):
+            cur = tm.group(1)
+        if cur is None:
+            cur = _default_currency_for_country(sender_country)
+        best = (m.start(), raw, cur, "prefix")
+        break
+    if best is None:
+        for m in suffix_re.finditer(content):
+            raw = m.group(1).strip()
+            if not _format_price(_normalize_adjacent_currency_price(raw)):
+                continue
+            tag = m.group(2).lower()
+            cur = {"€": "EUR", "£": "GBP", "¥": "CNY", "euro": "EUR", "dhs": "AED", "yen": "JPY"}.get(tag, tag.upper())
+            if tag == "$":
+                cur = _default_currency_for_country(sender_country)
+            best = (m.start(), raw, cur, "suffix")
+            break
 
-    # Number followed by currency suffix: 387k hkd, 435,000hkd, 1.265m hkd, 300k usdt
-    # Also handles symbol suffixes: 17,5€, 9.8€, 125£, 450k rmb
-    # The number+k/m is always together (no space between digits and k/m).
-    # The leading lookbehind `(?<![A-Za-z])` prevents month-code bleed-through:
-    # without it, "N4,1.475M hkd" would match starting at "4,1.475M" and parse
-    # as 41,475,000 — the N4 month code joining the price via the comma.
-    # Trailing bare "$" accepted as suffix (dealers write "260000$" meaning USD/HKD
-    # depending on sender country).
-    currency_suffix = r'(?:\s*(?:hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy|cny|rmb|€|£|¥|\$))'
-    m = re.search(r'(?<![A-Za-z])([\d,.]+[kKmM]?)' + currency_suffix, content, re.IGNORECASE)
-    if m:
-        raw_price = _normalize_adjacent_currency_price(m.group(1).strip())
-        formatted = _format_price(raw_price)
+    if best:
+        formatted = _format_price(_normalize_adjacent_currency_price(best[1]))
         if formatted:
-            full = m.group(0).upper()
-            for cur in ["USDT", "HKD", "USD", "EUR", "GBP", "CHF", "AED", "SGD", "JPY", "CNY", "RMB"]:
-                if cur in full:
-                    return formatted, _canonicalize_currency(cur)
-            if '€' in m.group(0):
-                return formatted, "EUR"
-            if '£' in m.group(0):
-                return formatted, "GBP"
-            if '¥' in m.group(0):
-                return formatted, "CNY"
-            if '$' in m.group(0):
-                # trailing bare $ — resolve by sender country, same rule as prefix $
-                return formatted, _default_currency_for_country(sender_country)
-            return formatted, "USD"
+            return formatted, _canonicalize_currency(best[2])
 
     # Last-resort Chinese pattern (only fires when no standard currency found)
     cn_result = _extract_chinese_price()
@@ -2396,6 +2578,7 @@ def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[O
         return cn_result
 
     return None, None
+
 
 
 def extract_wtb_price(content: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
@@ -2442,87 +2625,200 @@ def _apply_discount(price_val: float, discount_pct: float) -> str:
     return f"{int(discounted):,}"
 
 
-def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-    """Extract price from a single watch line.
-    Handles stock list formats: '5968A N2 1.17m hkd', '126334G Black Jub N12 138,000'
-    N1, N2, N10, N12 etc. are month codes — NOT prices. Price is the numeric token
-    (optionally with k/m suffix) that is NOT preceded by N.
-    Also handles discount formats: '$565000-25%', '134000-35%'.
+# Retail-price markers (§7): "retail 93200", "rrp", "lp", "hkr 68500", "hkretail",
+# "list price", "shop".
+_RETAIL_MARKER = r'(?<![a-z])(?:hk\s?retail|hkr|retail|rrp|msrp|lp|list\s?price|shop(?:\s?price)?)(?![a-z])'
+_CUR_OPT = r'(?:[ \t]*(?:hk\$|us\$|\$|€|£|hkd|usdt|usd|eur|gbp|chf|aed|sgd|cny|rmb|jpy)[ \t]*)?'
+_MARKED_RETAIL_RE = re.compile(
+    r'\(?[ \t]*' + _RETAIL_MARKER + r'[ \t]*[:\-]?' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)' + _CUR_OPT
+    + r'(?:[ \t]*[-−][ \t]*(\d{1,2}(?:[.,]\d)?)[ \t]*%)?'
+    + r'(?:[ \t]*=[ \t]*' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)' + _CUR_OPT + r')?[ \t]*\)?',
+    re.IGNORECASE,
+)
+_UNMARKED_DISCOUNT_RE = re.compile(
+    r'(hk\$|us\$|\$|€|£|hkd|usdt|usd|eur|gbp|chf)?[ \t]*(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)[ \t]*'
+    r'(hkd|usdt|usd|eur|gbp|chf|€|£)?[ \t]*[-−][ \t]*(\d{1,2}(?:[.,]\d)?)[ \t]*%'
+    r'(?:[ \t]*=[ \t]*' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?))?',
+    re.IGNORECASE,
+)
+
+
+def _pct(raw: str) -> float:
+    return float(raw.replace(',', '.'))
+
+
+def _num(formatted: Optional[str]) -> Optional[float]:
+    try:
+        return float(formatted.replace(',', '')) if formatted else None
+    except ValueError:
+        return None
+
+
+def price_info(text: str, sender_country: Optional[str] = None, line_level: bool = True) -> dict:
+    """Price of a listing with the §7 retail / discount rules.
+
+    1. Two numbers, one marked retail ('hkd 71764 (retail 93200 -23%)') → the
+       unmarked number.
+    2. Only a marked retail price with % ('hkr 68500 -15%') → calculated (58,225);
+       a result written after '=' wins.
+    3. Number + % without marker ('$32700 -9%') → calculated for now, but flagged
+       (`needs_list_check`) so the caller compares it with the catalog list price.
+
+    Returns {"price", "currency", "discount_pct", "base_price", "needs_list_check"}.
     """
-    # Handle discount formats: $565000-25%, 134000-35%, $83000-35%
-    discount_match = re.search(
-        r'(?:[\$€£]|HK\$)?\s*([\d,.]+[kKmM]?)\s*-\s*(\d{1,2})%',
-        line, re.IGNORECASE
-    )
-    if discount_match:
-        raw_price = discount_match.group(1).strip()
-        discount_pct = float(discount_match.group(2))
-        formatted = _format_price(raw_price)
-        if formatted:
-            price_val = float(formatted.replace(',', ''))
-            discounted = _apply_discount(price_val, discount_pct)
-            # Determine currency from prefix or context
-            prefix = line[:discount_match.start()].strip()
-            if '$' in line[:discount_match.end()] or 'hk$' in line[:discount_match.end()].lower():
-                cur = "HKD" if sender_country in HKD_DEFAULT_COUNTRIES else "USD"
-            elif '€' in prefix:
-                cur = "EUR"
-            elif '£' in prefix:
-                cur = "GBP"
+    t = _normalize_price_text(text or "")
+    info = {"price": None, "currency": None, "discount_pct": None, "base_price": None,
+            "needs_list_check": False}
+
+    def _base(s: str) -> tuple[Optional[str], Optional[str]]:
+        if line_level:
+            return _extract_price_from_line_basic(s, sender_country)
+        p, c = extract_price(s, sender_country)
+        if not p:
+            p, c = _extract_price_from_line_basic(s, sender_country)
+        return p, c
+
+    marked = list(_MARKED_RETAIL_RE.finditer(t))
+    if marked:
+        remainder = t
+        for m in reversed(marked):
+            remainder = remainder[:m.start()] + " " + remainder[m.end():]
+        p, c = _base(remainder)
+        if p:
+            info.update(price=p, currency=c)
+            return info
+        m = marked[0]
+        base = _format_price(m.group(1))
+        cur = _base(m.group(0))[1] or ("HKD" if re.search(r'hk', m.group(0), re.I) else
+                                       _default_currency_for_country(sender_country))
+        if m.group(3):
+            info.update(price=_format_price(m.group(3)), currency=cur, base_price=base)
+            return info
+        if m.group(2) and base:
+            pct = _pct(m.group(2))
+            info.update(price=_apply_discount(_num(base), pct), currency=cur, discount_pct=pct, base_price=base)
+            return info
+        return info
+
+    d = _UNMARKED_DISCOUNT_RE.search(t)
+    if d:
+        base = _format_price(d.group(2))
+        if base:
+            cur_tag = (d.group(1) or d.group(3) or "").lower()
+            if cur_tag in ("$", ):
+                cur = _default_currency_for_country(sender_country)
+            elif cur_tag:
+                cur = _canonicalize_currency({"€": "EUR", "£": "GBP", "hk$": "HKD", "us$": "USD"}.get(cur_tag, cur_tag))
             else:
                 cur = _default_currency_for_country(sender_country)
-            return discounted, cur
+            pct = _pct(d.group(4))
+            if d.group(5):
+                info.update(price=_format_price(d.group(5)), currency=cur, discount_pct=pct, base_price=base)
+                return info
+            info.update(price=_apply_discount(_num(base), pct), currency=cur, discount_pct=pct,
+                        base_price=base, needs_list_check=True)
+            return info
 
-    # Try standard extraction first (handles currency prefix/suffix)
+    p, c = _base(t)
+    info.update(price=p, currency=c)
+    return info
+
+
+def apply_list_price_rule(info: dict, watch: Optional[dict], rates: Optional[dict] = None,
+                          tolerance: float = 0.06) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Rule 3 of §7 for 'number −x%' without a retail marker.
+
+    ≈ catalog list price → the number is the retail price → calculate.
+    ≈ list price − discount → the number already is the dealer price → keep.
+    Otherwise (or no list price) → review. Returns (price, currency, review_reason).
+    """
+    if not info.get("needs_list_check"):
+        return info.get("price"), info.get("currency"), None
+    base = _num(info.get("base_price"))
+    pct = info.get("discount_pct") or 0
+    cur = info.get("currency")
+    list_prices = (watch or {}).get("list_prices") or {}
+    if base is None:
+        return info.get("price"), cur, "Discount without a readable base price"
+    if list_prices:
+        from app.core.market_constants import LIST_PRICE_CURRENCY
+        from app.services import fx as fx_service
+        rates = rates or fx_service.cached_rates()
+        for country, lp in list_prices.items():
+            if not lp:
+                continue
+            lp_cur = LIST_PRICE_CURRENCY.get((country or "").upper())
+            if not lp_cur:
+                continue
+            base_in_lp = fx_service.convert(base, cur, lp_cur, rates)
+            if base_in_lp is None:
+                continue
+            if abs(base_in_lp - lp) <= lp * tolerance:
+                return info.get("price"), cur, None
+            if abs(base_in_lp - lp * (1 - pct / 100)) <= lp * tolerance:
+                return f"{int(round(base)):,}", cur, None
+    reason = (f"Discount -{pct:g}% on {int(base):,} {cur or ''}: unclear whether "
+              f"{int(base):,} is the list price").strip()
+    return info.get("price"), cur, reason
+
+
+def _extract_price_from_line_basic(line: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+    """Currency-tagged price, else the most price-like bare number on the line.
+    A bare number counts only with k/m or 4+ digits — '143k Datejust 28' is
+    143,000, never 28 (a case size)."""
+    line = _normalize_price_text(line)
     price, currency = extract_price(line, sender_country)
     if price:
         return price, currency
 
-    # Try concatenated format: 345000hkd, 142000hkd, 450000hkd, 125€, 17,5€
-    concat_pattern = r'([\d,.]+[kKmM]?)\s*(hkd|usd|usdt|eur|gbp|chf|aed|sgd|jpy|€|£)'
-    m = re.search(concat_pattern, line, re.IGNORECASE)
-    if m:
-        raw_price = _normalize_adjacent_currency_price(m.group(1))
-        cur_raw = m.group(2)
-        if cur_raw == '€':
-            currency = "EUR"
-        elif cur_raw == '£':
-            currency = "GBP"
-        else:
-            currency = cur_raw.upper()
-            if currency == "USDT":
-                currency = "USD"  # Treat USDT as USD
-        formatted = _format_price(raw_price)
-        if formatted:
-            return formatted, currency
-
-    # Try bare price at end of line (no currency specified)
-    tokens = line.strip().split()
+    tokens = _clean_text(line).strip().split()
     first_token = tokens[0].strip().rstrip('.').lower() if tokens else ""
-    for token in reversed(tokens):
-        token_clean = token.strip().rstrip('.')
-        # Skip month codes: N1, N2, N10, N12, n2/2026, etc.
-        if re.match(r'^[nN]\d', token_clean):
+    line_ref = (_extract_ref_from_line(line) or "").lower()
+    best_suffixed = None
+    best_plain = None
+    for idx, token in enumerate(tokens):
+        token_clean = token.strip().rstrip('.,;:)').lstrip('(')
+        if re.match(r'^[nNwW]\d', token_clean):
             continue
-        # Skip year tokens like 2024, 2022year, 19y, 20y
-        if re.match(r'^20[1-2]\d(?:year|y)?$', token_clean, re.IGNORECASE):
+        if re.match(r'^20[1-3]\d(?:year|y)?$', token_clean, re.IGNORECASE):
             continue
         if re.match(r'^\d{2}y$', token_clean, re.IGNORECASE):
             continue
-        # Skip non-numeric tokens
         if not re.match(r'^[\d,.]+[kKmM]?$', token_clean):
+            # '1.2 m' — number followed by a lone k/m token
+            if re.match(r'^[kKmM]$', token_clean) and idx > 0 and re.match(r'^[\d,.]+$', tokens[idx - 1]):
+                cand = tokens[idx - 1] + token_clean
+                if _format_price(cand) and best_suffixed is None:
+                    best_suffixed = cand
             continue
-        # Skip if this token matches the first token (likely a reference number)
-        if token_clean.lower() == first_token:
+        if idx == 0 and token_clean.lower() == first_token and not re.search(r'[kKmM]$', token_clean):
+            continue  # likely the reference
+        if re.search(r'[kKmM]$', token_clean):
+            if best_suffixed is None:
+                best_suffixed = token_clean
             continue
-        # Skip if this looks like a reference number (e.g., pure digits 4-6 chars matching first token pattern)
-        if re.match(r'^\d{4,6}$', token_clean) and token == tokens[0]:
+        digits = re.sub(r'\D', '', token_clean)
+        if len(digits) < 4 or token_clean.lower() == line_ref:
             continue
-        formatted = _format_price(token_clean)
-        if formatted:
-            return formatted, _default_currency_for_country(sender_country)
-
+        best_plain = token_clean  # last plain number wins (prices end the line)
+    for cand in (best_suffixed, best_plain):
+        if cand:
+            formatted = _format_price(cand)
+            if formatted:
+                return formatted, _default_currency_for_country(sender_country)
     return None, None
+
+
+def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+    """Extract price from a single watch line.
+    Handles stock list formats: '5968A N2 1.17m hkd', '126334G Black Jub N12 138,000'
+    N1, N2, N10, N12, W10 are month codes — NOT prices.
+    Retail/discount forms follow §7 (see price_info): '$565000-25%', 'hkr 68500 -15%',
+    'hkd 71764 (retail 93200 -23%)'.
+    """
+    info = price_info(line, sender_country, line_level=True)
+    return info["price"], info["currency"]
+
 
 
 def extract_all_prices(content: str, sender_country: Optional[str] = None) -> list[tuple[str, str]]:
@@ -2788,68 +3084,11 @@ _LOCATION_TOKEN_PATTERN = r'\b(?:' + '|'.join(re.escape(t) for t in _LOCATION_TO
 
 
 def extract_location_remarks(content: str, mode: str) -> Optional[str]:
-    """Extract location-preference remarks for BOTH WTS and WTB.
-
-    Matches the dealer phrases described by the user:
-      - "watch in HK"  / "watch in EU"            (WTS seller's location)
-      - "need in HK"   / "need in EU"             (WTB buyer's requested location)
-      - "worldwide", "can be worldwide"
-      - multi-country: "need in HK, US or DXB" → "Need in HK, US, AE"
-
-    Returns a normalized string like "Watch in HK" or "Need in HK, US, AE",
-    or None if no location preference is present.
-    """
-    cl = content.lower()
-
-    # Match the prefix verb ("watch in", "need in", "located in", "only in")
-    # and capture the tail up to end-of-line or a terminator. Split the tail
-    # on commas, slashes, "or", "and" and canonicalize each candidate to a code.
-    prefix_match = re.search(
-        r'\b(watch|need|looking|located|available|only)\s+(?:is\s+)?(?:in|at)\s+([^\n.;]+)',
-        cl,
-    )
-    verb_label = "Watch in"
-    tail = None
-    if prefix_match:
-        verb = prefix_match.group(1)
-        tail = prefix_match.group(2)
-        verb_label = {
-            "watch": "Watch in",
-            "located": "Watch in",
-            "available": "Watch in",
-            "need": "Need in",
-            "looking": "Need in",
-            "only": "Need in" if mode == "WTB" else "Watch in",
-        }.get(verb, "Watch in")
-
-    # Worldwide shortcut — WTB only. The buyer accepting any origin is real
-    # information; the WTS-side "Watch Worldwide" remark was removed per user
-    # request, so a seller saying "worldwide" yields no remark at all.
-    if mode == "WTB" and re.search(r'\b(?:worldwide|any\s+country|any\s+location)\b', cl):
-        return "Worldwide"
-
-    if not tail:
-        return None
-
-    # Tokenize the tail on commas/slashes/or/and
-    parts = re.split(r'[,/]|\bor\b|\band\b', tail)
-    codes: list[str] = []
-    for p in parts:
-        p = p.strip()
-        if not p:
-            continue
-        # Try to match any location token inside this part
-        m = re.search(_LOCATION_TOKEN_PATTERN, p)
-        if m:
-            code = _LOCATION_CODES.get(m.group(0))
-            # "Worldwide" is not a WTS location remark (removed per user request)
-            if code == "Worldwide" and mode != "WTB":
-                continue
-            if code and code not in codes:
-                codes.append(code)
-    if not codes:
-        return None
-    return f"{verb_label} " + ", ".join(codes)
+    """Location remarks written out (§6): 'Watch in Dubai' (WTS), 'Need in Miami,
+    New York' (WTB), 'Ready Stock' for 'ready in HK'. Places and cities come from
+    the editable list."""
+    found = remark_rules.location_remarks(content, mode, _ACTIVE_REMARK_CONFIG)
+    return ", ".join(found) if found else None
 
 
 # Backward-compatible WTB helper (kept for _build_row callers)
@@ -2857,34 +3096,11 @@ def extract_wtb_location_remarks(content: str) -> Optional[str]:
     return extract_location_remarks(content, "WTB")
 
 
-def normalize_remarks(content: str) -> str:
-    """Extract and normalize remarks from message text.
-
-    Keywords are matched with word boundaries to avoid false positives like
-    'net' matching inside 'internet'. Keys are scanned longest-first so a
-    longer phrase (e.g. 'nfc card') claims its span before a shorter
-    substring (e.g. 'nfc') would otherwise fire on the same text.
-    """
-    content_lower = content.lower()
-    consumed = [False] * len(content_lower)
-    found_remarks: list[str] = []
-
-    keys = sorted(REMARKS_MAP.keys(), key=len, reverse=True)
-    for keyword in keys:
-        normalized = REMARKS_MAP[keyword]
-        # Build a word-boundary regex for this keyword. Hyphens and spaces
-        # inside the keyword are matched literally; \b is used on each side.
-        pattern = r'(?<![a-z0-9])' + re.escape(keyword) + r'(?![a-z0-9])'
-        for m in re.finditer(pattern, content_lower):
-            # Skip if this span overlaps an already-consumed region (a
-            # longer phrase claimed it first).
-            if any(consumed[m.start():m.end()]):
-                continue
-            for i in range(m.start(), m.end()):
-                consumed[i] = True
-            if normalized not in found_remarks:
-                found_remarks.append(normalized)
-    return ", ".join(found_remarks)
+def normalize_remarks(content: str, mode: Optional[str] = None) -> str:
+    """Remarks for a listing text (appendix A rules from the admin panel plus the
+    numeric remarks built in code). Location remarks are added separately by
+    extract_location_remarks."""
+    return remark_rules.normalize_remarks(content, mode, _ACTIVE_REMARK_CONFIG, include_locations=False)
 
 
 def format_timestamp(ts: datetime) -> str:
@@ -2954,6 +3170,455 @@ def _is_stock_list_message(content: str) -> bool:
     return False
 
 
+# --- Real references and message splitting (§3) ------------------------------
+
+# Known brand reference formats — a token that is not in the catalog still counts
+# as a reference when it has one of these shapes.
+_BRAND_FORMAT_RES = [re.compile(p) for p in (
+    r'^m?\d{5,6}[a-z]{1,6}(?:-\d{4})?$',                       # Rolex / Tudor: 126610ln, 228349rbr-0036, m79360n-0001
+    r'^\d{4}(?:/\d{1,4})?[a-z]{1,3}(?:-\d{3})?$',              # Patek: 5711/1a-010, 5167a, 7118/1200r
+    r'^\d{4}/\d{1,4}[a-z]{0,3}(?:-\d{3})?$',                   # Patek: 5980/60g, 3940/1
+    r'^\d{5}[a-z]{2}(?:\.[a-z0-9]{2}\.[a-z0-9]{3,8}(?:\.\d{2})?)?$',  # AP: 15210or.oo.a056kb.01
+    r'^rm\d{2,3}(?:-\d{2})?[a-z]{0,4}$',                       # Richard Mille
+    r'^\d{4}v/\d{3}[a-z](?:-[a-z0-9]{4})?$',                   # Vacheron: 4300v/220g-h151
+    r'^\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}$',             # Omega
+    r'^w[a-z]{3}\d{4}$|^w\d{7}$|^cr[a-z]{2}\d{4}$',            # Cartier
+    r'^\d{3}\.[a-z]{2}\.\d{4}\.[a-z]{2}$',                     # Hublot
+)]
+_RM_TOKEN_RE = re.compile(r'(?<![A-Za-z0-9])RM\s?\d{2,3}(?:-\d{2})?(?![0-9])', re.IGNORECASE)
+
+
+def _token_is_known_ref(tok: str, watch_index: dict) -> bool:
+    t = tok.lower()
+    for key in ("by_ws_code", "by_reference", "by_oem_ref"):
+        if t in watch_index.get(key, {}):
+            return True
+    if ref_stem(t) in (watch_index.get("by_stem") or {}):
+        return True
+    # Bare digits ('126334') only when that digit sequence is a catalog reference.
+    if re.fullmatch(r'\d{4,6}', t) and t in (watch_index.get("by_digits") or {}):
+        return True
+    return any(rx.match(t) for rx in _BRAND_FORMAT_RES)
+
+
+def find_references(line: str, watch_index: dict) -> list[str]:
+    """Real references in one line, in order. Dates and numbers are never a
+    reference (10-2026, 06/2026, 29/08/2026, N10/26, W10, 2025, prices); a token
+    counts only when its stem is in the catalog or it matches a known brand
+    format. References are found anywhere, also after 'Ref', 'Ref.', 'ref:'."""
+    text = _normalize_hyphens(_clean_text(line))
+    masked = _mask_prices_and_dates(text)
+    refs: list[str] = []
+    for m in _RM_TOKEN_RE.finditer(masked):
+        tok = re.sub(r'\s+', '', m.group(0))
+        if tok.lower() not in [r.lower() for r in refs]:
+            refs.append(tok)
+    for m in _REF_TOKEN_RE.finditer(masked):
+        if m.start() > 0 and (masked[m.start() - 1].isalnum() or masked[m.start() - 1] in '/-.'):
+            continue
+        tok = m.group(0).rstrip('.-/')
+        if not tok or len(re.sub(r'\D', '', tok)) < 3:
+            continue
+        if re.match(r'^rm', tok, re.IGNORECASE):
+            continue  # handled above
+        if _is_non_ref_token(tok, masked[m.end():]):
+            continue
+        if not _token_is_known_ref(tok, watch_index):
+            continue
+        if tok.lower() not in [r.lower() for r in refs]:
+            refs.append(tok)
+    return refs
+
+
+def _line_has_price(line: str) -> bool:
+    t = _normalize_price_text(line)
+    if extract_price(t)[0]:
+        return True
+    return bool(re.search(r'(?<![\w.,/\-])\d+(?:[.,]\d+)?\s?[kKmM](?![a-z])', t))
+
+
+def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, list[str]]:
+    """Decide how a message splits into listings (§3).
+
+    Counts the real references first:
+      * 0 or 1 reference → the whole message is one listing ("single").
+      * several references, each with a price on its own line → line by line ("list").
+      * several references, prices on separate lines → blocks: each new reference
+        starts a new watch; lines after a block's price go to the next block
+        ("blocks").
+    Returns (kind, texts).
+    """
+    lines = [l for l in content.split('\n') if l.strip()]
+    ref_lines: dict[int, list[str]] = {}
+    distinct: list[str] = []
+    for i, line in enumerate(lines):
+        if detect_brand_header(line):
+            continue
+        refs = find_references(line, watch_index)
+        if refs:
+            ref_lines[i] = refs
+            for r in refs:
+                st = ref_stem(r)
+                if st not in distinct:
+                    distinct.append(st)
+    if len(distinct) <= 1:
+        return "single", [content]
+    if all(_line_has_price(lines[i]) for i in ref_lines):
+        return "list", [content]
+
+    blocks: list[list[str]] = []
+    cur: list[str] = []
+    carry: list[str] = []
+    cur_ref = cur_price = False
+    for i, line in enumerate(lines):
+        is_ref = i in ref_lines
+        is_price = _line_has_price(line)
+        if is_ref:
+            if cur_ref:
+                blocks.append(cur)
+                cur, carry = carry, []
+                cur_price = False
+            else:
+                cur += carry
+                carry = []
+            cur.append(line)
+            cur_ref = True
+            cur_price = cur_price or is_price
+        elif cur_ref and cur_price:
+            carry.append(line)
+        else:
+            cur.append(line)
+            cur_price = cur_price or is_price
+    if cur or carry:
+        blocks.append(cur + carry)
+    return "blocks", ["\n".join(b) for b in blocks if b]
+
+
+# --- Discarded messages (§2 tab 5) --------------------------------------------
+
+_TRIVIAL_QUERY_RE = re.compile(
+    r'^\W*(?:wtb|wts|\?+|price\s*\?*|pm|pm\s+me|pls\s+pm|dm|dm\s+me|how\s+much\s*\?*|hm\s*\?*|interested\s*\?*)\W*$',
+    re.IGNORECASE,
+)
+_NON_WATCH_RE = re.compile(
+    r'(?<![a-z])(?:spare\s+parts?|parts?\s+only|bags?|handbags?|birkin|kelly\s+\d{2}|jewel(?:le)?ry|necklace|'
+    r'earrings?|bracelet\s+only|bangle|pendant|cufflinks?|sunglasses|clasp\s+only|links?\s+only|'
+    r'crown\s+only|bezel\s+only|dial\s+only|movement\s+only|winder)(?![a-z])',
+    re.IGNORECASE,
+)
+_THANKS_RE = re.compile(r'(?<![a-z])(?:thanks?|thank\s+you|thx|tks|ty|danke|merci|grazie|cheers)(?![a-z])', re.I)
+_FEEDBACK_RE = re.compile(
+    r'(?<![a-z])(?:received|legit|recommend(?:ed)?|great\s+deal|smooth\s+deal|good\s+deal|feedback|'
+    r'trusted|reliable|arrived)(?![a-z])', re.I)
+_QUESTION_RE = re.compile(r'\?\s*$|^(?:who|what|where|when|why|how|anyone|any1|does|do|is|are|can|could)\b', re.I)
+
+
+def discard_reason_for_chat(content: str) -> str:
+    text = _clean_text(content).strip()
+    if _THANKS_RE.search(text):
+        return "Thanks"
+    if _FEEDBACK_RE.search(text):
+        return "Feedback"
+    if _QUESTION_RE.search(text):
+        return "Question"
+    return "Chat"
+
+
+# --- Unknown currencies (§8.4) ------------------------------------------------
+
+_SUPPORTED_ISO = {"USD", "USDT", "HKD", "EUR", "GBP", "CHF", "AED", "SGD", "CNY", "JPY", "RMB"}
+_OTHER_ISO = ("THB|MYR|INR|KRW|TWD|AUD|CAD|NZD|RUB|TRY|SAR|QAR|KWD|BHD|OMR|IDR|PHP|VND|BRL|MXN|ZAR|SEK|"
+              "NOK|DKK|PLN|CZK|HUF|ILS|EGP|NGN|BTC|ETH")
+_UNKNOWN_CURRENCY_RE = re.compile(
+    r'\d[\d,.]*\s?[kKmM]?\s*(' + _OTHER_ISO + r')(?![a-z])|(?<![a-z])(' + _OTHER_ISO + r')\s*:?\s*\d',
+    re.IGNORECASE,
+)
+
+
+def unknown_currency(text: str) -> Optional[str]:
+    """A currency the generator does not support ('350k THB'), else None."""
+    m = _UNKNOWN_CURRENCY_RE.search(_normalize_price_text(text or ""))
+    if not m:
+        return None
+    code = (m.group(1) or m.group(2) or "").upper()
+    return code if code and code not in _SUPPORTED_ISO else None
+
+
+# --- Row building --------------------------------------------------------------
+
+def _candidate_meta(watches: list[dict], reason: str = "", score: Optional[float] = None) -> list[dict]:
+    out = []
+    for w in watches or []:
+        if not w or not w.get("ws_code"):
+            continue
+        out.append({
+            "ws_code": w.get("ws_code") or "",
+            "brand": w.get("brand") or "",
+            "model": w.get("model") or "",
+            "reference": w.get("reference") or "",
+            "score": score,
+            "reason": reason,
+        })
+    return out
+
+
+def shortlist_candidates(text: str, watch_index: dict, brand_hint: Optional[str] = None,
+                         limit: int = 10) -> list[dict]:
+    """5–10 plausible catalog watches for a text: same reference stem / digit
+    sequence first, then alias hits, then the closest strings."""
+    found: list[dict] = []
+
+    def add(ws):
+        for w in ws:
+            if w and not any(w is f for f in found):
+                found.append(w)
+
+    refs = find_references(text, watch_index) or ([_extract_ref_from_line(text)] if _extract_ref_from_line(text) else [])
+    for r in refs:
+        rl = r.lower()
+        add(watch_index["by_reference"].get(rl, []))
+        add(watch_index["by_oem_ref"].get(rl, []))
+        add((watch_index.get("by_stem") or {}).get(ref_stem(rl), []))
+        add((watch_index.get("by_digits") or {}).get(digit_key(rl), []))
+    pat = watch_index.get("_alias_pattern")
+    if pat:
+        for m in pat.finditer(text.lower()):
+            add(watch_index["by_alias"].get(m.group(0), []))
+    if len(found) < limit and refs and watch_index.get("fuzzy_by_digits"):
+        # Closest strings among references that share the first digits — keeps
+        # the scan small on a large catalog.
+        for r in refs[:2]:
+            dk = digit_key(r)
+            if len(dk) < 3:
+                continue
+            prefix_index = watch_index.get("fuzzy_by_prefix3")
+            if prefix_index is not None:
+                choices = list(prefix_index.get(dk[:3], []))
+            else:
+                choices = [c for key, lst in watch_index["fuzzy_by_digits"].items() if key[:3] == dk[:3] for c in lst]
+            if brand_hint:
+                bh = brand_hint.lower()
+                choices = [c for c in choices if (c[1].get("brand") or "").lower() == bh] or choices
+            if not choices:
+                continue
+            for _s, _score, idx in process.extract(r.lower(), [c[0] for c in choices], scorer=fuzz.WRatio, limit=15):
+                if _score >= 70:
+                    add([choices[idx][1]])
+    if brand_hint:
+        bh = brand_hint.lower()
+        found.sort(key=lambda w: (w.get("brand") or "").lower() != bh)
+    return found[:limit]
+
+
+def _resolve_month_year(content: str, mode: str, ref_month: int, ref_year: int) -> tuple[Optional[str], str]:
+    """Resolve month/year for a listing. Returns (raw_month_year, normalized).
+
+    Never fabricates a warranty date from the message timestamp. W-month codes
+    (wood card) count like N-month codes. Future dates are rejected.
+    """
+    raw_month_year = extract_month_year_from_text(content)
+    if raw_month_year:
+        normalized = normalize_month_year(raw_month_year, ref_month, ref_year, mode)
+        if normalized:
+            return raw_month_year, normalized
+
+    year = extract_year_from_line(content)
+    if year and int(year) <= ref_year:
+        suffix = "+" if mode == "WTB" else ""
+        return None, f"{year}{suffix}"
+    return None, ""
+
+
+def _ctx_base_row(ctx: dict, watch: Optional[dict], brand: str = "") -> dict:
+    return {
+        "Nachrichten Art": ctx["mode"],
+        "Marke": (watch or {}).get("brand") or brand or "",
+        "WS-Code": (watch or {}).get("ws_code") or "",
+        "Monat/Jahr": "",
+        "Standort": "",
+        "Zustand": "",
+        "Bemerkungen": "",
+        "Preis": "",
+        "Nummer": ctx["phone"] or ctx["sender"],
+        "Gruppe": ctx["group_name"],
+        "Nachricht gepostet am": format_timestamp(ctx["timestamp"]),
+    }
+
+
+def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, line_level: bool,
+                 section_condition: Optional[str] = None, location_text: Optional[str] = None,
+                 extra_remarks: str = "") -> list[str]:
+    """Fill date, location, condition, remarks and price. Returns review reasons
+    raised by the price (§7 rule 3, unknown currency, brand minimum)."""
+    mode = ctx["mode"]
+    reasons: list[str] = []
+    _raw, month_year = _resolve_month_year(scope, mode, ctx["ref_month"], ctx["ref_year"])
+    row["Monat/Jahr"] = month_year
+    row["Standort"] = (extract_location(location_text or scope, ctx["sender_country"], mode)
+                       if not line_level else (ctx["sender_country"] or "")) or ""
+    if line_level:
+        row["Zustand"] = extract_condition_from_line(scope, section_condition, mode) or ""
+    else:
+        row["Zustand"] = extract_condition(scope, mode) or ""
+
+    remarks = normalize_remarks(scope, mode)
+    loc = extract_location_remarks(location_text or scope, mode)
+    parts = [p for p in (remarks, loc, extra_remarks) if p]
+    row["Bemerkungen"] = "; ".join(parts)
+
+    if mode == "WTB":
+        info = {"price": None, "currency": None}
+        p, c = extract_wtb_price(scope, ctx["sender_country"])
+        if not p:
+            info = price_info(scope, ctx["sender_country"], line_level=False)
+            p, c = info["price"], info["currency"]
+        price, currency, rule_reason = p, c, None
+    else:
+        info = price_info(scope, ctx["sender_country"], line_level=line_level)
+        price, currency, rule_reason = apply_list_price_rule(info, watch, ctx.get("rates"))
+    if rule_reason:
+        reasons.append(rule_reason)
+
+    unknown = unknown_currency(scope)
+    row["_currency_unknown"] = bool(unknown)
+    if unknown:
+        reasons.append(f"Unknown currency {unknown}")
+    if mode == "WTS" and not price and not unknown:
+        reasons.append("No price found for WTS post")
+    if price and watch:
+        ok, why = validate_price(price, watch.get("brand"))
+        if not ok:
+            reasons.append(why)
+    row["Preis"] = f"{price} {currency}" if price and currency else (price or "")
+    return reasons
+
+
+def _finish_row(row: dict, ctx: dict, scope: str, *, reason: str = "", candidates=None,
+                extracted_ref: Optional[str] = None, discard_reason: Optional[str] = None) -> dict:
+    row["Original Text"] = scope.strip()[:500]
+    if reason:
+        row["Review Reason"] = reason
+        row["_review_reason"] = reason
+    if extracted_ref:
+        row["Extracted Ref"] = extracted_ref
+    row["_original_content"] = scope.strip()
+    row["_message_text"] = ctx["content"]
+    row["_attachments"] = list(ctx.get("attachments") or [])
+    row["_msg_index"] = ctx["msg_index"]
+    row["_sender_phone"] = ctx["phone"]
+    row["_timestamp"] = ctx["timestamp"].isoformat() if isinstance(ctx["timestamp"], datetime) else str(ctx["timestamp"])
+    row["_group"] = ctx["group_name"]
+    row["_candidates"] = list(candidates or [])
+    row["_discard_reason"] = discard_reason
+    row.setdefault("_currency_unknown", False)
+    return row
+
+
+def _discard_row(ctx: dict, text: str, reason: str) -> dict:
+    row = _ctx_base_row(ctx, None)
+    return _finish_row(row, ctx, text, reason=reason, discard_reason=reason)
+
+
+def _route_listing(
+    buckets: dict, ctx: dict, scope: str, matches: list[dict], diag: dict, *,
+    line_level: bool, extracted_ref: Optional[str], brand_hint: Optional[str],
+    section_condition: Optional[str] = None, fuzzy_score: Optional[int] = None,
+    location_text: Optional[str] = None, extra_remarks: str = "",
+) -> None:
+    """Put one listing into its bucket: matched, needs_review, not_in_database,
+    aftermarket or discarded."""
+    mode = ctx["mode"]
+    watch_index = ctx["watch_index"]
+    review: list[str] = []
+    if not ctx["phone"]:
+        review.append("No phone number (contact name used)")
+
+    # Aftermarket is never imported — even if only one part is aftermarket.
+    am = remark_rules.is_aftermarket(scope, _ACTIVE_REMARK_CONFIG)
+    if am:
+        watch = matches[0] if len(matches) == 1 and not diag.get("unsure") else None
+        row = _ctx_base_row(ctx, watch, brand_hint or "")
+        _fill_fields(row, scope, ctx, watch, line_level=line_level, section_condition=section_condition,
+                     location_text=location_text, extra_remarks=extra_remarks)
+        buckets["aftermarket"].append(_finish_row(
+            row, ctx, scope, reason=f"Aftermarket ({am})", extracted_ref=extracted_ref,
+            candidates=_candidate_meta(matches[:3], "text match")))
+        return
+
+    if not matches:
+        if mode == "WTB" and not extracted_ref:
+            buckets["discarded"].append(_discard_row(ctx, scope, "WTB without reference or model"))
+            return
+        if _NON_WATCH_RE.search(scope):
+            buckets["discarded"].append(_discard_row(ctx, scope, "Spare part, bag or jewellery"))
+            return
+        row = _ctx_base_row(ctx, None, brand_hint or "")
+        _fill_fields(row, scope, ctx, None, line_level=line_level, section_condition=section_condition,
+                     location_text=location_text, extra_remarks=extra_remarks)
+        reason = "No matching watch found in database"
+        if not ctx["phone"]:
+            reason += "; no phone number (contact name used)"
+        cands = _candidate_meta(shortlist_candidates(scope, watch_index, brand_hint, limit=3), "similar text")
+        buckets["not_in_database"].append(_finish_row(
+            row, ctx, scope, reason=reason, extracted_ref=extracted_ref, candidates=cands))
+        return
+
+    unsure = len(matches) > 1 or bool(diag.get("unsure"))
+    watch = None if unsure else matches[0]
+    if unsure:
+        review.append(diag.get("reason") or "Ambiguous match: " + ", ".join(
+            w["ws_code"] for w in matches if w.get("ws_code")))
+        # Keep the classic marker the image pass and AI verify read.
+        if "Ambiguous match:" not in review[-1]:
+            review.append("Ambiguous match: " + ", ".join(w["ws_code"] for w in matches if w.get("ws_code")))
+    if fuzzy_score is not None and fuzzy_score < FUZZY_CONFIDENT_THRESHOLD:
+        review.append(
+            f"Similar reference — please verify ({fuzzy_score}% match: "
+            + ", ".join(w["ws_code"] for w in matches if w.get("ws_code")) + ")")
+
+    brand = matches[0].get("brand") if len({(w.get("brand") or "") for w in matches}) == 1 else (brand_hint or "")
+    row = _ctx_base_row(ctx, watch, brand or "")
+    if watch is None and fuzzy_score is not None and len(matches) == 1:
+        row["WS-Code"] = matches[0]["ws_code"]
+        row["Marke"] = matches[0]["brand"]
+    review += _fill_fields(row, scope, ctx, watch or (matches[0] if len(matches) == 1 else None),
+                           line_level=line_level, section_condition=section_condition,
+                           location_text=location_text, extra_remarks=extra_remarks)
+
+    cands = _candidate_meta(matches[:4], diag.get("reason") or "text match",
+                            score=float(fuzzy_score) if fuzzy_score is not None else None)
+    if review:
+        if len(cands) < 2:
+            extra = [w for w in shortlist_candidates(scope, watch_index, brand_hint, limit=4)
+                     if w.get("ws_code") not in {c["ws_code"] for c in cands}]
+            cands += _candidate_meta(extra[: 3 - len(cands)], "similar reference")
+        buckets["needs_review"].append(_finish_row(
+            row, ctx, scope, reason="; ".join(review), extracted_ref=extracted_ref, candidates=cands[:4]))
+    else:
+        buckets["matched"].append(_finish_row(row, ctx, scope, extracted_ref=extracted_ref, candidates=cands[:1]))
+
+
+def _match_listing_text(text: str, watch_index: dict, brand_hint: Optional[str]) -> tuple[list[dict], dict, Optional[int], Optional[str]]:
+    """Match a single listing text (whole message or block).
+    Returns (matches, diag, fuzzy_score, extracted_ref)."""
+    diag: dict = {}
+    refs = find_references(text, watch_index)
+    extracted = refs[0] if refs else _extract_ref_from_line(text.split('\n')[0]) if text else None
+    matches = match_watch(text, watch_index, brand_hint=brand_hint, diag=diag)
+    fuzzy_score = None
+    if not matches and refs:
+        line = next((l for l in text.split('\n') if refs[0].lower() in _normalize_hyphens(l).lower()), text)
+        cleaned = _normalize_hyphens(_clean_text(line))
+        pos = cleaned.lower().find(refs[0].lower())
+        tokens = (cleaned[pos + len(refs[0]):] if pos >= 0 else cleaned).split()
+        # Descriptor words on other lines of the block count too.
+        tokens += [t for l in text.split('\n') if l is not line for t in _clean_text(l).split()]
+        diag = {}
+        matches, fuzzy_score = match_watch_by_ref(refs[0], watch_index, brand_hint=brand_hint,
+                                                  line_tokens=tokens, return_fuzzy_score=True, diag=diag)
+    return matches, diag, fuzzy_score, extracted
+
+
 def parse_stock_list(
     content: str,
     mode: str,
@@ -2965,30 +3630,32 @@ def parse_stock_list(
     ref_year: int,
     phone: Optional[str],
     sender_country: Optional[str],
+    ctx: Optional[dict] = None,
+    buckets: Optional[dict] = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
-    """Parse a structured stock list message into individual watch rows.
-    Returns (matched_rows, needs_review_rows, not_in_database_rows).
+    """Parse a line-by-line stock list (one watch per line, price on the same line).
+    Returns (matched_rows, needs_review_rows, not_in_database_rows); aftermarket and
+    discarded rows go into `buckets` when given.
 
-    - matched_rows: confident matches with all required info.
-    - needs_review_rows: rows that have a likely/ambiguous match but need a human
-      to confirm (ambiguous between variants, low-confidence fuzzy, missing info).
-    - not_in_database_rows: rows where no matching watch was found at all —
-      typically candidates for catalog additions.
+    A brand header ('Patek Used ✨✨') sets the brand for the following lines; a
+    line that starts with a brand and a reference ('AP 15407ST …') is a watch line
+    whose brand applies to that line only.
     """
-    matched_rows = []
-    needs_review_rows = []
-    not_in_database_rows = []
+    if ctx is None:
+        ctx = {"mode": mode, "watch_index": watch_index, "sender": sender, "timestamp": timestamp,
+               "group_name": group_name, "ref_month": ref_month, "ref_year": ref_year, "phone": phone,
+               "sender_country": sender_country, "attachments": [], "msg_index": -1, "content": content,
+               "rates": None}
+    own_buckets = buckets is None
+    if buckets is None:
+        buckets = _new_buckets()
+    start_counts = {k: len(v) for k, v in buckets.items()}
 
     current_brand = None
     section_condition = None
-
-    # Message-level location remarks apply to every row in the stock list
-    # (dealers usually write "Watch in HK" once at the top, not per line).
     msg_location_remarks = extract_location_remarks(content, mode) or ""
 
-    # Pre-process: merge split lines where reference is on one line and price/year
-    # on the next (common in AP/PP stock lists). Pattern: line with ref but no price,
-    # followed by 1-2 lines with price/year but no ref.
+    # Merge split lines: reference on one line, price/year on the next 1-3 lines.
     raw_lines = content.split('\n')
     lines = []
     i = 0
@@ -2997,9 +3664,7 @@ def parse_stock_list(
         if stripped_cur:
             ref_cur = _extract_ref_from_line(stripped_cur)
             price_cur, _ = extract_price_from_line(stripped_cur, sender_country) if ref_cur else (None, None)
-
             if ref_cur and not price_cur:
-                # Look ahead up to 3 lines for price/year continuation
                 merged = stripped_cur
                 consumed = 0
                 for look in range(1, 4):
@@ -3008,17 +3673,14 @@ def parse_stock_list(
                     nxt = raw_lines[i + look].strip()
                     if not nxt:
                         continue
-                    # Stop if next line has its own ref or is a brand header
                     if _extract_ref_from_line(nxt) or detect_brand_header(nxt):
                         break
                     price_nxt, _ = extract_price_from_line(nxt, sender_country)
-                    year_nxt = extract_year_from_line(nxt)
+                    year_nxt = extract_year_from_line(nxt) or extract_month_year_from_text(nxt)
                     merged += " " + nxt
                     consumed = look
-                    # Stop once we've gathered a price (no need to pull in more)
                     if price_nxt:
                         break
-                    # Gather continuation lines with only year/condition info
                     if not year_nxt and not re.search(r'\b(?:used|new|unworn|nos|bnib|full\s*set|brand\s*new)\b', nxt, re.IGNORECASE):
                         break
                 if consumed > 0:
@@ -3033,204 +3695,59 @@ def parse_stock_list(
         if not stripped:
             continue
 
-        # Check for brand header
         brand = detect_brand_header(stripped)
         if brand is not None:
             current_brand = brand
             section_condition = _detect_section_condition(stripped, mode)
             continue
-
-        # Check if it's a section header (condition group, separator, etc.)
         if _is_section_header(stripped):
-            # Could be a condition sub-header like "New Fullset" or "Used Fullset"
             cond = _detect_section_condition(stripped, mode)
             if cond:
                 section_condition = cond
             continue
 
-        # Try to extract a reference from this line
         ref = _extract_ref_from_line(stripped)
-        if not ref:
-            continue
-
-        # Skip SOLD lines within stock lists
         if re.search(r'\bsold\b', stripped, re.IGNORECASE):
             continue
 
-        # This is a watch line — try to match it
-        review_reasons = []
-        if not phone:
-            review_reasons.append("No phone number (contact name used)")
-
-        # Get remaining tokens after the reference for disambiguation
-        # Use cleaned line (emoji-free) for token extraction
-        cleaned_line = _clean_text(stripped).strip()
-        ref_pos = cleaned_line.lower().find(ref.lower())
-        if ref_pos >= 0:
-            remaining = cleaned_line[ref_pos + len(ref):].strip()
-        else:
-            remaining = cleaned_line[len(ref):].strip()
-        line_tokens = remaining.split() if remaining else []
-
-        watch_matches, fuzzy_score = match_watch_by_ref(
-            ref, watch_index, brand_hint=current_brand,
-            line_tokens=line_tokens, return_fuzzy_score=True,
-        )
-
-        if len(watch_matches) == 0:
-            # Also try full-line matching (no fuzzy — this only exact-matches via
-            # pre-compiled patterns, so no fuzzy score to worry about here).
-            watch_matches = match_watch(stripped, watch_index, brand_hint=current_brand)
-            if len(watch_matches) > 1 and line_tokens:
-                watch_matches = _disambiguate_matches(watch_matches, line_tokens)
-                # After disambiguation, if a single survivor was picked, re-apply
-                # the descriptor-conflict guard. Disambiguation may resolve to one
-                # variant whose descriptor doesn't match the line's tokens.
-                if len(watch_matches) == 1 and _has_descriptor_conflict(watch_matches[0], line_tokens):
-                    watch_matches = []
-
-        if len(watch_matches) == 0:
-            # No match at all — goes to not_in_database, not needs_review.
-            # Build partial row. When no date tokens are present on the line,
-            # leave Monat/Jahr empty rather than fabricating it from the
-            # message timestamp (matches the WTB parsing rule: never hallucinate
-            # a warranty date the dealer did not write).
-            line_condition = extract_condition_from_line(stripped, section_condition, mode)
-            raw_month_year = extract_month_year_from_text(stripped)
-            year_str = extract_year_from_line(stripped)
-            if raw_month_year:
-                month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode)
-            elif year_str:
-                month_year = year_str
-            else:
-                month_year = ""
-
-            price, currency = extract_price_from_line(stripped, sender_country)
-            remarks = normalize_remarks(stripped)
-            if msg_location_remarks:
-                remarks = f"{remarks}; {msg_location_remarks}" if remarks else msg_location_remarks
-            price_str = f"{price} {currency}" if price and currency else (price or "")
-
-            nid_reason = "No matching watch found in database"
-            if not phone:
-                nid_reason = f"{nid_reason}; no phone number (contact name used)"
-            row = {
-                "Nachrichten Art": mode,
-                "Marke": current_brand or "",
-                "WS-Code": "",
-                "Monat/Jahr": month_year,
-                "Standort": sender_country or "",
-                "Zustand": line_condition or "",
-                "Bemerkungen": remarks,
-                "Preis": price_str,
-                "Nummer": phone or sender,
-                "Gruppe": group_name,
-                "Nachricht gepostet am": format_timestamp(timestamp),
-                "Review Reason": nid_reason,
-                "Original Text": stripped[:500],
-                "Extracted Ref": ref,
-                "_review_reason": nid_reason,
-                "_original_content": stripped,
-            }
-            not_in_database_rows.append(row)
+        line_brand = detect_brand_from_content(stripped) or current_brand
+        if not ref:
+            # A nickname / alias line with a price still is a listing ("Pepsi jub N3 150k").
+            if not _line_has_price(stripped):
+                continue
+            diag: dict = {}
+            alias_hits = match_watch(stripped, watch_index, brand_hint=line_brand, diag=diag)
+            if not alias_hits:
+                continue
+            _route_listing(buckets, ctx, stripped, alias_hits, diag, line_level=True, extracted_ref=None,
+                           brand_hint=line_brand, section_condition=section_condition,
+                           location_text=content, extra_remarks="")
             continue
 
-        # Low-confidence fuzzy hit — we found a *similar* reference but aren't
-        # sure it's the right one. Route to needs_review with an explanation.
-        if fuzzy_score is not None and fuzzy_score < FUZZY_CONFIDENT_THRESHOLD:
-            ws_codes = ", ".join(w["ws_code"] for w in watch_matches if w["ws_code"])
-            review_reasons.append(
-                f"Similar reference — please verify ({fuzzy_score}% match: {ws_codes})"
-            )
+        cleaned_line = _normalize_hyphens(_clean_text(stripped)).strip()
+        ref_pos = cleaned_line.lower().find(ref.lower())
+        remaining = cleaned_line[ref_pos + len(ref):].strip() if ref_pos >= 0 else cleaned_line[len(ref):].strip()
+        line_tokens = remaining.split() if remaining else []
 
-        if len(watch_matches) > 1:
-            ws_codes = ", ".join(w["ws_code"] for w in watch_matches if w["ws_code"])
-            review_reasons.append(f"Ambiguous match: {ws_codes}")
+        diag = {}
+        watch_matches, fuzzy_score = match_watch_by_ref(
+            ref, watch_index, brand_hint=line_brand,
+            line_tokens=line_tokens, return_fuzzy_score=True, diag=diag,
+        )
+        if not watch_matches:
+            diag = {}
+            watch_matches = match_watch(stripped, watch_index, brand_hint=line_brand, diag=diag)
 
-        watch = watch_matches[0]
+        _route_listing(buckets, ctx, stripped, watch_matches, diag, line_level=True, extracted_ref=ref,
+                       brand_hint=line_brand, section_condition=section_condition, fuzzy_score=fuzzy_score,
+                       location_text=None,
+                       extra_remarks=msg_location_remarks)
 
-        line_condition = extract_condition_from_line(stripped, section_condition, mode)
-        raw_month_year = extract_month_year_from_text(stripped)
-        year_str = extract_year_from_line(stripped)
-        if raw_month_year:
-            month_year = normalize_month_year(raw_month_year, ref_month, ref_year, mode)
-        elif year_str:
-            month_year = year_str
-        else:
-            # No date on the line — don't fabricate one from the message timestamp.
-            month_year = ""
-
-        price, currency = extract_price_from_line(stripped, sender_country)
-        remarks = normalize_remarks(stripped)
-        if msg_location_remarks:
-            remarks = f"{remarks}; {msg_location_remarks}" if remarks else msg_location_remarks
-
-        if mode == "WTS" and not price:
-            review_reasons.append("No price found for WTS post")
-
-        # Validate price against brand minimums
-        if price:
-            price_valid, price_reason = validate_price(price, watch["brand"])
-            if not price_valid:
-                review_reasons.append(price_reason)
-
-        price_str = f"{price} {currency}" if price and currency else (price or "")
-
-        if review_reasons:
-            row = {
-                "Nachrichten Art": mode,
-                "Marke": watch["brand"],
-                "WS-Code": watch["ws_code"],
-                "Monat/Jahr": month_year,
-                "Standort": sender_country or "",
-                "Zustand": line_condition or "",
-                "Bemerkungen": remarks,
-                "Preis": price_str,
-                "Nummer": phone or sender,
-                "Gruppe": group_name,
-                "Nachricht gepostet am": format_timestamp(timestamp),
-                "Review Reason": "; ".join(review_reasons),
-                "Original Text": stripped[:500],
-                "Extracted Ref": ref,
-            }
-            needs_review_rows.append(row)
-        else:
-            matched_rows.append({
-                "Nachrichten Art": mode,
-                "Marke": watch["brand"],
-                "WS-Code": watch["ws_code"],
-                "Monat/Jahr": month_year,
-                "Standort": sender_country or "",
-                "Zustand": line_condition or "",
-                "Bemerkungen": remarks,
-                "Preis": price_str,
-                "Nummer": phone or sender,
-                "Gruppe": group_name,
-                "Nachricht gepostet am": format_timestamp(timestamp),
-                "Original Text": stripped[:500],
-            })
-
-    return matched_rows, needs_review_rows, not_in_database_rows
-
-
-def _resolve_month_year(content: str, mode: str, ref_month: int, ref_year: int) -> tuple[Optional[str], str]:
-    """Resolve month/year for a message.
-    Returns (raw_month_year, normalized_month_year).
-
-    Neither WTS nor WTB fabricates a warranty date from the message timestamp —
-    that would stamp every dateless listing with the export month. If no
-    month/year token is present, try a bare-year fallback (WTB adds `+`), else
-    return empty.
-    """
-    raw_month_year = extract_month_year_from_text(content)
-    if raw_month_year:
-        return raw_month_year, normalize_month_year(raw_month_year, ref_month, ref_year, mode)
-
-    year = extract_year_from_line(content)
-    if year:
-        suffix = "+" if mode == "WTB" else ""
-        return None, f"{year}{suffix}"
-    return None, ""
+    if own_buckets:
+        return buckets["matched"], buckets["needs_review"], buckets["not_in_database"]
+    return (buckets["matched"][start_counts["matched"]:],
+            buckets["needs_review"][start_counts["needs_review"]:],
+            buckets["not_in_database"][start_counts["not_in_database"]:])
 
 
 def _find_watch_line(content: str, watch: Optional[dict]) -> str:
@@ -3279,71 +3796,151 @@ def _build_row(
     reason: str = "",
     attachments: Optional[list[str]] = None,
 ) -> dict:
-    """Build a CSV row dict (used for needs_review entries)."""
-    raw_month_year, month_year = _resolve_month_year(content, mode, ref_month, ref_year)
-    location = extract_location(content, sender_country, mode)
-    condition = extract_condition(content, mode, raw_month_year, ref_month, ref_year)
-    if mode == "WTB":
-        price, currency = extract_wtb_price(content, sender_country)
-    else:
-        price, currency = extract_price(content, sender_country)
-    remarks = normalize_remarks(content)
-    # Location-preference remarks apply to BOTH WTS and WTB per user rules.
-    location_remarks = extract_location_remarks(content, mode)
-    if location_remarks:
-        remarks = f"{remarks}; {location_remarks}" if remarks else location_remarks
-
-    price_str = f"{price} {currency}" if price and currency else (price or "")
-
-    row = {
-        "Nachrichten Art": mode,
-        "Marke": watch["brand"] if watch else "",
-        "WS-Code": watch["ws_code"] if watch else "",
-        "Monat/Jahr": month_year,
-        "Standort": location or "",
-        "Zustand": condition or "",
-        "Bemerkungen": remarks,
-        "Preis": price_str,
-        "Nummer": phone or sender,
-        "Gruppe": group_name,
-        "Nachricht gepostet am": format_timestamp(timestamp),
-    }
+    """Build a CSV row dict for one listing text (kept for callers outside the main loop)."""
+    ctx = {"mode": mode, "watch_index": {}, "sender": sender, "timestamp": timestamp,
+           "group_name": group_name, "ref_month": ref_month, "ref_year": ref_year, "phone": phone,
+           "sender_country": sender_country, "attachments": attachments or [], "msg_index": -1,
+           "content": content, "rates": None}
+    row = _ctx_base_row(ctx, watch)
+    _fill_fields(row, content, ctx, watch, line_level=False)
+    _finish_row(row, ctx, _find_watch_line(content, watch), reason=reason)
     row["Review Reason"] = reason
-    row["Original Text"] = _find_watch_line(content, watch)[:500]
-    # Internal fields for AI matching pass (removed before CSV output)
     row["_review_reason"] = reason
     row["_original_content"] = content
-    row["_attachments"] = attachments or []
     return row
 
 
+def _price_values_in_text(text: str) -> set[int]:
+    """Every price the text actually states (currency-tagged, k/m, or a bare
+    4+ digit number that is not part of a reference)."""
+    t = _normalize_price_text(text or "")
+    values: set[int] = set()
+    for p, _c in extract_all_prices(t):
+        v = _num(p)
+        if v:
+            values.add(int(round(v)))
+    for fn in (extract_price, _extract_price_from_line_basic):
+        for line in [t] + t.split("\n"):
+            p, _c = fn(line)
+            v = _num(p)
+            if v:
+                values.add(int(round(v)))
+    info = price_info(t)
+    for key in ("price", "base_price"):
+        v = _num(info.get(key))
+        if v:
+            values.add(int(round(v)))
+    masked_refs = t
+    for line in t.split("\n"):
+        r = _extract_ref_from_line(line)
+        if r:
+            masked_refs = masked_refs.replace(r, " ")
+    for m in re.finditer(r'(?<![\w/\-.])(\d[\d,.]*(?:\s?[kKmM](?![a-z]))?)(?![\w/\-])', masked_refs):
+        raw = m.group(1)
+        if len(re.sub(r'\D', '', raw)) < 4 and not re.search(r'[kKmM]$', raw):
+            continue
+        v = _num(_format_price(raw))
+        if v:
+            values.add(int(round(v)))
+    return values
+
+
+def price_in_text(price: str, text: str) -> bool:
+    """True when `price` (e.g. '177,000') is one of the prices written in `text`."""
+    v = _num(_format_price(str(price)) or str(price))
+    if not v:
+        return False
+    return int(round(v)) in _price_values_in_text(text)
+
+
 def _rows_to_csv(rows: list[dict]) -> str:
-    """Convert list of row dicts to CSV string."""
+    """Convert list of row dicts to CSV string (internal '_' fields are skipped)."""
     if not rows:
         return ""
     output = io.StringIO()
     all_keys = list(CSV_HEADERS)
     for row in rows:
         for key in row:
-            if key not in all_keys:
+            if key not in all_keys and not key.startswith("_"):
                 all_keys.append(key)
-    writer = csv.DictWriter(output, fieldnames=all_keys)
+    writer = csv.DictWriter(output, fieldnames=all_keys, extrasaction="ignore")
     writer.writeheader()
     for row in rows:
         writer.writerow(row)
     return output.getvalue()
 
 
+def canonical_month_year(my: str) -> str:
+    """'10/26' = 'N10/2026' = 'W10/26' = '10/2026' → '10/26' (for duplicate checks)."""
+    t = (my or "").strip().lower()
+    plus = t.endswith("+")
+    t = t.rstrip("+").rstrip("y")
+    m = re.match(r'^[nw]?(\d{1,2})[/\-.](\d{2}|\d{4})$', t)
+    if m:
+        out = f"{int(m.group(1)):02d}/{int(m.group(2)) % 100:02d}"
+        return out + ("+" if plus else "")
+    return (my or "").strip().lower()
+
+
 def _make_dedup_key(ws_code: str, phone: str, price: str, currency: str, month_year: str) -> str:
     """Generate a dedup key from order fields.
-    Key: ws_code|phone|price_numeric|currency|month_year (all normalized)."""
+    Key: ws_code|phone|price_numeric|currency|month_year (all normalized; dates
+    are normalised first so 10/26, N10/2026 and W10 are one listing)."""
     ws = ws_code.strip().lower() if ws_code else ""
     ph = re.sub(r'[\s\-\(\)]', '', phone).strip() if phone else ""
-    # Extract numeric price only
     pr = re.sub(r'[^\d]', '', price.split()[0]) if price else ""
     cur = currency.strip().upper() if currency else ""
-    my = month_year.strip().lower() if month_year else ""
+    my = canonical_month_year(month_year)
     return f"{ws}|{ph}|{pr}|{cur}|{my}"
+
+
+BUCKETS = ("matched", "matched_via_image", "needs_review", "not_in_database", "discarded", "aftermarket")
+
+
+def _new_buckets() -> dict[str, list[dict]]:
+    return {k: [] for k in BUCKETS}
+
+
+# Photos are attached to a text only when it is clear (§5): same sender, at most
+# two minutes apart, nothing in between, and the text holds exactly one watch.
+PHOTO_ATTACH_WINDOW_SECONDS = 120
+
+
+def attach_photos(messages: list[dict]) -> list[dict]:
+    """Move photo-only messages onto the neighbouring caption of the same sender.
+
+    A photo-only message is attached to the next message (or, failing that, the
+    previous one) only when it comes from the same sender within two minutes with
+    nothing in between. Photo-only messages that were attached are flagged with
+    `_photo_attached` so the main loop skips them.
+    """
+    def _is_photo_only(m):
+        return bool(m.get("attachments")) and not _strip_media_markers(m.get("content") or "").strip()
+
+    def _close(a, b):
+        try:
+            return abs((a["timestamp"] - b["timestamp"]).total_seconds()) <= PHOTO_ATTACH_WINDOW_SECONDS
+        except Exception:
+            return False
+
+    for i, msg in enumerate(messages):
+        if not _is_photo_only(msg) or msg.get("_photo_attached"):
+            continue
+        for j in (i + 1, i - 1):
+            if not 0 <= j < len(messages):
+                continue
+            other = messages[j]
+            if other.get("sender") != msg.get("sender") or not _close(msg, other):
+                continue
+            if _is_photo_only(other) or not (other.get("content") or "").strip():
+                continue
+            if other.get("attachments") and j == i - 1:
+                continue  # previous text already has its own photo
+            other["attachments"] = list(other.get("attachments") or []) + [
+                a for a in msg["attachments"] if a not in (other.get("attachments") or [])]
+            msg["_photo_attached"] = True
+            break
+    return messages
 
 
 def _process_messages_sync(
@@ -3354,190 +3951,117 @@ def _process_messages_sync(
     ref_month: int,
     ref_year: int,
     progress_state: Optional[dict] = None,
+    rates: Optional[dict] = None,
 ) -> dict:
     """CPU-bound main processing loop. Runs in a thread pool so it doesn't
-    block the async event loop (which serves progress polling, /auth/me, etc.).
+    block the async event loop.
 
-    progress_state: optional shared dict for thread-safe progress reporting.
-    The async caller reads this dict periodically to push updates to MongoDB.
-
-    Returns dict with matched_rows, needs_review_rows, not_in_database_rows,
-    detected_posts, fuzzy_match_count."""
+    Each message is split into listings (§3) and every listing lands in one
+    bucket: matched, needs_review, not_in_database, aftermarket or discarded.
+    """
     global _fuzzy_match_count
 
-    matched_rows = []
-    needs_review_rows = []
-    not_in_database_rows = []
+    buckets = _new_buckets()
     detected_posts = 0
     total_messages = len(messages)
+    attach_photos(messages)
 
     for idx, msg in enumerate(messages):
-        # Update shared progress state (read by async poller on the event loop)
         if progress_state is not None and total_messages > 0 and idx % 20 == 0:
-            pct = 15 + int((idx / total_messages) * 60)  # 15% to 75%
+            pct = 15 + int((idx / total_messages) * 60)
             progress_state["percent"] = pct
             progress_state["detail"] = f"Processing messages... {idx:,}/{total_messages:,}"
-        content = msg["content"]
-        # Strip media markers like "Bild weggelassen" / "image omitted" that are
-        # injected by WhatsApp exports alongside the actual listing content.
-        content = _strip_media_markers(content).strip()
+        if msg.get("_photo_attached"):
+            continue
+        content = _strip_media_markers(msg["content"]).strip()
         sender = msg["sender"]
         timestamp = msg["timestamp"]
         attachments = msg.get("attachments") or []
+        phone = extract_phone_number(sender)
+        sender_country = get_country_from_phone(phone) if phone else None
+        ctx = {"mode": mode, "watch_index": watch_index, "sender": sender, "timestamp": timestamp,
+               "group_name": group_name, "ref_month": ref_month, "ref_year": ref_year, "phone": phone,
+               "sender_country": sender_country, "attachments": attachments, "msg_index": idx,
+               "content": content, "rates": rates}
+
+        if not content:
+            if attachments:
+                buckets["discarded"].append(_discard_row(ctx, "", "Photo only"))
+            continue
+        if _SKIP_RE.search(content):
+            continue
+        if attachments and _TRIVIAL_QUERY_RE.match(_clean_text(content)):
+            buckets["discarded"].append(_discard_row(ctx, content, "Photo with only WTB / ? / price? / pm"))
+            continue
 
         post_type = detect_post_type(content)
         if post_type is None:
+            if not should_skip_message(content):
+                buckets["discarded"].append(_discard_row(ctx, content, discard_reason_for_chat(content)))
             continue
         if post_type != mode:
             continue
-
         detected_posts += 1
 
-        phone = extract_phone_number(sender)
-        sender_country = get_country_from_phone(phone) if phone else None
-
-        # Check if this is a structured stock list
-        if _is_stock_list_message(content):
-            m_rows, nr_rows, nid_rows = parse_stock_list(
-                content=content,
-                mode=mode,
-                watch_index=watch_index,
-                sender=sender,
-                timestamp=timestamp,
-                group_name=group_name,
-                ref_month=ref_month,
-                ref_year=ref_year,
-                phone=phone,
-                sender_country=sender_country,
-            )
-            matched_rows.extend(m_rows)
-            needs_review_rows.extend(nr_rows)
-            not_in_database_rows.extend(nid_rows)
-            continue
-
-        # Non-stock-list: single post processing
-        review_reasons = []
-        if not phone:
-            review_reasons.append("No phone number (contact name used)")
-
-        msg_brand_hint = detect_brand_from_content(content)
-        watch_matches = match_watch(content, watch_index, brand_hint=msg_brand_hint)
-
-        if len(watch_matches) == 0:
-            # No watch found at all — route to not_in_database, not needs_review.
-            nid_reason = "No matching watch found in database"
-            if not phone:
-                nid_reason = f"{nid_reason}; no phone number (contact name used)"
-            not_in_database_rows.append(_build_row(
-                mode=mode, content=content, sender=sender, timestamp=timestamp,
-                group_name=group_name, ref_month=ref_month, ref_year=ref_year,
-                sender_country=sender_country, phone=phone, watch=None,
-                reason=nid_reason, attachments=attachments,
-            ))
-            continue
-
-        if len(watch_matches) > 1:
-            ws_codes = ", ".join(w["ws_code"] for w in watch_matches if w["ws_code"])
-            review_reasons.append(f"Ambiguous match: {ws_codes}")
-            needs_review_rows.append(_build_row(
-                mode=mode, content=content, sender=sender, timestamp=timestamp,
-                group_name=group_name, ref_month=ref_month, ref_year=ref_year,
-                sender_country=sender_country, phone=phone, watch=None,
-                reason="; ".join(review_reasons), attachments=attachments,
-            ))
-            continue
-
-        watch = watch_matches[0]
-
-        # When the message contains multiple distinct watches, resolve
-        # date/condition/price against the specific line naming THIS watch, so
-        # each match gets its own attributes. When there's only one watch, use
-        # the full content — WTB messages commonly spread the ref on one line
-        # and year/target/location across separate follow-up lines.
-        if len(watch_matches) > 1:
-            scope = _find_watch_line(content, watch) or content
+        before = {k: len(v) for k, v in buckets.items()}
+        kind, texts = split_message_into_listings(content, watch_index)
+        if kind == "list" or (kind == "single" and _is_stock_list_message(content)
+                              and len(find_references(content, watch_index)) > 1):
+            parse_stock_list(content=content, mode=mode, watch_index=watch_index, sender=sender,
+                             timestamp=timestamp, group_name=group_name, ref_month=ref_month,
+                             ref_year=ref_year, phone=phone, sender_country=sender_country,
+                             ctx=ctx, buckets=buckets)
         else:
-            scope = content
+            for text in texts:
+                brand_hint = detect_brand_from_content(text) or detect_brand_from_content(content)
+                matches, diag, fuzzy_score, extracted = _match_listing_text(text, watch_index, brand_hint)
+                _route_listing(buckets, ctx, text, matches, diag, line_level=False, extracted_ref=extracted,
+                               brand_hint=brand_hint, fuzzy_score=fuzzy_score,
+                               location_text=content if len(texts) == 1 else text)
 
-        raw_month_year, month_year = _resolve_month_year(scope, mode, ref_month, ref_year)
-
-        location = extract_location(content, sender_country, mode)
-        condition = extract_condition(scope, mode, raw_month_year, ref_month, ref_year)
-        if mode == "WTB":
-            price, currency = extract_wtb_price(scope, sender_country)
-        else:
-            price, currency = extract_price(scope, sender_country)
-            # Fallback for lines without explicit currency tags:
-            # "126508 YML 530k n3" has no HKD/USD marker but 530k is clearly
-            # the price. extract_price_from_line scans bare numeric tokens.
-            if not price:
-                price, currency = extract_price_from_line(scope, sender_country)
-
-        if mode == "WTS" and not price:
-            review_reasons.append("No price found for WTS post")
-
-        # Validate price against brand minimums
-        if price:
-            price_valid, price_reason = validate_price(price, watch["brand"])
-            if not price_valid:
-                review_reasons.append(price_reason)
-
-        if review_reasons:
-            needs_review_rows.append(_build_row(
-                mode=mode, content=content, sender=sender, timestamp=timestamp,
-                group_name=group_name, ref_month=ref_month, ref_year=ref_year,
-                sender_country=sender_country, phone=phone, watch=watch,
-                reason="; ".join(review_reasons), attachments=attachments,
-            ))
-            continue
-
-        remarks = normalize_remarks(content)
-        location_remarks = extract_location_remarks(content, mode)
-        if location_remarks:
-            remarks = f"{remarks}; {location_remarks}" if remarks else location_remarks
-
-        price_str = f"{price} {currency}" if price and currency else (price or "")
-
-        matched_rows.append({
-            "Nachrichten Art": mode,
-            "Marke": watch["brand"],
-            "WS-Code": watch["ws_code"],
-            "Monat/Jahr": month_year,
-            "Standort": location or "",
-            "Zustand": condition or "",
-            "Bemerkungen": remarks,
-            "Preis": price_str,
-            "Nummer": phone or sender,
-            "Gruppe": group_name,
-            "Nachricht gepostet am": format_timestamp(timestamp),
-            "Original Text": _find_watch_line(content, watch)[:500],
-            "_attachments": attachments,
-            "_original_content": content,
-        })
+        # A photo belongs to a listing only when the message holds exactly one watch.
+        new_rows = [r for k in ("matched", "needs_review", "not_in_database", "aftermarket")
+                    for r in buckets[k][before[k]:]]
+        if len(new_rows) != 1:
+            for r in new_rows:
+                r["_attachments"] = []
+        for r in new_rows:
+            r["_listing_count"] = len(new_rows)
 
     return {
-        "matched_rows": matched_rows,
-        "needs_review_rows": needs_review_rows,
-        "not_in_database_rows": not_in_database_rows,
+        "matched_rows": buckets["matched"],
+        "needs_review_rows": buckets["needs_review"],
+        "not_in_database_rows": buckets["not_in_database"],
+        "aftermarket_rows": buckets["aftermarket"],
+        "discarded_rows": buckets["discarded"],
         "detected_posts": detected_posts,
         "fuzzy_match_count": _fuzzy_match_count,
     }
 
 
 # Cap image analysis so a huge export can't run up an unbounded vision bill.
-IMAGE_ANALYSIS_CAP = 200
+# In WDG groups ~80 % of listings are photo + caption, so 200 rows per run was
+# too low; override with the IMAGE_ANALYSIS_CAP environment variable.
+import os as _os
+try:
+    IMAGE_ANALYSIS_CAP = int(_os.environ.get("IMAGE_ANALYSIS_CAP", "1000"))
+except ValueError:
+    IMAGE_ANALYSIS_CAP = 1000
 
 
 def _ambiguous_candidates(row: dict, watch_index: dict) -> list[dict]:
-    """Catalog candidates behind an 'Ambiguous match: A, B' review reason."""
-    reason = row.get("Review Reason") or row.get("_review_reason") or ""
-    m = re.search(r'Ambiguous match:\s*([^;]+)', reason)
-    if not m:
-        return []
+    """Catalog candidates of an unsure row: its `_candidates`, else the codes
+    behind an 'Ambiguous match: A, B' review reason."""
+    codes: list[str] = [c.get("ws_code") for c in row.get("_candidates") or [] if c.get("ws_code")]
+    if not codes:
+        reason = row.get("Review Reason") or row.get("_review_reason") or ""
+        m = re.search(r'Ambiguous match:\s*([^;]+)', reason)
+        if m:
+            codes = [c.strip() for c in m.group(1).split(",")]
     candidates = []
-    for code in m.group(1).split(","):
+    for code in codes:
         watch = watch_index["by_ws_code"].get(code.strip().lower())
-        if watch:
+        if watch and watch not in candidates:
             candidates.append(watch)
     return candidates
 
@@ -3569,9 +4093,17 @@ async def _image_analysis_pass(
 
     # --- 1. Ambiguous rows: which catalog variant is it? ---
     variant_targets: list[tuple[int, list[str], list[dict], dict]] = []
+    skipped_cap = 0
     for idx, row in enumerate(needs_review_rows):
         attachments = row.get("_attachments") or []
         if not attachments:
+            continue
+        # Only variant questions: a missing price / phone is not for the photo.
+        reason = row.get("Review Reason") or ""
+        if re.search(r'No price|No phone|Unknown currency|Discount|outlier', reason, re.IGNORECASE):
+            continue
+        if len(variant_targets) >= IMAGE_ANALYSIS_CAP:
+            skipped_cap += 1
             continue
         candidates = _ambiguous_candidates(row, watch_index)
         if len(candidates) < 2:
@@ -3580,8 +4112,6 @@ async def _image_analysis_pass(
         if not images:
             continue
         variant_targets.append((idx, images, candidates, row))
-        if len(variant_targets) >= IMAGE_ANALYSIS_CAP:
-            break
 
     # --- 2. Matched rows missing the warranty date the photo may show ---
     field_targets: list[tuple[int, list[str], dict]] = []
@@ -3598,6 +4128,9 @@ async def _image_analysis_pass(
         if len(field_targets) >= IMAGE_ANALYSIS_CAP:
             break
 
+    if skipped_cap:
+        logger.warning(f"image analysis: IMAGE_ANALYSIS_CAP={IMAGE_ANALYSIS_CAP} reached, "
+                       f"{skipped_cap} unsure rows with photos stay in needs review")
     analyzed = len(variant_targets) + len(field_targets)
     if not analyzed:
         logger.info("image analysis: no rows qualified for image analysis")
@@ -3642,22 +4175,19 @@ async def _image_analysis_pass(
         observed_str = ", ".join(
             f"{k}: {v}" for k, v in observed.items() if v
         )
-        matched_via_image_rows.append({
-            "Nachrichten Art": row.get("Nachrichten Art", ""),
+        new_row = dict(row)
+        for k in ("Review Reason", "_review_reason", "Extracted Ref"):
+            new_row.pop(k, None)
+        new_row.update({
             "Marke": watch.get("brand", ""),
             "WS-Code": watch.get("ws_code", ""),
-            "Monat/Jahr": row.get("Monat/Jahr", ""),
-            "Standort": row.get("Standort", ""),
-            "Zustand": row.get("Zustand", ""),
-            "Bemerkungen": row.get("Bemerkungen", ""),
-            "Preis": row.get("Preis", ""),
-            "Nummer": row.get("Nummer", ""),
-            "Gruppe": row.get("Gruppe", ""),
-            "Nachricht gepostet am": row.get("Nachricht gepostet am", ""),
-            "Original Text": row.get("Original Text", ""),
             "Image Confidence": result["confidence"],
             "Image Evidence": observed_str or result.get("reason", ""),
+            "_candidates": _candidate_meta([watch], "image match", float(result["confidence"])),
         })
+        if not new_row.get("Monat/Jahr") and result.get("card_month_year"):
+            new_row["Monat/Jahr"] = result["card_month_year"]
+        matched_via_image_rows.append(new_row)
         resolved_indices.append(idx)
 
     for idx in sorted(set(resolved_indices), reverse=True):
@@ -3685,6 +4215,7 @@ async def process_generation(
     jsonl_content: Optional[str] = None,
     progress_callback=None,
     media_archive: Optional[dict] = None,
+    run_id: Optional[str] = None,
 ) -> dict:
     """Main processing function. Returns matched_csv, needs_review_csv, and stats.
     progress_callback: optional async callable(stage, percent, detail) for progress updates.
@@ -3699,9 +4230,19 @@ async def process_generation(
         if progress_callback:
             await progress_callback(stage, percent, detail)
 
-    global _fuzzy_match_count
+    global _fuzzy_match_count, _ACTIVE_REMARK_CONFIG
     _fuzzy_match_count = 0
     _fuzzy_match_cache.clear()
+
+    # Remark rules (admin panel) and exchange rates are loaded once per run and
+    # handed to the sync worker.
+    _ACTIVE_REMARK_CONFIG = await remark_rules.load_remark_config()
+    from app.services import fx as fx_service
+    try:
+        rates = await fx_service.load_rates()
+    except Exception as e:  # never fail a run on the rate table
+        logger.warning(f"process_generation: fx rates unavailable ({e}), using seed table")
+        rates = dict(fx_service.SEED_RATES)
 
     await _report("building_index", 5, "Building watch index...")
     logger.info("process_generation: building watch index...")
@@ -3729,7 +4270,7 @@ async def process_generation(
             pool,
             _process_messages_sync,
             messages, mode, watch_index, group_name, ref_month, ref_year,
-            progress_state,
+            progress_state, rates,
         )
 
         # Poll the shared progress state while the thread works and push
@@ -3752,6 +4293,8 @@ async def process_generation(
     matched_rows = sync_result["matched_rows"]
     needs_review_rows = sync_result["needs_review_rows"]
     not_in_database_rows = sync_result["not_in_database_rows"]
+    aftermarket_rows = sync_result.get("aftermarket_rows", [])
+    discarded_rows = sync_result.get("discarded_rows", [])
     detected_posts = sync_result["detected_posts"]
 
     t_main_loop = time.time()
@@ -3768,8 +4311,8 @@ async def process_generation(
     )
 
     # --- AI matching pass: attempt to match remaining "not in database" items ---
-    # Cap at 3000 items to avoid excessive OpenAI costs and timeouts.
-    # 3000 items = 2 batches × 1500 ≈ 2 API calls, ~$0.10-0.20 total.
+    # Each row is sent with its own 5–10 catalog candidates instead of the whole
+    # catalog (§4: the whole catalog was ~200k tokens per batch).
     AI_MATCHING_CAP = 3000
     AI_MATCHING_TIMEOUT = 180  # seconds
 
@@ -3778,13 +4321,14 @@ async def process_generation(
     unmatched_for_ai = []
     unmatched_indices = []
 
-    # AI pass now operates on the not_in_database bucket — these are the rows
-    # where automatic matching found nothing and we want AI to take a second look.
     for i, row in enumerate(not_in_database_rows):
+        content_i = row.get("_original_content", "")
+        brand_i = row.get("Marke") or None
         unmatched_for_ai.append({
             "index": len(unmatched_for_ai),
-            "content": row.get("_original_content", ""),
-            "brand_hint": row.get("Marke", None),
+            "content": content_i,
+            "brand_hint": brand_i,
+            "candidates": [w["ws_code"] for w in shortlist_candidates(content_i, watch_index, brand_i, limit=10)],
         })
         unmatched_indices.append(i)
 
@@ -3792,114 +4336,86 @@ async def process_generation(
         total_unmatched = len(unmatched_for_ai)
         if total_unmatched > AI_MATCHING_CAP:
             logger.info(f"process_generation: capping AI matching from {total_unmatched} to {AI_MATCHING_CAP} items")
-            # Keep the first N items (most recent messages first in the processing order)
             unmatched_for_ai = unmatched_for_ai[:AI_MATCHING_CAP]
             unmatched_indices = unmatched_indices[:AI_MATCHING_CAP]
 
         ai_count = len(unmatched_for_ai)
         skipped = total_unmatched - ai_count
-        skip_msg = f" ({total_unmatched - ai_count:,} skipped)" if skipped else ""
-        await _report("ai_matching", 80, f"AI matching {ai_count:,} unmatched items with GPT-5.2...{skip_msg}")
-        logger.info(f"process_generation: starting AI matching for {ai_count} lines (timeout={AI_MATCHING_TIMEOUT}s)...")
+        skip_msg = f" ({skipped:,} skipped)" if skipped else ""
+        await _report("ai_matching", 80, f"AI matching {ai_count:,} unmatched items...{skip_msg}")
         t_ai_start = time.time()
-        # Batches still running at the timeout are cancelled inside
-        # batch_ai_match; the ones that finished are kept.
         ai_results = await batch_ai_match(unmatched_for_ai, watch_index, timeout=AI_MATCHING_TIMEOUT)
         logger.info(f"process_generation: AI matching done in {time.time()-t_ai_start:.1f}s — {len(ai_results)} results")
         if len(ai_results) < ai_count:
             await _report("ai_matching", 85,
                           f"AI answered {len(ai_results):,} of {ai_count:,} items — the rest keep their parsed result")
 
-        # Build lookup: ai line index -> match result
         ai_lookup = {r["index"]: r for r in ai_results}
-
-        # Track which not_in_database rows were matched (remove) or upgraded to
-        # needs_review (move). We process in reverse order for safe removal.
         indices_to_remove = []
         indices_to_move_to_review = []
         for ai_idx, nid_idx in enumerate(unmatched_indices):
-            if ai_idx in ai_lookup:
-                result = ai_lookup[ai_idx]
-                confidence = result.get("confidence", 0)
+            if ai_idx not in ai_lookup:
+                continue
+            result = ai_lookup[ai_idx]
+            confidence = result.get("confidence", 0)
+            row = not_in_database_rows[nid_idx]
+            original_content = row.get("_original_content", "")
+            watch = result.get("watch")
 
-                if confidence < 80:
-                    # Low confidence — AI found *something* similar, so promote
-                    # this row from not_in_database to needs_review with the AI
-                    # suggestion attached. The human can confirm or reject.
-                    row = not_in_database_rows[nid_idx]
-                    ai_info = f"AI suggestion ({confidence}%): {result.get('ai_ws_code', '?')}"
-                    row["Review Reason"] = (
-                        f"{row.get('Review Reason', '')}; {ai_info}"
-                        if row.get("Review Reason") else ai_info
-                    )
-                    indices_to_move_to_review.append(nid_idx)
-                    continue
+            def _note(text: str) -> None:
+                row["Review Reason"] = f"{row.get('Review Reason', '')}; {text}" if row.get("Review Reason") else text
+                row["_review_reason"] = row["Review Reason"]
 
-                watch = result.get("watch")
-                row = not_in_database_rows[nid_idx]
-                original_content = row.get("_original_content", "")
+            if confidence < 80:
+                _note(f"AI suggestion ({confidence}%): {result.get('ai_ws_code', '?')}")
+                if watch:
+                    row["_candidates"] = _candidate_meta([watch], "AI suggestion", float(confidence)) + [
+                        c for c in row.get("_candidates", []) if c["ws_code"] != watch["ws_code"]][:2]
+                indices_to_move_to_review.append(nid_idx)
+                continue
 
-                if watch is None:
-                    # Identified, but not a catalog watch. The CSV import matches
-                    # ws_codes strictly, so a matched row under this code could
-                    # never reach the order book. Review it instead, and offer the
-                    # watch as a catalog addition.
-                    ai_ws = result.get("ai_ws_code", "")
-                    ai_info = f"AI identified {ai_ws or '?'} ({confidence}%), not in catalog"
-                    row["Review Reason"] = (
-                        f"{row.get('Review Reason', '')}; {ai_info}"
-                        if row.get("Review Reason") else ai_info
-                    )
-                    indices_to_move_to_review.append(nid_idx)
-                    if ai_ws and result.get("ai_brand"):
-                        ai_suggested_additions.append({
-                            "brand": result.get("ai_brand", ""),
-                            "suggested_ws_code": ai_ws,
-                            "model": result.get("ai_model", ""),
-                            "reference": ai_ws.split()[0],
-                            "confidence": confidence,
-                            "example_line": original_content[:200],
-                        })
-                    continue
+            if watch is None:
+                # Identified, but not a catalog watch: review it and offer it as a
+                # catalog addition (the CSV import matches ws_codes strictly).
+                ai_ws = result.get("ai_ws_code", "")
+                _note(f"AI identified {ai_ws or '?'} ({confidence}%), not in catalog")
+                indices_to_move_to_review.append(nid_idx)
+                if ai_ws and result.get("ai_brand"):
+                    ai_suggested_additions.append({
+                        "brand": result.get("ai_brand", ""),
+                        "suggested_ws_code": ai_ws,
+                        "model": result.get("ai_model", ""),
+                        "reference": ai_ws.split()[0],
+                        "confidence": confidence,
+                        "example_line": original_content[:200],
+                    })
+                continue
 
-                # Re-extract fields for the matched row
-                raw_month_year, month_year_val = _resolve_month_year(original_content, mode, ref_month, ref_year)
-                phone_val = row.get("Nummer", "")
-                sender_country_val = get_country_from_phone(phone_val) if phone_val.startswith("+") else None
-                location_val = extract_location(original_content, sender_country_val, mode)
-                condition_val = extract_condition(original_content, mode, raw_month_year, ref_month, ref_year)
-                price_val, currency_val = extract_price(original_content, sender_country_val)
-                if not price_val:
-                    price_val, currency_val = extract_price_from_line(original_content, sender_country_val)
-                remarks_val = normalize_remarks(original_content)
-                loc_remarks = extract_location_remarks(original_content, mode)
-                if loc_remarks:
-                    remarks_val = f"{remarks_val}; {loc_remarks}" if remarks_val else loc_remarks
-                price_str_val = f"{price_val} {currency_val}" if price_val and currency_val else (price_val or "")
+            row["WS-Code"] = watch["ws_code"]
+            row["Marke"] = watch["brand"]
+            row["_candidates"] = _candidate_meta([watch], "AI match", float(confidence))
+            row["_ai_reason"] = f"AI match ({confidence}%)"
+            row.pop("Review Reason", None)
+            row.pop("_review_reason", None)
+            row.pop("Extracted Ref", None)
+            problems = []
+            if mode == "WTS" and not row.get("Preis"):
+                problems.append("No price found for WTS post")
+            if row.get("Preis"):
+                ok, why = validate_price(row["Preis"].split()[0], watch["brand"])
+                if not ok:
+                    problems.append(why)
+            if problems:
+                row["Review Reason"] = "; ".join(problems)
+                indices_to_move_to_review.append(nid_idx)
+                continue
+            matched_rows.append(row)
+            indices_to_remove.append(nid_idx)
+            ai_matched_count += 1
 
-                matched_rows.append({
-                    "Nachrichten Art": mode,
-                    "Marke": watch["brand"],
-                    "WS-Code": watch["ws_code"],
-                    "Monat/Jahr": month_year_val,
-                    "Standort": location_val or "",
-                    "Zustand": condition_val or "",
-                    "Bemerkungen": remarks_val,
-                    "Preis": price_str_val,
-                    "Nummer": phone_val,
-                    "Gruppe": group_name,
-                    "Nachricht gepostet am": row.get("Nachricht gepostet am", ""),
-                    "Original Text": _find_watch_line(original_content, watch)[:500],
-                })
-                indices_to_remove.append(nid_idx)
-                ai_matched_count += 1
-
-        # Apply moves/removals to not_in_database_rows. Process in reverse index
-        # order so earlier indices stay valid while we splice.
         move_set = set(indices_to_move_to_review)
         remove_set = set(indices_to_remove)
-        all_touched = sorted(move_set | remove_set, reverse=True)
-        for idx in all_touched:
+        for idx in sorted(move_set | remove_set, reverse=True):
             row = not_in_database_rows[idx]
             if idx in move_set:
                 needs_review_rows.append(row)
@@ -3947,6 +4463,9 @@ async def process_generation(
             m = re.search(r'Ambiguous match:\s*([^;]+)', reason)
             if m:
                 candidates = [c.strip() for c in m.group(1).split(",") if c.strip()]
+            for c in row.get("_candidates") or []:
+                if c.get("ws_code") and c["ws_code"] not in candidates:
+                    candidates.append(c["ws_code"])
             if row.get("WS-Code") and row["WS-Code"] not in candidates:
                 candidates.insert(0, row["WS-Code"])
             verify_items.append({
@@ -3990,15 +4509,26 @@ async def process_generation(
             # may only move a row to a catalog watch.
             cat_watch = watch_index["by_ws_code"].get(new_ws.lower()) if new_ws else None
 
+            # Never accept a price that is not in the text (7118/1200R … 177000usdt
+            # must not become 7,118 USD).
+            src_text = (matched_rows[row_idx] if tier == "matched" else needs_review_rows[row_idx])
+            src_text = src_text.get("_original_content") or src_text.get("Original Text") or ""
+            if new_price and not price_in_text(str(new_price), src_text):
+                if new_price:
+                    logger.info(f"AI verify: ignoring price {new_price} not found in text")
+                new_price = None
+                new_currency = None
+
             if tier == "matched":
                 row = matched_rows[row_idx]
                 if action == "flip" and conf >= 95 and cat_watch:
                     row["WS-Code"] = cat_watch["ws_code"]
                     row["Marke"] = cat_watch["brand"]
+                    row["_ai_reason"] = f"AI verify ({conf}%): {reason}"
                     if new_price and new_currency:
-                        row["Preis"] = f"{new_price} {new_currency}"
+                        row["Preis"] = f"{_format_price(str(new_price)) or new_price} {_canonicalize_currency(str(new_currency))}"
                     elif new_price:
-                        row["Preis"] = new_price
+                        row["Preis"] = _format_price(str(new_price)) or str(new_price)
                 elif action == "demote" and conf < 80:
                     row["Review Reason"] = (
                         f"AI demoted ({conf}%): {reason}" if not row.get("Review Reason")
@@ -4009,11 +4539,13 @@ async def process_generation(
             else:  # tier == "review"
                 row = needs_review_rows[row_idx]
                 if action in ("keep", "flip") and conf >= 80 and cat_watch:
-                    row["WS-Code"] = cat_watch["ws_code"]
-                    row["Marke"] = cat_watch["brand"]
+                    # The AI pick is offered as the first suggestion; the WS-Code
+                    # is not pre-filled while the variant is open.
+                    cands = [c for c in row.get("_candidates") or [] if c.get("ws_code") != cat_watch["ws_code"]]
+                    row["_candidates"] = _candidate_meta([cat_watch], f"AI: {reason}", float(conf)) + cands
+                    row["Marke"] = row.get("Marke") or cat_watch["brand"]
                     if new_price and new_currency:
-                        row["Preis"] = f"{new_price} {new_currency}"
-                    # Leave it in needs_review unless action asks for promote — keep conservative
+                        row["Preis"] = f"{_format_price(str(new_price)) or new_price} {_canonicalize_currency(str(new_currency))}"
                 else:
                     # Append AI reason to existing review reason
                     ai_note = f"AI ({conf}%): {reason}"
@@ -4131,15 +4663,13 @@ async def process_generation(
     # Catches: (a) currency misclassifications (USD 140k vs HKD 140k ≈ 8× drift),
     # (b) wildly-off dealer typos (260k for 5712/1R when 2018 market is ~1.8M+),
     # (c) single-row currency defaults that don't match the group consensus.
-    FX_TO_HKD = {
-        "HKD": 1.0, "USD": 7.8, "USDT": 7.8, "CNY": 1.1, "RMB": 1.1,
-        "EUR": 8.4, "GBP": 9.8, "CHF": 8.8, "JPY": 0.05, "AED": 2.1, "SGD": 5.8,
-    }
+    # Central rate table (app.services.fx), loaded once at the start of the run.
     def _to_hkd(num: str, cur: str) -> Optional[float]:
         try:
-            return float(num.replace(',', '')) * FX_TO_HKD.get((cur or '').upper(), 1.0)
+            amount = float(num.replace(',', ''))
         except ValueError:
             return None
+        return fx_service.convert(amount, (cur or "USD").upper(), "HKD", rates)
 
     def _extract_year(my: str) -> Optional[int]:
         """Extract 4-digit year from the Monat/Jahr field.
@@ -4384,34 +4914,48 @@ async def process_generation(
 
     await _report("generating_csv", 95, "Generating CSV files...")
 
-    # Clean internal fields before CSV generation
-    for bucket in (matched_rows, needs_review_rows, not_in_database_rows,
-                   matched_via_image_rows):
-        for row in bucket:
-            row.pop("_review_reason", None)
-            row.pop("_original_content", None)
-            row.pop("_attachments", None)
+    structured_rows = {
+        "matched": [_structured_row(r) for r in matched_rows],
+        "matched_via_image": [_structured_row(r) for r in matched_via_image_rows],
+        "needs_review": [_structured_row(r) for r in needs_review_rows],
+        "not_in_database": [_structured_row(r) for r in not_in_database_rows],
+        "discarded": [_structured_row(r) for r in discarded_rows],
+        "aftermarket": [_structured_row(r) for r in aftermarket_rows],
+    }
 
     matched_csv = _rows_to_csv(matched_rows)
     needs_review_csv = _rows_to_csv(needs_review_rows)
     not_in_database_csv = _rows_to_csv(not_in_database_rows)
     matched_via_image_csv = _rows_to_csv(matched_via_image_rows)
+    aftermarket_csv = _rows_to_csv(aftermarket_rows)
+    discarded_csv = _rows_to_csv([dict(r, **{"Discard Reason": r.get("_discard_reason") or ""})
+                                  for r in discarded_rows])
 
     logger.info(f"process_generation: COMPLETE in {time.time()-t_start:.1f}s — "
                 f"{len(matched_rows)} matched, {len(needs_review_rows)} needs_review, "
                 f"{len(not_in_database_rows)} not_in_database, "
                 f"{len(matched_via_image_rows)} matched_via_image, "
+                f"{len(aftermarket_rows)} aftermarket, {len(discarded_rows)} discarded, "
                 f"{_fuzzy_match_count} fuzzy, {ai_matched_count} AI")
 
     total_rows = (len(matched_rows) + len(needs_review_rows)
                   + len(not_in_database_rows) + len(matched_via_image_rows))
+
+    if run_id:
+        try:
+            await store_run_rows(run_id, structured_rows)
+        except Exception as e:
+            logger.error(f"process_generation: could not store structured rows for run {run_id}: {e}")
 
     return {
         "matched_csv": matched_csv,
         "needs_review_csv": needs_review_csv,
         "not_in_database_csv": not_in_database_csv,
         "matched_via_image_csv": matched_via_image_csv,
+        "aftermarket_csv": aftermarket_csv,
+        "discarded_csv": discarded_csv,
         "suggested_additions_csv": suggested_csv,
+        "rows": structured_rows,
         "matched_via_image_count": len(matched_via_image_rows),
         "image_analyzed_count": image_analyzed_count,
         "image_enriched_count": image_enriched_count,
@@ -4420,7 +4964,135 @@ async def process_generation(
         "matched_count": len(matched_rows),
         "needs_review_count": len(needs_review_rows),
         "not_in_database_count": len(not_in_database_rows),
+        "aftermarket_count": len(aftermarket_rows),
+        "discarded_count": len(discarded_rows),
         "fuzzy_matched_count": _fuzzy_match_count,
         "ai_matched_count": ai_matched_count,
         "suggested_additions_count": len(unique_suggestions) if ai_suggested_additions else 0,
     }
+
+
+# --- Structured output (generator → pipeline contract) -------------------------
+
+def _structured_row(row: dict) -> dict:
+    """CSV fields of a row plus `_meta` for the pipeline / approval page."""
+    out = {k: v for k, v in row.items() if not k.startswith("_")}
+    attachments = row.get("_attachments") or []
+    out["_meta"] = {
+        "source_text": row.get("_original_content") or row.get("Original Text") or "",
+        "message_text": row.get("_message_text") or "",
+        "sender_phone": row.get("_sender_phone"),
+        "timestamp": row.get("_timestamp"),
+        "group_name": row.get("_group") or row.get("Gruppe") or "",
+        "image_file": attachments[0] if attachments else None,
+        "image_files": list(attachments),
+        "candidates": list(row.get("_candidates") or [])[:4],
+        "discard_reason": row.get("_discard_reason"),
+        "currency_unknown": bool(row.get("_currency_unknown")),
+        "ai_reason": row.get("_ai_reason"),
+        "review_reason": row.get("Review Reason") or row.get("_review_reason"),
+    }
+    return out
+
+
+def _rows_gridfs_bucket():
+    from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+    from app.models.wtb_wts import WtbWtsRun
+    db = WtbWtsRun.get_motor_collection().database
+    return AsyncIOMotorGridFSBucket(db, bucket_name="wtb_wts_files")
+
+
+async def _gridfs_put_text(content: str, filename: str) -> str:
+    file_id = await _rows_gridfs_bucket().upload_from_stream(filename, content.encode("utf-8"))
+    return str(file_id)
+
+
+async def _gridfs_get_text(file_id: str) -> str:
+    from bson import ObjectId
+    stream = await _rows_gridfs_bucket().open_download_stream(ObjectId(file_id))
+    return (await stream.read()).decode("utf-8")
+
+
+async def store_run_rows(run_id, rows: dict[str, list[dict]]) -> str:
+    """Store the per-run JSON rows in GridFS and link them on the run."""
+    from beanie import PydanticObjectId
+    from app.models.wtb_wts import WtbWtsRun
+    payload = json.dumps({k: rows.get(k, []) for k in BUCKETS}, ensure_ascii=False, default=str)
+    file_id = await _gridfs_put_text(payload, f"rows-{run_id}.json")
+    await WtbWtsRun.find_one(WtbWtsRun.id == PydanticObjectId(str(run_id))).update(
+        {"$set": {"rows_json_gridfs_id": file_id}})
+    return file_id
+
+
+async def load_run_rows(run_id) -> dict[str, list[dict]]:
+    """Rows of a run by bucket: matched, matched_via_image, needs_review,
+    not_in_database, discarded, aftermarket. Each row = CSV fields + `_meta`."""
+    from beanie import PydanticObjectId
+    from bson import ObjectId
+    from app.models.wtb_wts import WtbWtsRun
+    empty = {k: [] for k in BUCKETS}
+    run = await WtbWtsRun.get(PydanticObjectId(str(run_id)))
+    if not run or not run.rows_json_gridfs_id:
+        return empty
+    data = json.loads(await _gridfs_get_text(run.rows_json_gridfs_id))
+    return {k: list(data.get(k) or []) for k in BUCKETS}
+
+
+async def run_generator_on_export(
+    chat_txt: str,
+    media: Optional[dict[str, bytes]],
+    group_name: str,
+    mode: str,
+    ref_month: int,
+    ref_year: int,
+    imported_by: str,
+) -> str:
+    """Run the generator on one exported chat and return the run id.
+
+    Runs to completion (no background task): creates a WtbWtsRun, stores the CSVs
+    and the structured rows, and marks the run completed (or failed, re-raising).
+    `media` maps attachment file names to bytes (the <group>_Medien.zip content).
+    """
+    from app.models.wtb_wts import GenerationMode, RunStatus, WtbWtsRun
+
+    gen_mode = GenerationMode(mode.lower())
+    run = WtbWtsRun(
+        filename=f"{group_name}.txt",
+        group_name=group_name,
+        mode=gen_mode,
+        reference_month=ref_month,
+        reference_year=ref_year,
+        status=RunStatus.PROCESSING,
+        imported_by=imported_by,
+        imported_by_name="pipeline",
+    )
+    await run.insert()
+    media_archive = {k.rsplit("/", 1)[-1].lower(): v for k, v in (media or {}).items()} or None
+    try:
+        result = await process_generation(
+            txt_content=chat_txt, mode=gen_mode.value.upper(), ref_month=ref_month, ref_year=ref_year,
+            group_name=group_name, media_archive=media_archive, run_id=str(run.id),
+        )
+        updates = {
+            "status": RunStatus.COMPLETED,
+            "completed_at": datetime.utcnow(),
+            "progress_percent": 100, "progress_stage": "completed", "progress_detail": "Done",
+        }
+        for key in ("total_messages", "detected_posts", "matched_count", "needs_review_count",
+                    "not_in_database_count", "fuzzy_matched_count", "ai_matched_count",
+                    "suggested_additions_count", "matched_via_image_count", "image_analyzed_count",
+                    "image_enriched_count", "aftermarket_count", "discarded_count"):
+            updates[key] = result.get(key, 0)
+        for key, field_name in (("matched_csv", "matched_csv_gridfs_id"),
+                                ("needs_review_csv", "needs_review_csv_gridfs_id"),
+                                ("not_in_database_csv", "not_in_database_csv_gridfs_id"),
+                                ("matched_via_image_csv", "matched_via_image_csv_gridfs_id"),
+                                ("suggested_additions_csv", "suggested_csv_gridfs_id")):
+            if result.get(key):
+                updates[field_name] = await _gridfs_put_text(result[key], f"{key}-{run.id}.csv")
+        await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": updates})
+    except Exception as e:
+        await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {
+            "status": RunStatus.FAILED, "error_message": str(e), "progress_stage": "failed"}})
+        raise
+    return str(run.id)

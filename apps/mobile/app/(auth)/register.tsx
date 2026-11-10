@@ -249,7 +249,7 @@ export default function RegisterScreen() {
           </Text>
           <TextInput
             style={[styles.input, whatsappFocused && styles.inputFocused]}
-            placeholder="+387 61 123 456"
+            placeholder="+852 9123 4567"
             placeholderTextColor="rgba(29, 29, 31, 0.4)"
             value={whatsappPhone}
             onChangeText={setWhatsappPhone}

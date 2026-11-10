@@ -105,8 +105,26 @@ class Order(Document):
     clasp_type: Optional[str] = None
     clasp_material: Optional[str] = None
 
-    # USD equivalent price (for cross-currency sorting)
+    # USD equivalent price (for cross-currency sorting). Recomputed from the central FX table
+    # (app.services.fx) after every rate update; `price` + `currency` stay the dealer's original.
     usd_price: Optional[float] = None
+
+    # --- Generator pipeline / market data (generator spec §1, §2, §9) ---
+    # How the listing was matched to the catalog: exact | image | ai | manual
+    match_method: Optional[str] = None
+    # Short AI reason when match_method == "ai" (shown on the approval page)
+    ai_reason: Optional[str] = None
+    # Original WhatsApp text and photo the listing came from
+    source_text: Optional[str] = None
+    source_image: Optional[str] = None
+    source_group: Optional[str] = None
+    source_run_id: Optional[str] = None
+    # First time this dealer+watch+price was seen; a repost in another group only bumps
+    # last_seen_at and never triggers a push (spec §1.11).
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    # Admin price check: listing stays in the app but is ignored for medians.
+    excluded_from_median: bool = False
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -127,6 +145,8 @@ class Order(Document):
             [("reference", 1), ("order_type", 1), ("status", 1)],
             [("ws_code", 1), ("status", 1)],
             [("status", 1), ("order_type", 1), ("price", 1)],
+            [("ws_code", 1), ("order_type", 1), ("created_at", -1)],
+            "whatsapp_phone",
         ]
 
     class Config:

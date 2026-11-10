@@ -2,7 +2,7 @@
 Notification model for storing user notifications
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 from datetime import datetime
 from enum import Enum
 from beanie import Document, Indexed
@@ -22,6 +22,7 @@ class NotificationType(str, Enum):
     WATCHLIST_ALERT = "watchlist_alert"  # Watchlist item update
     BUY_ORDER_OFFER = "buy_order_offer"  # New listing matches buyer's bid
     PRICE_UNDERCUT = "price_undercut"  # Another seller listed at lower price
+    ALERT_MATCH = "alert_match"  # New WTS/WTB matched one of the user's alerts (redesign v3 §7)
 
 
 class Notification(Document):
@@ -35,6 +36,7 @@ class Notification(Document):
 
     # Reference data for navigation
     reference: Optional[str] = None  # Watch reference (e.g., "126610LN")
+    ws_code: Optional[str] = None
     order_id: Optional[str] = None  # Related order ID for navigation
     conversation_id: Optional[str] = None  # Related conversation ID
 
@@ -44,6 +46,10 @@ class Notification(Document):
     from_user_id: Optional[str] = None  # User who triggered the notification
     from_user_name: Optional[str] = None
     from_user_avatar: Optional[str] = None
+
+    # Structured payload for the Activity tab (alert_match: kind, ws_code, country, year,
+    # condition, price, order_ids, count, dealer_phone, watch_id, …)
+    data: Optional[Dict[str, Any]] = None
 
     # Status
     is_read: bool = False
@@ -59,4 +65,5 @@ class Notification(Document):
             "type",
             "is_read",
             "created_at",
+            [("user_id", 1), ("type", 1), ("created_at", -1)],
         ]

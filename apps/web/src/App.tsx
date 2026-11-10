@@ -53,6 +53,9 @@ const AdminAIInsights = lazy(() => import('./features/admin/pages/AdminAIInsight
 const AdminWhatsAppImport = lazy(() => import('./features/admin/pages/AdminWhatsAppImport').then(m => ({ default: m.AdminWhatsAppImport })))
 const AdminWtbWtsGenerator = lazy(() => import('./features/admin/pages/AdminWtbWtsGenerator').then(m => ({ default: m.AdminWtbWtsGenerator })))
 const AdminWhatsAppBridge = lazy(() => import('./features/admin/pages/AdminWhatsAppBridge').then(m => ({ default: m.AdminWhatsAppBridge })))
+const AdminApproval = lazy(() => import('./features/admin/pages/AdminApproval').then(m => ({ default: m.AdminApproval })))
+const AdminPriceCheck = lazy(() => import('./features/admin/pages/AdminPriceCheck').then(m => ({ default: m.AdminPriceCheck })))
+const AdminRemarks = lazy(() => import('./features/admin/pages/AdminRemarks').then(m => ({ default: m.AdminRemarks })))
 const AdminActivity = lazy(() => import('./features/admin/pages/AdminActivity').then(m => ({ default: m.AdminActivity })))
 const AdminBilling = lazy(() => import('./features/admin/pages/AdminBilling').then(m => ({ default: m.AdminBilling })))
 const AdminSettings = lazy(() => import('./features/admin/pages/AdminSettings').then(m => ({ default: m.AdminSettings })))
@@ -174,6 +177,9 @@ function App() {
           <Route path="whatsapp" element={<AdminWhatsAppImport />} />
           <Route path="whatsapp-bridge" element={<AdminWhatsAppBridge />} />
           <Route path="wtb-wts" element={<AdminWtbWtsGenerator />} />
+          <Route path="remarks" element={<AdminRemarks />} />
+          <Route path="approval" element={<AdminApproval />} />
+          <Route path="price-check" element={<AdminPriceCheck />} />
           <Route path="activity" element={<AdminActivity />} />
           <Route path="billing" element={<AdminBilling />} />
           <Route path="settings" element={<AdminSettings />} />
