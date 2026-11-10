@@ -275,7 +275,7 @@ Answer with JSON only:
 
 def _is_reasoning_model(name: str) -> bool:
     n = (name or "").lower()
-    return n.startswith(("gpt-5", "o1", "o3", "o4"))
+    return n.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
 
 
 async def _vision_call(client, prompt: str, images: list[str],

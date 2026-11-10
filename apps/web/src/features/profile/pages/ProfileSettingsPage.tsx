@@ -43,6 +43,7 @@ interface SubscriptionStatus {
   price_monthly: number | null;
   currency: string | null;
   auto_renew: boolean | null;
+  paywall_enabled?: boolean;
 }
 
 interface ProfileData {
@@ -1515,6 +1516,27 @@ export function ProfileSettingsPage() {
               <p className="text-sm text-gray-500 text-center mt-3">
                 {t('settings.deleteAccountDesc')}
               </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeSection === 'billing' && subscription?.paywall_enabled === false) {
+      return (
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('settings.billingSubscription')}</h2>
+          <p className="text-gray-500 mb-6">{t('settings.billingSubscription')}</p>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-green-100">
+                <Crown className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">{t('settings.fullAccessTitle')}</h3>
+                <p className="text-sm text-gray-500">{t('settings.fullAccessDesc')}</p>
+              </div>
             </div>
           </div>
         </div>

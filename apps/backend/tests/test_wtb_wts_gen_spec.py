@@ -364,7 +364,7 @@ def test_batch_ai_match_sends_only_row_candidates(monkeypatch, index):
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "test-key")
     prompts = []
 
-    async def fake_request(client, prompt, temperature, label):
+    async def fake_request(client, prompt, label):
         prompts.append(prompt)
         return [], False
 

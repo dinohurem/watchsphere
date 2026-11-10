@@ -436,7 +436,10 @@ def test_endpoints_end_to_end(catalog_api):
     assert catalog_api.get("/catalog-admin/brands").json() == ["Richard Mille"]
 
     all_watches = catalog_api.get("/market/admin/all").json()
-    ids = [w["id"] for w in all_watches]
+    # Both editions are created in the same instant, so the listing order is not fixed:
+    # pick them by WS code (the Italy edition renamed to France must collide).
+    by_code = {w["ws_code"]: w["id"] for w in all_watches}
+    ids = [by_code["RM67-02 Italy"], by_code["RM67-02 France"]]
 
     # Export → edit → re-import.
     exported = catalog_api.post("/catalog-admin/watches/export", json={"format": "jsonl"}).text
