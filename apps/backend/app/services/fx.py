@@ -3,7 +3,7 @@
 Every conversion in the backend — order ``usd_price``, medians, the AI chat's EUR
 approximations, the generator's price checks and the app's 9 display currencies —
 reads the same table, stored in MongoDB (``FxRate``) and refreshed daily from the
-ECB reference rates (via api.frankfurter.app). If the source is unreachable the
+ECB reference rates (via api.frankfurter.dev). If the source is unreachable the
 last stored table stays in use; on a fresh database the hard-coded ``SEED_RATES``
 below are written as the starting point.
 
@@ -62,7 +62,7 @@ CURRENCY_ALIASES: dict[str, str] = {
     "SG$": "SGD",
 }
 
-SOURCE_URL = "https://api.frankfurter.app/latest"
+SOURCE_URL = "https://api.frankfurter.dev/v1/latest"
 CACHE_TTL_SECONDS = 600
 # A table older than this is refreshed by the startup task.
 STALE_AFTER = timedelta(hours=26)
@@ -169,7 +169,7 @@ async def to_usd(amount: Optional[float], currency: Optional[str]) -> Optional[f
 
 async def _fetch_from_source() -> tuple[dict[str, float], Optional[str]]:
     wanted = [c for c in APP_CURRENCIES if c not in ("USD", "AED")]
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
         resp = await client.get(SOURCE_URL, params={"from": "USD", "to": ",".join(wanted)})
         resp.raise_for_status()
         data = resp.json()
