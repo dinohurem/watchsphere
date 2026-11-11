@@ -4,7 +4,7 @@
  * end state directly.
  */
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleProp, ViewStyle } from 'react-native';
+import { Animated, Easing, LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 
@@ -16,11 +16,13 @@ export function StaggerIn({
   index,
   animate,
   style,
+  onLayout,
   children,
 }: {
   index: number;
   animate: boolean;
   style?: StyleProp<ViewStyle>;
+  onLayout?: (e: LayoutChangeEvent) => void;
   children: SheetNode;
 }) {
   const reduceMotion = useReduceMotion();
@@ -44,6 +46,7 @@ export function StaggerIn({
 
   return (
     <Animated.View
+      onLayout={onLayout}
       style={[
         style,
         {

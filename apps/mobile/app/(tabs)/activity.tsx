@@ -19,6 +19,7 @@ import { useFocusEffect } from 'expo-router';
 import { ActivityRow, ActivityRowSkeleton } from '@/components/activity/ActivityRow';
 import { ActivityEntry, groupByDay, toActivityEntries } from '@/components/activity/types';
 import { AppHeader, ScreenTitle } from '@/components/market/AppHeader';
+import { SkeletonCrossFade } from '@/components/market/Shimmer';
 import { StaggerIn, useFirstAppearance } from '@/components/market/StaggerIn';
 import { UI } from '@/components/market/tokens';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -151,13 +152,17 @@ export default function ActivityScreen() {
           </TouchableOpacity>
         }
       />
-      {feed.showSkeleton ? (
-        <View>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <ActivityRowSkeleton key={i} />
-          ))}
-        </View>
-      ) : (
+      <SkeletonCrossFade
+        loading={feed.showSkeleton}
+        style={styles.fadeBox}
+        skeleton={
+          <View>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <ActivityRowSkeleton key={i} />
+            ))}
+          </View>
+        }
+      >
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
@@ -199,12 +204,13 @@ export default function ActivityScreen() {
             )
           }
         />
-      )}
+      </SkeletonCrossFade>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fadeBox: { flex: 1 },
   container: { flex: 1, backgroundColor: UI.white },
   markAll: { fontSize: fp(15), color: UI.blue },
   list: { paddingBottom: hp(120) },

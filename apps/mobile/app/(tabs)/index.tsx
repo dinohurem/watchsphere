@@ -13,6 +13,7 @@ import { RecentlyViewed } from '@/components/home/RecentlyViewed';
 import { WatchlistEmpty } from '@/components/home/WatchlistEmpty';
 import { AppHeader } from '@/components/market/AppHeader';
 import { MarketCard, MarketCardSkeleton } from '@/components/market/MarketCard';
+import { SkeletonCrossFade } from '@/components/market/Shimmer';
 import { StaggerIn, useFirstAppearance } from '@/components/market/StaggerIn';
 import { UI } from '@/components/market/tokens';
 import { MarketCardData, toCards, watchlistToCards } from '@/components/market/types';
@@ -91,13 +92,17 @@ export default function HomeScreen() {
           ) : null}
         </View>
 
-        {watchlist.showSkeleton ? (
-          <View style={styles.grid}>
-            {Array.from({ length: WATCHLIST_PREVIEW }).map((_, i) => (
-              <MarketCardSkeleton key={i} width={CARD_WIDTH} />
-            ))}
-          </View>
-        ) : watchItems.length > 0 ? (
+        <SkeletonCrossFade
+          loading={watchlist.showSkeleton}
+          skeleton={
+            <View style={styles.grid}>
+              {Array.from({ length: WATCHLIST_PREVIEW }).map((_, i) => (
+                <MarketCardSkeleton key={i} width={CARD_WIDTH} />
+              ))}
+            </View>
+          }
+        >
+        {watchItems.length > 0 ? (
           <View style={styles.grid}>
             {watchItems.slice(0, WATCHLIST_PREVIEW).map((card, index) => (
               <StaggerIn key={`${card.id}-${index}`} index={index} animate={animateWatchlist}>
@@ -108,6 +113,7 @@ export default function HomeScreen() {
         ) : (
           <WatchlistEmpty />
         )}
+        </SkeletonCrossFade>
 
         {recentItems.length > 0 ? (
           <>

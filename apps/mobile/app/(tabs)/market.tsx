@@ -12,6 +12,7 @@ import { AppHeader } from '@/components/market/AppHeader';
 import { BrandTabs } from '@/components/market/BrandTabs';
 import { FilterButton } from '@/components/market/FilterButton';
 import { MarketCard, MarketCardSkeleton } from '@/components/market/MarketCard';
+import { SkeletonCrossFade } from '@/components/market/Shimmer';
 import { StaggerIn, useFirstAppearance } from '@/components/market/StaggerIn';
 import { UI } from '@/components/market/tokens';
 import { MarketCardData, toCards } from '@/components/market/types';
@@ -254,13 +255,17 @@ export default function MarketScreen() {
       <View style={styles.container}>
         <BrandTabs brands={brandTabs.data ?? []} selected={brand} onSelect={selectBrand} />
         {renderFilters()}
-        {cards.showSkeleton ? (
-          <View style={styles.skeletonGrid}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <MarketCardSkeleton key={i} width={CARD_WIDTH} />
-            ))}
-          </View>
-        ) : (
+        <SkeletonCrossFade
+          loading={cards.showSkeleton}
+          style={styles.fadeBox}
+          skeleton={
+            <View style={styles.skeletonGrid}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <MarketCardSkeleton key={i} width={CARD_WIDTH} />
+              ))}
+            </View>
+          }
+        >
           <FlatList
             data={items}
             keyExtractor={(item, i) => `${item.id}-${i}`}
@@ -286,7 +291,7 @@ export default function MarketScreen() {
               )
             }
           />
-        )}
+        </SkeletonCrossFade>
 
         <PickerSheet<Signal>
           visible={sheet === 'show'}
@@ -413,6 +418,7 @@ function DirectionToggle({
 }
 
 const styles = StyleSheet.create({
+  fadeBox: { flex: 1 },
   container: { flex: 1, backgroundColor: UI.white },
   filterRow: {
     flexDirection: 'row',

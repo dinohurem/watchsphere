@@ -22,6 +22,8 @@
 12. [Known Edge Cases & Gotchas](#12-known-edge-cases--gotchas)
 13. [AI Matching Pass](#13-ai-matching-pass)
 14. [Deduplication](#14-deduplication)
+15. [Automatic Pipeline and Claude Review](#15-automatic-pipeline-and-claude-review)
+16. [Price Sanity Quarantine](#16-price-sanity-quarantine)
 
 ---
 
@@ -1165,8 +1167,10 @@ The AI pass runs AFTER the main processing loop, specifically on rows that ended
 - Per-request timeout: 150 seconds; overall timeout: 180 seconds. At the overall
   timeout, unfinished batches are cancelled and finished ones are kept.
 - Model: `settings.OPENAI_TEXT_MODEL` (default `gpt-6-luna`)
-- Temperature: 0.1
-- Max tokens per call: 16,384
+- Temperature: model default. `gpt-6-luna` is a reasoning model and rejects a custom
+  temperature, so none is sent.
+- Token budget per call (`max_completion_tokens`): 16,384, which includes the model's
+  reasoning tokens
 
 ### 13.2a Failures and Truncation
 
@@ -1302,42 +1306,117 @@ For `needs_review` and `not_in_database` rows, the extracted reference is append
 - When duplicates are found, the row with the **latest timestamp** is kept
 - Applied independently to: matched rows, needs_review rows, not_in_database rows
 
+## 15. Automatic Pipeline and Claude Review
+
+`app/services/pipeline.py` runs the generator without an admin in the loop. The Mac mini
+uploads one group's `_chat.txt` and `<group>_Medien.zip` to `POST /pipeline/upload`
+(header `X-Pipeline-Key`).
+
+1. **Durable first.** Both files go to GridFS before the endpoint answers, so the Mac mini
+   only deletes its copy once the server holds it.
+2. **Only new messages.** Every export contains the whole chat history, so messages at or
+   before the group's watermark (the newest timestamp already processed) are dropped.
+3. **Generator.** The kept messages run through the WTS and the WTB generator.
+4. **Routing per bucket:**
+
+| Bucket | What happens |
+|---|---|
+| `matched` | Imported, `match_method="exact"` |
+| `matched_via_image` | Imported, `match_method="image"` |
+| `needs_review` | Sent to the Claude review (below) |
+| `not_in_database` | Archived. These rows feed the "New watches" suggestions |
+| `discarded`, `aftermarket`, no phone number | Kept on the "Discarded" tab for 30 days |
+
+5. **Reposts.** A listing that is already in the book only refreshes the existing order
+   (`last_seen_at`). New-listing alerts are dispatched once per upload, for the really-new
+   order ids only.
+
+### 15.1 Claude review of needs-review rows
+
+`app/services/ai_review.py`, model `ANTHROPIC_REVIEW_MODEL` (default `claude-opus-5-5`).
+It is skipped when `ANTHROPIC_API_KEY` is unset.
+
+- Only the row's original text and its 2–3 catalog candidates are sent, never the whole
+  catalog. Batches of 15 rows.
+- The model must pick one of the given candidates and say whether it is sure.
+- **Sure** → imported with `match_method="ai"` and a short reason, listed on the approval
+  page's "AI decisions" tab, where an admin can still correct it.
+- **Unsure** → waits on the "Unsure" tab. Identical texts are grouped, so one decision
+  covers all of them.
+- Everything that is not an explicit, valid "sure" counts as unsure: errors, a missing key,
+  unknown row ids, a ws_code outside the candidates, rows the model left out. A wrong
+  automatic match is worse than a manual decision.
+- A spelling the AI resolved is recorded as an alias suggestion. An admin approves it on
+  the approval page, and from then on the deterministic matcher knows it.
+
+### 15.2 Daily report
+
+`POST /pipeline/daily-report` (cron, `X-Pipeline-Key`) emails all admins a short summary
+with a link to the approval page.
+
+## 16. Price Sanity Quarantine
+
+`app/services/price_sanity.py`. The per-row check (§8.8) only knows brand minimums. This
+check compares each imported row against its peers: the other rows of the same import plus
+the active orders already in the book for that ws_code.
+
+- Prices are compared in USD via the central FX table.
+- At least **3** peers are needed. With fewer, the row is left alone, because the
+  "median" could itself be the slip.
+- A row is an outlier when its price is outside **0.4×–2.5×** the peer median.
+- If relabelling the currency would put the price within 0.6×–1.7× of the median (e.g.
+  "USD 105.000" that is really HKD), the reason suggests that currency.
+- Rows without a price (normal for WTB) are never flagged.
+- Outliers are quarantined instead of published. In the automatic pipeline they wait on the
+  approval page's "Unsure" tab with the reason. In a manual or `daily-ingest` import they
+  are held back and listed in the import result.
+- Orders already in the book are checked on the admin **Price check** page
+  (`/admin/price-check`). There an admin can correct a price, delete the order, or exclude
+  it from the median (`excluded_from_median`).
+
 ---
 
 ## Appendix A: Remarks Extraction
 
-Keywords are matched with word boundaries and scanned longest-first so a phrase like `nfc card` is consumed before the shorter `nfc` would otherwise fire. Multiple remarks can appear in one row (comma-separated).
+Remarks are **editable rules** stored in MongoDB (`RemarkRule`, `RemarkPlace`). Admins edit
+them on `/admin/remarks`. They are seeded from the defaults in
+`app/services/remark_rules.py` (generator spec appendix A) and loaded at the start of
+every generator run.
 
-| Keyword(s) in text | Normalized |
-|---------|-----------|
-| `only watch`, `watch only`, `single watch`, `naked`, `no paper`, `no papers` | only watch |
-| `white tag`, `both tag`, `both tags` | white tag |
-| `full sticker`, `fullsticker`, `fs` | full sticker |
-| `fullset`, `full set`, `complete set` | fullset |
-| `nfc card`, `nfc` | NFC Card |
-| `net price`, `net`, `netto`, `ex-vat`, `ex vat`, `excluding vat`, `intra`, `intracom`, `intracommunity` | net price |
-| `only export`, `need export`, `export only`, `export` | only export |
-| `margin scheme` | margin scheme |
-| `dial change` | dial change |
-| `retail ready` | retail ready |
-| `polished` | polished |
-| `card only` | Card Only |
-| `box only` | Box Only |
-| `no box` | No Box |
-| `can be used`, `used ok`, `used okay`, `used fine` | Can be Used |
-| `any year` | Any Year |
-| `new clasp` | New Clasp |
-| `new buckle` | New Buckle |
-| `new paper`, `new papers`, `new certificate` | New Paper |
-| `new caliber`, `new calibre` | New Caliber |
-| `double seal` | Double Seal |
-| `single seal` | Single Seal |
-| `open date` | Open Date |
-| `wire`, `wire transfer` | Wire |
-| `cash`, `bh` | Cash |
-| `usdt` | USDT |
-| `wta`, `wta munich` | WTA Munich |
-| `mercedes`, `mercedes hands` | Mercedes Hands |
+Matching:
+- Triggers match case- and accent-insensitively on word boundaries (`Zürich` = `zurich`).
+- Longer triggers claim their span first, so `unadjusted` never also yields `Adjusted` and
+  `margin invoice` never yields `Original Invoice`.
+- A rule can apply to WTS, WTB or both.
+- Several remarks per row are allowed. They are shown in category order and joined with
+  `, `.
+
+Default categories, with a few example rules (66 rules in total; see the admin page for
+every trigger):
+
+| Category | Example remarks (triggers) |
+|---|---|
+| Set and papers | fullset (`full set`, `box+paper`), only watch (`watch only`, `naked`, `no papers`), Watch + Card (`w+c`, `card only`), Watch + Papers (`w+p`), white tag, full sticker, NFC Card, Open Date, Blank Paper, New Card, New Paper, Wood Card (`wood card`, `🪵`), Hold Paper, Service Card, Box Only, No Box |
+| Origin of papers | LC Germany, EU Papers, German / Italian / Japanese / Hong Kong / China Papers |
+| Bracelet | Full Links, Unadjusted (`unadj`, `unsized`), Adjusted (`adj`, `sized`), Cut Strap, Uncut Strap, New Clasp, New Buckle |
+| Condition and service | polished, Unpolished, New Movement, New Caliber, dial change, Double Seal, Single Seal, Mercedes Hands, retail ready, CPO |
+| Price, tax, shipping, payment | net price (`net`, `ex vat`, `intracom`), margin scheme, VAT incl., Shipped, Your Label (`+ label`), only export, Wire, Cash, USDT, Safe Sell |
+| Availability and location | Ready Stock (`in stock`), Incoming (`arriving`, `on the way`), WTA Munich, Worldwide, Can be Used, Any Year |
+
+**Remarks with a number** stay in code (`numeric_remarks`) and cannot be edited:
+
+| Text | Remark |
+|---|---|
+| `11 links`, `missing 1 link` | `11 links` / `1 link` |
+| `serviced 2024`, `rolex service 2023` | `Serviced 2024` |
+| `LC100`, `lc-470` | `LC100` |
+| `-5%`, `less 5%` | `5% Retail` |
+| `W10`, `W10/26`, `W9-2026` | `Wood Card`, and the month/year goes to `Monat/Jahr` |
+
+**Aftermarket.** A row whose text contains an aftermarket trigger (`aftermarket`,
+`custom`, `iced`, `moissanite`, `non original`, …) goes to the `aftermarket` bucket and is
+never imported. Exceptions (`original diamond`, `factory diamond`,
+`aftermarket stickers`) cancel the trigger. Both lists are editable on `/admin/remarks`.
 
 Location-preference remarks are appended separately (see Appendix B). `worldwide`
 yields the `Worldwide` remark for **WTB only** — the former WTS-side
@@ -1356,6 +1435,13 @@ for two cases:
    reference photos.
 2. **Missing date on a matched row** — `Monat/Jahr` is empty and the message has photos;
    the warranty card / certificate date is read from the image.
+
+Steps for an ambiguous variant:
+1. **Describe.** The model first describes what the photo shows (dial, bracelet, bezel,
+   warranty card). The candidates whose catalog fields fit that description are kept, best
+   first, at most 4. Candidates without catalog data for an attribute are not penalised.
+2. **Decide.** The remaining candidates and their catalog reference photos (at most 4) are
+   compared with the listing photo, and the model names one ws_code with a confidence.
 
 Rules:
 - Only attributes that actually differ between the candidates (`bracelet`, `dial`,

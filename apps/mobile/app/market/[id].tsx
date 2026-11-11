@@ -35,6 +35,8 @@ import {
   periodLabel,
 } from '@/components/detail/detailTypes';
 import { CountUpText, PopIcon, useReduceMotion } from '@/components/detail/motion';
+import { Shimmer, SkeletonCrossFade } from '@/components/market/Shimmer';
+import { StaggerIn } from '@/components/market/StaggerIn';
 import { PriceTrendSheet } from '@/components/detail/PriceTrendSheet';
 import { RetailPricesSheet } from '@/components/detail/RetailPricesSheet';
 import { AlertsSheet, AlertsSheetStart } from '@/components/alerts/AlertsSheet';
@@ -562,6 +564,12 @@ export default function WatchDetailsScreen() {
   const [allTimeCounts, setAllTimeCounts] = useState<{ wts: number; wtb: number } | null>(null);
   // M2: count-up only on the first appearance of the page
   const [countUp, setCountUp] = useState(true);
+  // M5: skeleton rows until the order book has loaded once; M3: rows slide in on that first load.
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [animateRows, setAnimateRows] = useState(true);
+  // M1: star / bell only pop + buzz after the user's own tap, not when their state loads.
+  const starTapped = useRef(false);
+  const bellTapped = useRef(false);
 
   // N2 / M4: highlighted listings when opened from push / Activity
   const highlightIds = useMemo(
@@ -576,6 +584,7 @@ export default function WatchDetailsScreen() {
   const tableY = useRef(0);
   const orderSectionY = useRef(0);
   const rowYs = useRef<Record<string, number>>({});
+  const rowsOffsetY = useRef(0);
   const reduceMotion = useReduceMotion();
 
   // Chart interaction state
@@ -901,6 +910,15 @@ export default function WatchDetailsScreen() {
     }
   }, [loading, countUp]);
 
+  // M3 plays once per page: stop animating rows shortly after the first load (tab switches,
+  // filter changes and refreshes then show rows directly).
+  useEffect(() => {
+    if (!ordersLoading && animateRows) {
+      const t = setTimeout(() => setAnimateRows(false), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [ordersLoading, animateRows]);
+
   /** Price of a listing converted into the app currency (falls back to usd_price). */
   const convertedPrice = useCallback(
     (order: OrderBookItem): number | null => {
@@ -957,7 +975,7 @@ export default function WatchDetailsScreen() {
       const rowY = rowYs.current[firstId];
       if (rowY === undefined) return;
       highlightScrolled.current = true;
-      const y = Math.max(0, tableY.current + rowY - hp(160));
+      const y = Math.max(0, tableY.current + rowsOffsetY.current + rowY - hp(160));
       scrollRef.current?.scrollTo({ y, animated: !reduceMotion });
       // Arm the "fade on first interaction" only after the programmatic scroll has settled.
       setTimeout(() => {
@@ -1019,6 +1037,7 @@ export default function WatchDetailsScreen() {
     const ref = reference || watch.reference || id || '';
 
     const wasInWatchlist = isInWatchlist;
+    starTapped.current = true;
     // Optimistic update — toggle immediately for responsive UI
     setIsInWatchlist(!wasInWatchlist);
     setWatchlistLoading(true);
@@ -1148,7 +1167,7 @@ export default function WatchDetailsScreen() {
   };
 
   const loadOrderBook = async () => {
-    if (isGuideActive) { setBuyOrders(GUIDE_MOCK_BUY_ORDERS); setSellOrders(GUIDE_MOCK_SELL_ORDERS); return; }
+    if (isGuideActive) { setBuyOrders(GUIDE_MOCK_BUY_ORDERS); setSellOrders(GUIDE_MOCK_SELL_ORDERS); setOrdersLoading(false); return; }
     try {
       const watchReference = wsCodeParam || reference || id;
       // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
@@ -1257,6 +1276,8 @@ export default function WatchDetailsScreen() {
       console.error('Failed to load order book:', error);
       setBuyOrders([]);
       setSellOrders([]);
+    } finally {
+      setOrdersLoading(false);
     }
   };
 
@@ -1568,7 +1589,7 @@ export default function WatchDetailsScreen() {
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityLabel="Alerts"
                 >
-                  <PopIcon active={watchAlerts.length > 0} wiggle>
+                  <PopIcon active={watchAlerts.length > 0} wiggle armed={bellTapped.current}>
                     <DetailBellIcon filled={watchAlerts.length > 0} />
                   </PopIcon>
                 </TouchableOpacity>
@@ -1578,7 +1599,7 @@ export default function WatchDetailsScreen() {
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityLabel={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
                 >
-                  <PopIcon active={isInWatchlist}>
+                  <PopIcon active={isInWatchlist} armed={starTapped.current}>
                     <DetailStarIcon filled={isInWatchlist} />
                   </PopIcon>
                 </TouchableOpacity>
@@ -1789,6 +1810,13 @@ export default function WatchDetailsScreen() {
             </View>
 
             {/* Rows - use dynamic data from API with filters applied */}
+            <SkeletonCrossFade
+              loading={ordersLoading}
+              skeleton={<OrderRowsSkeleton />}
+              onLayout={(e) => {
+                rowsOffsetY.current = e.nativeEvent.layout.y;
+              }}
+            >
             {currentOrders.length === 0 ? (
               <View style={styles.orderBookEmptyState}>
                 <Text style={styles.orderBookEmptyText}>
@@ -1799,9 +1827,10 @@ export default function WatchDetailsScreen() {
               </View>
             ) : (
               (v2Enabled ? currentOrders.slice(0, 5) : currentOrders).map((order, index) => (
-                <View
+                <StaggerIn
                   key={order.id || index}
-                  style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}
+                  index={index}
+                  animate={animateRows}
                   onLayout={(e) => {
                     if (!order.id) return;
                     rowYs.current[order.id] = e.nativeEvent.layout.y;
@@ -1810,6 +1839,7 @@ export default function WatchDetailsScreen() {
                     }
                   }}
                 >
+                <View style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}>
                   {/* N2 / M4 highlight: light blue row with a 4 pt blue bar on the left */}
                   {highlightActive && highlightIds.includes(order.id) ? (
                     <Animated.View
@@ -1914,8 +1944,10 @@ export default function WatchDetailsScreen() {
                     ) : null}
                   </View>
                 </View>
+                </StaggerIn>
               ))
             )}
+            </SkeletonCrossFade>
           </View>); })()}
 
           {/* See Order Book Button */}
@@ -2270,7 +2302,10 @@ export default function WatchDetailsScreen() {
           wsCode={detailWsCode}
           alerts={watchAlerts}
           start={alertsSheet}
-          onChanged={fetchAlerts}
+          onChanged={() => {
+            bellTapped.current = true;
+            fetchAlerts();
+          }}
         />
       ) : null}
 
@@ -3306,3 +3341,21 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
+
+/** M5: grey placeholder rows in the shape of the listing table rows. */
+function OrderRowsSkeleton() {
+  return (
+    <View>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <View key={i} style={[styles.tableRow, i % 2 === 0 && styles.tableRowAlt]}>
+          {[0.5, 0.6, 0.7, 0.35].map((w, c) => (
+            <View key={c} style={[styles.tableCell, { flex: 1, alignItems: 'center' }]}>
+              <Shimmer style={{ width: `${w * 100}%`, height: hp(12) }} />
+              {c < 2 ? <Shimmer style={{ width: `${w * 60}%`, height: hp(9), marginTop: hp(5) }} /> : null}
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
