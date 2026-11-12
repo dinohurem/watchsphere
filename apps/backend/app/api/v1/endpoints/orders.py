@@ -931,6 +931,25 @@ async def trigger_watch_alerts(order: Order, creator: User):
         logger.error(f"Error triggering watch alerts: {e}", exc_info=True)
 
 
+async def _refresh_stats(*ws_codes: Optional[str]) -> None:
+    """Order changed by hand: recompute that watch's market stats now instead of at the next
+    daily FX refresh. Never fails the request."""
+    from app.services.market_stats import recompute_for_safe
+
+    codes = sorted({c for c in ws_codes if c})
+    if codes:
+        await recompute_for_safe(codes)
+
+
+async def _refresh_all_stats() -> None:
+    from app.services.market_stats import recompute_all
+
+    try:
+        await recompute_all()
+    except Exception as exc:  # logged, never fails the request
+        logger.exception("market_stats: full recompute failed: %s", exc)
+
+
 @router.post("", response_model=OrderResponse)
 async def create_order(
     order_data: OrderCreate,
@@ -987,6 +1006,7 @@ async def create_order(
     order.usd_price = await fx_to_usd(order.price, order.currency)
 
     await order.insert()
+    await _refresh_stats(order.ws_code)
 
     # Update order count on related watch models atomically
     await Watch.find(Watch.reference == order_data.reference).update_many(
@@ -1298,6 +1318,7 @@ async def update_order(
             detail="Not authorized to update this order"
         )
 
+    old_ws_code = order.ws_code
     # Update fields if provided
     update_data = order_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -1307,6 +1328,7 @@ async def update_order(
 
     order.updated_at = datetime.utcnow()
     await order.save()
+    await _refresh_stats(old_ws_code, order.ws_code)
 
     # Log activity
     platform = x_platform or "web"
@@ -1415,6 +1437,7 @@ async def cancel_order(
     order.status = OrderStatus.COMPLETED
     order.updated_at = datetime.utcnow()
     await order.save()
+    await _refresh_stats(order.ws_code)
 
     # Log activity
     platform = x_platform or "web"
@@ -1468,6 +1491,7 @@ async def mark_order_as_sold(
     order.status = OrderStatus.COMPLETED
     order.updated_at = datetime.utcnow()
     await order.save()
+    await _refresh_stats(order.ws_code)
 
     # Log activity
     platform = x_platform or "web"
@@ -1545,6 +1569,7 @@ async def mark_order_as_completed(
     order.status = OrderStatus.COMPLETED
     order.updated_at = datetime.utcnow()
     await order.save()
+    await _refresh_stats(order.ws_code)
 
     # Log activity
     platform = x_platform or "web"
@@ -1663,6 +1688,7 @@ async def admin_delete_order(
         )
 
     await order.delete()
+    await _refresh_stats(order.ws_code)
 
     return {"message": "Order deleted successfully"}
 
@@ -1673,6 +1699,7 @@ async def admin_delete_all_orders(
 ) -> Any:
     """Delete ALL orders (Admin only)"""
     result = await Order.find_all().delete()
+    await _refresh_all_stats()
     count = result.deleted_count if result else 0
     return {"message": f"Deleted {count} orders"}
 
@@ -1684,6 +1711,7 @@ async def admin_delete_orders_by_ws_code(
 ) -> Any:
     """Delete all orders for a specific ws_code (Admin only)"""
     result = await Order.find(Order.ws_code == ws_code).delete()
+    await _refresh_stats(ws_code)
     count = result.deleted_count if result else 0
     return {"message": f"Deleted {count} orders for ws_code '{ws_code}'"}
 
@@ -1928,6 +1956,7 @@ async def admin_create_order(
     order.usd_price = await fx_to_usd(order.price, order.currency)
 
     await order.insert()
+    await _refresh_stats(order.ws_code)
 
     # Update order count on related watch models atomically
     await Watch.find(Watch.reference == order_data.reference).update_many(
@@ -1980,6 +2009,7 @@ async def admin_update_order(
             detail="Order not found"
         )
 
+    old_ws_code = order.ws_code
     # Update fields if provided
     update_data = order_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -1989,6 +2019,7 @@ async def admin_update_order(
 
     order.updated_at = datetime.utcnow()
     await order.save()
+    await _refresh_stats(old_ws_code, order.ws_code)
 
     return OrderResponse(
         id=str(order.id),

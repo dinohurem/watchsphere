@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { WatchlistEmpty } from '@/components/home/WatchlistEmpty';
 import { ChevronLeft } from '@/components/icons';
 import { MarketCard, MarketCardSkeleton } from '@/components/market/MarketCard';
+import { SkeletonCrossFade } from '@/components/market/Shimmer';
 import { UI } from '@/components/market/tokens';
 import { MarketCardData, watchlistToCards } from '@/components/market/types';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -38,13 +39,17 @@ export default function WatchlistScreen() {
         <Text style={[styles.title, { fontFamily: fonts.semiBold }]}>Watchlist</Text>
         <View style={styles.back} />
       </View>
-      {watchlist.showSkeleton ? (
-        <View style={styles.grid}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <MarketCardSkeleton key={i} width={CARD_WIDTH} />
-          ))}
-        </View>
-      ) : (
+      <SkeletonCrossFade
+        loading={watchlist.showSkeleton}
+        style={styles.fadeBox}
+        skeleton={
+          <View style={styles.grid}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <MarketCardSkeleton key={i} width={CARD_WIDTH} />
+            ))}
+          </View>
+        }
+      >
         <FlatList
           data={watchlist.data ?? []}
           keyExtractor={(item, i) => `${item.id}-${i}`}
@@ -57,12 +62,13 @@ export default function WatchlistScreen() {
           }
           ListEmptyComponent={watchlist.loading ? null : <WatchlistEmpty />}
         />
-      )}
+      </SkeletonCrossFade>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  fadeBox: { flex: 1 },
   container: { flex: 1, backgroundColor: UI.white },
   header: {
     flexDirection: 'row',

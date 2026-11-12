@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleProp, Text, TextStyle, ViewStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 import type { SheetNode } from '@/components/PickerSheet';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
@@ -67,11 +68,17 @@ export function CountUpText({
 export function PopIcon({
   active,
   wiggle,
+  armed = true,
   children,
   style,
 }: {
   active: boolean;
   wiggle?: boolean;
+  /**
+   * Only animate (and buzz) when the change came from the user's tap – pass false while the
+   * state is still being loaded so an already-followed watch doesn't pop on open.
+   */
+  armed?: boolean;
   children: SheetNode;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -83,7 +90,10 @@ export function PopIcon({
   useEffect(() => {
     const was = previous.current;
     previous.current = active;
-    if (!active || was || reduce) return;
+    if (!active || was || !armed) return;
+    // M1: light haptic (UIImpactFeedbackGenerator .light) – not motion, so also with Reduce Motion.
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (reduce) return;
     Animated.sequence([
       Animated.timing(scale, {
         toValue: 1.3,
@@ -101,7 +111,7 @@ export function PopIcon({
         Animated.timing(rotate, { toValue: 0, duration: 175, useNativeDriver: true }),
       ]).start();
     }
-  }, [active, wiggle, reduce, scale, rotate]);
+  }, [active, wiggle, armed, reduce, scale, rotate]);
 
   const spin = rotate.interpolate({ inputRange: [-1, 1], outputRange: ['-14deg', '14deg'] });
   return (
