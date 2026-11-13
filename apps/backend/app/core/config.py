@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     # X-Pipeline-Key header when it uploads chat exports; scheduled jobs (FX refresh,
     # daily report) use it too. Empty means those endpoints return 503.
     PIPELINE_API_KEY: str = ""
+    # Extra recipients of the daily pipeline report, besides all admins.
+    # Comma-separated, e.g. "po@example.com, ops@example.com".
+    PIPELINE_REPORT_EXTRA_RECIPIENTS: str = ""
     # Claude API for the needs-review pass (generator spec §1.5). Empty → every
     # needs-review row goes to the approval page's "Unsure" tab.
     ANTHROPIC_API_KEY: str = ""
