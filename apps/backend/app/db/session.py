@@ -1,7 +1,14 @@
-from motor.motor_asyncio import AsyncIOMotorClient
-from beanie import init_beanie
-from app.core.config import settings
+import logging
 from typing import Optional
+
+from beanie import init_beanie
+from beanie.odm.utils.init import Initializer
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import OperationFailure
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Global MongoDB client
 mongodb_client: Optional[AsyncIOMotorClient] = None
@@ -43,25 +50,48 @@ async def connect_to_mongo():
     from app.models.change_batch import ChangeBatch, ChangeBatchEntry
     from app.models.remark_rule import RemarkRule, RemarkPlace
 
-    await init_beanie(
-        database=mongodb_client[settings.MONGODB_DB_NAME],
-        document_models=[
-            User, Watch, Message, Conversation,
-            News, ConversationMember,
-            Billing, Subscription, SubscriptionHistory, Transaction,
-            WatchlistRecord, DefaultWatchlistItem, ActivityLog,
-            WhatsAppImport, WhatsAppMessage, ExtractedWatchListing,
-            VerificationCode, Order,
-            ListingField, Filter,
-            Dispute, Issue, Report, Review, AuthHandoffToken,
-            Notification, AppSettings, WatchAlert,
-            WtbWtsRun, BridgeMessage, BridgeStatus,
-            FxRate, FxRateHistory, WatchMarketStats,
-            PipelineUpload, PipelineGroupState, PipelineItem, AliasSuggestion, PipelineReportState,
-            ChangeBatch, ChangeBatchEntry,
-            RemarkRule, RemarkPlace,
-        ]
-    )
+    models = [
+        User, Watch, Message, Conversation,
+        News, ConversationMember,
+        Billing, Subscription, SubscriptionHistory, Transaction,
+        WatchlistRecord, DefaultWatchlistItem, ActivityLog,
+        WhatsAppImport, WhatsAppMessage, ExtractedWatchListing,
+        VerificationCode, Order,
+        ListingField, Filter,
+        Dispute, Issue, Report, Review, AuthHandoffToken,
+        Notification, AppSettings, WatchAlert,
+        WtbWtsRun, BridgeMessage, BridgeStatus,
+        FxRate, FxRateHistory, WatchMarketStats,
+        PipelineUpload, PipelineGroupState, PipelineItem, AliasSuggestion, PipelineReportState,
+        ChangeBatch, ChangeBatchEntry,
+        RemarkRule, RemarkPlace,
+    ]
+    database = mongodb_client[settings.MONGODB_DB_NAME]
+    try:
+        await init_beanie(database=database, document_models=models)
+    except OperationFailure as exc:
+        # Index sync is a write. When the cluster refuses writes (e.g. Atlas storage
+        # quota, code 8000) a crash here takes the whole API down although reads
+        # still work. Start without index sync instead; it runs again next start.
+        logger.error(
+            "MongoDB refused index creation at startup (%s: %s). Starting without "
+            "index sync; writes will fail until the cluster accepts them again.",
+            exc.code, str(exc)[:200],
+        )
+        await _init_beanie_without_indexes(database, models)
+
+
+async def _init_beanie_without_indexes(database, models) -> None:
+    original = Initializer.init_indexes
+
+    async def _skip(self, cls, allow_index_dropping: bool = False):
+        return None
+
+    Initializer.init_indexes = _skip
+    try:
+        await init_beanie(database=database, document_models=models)
+    finally:
+        Initializer.init_indexes = original
 
 
 async def close_mongo_connection():

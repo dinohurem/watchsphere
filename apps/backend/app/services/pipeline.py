@@ -178,6 +178,23 @@ async def store_upload(group_name: str, chat_bytes: bytes, media_bytes: Optional
     if existing:
         return existing, True
 
+    if media_bytes:
+        # The export's ZIP holds the media of the group's whole history. Keep only the
+        # files attached to messages newer than the watermark: processing never reads
+        # the rest, and storing it filled the database. An older watermark (an earlier
+        # upload not processed yet) only keeps more files, never fewer.
+        from app.models.pipeline import PipelineGroupState
+
+        state = await PipelineGroupState.find_one({"group_name": group_name})
+        wanted = filter_new_messages(
+            chat_bytes.decode("utf-8", errors="replace"),
+            state.last_message_at if state else None,
+        )["attachments"]
+        slim = slim_media_zip(media_bytes, wanted)
+        logger.info("pipeline: %s media zip %d → %d bytes (%d attachment(s) kept)",
+                    group_name, len(media_bytes), len(slim or b""), len(wanted))
+        media_bytes = slim
+
     chat_id = await _put(UPLOAD_BUCKET, chat_bytes, f"{group_name}/_chat.txt", {"group": group_name})
     media_id = None
     if media_bytes:
@@ -192,6 +209,27 @@ async def store_upload(group_name: str, chat_bytes: bytes, media_bytes: Optional
     )
     await upload.insert()
     return upload, False
+
+
+def slim_media_zip(zip_bytes: Optional[bytes], wanted: list[str]) -> Optional[bytes]:
+    """Rebuild the media ZIP with only the ``wanted`` files (matched by base name,
+    case-insensitive). None when nothing is wanted or found. An unreadable ZIP is
+    kept as-is so nothing is lost."""
+    if not zip_bytes or not wanted:
+        return None
+    files = _extract_media(zip_bytes, wanted)
+    if not files:
+        try:
+            zipfile.ZipFile(io.BytesIO(zip_bytes)).close()
+        except zipfile.BadZipFile:
+            return zip_bytes
+        return None
+    out = io.BytesIO()
+    # Photos are already compressed; storing avoids recompressing them for nothing.
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_STORED) as zf:
+        for name, data in files.items():
+            zf.writestr(name, data)
+    return out.getvalue()
 
 
 def _extract_media(zip_bytes: Optional[bytes], wanted: list[str]) -> dict[str, bytes]:
@@ -626,6 +664,19 @@ async def build_daily_report(since: datetime) -> dict:
     }
 
 
+def report_recipients(admin_emails: list[Optional[str]], extra: Optional[str]) -> list[str]:
+    """All admin emails plus the comma/semicolon-separated extra addresses,
+    deduplicated case-insensitively, in that order."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for email in [*admin_emails, *re.split(r"[,;\s]+", extra or "")]:
+        email = (email or "").strip()
+        if email and "@" in email and email.lower() not in seen:
+            seen.add(email.lower())
+            out.append(email)
+    return out
+
+
 async def send_daily_report() -> dict:
     from app.core.config import settings
     from app.models.pipeline import PipelineReportState
@@ -655,10 +706,11 @@ async def send_daily_report() -> dict:
     )
     html = email_service._get_email_template(html_body)
     admins = await User.find({"role": UserRole.ADMIN.value}).to_list()
+    recipients = report_recipients([a.email for a in admins], settings.PIPELINE_REPORT_EXTRA_RECIPIENTS)
     sent = 0
-    for admin in admins:
-        if admin.email and await email_service._send_email(
-            admin.email, "WatchSphere – daily pipeline report", html, text
+    for email in recipients:
+        if await email_service._send_email(
+            email, "WatchSphere – daily pipeline report", html, text
         ):
             sent += 1
     if state is None:
