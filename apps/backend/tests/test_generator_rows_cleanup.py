@@ -80,11 +80,24 @@ async def test_pipeline_generator_step_discards_rows(runs_db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_startup_sweep_removes_only_old_leftovers(runs_db):
-    old = await _run(minutes_ago=120)
-    fresh = await _run(minutes_ago=5)
-    assert await svc.cleanup_stale_run_rows() == 1
-    assert len(runs_db) == 1
+async def test_startup_sweep_deletes_only_old_files_and_never_writes(runs_db, monkeypatch):
+    from bson import ObjectId
+
     from app.models.wtb_wts import WtbWtsRun
-    assert (await WtbWtsRun.get(old.id)).rows_json_gridfs_id is None
-    assert (await WtbWtsRun.get(fresh.id)).rows_json_gridfs_id is not None
+
+    files = WtbWtsRun.get_motor_collection().database["wtb_wts_files.files"]
+    old_id, fresh_id, csv_id = ObjectId(), ObjectId(), ObjectId()
+    now = datetime.utcnow()
+    await files.insert_many([
+        {"_id": old_id, "filename": "rows-a.json", "uploadDate": now - timedelta(hours=2)},
+        {"_id": fresh_id, "filename": "rows-b.json", "uploadDate": now - timedelta(minutes=5)},
+        {"_id": csv_id, "filename": "matched-a.csv", "uploadDate": now - timedelta(hours=2)},
+    ])
+    runs_db.update({str(old_id): "x", str(fresh_id): "y", str(csv_id): "z"})
+
+    async def no_writes(*a, **k):
+        raise AssertionError("sweep must not update runs")
+
+    monkeypatch.setattr(WtbWtsRun, "update", no_writes, raising=False)
+    assert await svc.cleanup_stale_run_rows() == 1
+    assert set(runs_db) == {str(fresh_id), str(csv_id)}
