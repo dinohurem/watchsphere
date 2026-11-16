@@ -36,7 +36,8 @@ class WtbWtsRun(Document):
     # Rows that could only be assigned correctly through image analysis
     matched_via_image_csv_gridfs_id: Optional[str] = None
     # Structured per-row JSON (all buckets incl. discarded / aftermarket, with
-    # _meta) for the pipeline and the approval page. Not removed by the CSV TTL.
+    # _meta), read once by the pipeline and deleted right after (see
+    # discard_run_rows; cleanup_stale_run_rows at startup catches leftovers).
     rows_json_gridfs_id: Optional[str] = None
     files_expire_at: Optional[datetime] = None
 

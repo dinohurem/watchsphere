@@ -528,6 +528,8 @@ async def _run_generator(chat_txt: str, media: dict, group_name: str, mode: str,
             chat_txt, media or None, group_name, mode, ref.month, ref.year, admin_id,
         )
         rows = await gen.load_run_rows(run_id)
+        # Read once, here; the rows live on in PipelineItems and orders.
+        await gen.discard_run_rows(run_id)
         return str(run_id), rows or {}
 
     import csv as _csv
