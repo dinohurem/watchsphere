@@ -46,6 +46,8 @@ _drain_task: Optional[asyncio.Task] = None
 # A restarted instance waits this long before taking over interrupted uploads, so
 # an old instance still finishing during a deploy is not processed twice.
 RECOVERY_DELAY_SECONDS = 30
+RECOVERY_RETRIES = 10
+RECOVERY_RETRY_SECONDS = 60
 
 # Same header formats the generator understands (iOS bracket, Android, German).
 _HEADER_PATTERNS = [
@@ -215,7 +217,54 @@ async def store_upload(group_name: str, chat_bytes: bytes, media_bytes: Optional
         media_bytes=len(media_bytes or b""),
     )
     await upload.insert()
+    try:
+        await supersede_queued(group_name)
+    except Exception as exc:  # the new upload is stored; this is housekeeping only
+        logger.warning("pipeline: superseding older uploads of %s failed: %s", group_name, exc)
     return upload, False
+
+
+async def supersede_queued(group_name: Optional[str] = None, delete_only: bool = False,
+                           statuses: tuple = ("received",)) -> int:
+    """Every export holds the group's whole history, so a newer queued export makes
+    the older queued ones of the same group redundant: processing the newest one
+    imports everything past the watermark. Delete their files and mark them done
+    (``stats.superseded_by``). While the Mac mini kept re-sending during a backlog,
+    the stale copies (up to 10 per group, ~3.5 GB) pushed Atlas over its quota.
+
+    ``delete_only`` only deletes the files (Atlas allows deletes over quota); the
+    status update follows once writes work again, and ``process_upload`` skips a
+    superseded upload without reading its files either way."""
+    from app.models.pipeline import PipelineUpload
+
+    coll = PipelineUpload.get_motor_collection()
+    query: dict[str, Any] = {"status": {"$in": list(statuses)}}
+    if group_name:
+        query["group_name"] = group_name
+    by_group: dict[str, list[dict]] = {}
+    async for doc in coll.find(query, {"group_name": 1, "received_at": 1,
+                                       "chat_gridfs_id": 1, "media_gridfs_id": 1}):
+        by_group.setdefault(doc["group_name"], []).append(doc)
+    count = 0
+    for docs in by_group.values():
+        if len(docs) < 2:
+            continue
+        docs.sort(key=lambda d: d["received_at"])
+        newest, older = docs[-1], docs[:-1]
+        for doc in older:
+            await _delete(UPLOAD_BUCKET, doc.get("chat_gridfs_id"))
+            await _delete(UPLOAD_BUCKET, doc.get("media_gridfs_id"))
+        if not delete_only:
+            await coll.update_many(
+                {"_id": {"$in": [d["_id"] for d in older]}, "status": {"$in": list(statuses)}},
+                {"$set": {"status": "done", "stats": {"superseded_by": str(newest["_id"])},
+                          "error": None, "processed_at": datetime.utcnow()}},
+            )
+        count += len(older)
+    if count:
+        logger.info("pipeline: %d older queued upload(s) superseded%s", count,
+                    " (files deleted)" if delete_only else "")
+    return count
 
 
 def _slim_for_watermark(chat_bytes: bytes, media_bytes: bytes, watermark: Optional[datetime]):
@@ -569,6 +618,22 @@ async def process_upload(upload_id: str) -> dict:
         if not claimed:
             return {"skipped": True}
         upload = await PipelineUpload.get(ObjectId(upload_id))
+        newer = await PipelineUpload.find_one({
+            "group_name": upload.group_name, "_id": {"$ne": upload.id},
+            "received_at": {"$gt": upload.received_at},
+            "status": {"$in": [UploadStatus.RECEIVED.value, UploadStatus.PROCESSING.value,
+                               UploadStatus.DONE.value]},
+        })
+        if newer:
+            # A newer export of the group covers everything this one holds.
+            await _delete(UPLOAD_BUCKET, upload.chat_gridfs_id)
+            await _delete(UPLOAD_BUCKET, upload.media_gridfs_id)
+            upload.status = UploadStatus.DONE
+            upload.stats = {"superseded_by": str(newer.id)}
+            upload.error = None
+            upload.processed_at = datetime.utcnow()
+            await upload.save()
+            return {"superseded": True}
         try:
             stats = await _process_claimed(upload)
             upload.status = UploadStatus.DONE
@@ -645,6 +710,17 @@ async def recover_interrupted_uploads(delay: float = RECOVERY_DELAY_SECONDS) -> 
 
     if delay:
         await asyncio.sleep(delay)
+    # Atlas takes a while to notice space freed at startup; until then writes fail.
+    for attempt in range(RECOVERY_RETRIES):
+        try:
+            return await _recover(PipelineUpload, UploadStatus)
+        except Exception as exc:
+            logger.warning("pipeline: startup recovery attempt %d failed: %s", attempt + 1, str(exc)[:200])
+            await asyncio.sleep(RECOVERY_RETRY_SECONDS)
+    return {"requeued": 0, "failed": 0}
+
+
+async def _recover(PipelineUpload, UploadStatus) -> dict:
     coll = PipelineUpload.get_motor_collection()
     gave_up = await coll.update_many(
         {"status": UploadStatus.PROCESSING.value, "attempts": {"$gte": MAX_ATTEMPTS}},
@@ -658,6 +734,7 @@ async def recover_interrupted_uploads(delay: float = RECOVERY_DELAY_SECONDS) -> 
     if gave_up.modified_count or requeued.modified_count:
         logger.warning("pipeline: startup recovery: %d upload(s) requeued, %d marked failed",
                        requeued.modified_count, gave_up.modified_count)
+    await supersede_queued()
     kick_processing()
     return {"requeued": requeued.modified_count, "failed": gave_up.modified_count}
 
