@@ -4,7 +4,7 @@ import csv
 import io
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from app.models.watch import Watch
 from app.services.vision_matching import (
@@ -5036,6 +5036,36 @@ async def load_run_rows(run_id) -> dict[str, list[dict]]:
         return empty
     data = json.loads(await _gridfs_get_text(run.rows_json_gridfs_id))
     return {k: list(data.get(k) or []) for k in BUCKETS}
+
+
+async def discard_run_rows(run_id) -> None:
+    """Delete a run's rows JSON once the pipeline has read it. Nothing else reads
+    it, and at ~10 MB per run it filled the database."""
+    from beanie import PydanticObjectId
+    from bson import ObjectId
+    from app.models.wtb_wts import WtbWtsRun
+    run = await WtbWtsRun.get(PydanticObjectId(str(run_id)))
+    if not run or not run.rows_json_gridfs_id:
+        return
+    try:
+        await _rows_gridfs_bucket().delete(ObjectId(run.rows_json_gridfs_id))
+    except Exception as exc:  # already gone
+        logger.debug("rows json %s not deleted: %s", run.rows_json_gridfs_id, exc)
+    await WtbWtsRun.find_one(WtbWtsRun.id == run.id).update({"$set": {"rows_json_gridfs_id": None}})
+
+
+async def cleanup_stale_run_rows(older_than: timedelta = timedelta(hours=1)) -> int:
+    """Delete rows JSON of runs older than ``older_than``: left behind by runs that
+    were interrupted, or written before rows were deleted after reading. A run's
+    rows are read within minutes of it finishing."""
+    from app.models.wtb_wts import WtbWtsRun
+    cutoff = datetime.utcnow() - older_than
+    runs = await WtbWtsRun.find(
+        {"rows_json_gridfs_id": {"$ne": None}, "created_at": {"$lt": cutoff}}
+    ).to_list()
+    for run in runs:
+        await discard_run_rows(run.id)
+    return len(runs)
 
 
 async def run_generator_on_export(

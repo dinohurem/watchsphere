@@ -348,7 +348,9 @@ async def startup():
         await _cleanup_all_expired()
         from app.api.v1.endpoints.whatsapp import cleanup_expired_whatsapp_files
         await cleanup_expired_whatsapp_files()
-        logger.info("Startup: cleaned up expired files")
+        from app.services.wtb_wts_service import cleanup_stale_run_rows
+        removed = await cleanup_stale_run_rows()
+        logger.info("Startup: cleaned up expired files (%d stale generator row file(s))", removed)
     except Exception as e:
         logger.warning(f"Startup: failed to clean up expired files: {e}")
     # Central FX table: refresh when older than a day (the daily cron calls
