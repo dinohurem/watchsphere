@@ -105,3 +105,88 @@ async def test_queue_pending_retries_failed_and_returns_without_waiting(upload_d
     assert fake_processing["order"] == []  # answered before processing ran
     await pipeline._drain_task
     assert fake_processing["order"] == ["failed-once", "waiting"]
+
+
+# --- superseding older queued exports ------------------------------------------
+
+@pytest.fixture
+def deleted(monkeypatch):
+    calls = []
+
+    async def record(bucket, file_id):
+        if file_id:
+            calls.append(file_id)
+
+    monkeypatch.setattr(pipeline, "_delete", record)
+    return calls
+
+
+async def _upload_files(group, minutes_ago, status="received"):
+    up = await _upload(group, minutes_ago, status=status)
+    up.chat_gridfs_id = f"chat-{group}-{minutes_ago}"
+    up.media_gridfs_id = f"media-{group}-{minutes_ago}"
+    await up.save()
+    return up
+
+
+@pytest.mark.asyncio
+async def test_newer_export_supersedes_older_queued_ones(upload_db, deleted):
+    from app.models.pipeline import PipelineUpload
+
+    old1 = await _upload_files("A", 30)
+    old2 = await _upload_files("A", 20)
+    running = await _upload_files("A", 40, status="processing")
+    newest = await _upload_files("A", 10)
+    other = await _upload_files("B", 25)
+    assert await pipeline.supersede_queued() == 2
+    got = {u.id: u for u in await PipelineUpload.find_all().to_list()}
+    for old in (old1, old2):
+        assert got[old.id].status.value == "done"
+        assert got[old.id].stats == {"superseded_by": str(newest.id)}
+    assert got[newest.id].status.value == "received"
+    assert got[running.id].status.value == "processing"  # never touched mid-run
+    assert got[other.id].status.value == "received"
+    assert sorted(deleted) == sorted([old1.chat_gridfs_id, old1.media_gridfs_id,
+                                      old2.chat_gridfs_id, old2.media_gridfs_id])
+
+
+@pytest.mark.asyncio
+async def test_delete_only_frees_files_without_writing_status(upload_db, deleted):
+    from app.models.pipeline import PipelineUpload
+
+    stuck = await _upload_files("A", 30, status="processing")
+    await _upload_files("A", 10)
+    n = await pipeline.supersede_queued(delete_only=True, statuses=("received", "processing"))
+    assert n == 1 and deleted == [stuck.chat_gridfs_id, stuck.media_gridfs_id]
+    assert (await PipelineUpload.get(stuck.id)).status.value == "processing"
+
+
+@pytest.mark.asyncio
+async def test_process_upload_skips_superseded_without_reading_files(upload_db, fake_processing, deleted):
+    from app.models.pipeline import PipelineUpload
+
+    old = await _upload_files("A", 30)
+    await _upload_files("A", 10)
+    assert await pipeline.process_upload(str(old.id)) == {"superseded": True}
+    assert fake_processing["order"] == []
+    assert (await PipelineUpload.get(old.id)).status.value == "done"
+
+
+@pytest.mark.asyncio
+async def test_recovery_retries_until_writes_work(upload_db, fake_processing, monkeypatch):
+    calls = {"n": 0}
+    real = pipeline._recover
+
+    async def flaky(*args):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("over your space quota")
+        return await real(*args)
+
+    monkeypatch.setattr(pipeline, "_recover", flaky)
+    monkeypatch.setattr(pipeline, "RECOVERY_RETRY_SECONDS", 0)
+    await _upload("interrupted", 5, status="processing", attempts=1)
+    assert await pipeline.recover_interrupted_uploads(delay=0) == {"requeued": 1, "failed": 0}
+    assert calls["n"] == 3
+    await pipeline._drain_task
+    assert fake_processing["order"] == ["interrupted"]
