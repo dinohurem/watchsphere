@@ -359,6 +359,14 @@ async def startup():
         _asyncio.create_task(refresh_if_stale())
     except Exception as e:
         logger.warning(f"Startup: FX refresh not scheduled: {e}")
+    # Generator pipeline: requeue uploads a stopped instance left "processing"
+    # and start the worker for anything still waiting.
+    try:
+        import asyncio as _asyncio
+        from app.services.pipeline import recover_interrupted_uploads
+        _asyncio.create_task(recover_interrupted_uploads())
+    except Exception as e:
+        logger.warning(f"Startup: pipeline recovery not scheduled: {e}")
 
 app = Starlette(
     routes=[

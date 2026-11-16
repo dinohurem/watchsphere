@@ -19,7 +19,7 @@ google-auth==2.27.0
 PyJWT==2.8.0
 
 # AI & ML
-openai==1.10.0
+openai==2.53.0
 anthropic==2.6.0
 rapidfuzz>=3.0.0
 

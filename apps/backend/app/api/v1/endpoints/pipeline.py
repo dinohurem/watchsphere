@@ -3,7 +3,6 @@
 Service endpoints authenticate with ``X-Pipeline-Key`` (``PIPELINE_API_KEY``;
 unset → 503). Admin endpoints use the normal admin JWT.
 """
-import asyncio
 import logging
 from typing import Any, Optional
 
@@ -31,8 +30,8 @@ async def upload_export(
 
     Answers only after both files are stored in GridFS. ``stored: true`` is the
     Mac mini's signal that it may delete its local copy. Processing (generator,
-    AI review, import) runs afterwards; a cron on ``/pipeline/process-pending``
-    picks up anything a stopped instance left behind.
+    AI review, import) runs afterwards in a background worker, one upload at a
+    time; uploads a stopped instance left behind are requeued at startup.
     """
     group = (group_name or "").strip()
     if not group:
@@ -50,7 +49,8 @@ async def upload_export(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Upload could not be stored")
 
     if not duplicate:
-        asyncio.create_task(pipeline_service.process_upload(str(upload.id)))
+        # Queued, not started here: one upload is processed at a time.
+        pipeline_service.kick_processing()
     return {
         "stored": True,
         "upload_id": str(upload.id),
@@ -66,7 +66,9 @@ async def process_pending(
     limit: int = Query(20, ge=1, le=200),
     _key: str = Depends(require_pipeline_key),
 ) -> Any:
-    return {"results": await pipeline_service.process_pending(limit)}
+    # Starts the background worker and answers right away; processing a batch
+    # takes longer than the proxy waits for a response.
+    return {"queued": await pipeline_service.queue_pending(limit)}
 
 
 @router.post("/daily-report")
@@ -116,7 +118,7 @@ async def list_groups(current_admin: User = Depends(get_current_admin_user)) -> 
 
 @router.post("/admin/process-pending")
 async def admin_process_pending(current_admin: User = Depends(get_current_admin_user)) -> Any:
-    return {"results": await pipeline_service.process_pending(20)}
+    return {"queued": await pipeline_service.queue_pending(20)}
 
 
 @router.post("/admin/daily-report")
