@@ -342,15 +342,21 @@ from starlette.applications import Starlette
 # FastAPI handles everything else including /ws for native WebSocket
 async def startup():
     await connect_to_mongo()
+    # First and on its own: deletes only, so it also runs while Atlas blocks writes
+    # over quota, and the space it frees is what lets the other writes succeed.
+    try:
+        from app.services.wtb_wts_service import cleanup_stale_run_rows
+        removed = await cleanup_stale_run_rows()
+        logger.info("Startup: deleted %d stale generator row file(s)", removed)
+    except Exception as e:
+        logger.warning(f"Startup: stale generator row files not deleted: {e}")
     # Clean up any expired GridFS files from previous runs
     try:
         from app.api.v1.endpoints.wtb_wts import _cleanup_all_expired
         await _cleanup_all_expired()
         from app.api.v1.endpoints.whatsapp import cleanup_expired_whatsapp_files
         await cleanup_expired_whatsapp_files()
-        from app.services.wtb_wts_service import cleanup_stale_run_rows
-        removed = await cleanup_stale_run_rows()
-        logger.info("Startup: cleaned up expired files (%d stale generator row file(s))", removed)
+        logger.info("Startup: cleaned up expired files")
     except Exception as e:
         logger.warning(f"Startup: failed to clean up expired files: {e}")
     # Central FX table: refresh when older than a day (the daily cron calls

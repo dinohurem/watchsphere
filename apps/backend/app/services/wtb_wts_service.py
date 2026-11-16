@@ -5055,17 +5055,26 @@ async def discard_run_rows(run_id) -> None:
 
 
 async def cleanup_stale_run_rows(older_than: timedelta = timedelta(hours=1)) -> int:
-    """Delete rows JSON of runs older than ``older_than``: left behind by runs that
-    were interrupted, or written before rows were deleted after reading. A run's
-    rows are read within minutes of it finishing."""
+    """Delete rows JSON files older than ``older_than``: left behind by interrupted
+    runs, or written before rows were deleted after reading. A run's rows are read
+    within minutes of it finishing.
+
+    Deletes only, never updates the runs: Atlas still allows deletes when the
+    cluster is over its storage quota, so this is what gets it back under."""
+    from bson import ObjectId
     from app.models.wtb_wts import WtbWtsRun
+    files = WtbWtsRun.get_motor_collection().database["wtb_wts_files.files"]
     cutoff = datetime.utcnow() - older_than
-    runs = await WtbWtsRun.find(
-        {"rows_json_gridfs_id": {"$ne": None}, "created_at": {"$lt": cutoff}}
-    ).to_list()
-    for run in runs:
-        await discard_run_rows(run.id)
-    return len(runs)
+    stale = await files.find(
+        {"filename": {"$regex": "^rows-"}, "uploadDate": {"$lt": cutoff}}, {"_id": 1}
+    ).to_list(None)
+    bucket = _rows_gridfs_bucket()
+    for doc in stale:
+        try:
+            await bucket.delete(ObjectId(str(doc["_id"])))
+        except Exception as exc:  # already gone
+            logger.debug("rows json %s not deleted: %s", doc["_id"], exc)
+    return len(stale)
 
 
 async def run_generator_on_export(
