@@ -33,6 +33,14 @@ from pymongo import UpdateOne
 logger = logging.getLogger(__name__)
 
 DISCARD_TTL_DAYS = 30
+# A not-in-database row nobody has reposted for this long is no longer a useful
+# new-watch suggestion.
+NOT_IN_DATABASE_TTL_DAYS = 30
+# 16/17 Nov 2026: both AI accounts were out of credit and every needs-review row
+# went to the Unsure tab with this reason, never reviewed. Removed at startup.
+OUTAGE_REASON = "AI review unavailable"
+OUTAGE_START = datetime(2026, 11, 16, 18, 0)
+OUTAGE_END = datetime(2026, 11, 18, 12, 0)
 MODES = ("WTS", "WTB")
 UPLOAD_BUCKET = "pipeline_uploads"
 IMAGE_BUCKET = "pipeline_images"
@@ -399,6 +407,10 @@ def _item_base(row: dict, mode: str, ctx: dict) -> dict:
     }
 
 
+def not_in_database_expiry(now: Optional[datetime] = None) -> datetime:
+    return (now or datetime.utcnow()) + timedelta(days=NOT_IN_DATABASE_TTL_DAYS)
+
+
 def _repost_filter(kind, data: dict) -> dict:
     """Matches the waiting item a repost of this row belongs to."""
     from app.models.pipeline import ReviewKind, ReviewStatus
@@ -444,6 +456,8 @@ async def _create_items(kind, rows: list[dict], mode: str, ctx: dict, media: dic
             }
             if kind == ReviewKind.DISCARDED:
                 refresh["expires_at"] = now + timedelta(days=DISCARD_TTL_DAYS)
+            elif kind == ReviewKind.NOT_IN_DATABASE:
+                refresh["expires_at"] = not_in_database_expiry(now)
             hit = await coll.find_one_and_update(
                 f, {"$inc": {"occurrences": 1}, "$set": refresh},
                 sort=[("created_at", -1)], projection={"_id": 1},
@@ -462,6 +476,7 @@ async def _create_items(kind, rows: list[dict], mode: str, ctx: dict, media: dic
                 or (cands[0].get("reference") if cands else None)
             )
             data["guessed_brand"] = row.get("Marke") or (cands[0].get("brand") if cands else None)
+            data["expires_at"] = not_in_database_expiry(now)
         data.update(extra)
         doc = PipelineItem(kind=kind, last_seen_at=now, **data)
         docs.append(doc)
@@ -820,6 +835,95 @@ async def queue_pending(limit: int = 20) -> int:
     return await coll.count_documents({"status": UploadStatus.RECEIVED.value, "attempts": {"$lt": MAX_ATTEMPTS}})
 
 
+async def _delete_unused_images(candidates: set[str], batch: int = 5000) -> int:
+    """Delete the photos in ``candidates`` that no review item and no order
+    (``source_image`` URL) uses any more."""
+    from app.models.order import Order
+    from app.models.pipeline import PipelineItem
+
+    coll = PipelineItem.get_motor_collection()
+    images = [c for c in candidates if c]
+    in_use: set[str] = set()
+    for i in range(0, len(images), batch):
+        chunk = images[i:i + batch]
+        in_use.update(await coll.distinct("image_id", {"image_id": {"$in": chunk}}))
+        urls = [image_url(x) for x in chunk]
+        async for o in Order.get_motor_collection().find({"source_image": {"$in": urls}}, {"source_image": 1}):
+            in_use.add(o["source_image"].rsplit("/", 1)[-1])
+    deleted = 0
+    for image_id in set(images) - in_use:
+        try:
+            await _delete(IMAGE_BUCKET, image_id)
+            deleted += 1
+        except Exception as exc:
+            logger.warning("pipeline: could not delete image %s: %s", image_id, exc)
+    return deleted
+
+
+async def _delete_items(query: dict, batch: int = 5000) -> tuple[int, set[str]]:
+    """Delete the review items matching ``query`` in batches.
+    Returns (deleted, their image ids)."""
+    from app.models.pipeline import PipelineItem
+
+    coll = PipelineItem.get_motor_collection()
+    deleted = 0
+    images: set[str] = set()
+    while True:
+        docs = await coll.find(query, {"_id": 1, "image_id": 1}).limit(batch).to_list(batch)
+        if not docs:
+            return deleted, images
+        images.update(d["image_id"] for d in docs if d.get("image_id"))
+        deleted += (await coll.delete_many({"_id": {"$in": [d["_id"] for d in docs]}})).deleted_count
+
+
+async def apply_review_retention(now: Optional[datetime] = None) -> dict:
+    """Delete-only first (works while Atlas blocks writes):
+
+    - Unsure rows from the AI credit outage (``OUTAGE_*``): never reviewed.
+    - Waiting not-in-database rows nobody reposted for ``NOT_IN_DATABASE_TTL_DAYS``.
+    - Photos only those rows used.
+
+    ``set_missing_expiry`` then covers rows stored before the expiry existed."""
+    from app.models.pipeline import ReviewKind, ReviewStatus
+
+    now = now or datetime.utcnow()
+    outage, img1 = await _delete_items({
+        "kind": ReviewKind.UNSURE.value, "status": ReviewStatus.PENDING.value,
+        "reason": OUTAGE_REASON, "created_at": {"$gte": OUTAGE_START, "$lt": OUTAGE_END},
+    })
+    cutoff = now - timedelta(days=NOT_IN_DATABASE_TTL_DAYS)
+    stale, img2 = await _delete_items({
+        "kind": ReviewKind.NOT_IN_DATABASE.value, "status": ReviewStatus.PENDING.value,
+        "$or": [{"last_seen_at": {"$lt": cutoff}},
+                {"last_seen_at": None, "created_at": {"$lt": cutoff}}],
+    })
+    images = await _delete_unused_images(img1 | img2)
+    if outage or stale:
+        logger.warning("pipeline: retention removed %d outage item(s), %d stale not-in-database "
+                       "item(s), %d photo(s)", outage, stale, images)
+
+    return {"outage_deleted": outage, "stale_deleted": stale, "images_deleted": images}
+
+
+async def set_missing_expiry(now: Optional[datetime] = None) -> int:
+    """Give waiting not-in-database rows stored before the expiry existed one
+    (last seen + ``NOT_IN_DATABASE_TTL_DAYS``), so the TTL index removes them."""
+    from app.models.pipeline import PipelineItem, ReviewKind, ReviewStatus
+
+    now = now or datetime.utcnow()
+    coll = PipelineItem.get_motor_collection()
+    missing = {"kind": ReviewKind.NOT_IN_DATABASE.value, "status": ReviewStatus.PENDING.value,
+               "expires_at": None}
+    done = 0
+    while True:
+        docs = await coll.find(missing, {"_id": 1, "created_at": 1, "last_seen_at": 1}).limit(5000).to_list(5000)
+        if not docs:
+            return done
+        ops = [UpdateOne({"_id": d["_id"]}, {"$set": {"expires_at": not_in_database_expiry(
+                   d.get("last_seen_at") or d.get("created_at") or now)}}) for d in docs]
+        done += (await coll.bulk_write(ops, ordered=False)).modified_count
+
+
 async def dedupe_review_items(batch: int = 5000) -> dict:
     """Collapse reposted review items into one per (kind, mode, text, sender, group),
     keeping the newest, and delete photos no remaining item or order uses.
@@ -828,7 +932,6 @@ async def dedupe_review_items(batch: int = 5000) -> dict:
     blocks writes; the occurrence counts on the kept items are written afterwards
     and are skipped (logged) if that write is still refused. AI decisions are
     left alone."""
-    from app.models.order import Order
     from app.models.pipeline import PipelineItem, ReviewKind
 
     coll = PipelineItem.get_motor_collection()
@@ -876,22 +979,7 @@ async def dedupe_review_items(batch: int = 5000) -> dict:
         return {"deleted": 0, "images_deleted": 0}
     logger.warning("pipeline: removed %d duplicate review item(s) in %d group(s)", deleted, len(counts))
 
-    # Photos still shown by a kept item or by an order (source_image URL) stay.
-    images = list(candidate_images)
-    in_use: set[str] = set()
-    for i in range(0, len(images), batch):
-        chunk = images[i:i + batch]
-        in_use.update(await coll.distinct("image_id", {"image_id": {"$in": chunk}}))
-        urls = [image_url(x) for x in chunk]
-        async for o in Order.get_motor_collection().find({"source_image": {"$in": urls}}, {"source_image": 1}):
-            in_use.add(o["source_image"].rsplit("/", 1)[-1])
-    images_deleted = 0
-    for image_id in candidate_images - in_use:
-        try:
-            await _delete(IMAGE_BUCKET, image_id)
-            images_deleted += 1
-        except Exception as exc:
-            logger.warning("pipeline: could not delete image %s: %s", image_id, exc)
+    images_deleted = await _delete_unused_images(candidate_images, batch)
     logger.warning("pipeline: removed %d photo(s) only duplicates used", images_deleted)
 
     for attempt in range(RECOVERY_RETRIES):
@@ -918,9 +1006,21 @@ async def recover_interrupted_uploads(delay: float = RECOVERY_DELAY_SECONDS) -> 
     # Before the worker starts adding items: collapse reposted review items
     # (delete-only first, so it also frees space while writes are blocked).
     try:
+        await apply_review_retention()
+    except Exception as exc:
+        logger.warning("pipeline: review item retention failed: %s", str(exc)[:200])
+    try:
         await dedupe_review_items()
     except Exception as exc:
         logger.warning("pipeline: review item cleanup failed: %s", str(exc)[:200])
+    for attempt in range(RECOVERY_RETRIES):  # a write: waits for Atlas to see the freed space
+        try:
+            await set_missing_expiry()
+            break
+        except Exception as exc:
+            logger.warning("pipeline: setting not-in-database expiry failed (attempt %d): %s",
+                           attempt + 1, str(exc)[:200])
+            await asyncio.sleep(RECOVERY_RETRY_SECONDS)
     # Atlas takes a while to notice space freed at startup; until then writes fail.
     for attempt in range(RECOVERY_RETRIES):
         try:

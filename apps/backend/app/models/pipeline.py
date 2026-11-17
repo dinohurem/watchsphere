@@ -111,7 +111,8 @@ class PipelineItem(Document):
     resolved_at: Optional[datetime] = None
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    # TTL: discarded rows disappear after 30 days.
+    # TTL: discarded rows disappear after 30 days; waiting not-in-database rows
+    # 30 days after they were last seen (a repost pushes it out again).
     expires_at: Optional[datetime] = None
 
     class Settings:

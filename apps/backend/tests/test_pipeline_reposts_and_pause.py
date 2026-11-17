@@ -284,3 +284,63 @@ async def test_openai_request_stops_retrying_on_credit_error(monkeypatch):
     await wtb_wts_service._request_json_array(Client(), "p", "AI matching")
     assert len(attempts) == 1
     ai_credit.reset()
+
+
+# --- retention ------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_not_in_database_items_expire_and_reposts_push_expiry_out(item_db):
+    from app.models.pipeline import PipelineItem, ReviewKind
+
+    await pipeline._create_items(ReviewKind.NOT_IN_DATABASE, [_row("Tudor 7941")], "WTS", CTX, {}, {})
+    item = await PipelineItem.find_one({})
+    soon = datetime.utcnow() + timedelta(days=pipeline.NOT_IN_DATABASE_TTL_DAYS)
+    assert abs((item.expires_at - soon).total_seconds()) < 60
+    item.expires_at = datetime.utcnow() + timedelta(days=1)
+    await item.save()
+    await pipeline._create_items(ReviewKind.NOT_IN_DATABASE, [_row("Tudor 7941")], "WTS", CTX, {}, {})
+    item = await PipelineItem.find_one({})
+    assert item.expires_at > datetime.utcnow() + timedelta(days=pipeline.NOT_IN_DATABASE_TTL_DAYS - 1)
+    # Other kinds waiting for an admin never expire.
+    await pipeline._create_items(ReviewKind.UNSURE, [_row("126334 ?")], "WTS", CTX, {}, {})
+    assert (await PipelineItem.find_one({"kind": "unsure"})).expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_retention_removes_outage_and_stale_items_only(item_db, monkeypatch):
+    from app.models.pipeline import PipelineItem, ReviewStatus
+
+    deleted_images = []
+
+    async def fake_delete(bucket, file_id):
+        deleted_images.append(file_id)
+
+    monkeypatch.setattr(pipeline, "_delete", fake_delete)
+    now = datetime(2026, 11, 18, 13, 0)
+    in_outage = datetime(2026, 11, 17, 3, 0)
+
+    def item(kind, created, reason=None, image=None, status=ReviewStatus.PENDING, **more):
+        return PipelineItem(kind=kind, created_at=created, reason=reason, image_id=image,
+                            status=status, text_key=f"{kind}{created}{reason}{image}", **more)
+
+    await item("unsure", in_outage, pipeline.OUTAGE_REASON, image="o1").insert()
+    await item("unsure", datetime(2026, 11, 15), pipeline.OUTAGE_REASON).insert()   # before: kept
+    await item("unsure", in_outage, "AI was not sure").insert()                      # real review: kept
+    await item("unsure", in_outage, pipeline.OUTAGE_REASON, status=ReviewStatus.RESOLVED).insert()
+    old = now - timedelta(days=40)
+    await item("not_in_database", old, image="s1").insert()                          # stale: deleted
+    await item("not_in_database", old, last_seen_at=now - timedelta(days=2)).insert()  # reposted: kept
+    await item("not_in_database", old, status=ReviewStatus.RESOLVED).insert()        # decided: kept
+    await item("not_in_database", now - timedelta(days=3)).insert()
+
+    result = await pipeline.apply_review_retention(now=now)
+
+    assert result == {"outage_deleted": 1, "stale_deleted": 1, "images_deleted": 2}
+    assert sorted(deleted_images) == ["o1", "s1"]
+    assert await PipelineItem.find({}).count() == 6
+
+    assert await pipeline.set_missing_expiry(now=now) == 2
+    for i in await PipelineItem.find({"kind": "not_in_database", "status": "pending"}).to_list():
+        seen = i.last_seen_at or i.created_at
+        assert i.expires_at == seen + timedelta(days=pipeline.NOT_IN_DATABASE_TTL_DAYS)
+    assert (await PipelineItem.find_one({"kind": "not_in_database", "status": "resolved"})).expires_at is None
