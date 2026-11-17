@@ -133,6 +133,8 @@ async def _review_batch(client, items: list[dict]) -> dict[str, ReviewDecision]:
         )
     except anthropic.APIStatusError as exc:
         logger.warning("ai_review: API error %s: %s", exc.status_code, exc.message)
+        from app.services import ai_credit
+        ai_credit.check("anthropic", exc)
         return {}
     except anthropic.APIConnectionError as exc:
         logger.warning("ai_review: connection error: %s", exc)

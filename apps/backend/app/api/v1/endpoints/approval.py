@@ -300,7 +300,7 @@ async def unsure(
                 "latest_at": item.created_at,
             }
         g["item_ids"].append(str(item.id))
-        g["count"] += 1
+        g["count"] += item.occurrences or 1
         if not g["image_url"] and item.image_id:
             g["image_url"] = pipeline_service.image_url(item.image_id)
         if item.group_name and item.group_name not in g["groups"]:
@@ -458,7 +458,7 @@ async def new_watches(current_admin: User = Depends(get_current_admin_user)) -> 
             "dealers": set(), "examples": [], "item_ids": [], "image_url": None,
             "last_seen": i.created_at,
         })
-        g["count"] += 1
+        g["count"] += i.occurrences or 1
         g["item_ids"].append(str(i.id))
         if i.sender_phone:
             g["dealers"].add(i.sender_phone)
