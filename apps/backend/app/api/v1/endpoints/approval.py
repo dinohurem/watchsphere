@@ -90,6 +90,8 @@ def _resolve(item: PipelineItem, admin: User, resolution: str, ws_code: Optional
     item.resolved_ws_code = ws_code
     item.resolved_by = str(admin.id)
     item.resolved_at = datetime.utcnow()
+    if item.kind == ReviewKind.NOT_IN_DATABASE:
+        item.expires_at = None  # only waiting suggestions expire; decisions are kept
 
 
 async def _import_items_as(
@@ -261,6 +263,7 @@ async def ai_decision_action(
                 message_at=item.message_at, row=item.row, candidates=item.candidates,
                 guessed_reference=(item.row or {}).get("Referenz") or (item.row or {}).get("WS-Code"),
                 guessed_brand=(item.row or {}).get("Marke"),
+                expires_at=pipeline_service.not_in_database_expiry(),
             ).insert()
     else:
         raise HTTPException(status_code=400, detail="Unknown action")
@@ -300,7 +303,7 @@ async def unsure(
                 "latest_at": item.created_at,
             }
         g["item_ids"].append(str(item.id))
-        g["count"] += 1
+        g["count"] += item.occurrences or 1
         if not g["image_url"] and item.image_id:
             g["image_url"] = pipeline_service.image_url(item.image_id)
         if item.group_name and item.group_name not in g["groups"]:
@@ -352,6 +355,7 @@ async def unsure_decide(
             i.kind = ReviewKind.NOT_IN_DATABASE
             i.guessed_reference = i.guessed_reference or (i.row or {}).get("Referenz") or (i.row or {}).get("WS-Code")
             i.guessed_brand = i.guessed_brand or (i.row or {}).get("Marke")
+            i.expires_at = pipeline_service.not_in_database_expiry()
     elif payload.action == "discard":
         for i in items:
             i.kind = ReviewKind.DISCARDED
@@ -458,7 +462,7 @@ async def new_watches(current_admin: User = Depends(get_current_admin_user)) -> 
             "dealers": set(), "examples": [], "item_ids": [], "image_url": None,
             "last_seen": i.created_at,
         })
-        g["count"] += 1
+        g["count"] += i.occurrences or 1
         g["item_ids"].append(str(i.id))
         if i.sender_phone:
             g["dealers"].add(i.sender_phone)

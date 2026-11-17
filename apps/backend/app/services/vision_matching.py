@@ -299,6 +299,8 @@ async def _vision_call(client, prompt: str, images: list[str],
         response = await client.chat.completions.create(**kwargs)
     except Exception as e:
         logger.warning(f"vision: OpenAI call failed: {type(e).__name__}: {e}")
+        from app.services import ai_credit
+        ai_credit.check("openai", e)
         return None
 
     choice = response.choices[0]

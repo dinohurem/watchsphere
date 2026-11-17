@@ -85,6 +85,11 @@ class PipelineItem(Document):
     image_id: Optional[str] = None  # GridFS id in the pipeline_images bucket
     sender_phone: Optional[str] = None
     message_at: Optional[datetime] = None
+    # Dealers repost the same list every hour or so. A repost of a row that is
+    # already waiting (same kind, mode, text, sender and group) bumps this counter
+    # on the existing item instead of adding another one.
+    occurrences: int = 1
+    last_seen_at: Optional[datetime] = None
 
     # The generator's CSV row (German headers) + its candidates.
     row: Dict[str, Any] = Field(default_factory=dict)
@@ -106,7 +111,8 @@ class PipelineItem(Document):
     resolved_at: Optional[datetime] = None
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    # TTL: discarded rows disappear after 30 days.
+    # TTL: discarded rows disappear after 30 days; waiting not-in-database rows
+    # 30 days after they were last seen (a repost pushes it out again).
     expires_at: Optional[datetime] = None
 
     class Settings:

@@ -1604,6 +1604,10 @@ async def _request_json_array(client, prompt: str, label: str) -> tuple[list[dic
     when the call fails or the reply is not an array.
     Returns (elements, truncated)."""
     from app.core.config import settings
+    from app.services import ai_credit
+
+    if ai_credit.is_exhausted():
+        return [], False  # the pipeline discards this run and waits for credit
 
     for attempt in (1, 2):
         try:
@@ -1614,6 +1618,8 @@ async def _request_json_array(client, prompt: str, label: str) -> tuple[list[dic
             )
         except Exception as e:
             logger.warning(f"{label}: OpenAI call failed (attempt {attempt}): {type(e).__name__}: {e}")
+            if ai_credit.check("openai", e):
+                break  # retrying cannot help until someone adds credit
             if attempt == 1:
                 await asyncio.sleep(AI_RETRY_DELAY)
             continue
