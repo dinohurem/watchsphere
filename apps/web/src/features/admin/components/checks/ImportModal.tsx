@@ -83,7 +83,7 @@ export function ImportModal({ config, onClose, onDone }: Props) {
     if (r.status === 'conflict') return conflictMode === 'import'
     return false
   }).length
-  const columns = preview ? Object.keys(preview.rows[0]?.data ?? {}) : []
+  const columns = preview ? Object.keys(preview.rows[0]?.data ?? {}).filter((k) => !k.endsWith('_normalized')) : []
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -166,7 +166,7 @@ export function ImportModal({ config, onClose, onDone }: Props) {
               {preview && (
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium">{preview.rows.length} rows:</span>
+                    <span className="font-medium">{preview.rows.length} {preview.rows.length === 1 ? 'row' : 'rows'}:</span>
                     {(['new', 'duplicate', 'conflict', 'invalid'] as ImportRowStatus[]).map((s) => (
                       <span key={s} className={`px-2 py-1 rounded-full text-xs font-medium ${ROW_STYLES[s]}`}>
                         {counts[s] ?? 0} {s}
