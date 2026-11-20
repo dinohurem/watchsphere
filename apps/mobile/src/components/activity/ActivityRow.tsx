@@ -4,7 +4,8 @@
  * Right: round chat button (opens WhatsApp with the dealer) with the age underneath.
  */
 import React from 'react';
-import { Alert, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppImage as Image } from '@/components/AppImage';
 
 import { ChatBubbleLines, WatchOutline } from '@/components/icons';
 import { KindChip } from '@/components/market/CountChips';

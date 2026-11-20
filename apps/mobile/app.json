@@ -81,7 +81,8 @@
         }
       ],
       "expo-web-browser",
-      ["./plugins/withPodsDeploymentTarget", { "minimum": "16.0" }]
+      ["./plugins/withPodsDeploymentTarget", { "minimum": "16.0" }],
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": false

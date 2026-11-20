@@ -1,4 +1,5 @@
-import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { AppImage as Image } from '@/components/AppImage';
 import { Heart } from './icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ImagePlaceholder } from './ImagePlaceholder';
