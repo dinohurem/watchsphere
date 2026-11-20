@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, Dimensions, Animated, Easing } from 'react-native';
+import { SheetModal } from '@/components/SheetModal';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -2003,23 +2004,12 @@ export default function WatchDetailsScreen() {
       </LinearGradient>
 
       {/* Make an Offer Modal */}
-      <Modal
+      <SheetModal
         visible={showMakeOfferModal}
-        animationType="fade"
-        transparent={true}
-        statusBarTranslucent={true}
-        onRequestClose={handleCloseOfferModal}
+        onClose={handleCloseOfferModal}
+        sheetStyle={styles.offerModalContent}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.offerModalOverlay}
-        >
-          <TouchableOpacity
-            style={{ flex: 1 }}
-            activeOpacity={1}
-            onPress={handleCloseOfferModal}
-          />
-          <View style={styles.offerModalContent}>
+        <View>
             {/* Modal Header */}
             <View style={styles.offerModalHeader}>
               <Text style={styles.offerModalTitle}>Make an offer</Text>
@@ -2089,9 +2079,8 @@ export default function WatchDetailsScreen() {
                 <Text style={styles.offerSubmittedAmount}>{watch.currency === 'EUR' ? '€' : watch.currency + ' '}{submittedOfferAmount}</Text>
               </View>
             )}
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      </SheetModal>
 
       {/* Location Filter Modal */}
       <Modal
@@ -2310,19 +2299,13 @@ export default function WatchDetailsScreen() {
       ) : null}
 
       {/* Year Filter Modal */}
-      <Modal
+      <SheetModal
         visible={showYearFilter}
-        animationType="fade"
-        transparent={true}
-        statusBarTranslucent={true}
-        onRequestClose={() => setShowYearFilter(false)}
+        onClose={() => setShowYearFilter(false)}
+        maxHeightPercent={0.7}
+        sheetStyle={styles.filterModalContent}
       >
-        <TouchableOpacity
-          style={styles.filterModalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowYearFilter(false)}
-        >
-          <View style={styles.filterModalContent} onStartShouldSetResponder={() => true}>
+          <View style={{ flexShrink: 1 }}>
             <View style={styles.filterModalHandle} />
             <Text style={styles.filterModalTitle}>Month / Year</Text>
 
@@ -2383,8 +2366,7 @@ export default function WatchDetailsScreen() {
               <Text style={styles.yearFilterApplyText}>Apply</Text>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </Modal>
+      </SheetModal>
 
       {/* Remarks tooltip — chat-bubble anchored to the tapped pill */}
       <Modal
@@ -3032,17 +3014,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   // Make an Offer Modal Styles
-  offerModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
   offerModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: sp(24),
-    borderTopRightRadius: sp(24),
     paddingTop: hp(16),
-    paddingBottom: Platform.OS === 'ios' ? hp(34) : hp(24),
   },
   offerModalHeader: {
     flexDirection: 'row',
@@ -3225,18 +3198,8 @@ const styles = StyleSheet.create({
     fontFamily: 'HankenGrotesk_600SemiBold',
   },
   // Filter Modals
-  filterModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end',
-  },
   filterModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: sp(24),
-    borderTopRightRadius: sp(24),
     paddingTop: hp(12),
-    paddingBottom: Platform.OS === 'ios' ? hp(34) : hp(24),
-    maxHeight: '70%',
   },
   filterModalHandle: {
     width: sp(36),

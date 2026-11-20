@@ -54,7 +54,7 @@ export function PriceTrendChart({
 
   const labelWidth = wp(62);
   const top = 8;
-  const bottom = 22;
+  const bottom = 26;
   const plotW = Math.max(10, width - labelWidth - 6);
   const plotH = Math.max(10, height - top - bottom);
 
@@ -119,6 +119,8 @@ export function PriceTrendChart({
     draw.setValue(0);
     area.setValue(0);
     Animated.sequence([
+      // Let the sheet finish sliding up before the lines start to draw.
+      Animated.delay(280),
       Animated.timing(draw, {
         toValue: 1,
         duration: 1000,
