@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { apiErrorMessage } from '@/features/admin/components/catalog'
 import {
   commitImport,
+  type ConflictMode,
   previewImport,
   type DuplicateMode,
   type ImportCommitResult,
@@ -35,6 +36,8 @@ export function ImportModal({ config, onClose, onDone }: Props) {
   const [zip, setZip] = useState<File | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [mode, setMode] = useState<DuplicateMode>('skip')
+  const [conflictMode, setConflictMode] = useState<ConflictMode>('skip')
+  const [skipRows, setSkipRows] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<ImportCommitResult | null>(null)
@@ -57,7 +60,11 @@ export function ImportModal({ config, onClose, onDone }: Props) {
     setBusy(true)
     setError('')
     try {
-      setResult(await commitImport(config.collection, preview.token, mode))
+      setResult(await commitImport(config.collection, preview.token, {
+          duplicates: mode,
+          conflicts: conflictMode,
+          skipRows: [...skipRows],
+        }))
     } catch (err) {
       setError(apiErrorMessage(err, 'Import failed'))
     } finally {
@@ -69,7 +76,13 @@ export function ImportModal({ config, onClose, onDone }: Props) {
     acc[r.status] = (acc[r.status] ?? 0) + 1
     return acc
   }, {})
-  const importable = (counts.new ?? 0) + (mode === 'update' ? (counts.duplicate ?? 0) : 0) + (counts.conflict ?? 0)
+  const importable = (preview?.rows ?? []).filter((r) => {
+    if (skipRows.has(r.row)) return false
+    if (r.status === 'new') return true
+    if (r.status === 'duplicate') return mode === 'update'
+    if (r.status === 'conflict') return conflictMode === 'import'
+    return false
+  }).length
   const columns = preview ? Object.keys(preview.rows[0]?.data ?? {}) : []
 
   return (
@@ -176,10 +189,36 @@ export function ImportModal({ config, onClose, onDone }: Props) {
                     </fieldset>
                   )}
 
+                  {(counts.conflict ?? 0) > 0 && (
+                    <fieldset className="text-sm flex flex-wrap items-center gap-4">
+                      <legend className="sr-only">Conflicts</legend>
+                      <span className="font-medium text-gray-700">Conflicts (verified and scammer):</span>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="conflict"
+                          checked={conflictMode === 'skip'}
+                          onChange={() => setConflictMode('skip')}
+                        />
+                        Skip them
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="conflict"
+                          checked={conflictMode === 'import'}
+                          onChange={() => setConflictMode('import')}
+                        />
+                        Import anyway
+                      </label>
+                    </fieldset>
+                  )}
+
                   <div className="overflow-x-auto border rounded-lg max-h-96">
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50 border-b sticky top-0">
                         <tr>
+                          <th className="px-3 py-2 text-left">Skip</th>
                           <th className="px-3 py-2 text-left">Row</th>
                           <th className="px-3 py-2 text-left">Result</th>
                           <th className="px-3 py-2 text-left">Message</th>
@@ -193,6 +232,22 @@ export function ImportModal({ config, onClose, onDone }: Props) {
                       <tbody className="divide-y">
                         {preview.rows.map((r) => (
                           <tr key={r.row} className={r.status === 'invalid' ? 'bg-red-50/50' : ''}>
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                aria-label={`Skip row ${r.row}`}
+                                disabled={r.status === 'invalid'}
+                                checked={r.status === 'invalid' || skipRows.has(r.row)}
+                                onChange={() =>
+                                  setSkipRows((prev) => {
+                                    const next = new Set(prev)
+                                    if (next.has(r.row)) next.delete(r.row)
+                                    else next.add(r.row)
+                                    return next
+                                  })
+                                }
+                              />
+                            </td>
                             <td className="px-3 py-2">{r.row}</td>
                             <td className="px-3 py-2">
                               <span className={`px-2 py-0.5 rounded-full font-medium ${ROW_STYLES[r.status]}`}>
@@ -212,8 +267,7 @@ export function ImportModal({ config, onClose, onDone }: Props) {
                   </div>
 
                   <p className="text-xs text-gray-500">
-                    Invalid rows are always skipped. Rows marked conflict are imported as shown; review the message
-                    first.
+                    Invalid rows are always skipped. Tick Skip to leave out any other row.
                   </p>
 
                   <div className="flex justify-end gap-3">

@@ -114,12 +114,18 @@ export async function previewImport(
   return data
 }
 
+export type ConflictMode = 'skip' | 'import'
+
 export async function commitImport(
   c: CollectionKey,
   token: string,
-  duplicates: DuplicateMode
+  opts: { duplicates: DuplicateMode; conflicts: ConflictMode; skipRows: number[] }
 ): Promise<ImportCommitResult> {
-  const { data } = await api.post(`${base(c)}/import/commit`, { token, duplicates }, { timeout: 0 })
+  const { data } = await api.post(
+    `${base(c)}/import/commit`,
+    { token, duplicates: opts.duplicates, conflicts: opts.conflicts, skip_rows: opts.skipRows },
+    { timeout: 0 }
+  )
   return data
 }
 

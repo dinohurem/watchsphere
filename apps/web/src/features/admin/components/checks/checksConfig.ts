@@ -75,7 +75,8 @@ const firstPhoto = (item: CheckItem): string | undefined => {
   if (typeof thumb === 'string' && thumb) return thumb
   const one = item.photo_url
   if (typeof one === 'string' && one) return one
-  const many = item.photo_urls
+  const thumbs = item.photo_thumbnails
+  const many = Array.isArray(thumbs) && thumbs.length ? thumbs : item.photos
   if (Array.isArray(many) && typeof many[0] === 'string') return many[0]
   return undefined
 }
@@ -96,7 +97,7 @@ export const serialReportsConfig: CollectionConfig = {
     { value: 'fake_papers', label: 'Fake papers' },
   ],
   statusOptions: STATUS_ALL,
-  defaults: { type: 'stolen', status: 'published', photo_urls: [] },
+  defaults: { type: 'stolen', status: 'published', photos: [] },
   importColumns:
     'type, serial, brand, model, reference, how_stolen, date, location, who_offered, details, status, photo_filename',
   rowName: (i) => join([i.brand, i.model]) || str(i.serial) || '-',
@@ -142,7 +143,7 @@ export const serialReportsConfig: CollectionConfig = {
     },
     { key: 'details', label: 'Details', kind: 'textarea', placeholder: 'The story shown on the detail screens', bulk: true },
     {
-      key: 'photo_urls',
+      key: 'photos',
       label: 'Photos / documents',
       kind: 'photos',
       note: 'Internal only, never shown to other users.',
@@ -164,7 +165,7 @@ export const dealerNumbersConfig: CollectionConfig = {
     { value: 'scammer', label: 'Scammer' },
   ],
   statusOptions: STATUS_ALL,
-  defaults: { type: 'verified', status: 'published', country_code: '+852', photo_urls: [] },
+  defaults: { type: 'verified', status: 'published', country_code: '+852', photos: [] },
   importColumns: 'type, country_code, phone, name, country, details, status, photo_filename',
   rowName: (i) => str(i.name) || str(i.e164) || join([i.country_code, i.phone]),
   rowSub: (i) => {
@@ -198,7 +199,7 @@ export const dealerNumbersConfig: CollectionConfig = {
       showWhen: (v) => v.type === 'scammer',
       bulk: true,
     },
-    { key: 'photo_urls', label: 'Photos / documents', kind: 'photos', note: 'Internal only.' },
+    { key: 'photos', label: 'Photos / documents', kind: 'photos', note: 'Internal only.' },
   ],
 }
 
