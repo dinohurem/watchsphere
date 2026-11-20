@@ -7,8 +7,11 @@ normalised value, never a substring match.
 import re
 from typing import Optional
 
-# Leading serial prefixes, longest first so "NO." wins over "NO" and "S/N" over "SN".
-_SERIAL_PREFIX_RE = re.compile(r"^(?:NO\.|NO|CASE|S/N|SN|#)", re.IGNORECASE)
+# Leading serial prefixes. Word prefixes (NO, CASE, SN) only count when a separator
+# follows ("No. 123", "SN: 123", "Case 123"); glued to the serial they are kept, because
+# real serials can start with those letters and stripping them would make "NOA123" match
+# "A123" - a false "reported" result. "S/N" and "#" are never part of a serial.
+_SERIAL_PREFIX_RE = re.compile(r"^(?:(?:NO|CASE|SN)(?=[\s.:\-#/])|S/N|#)", re.IGNORECASE)
 _SERIAL_JUNK_RE = re.compile(r"[\s\-.]+")
 _REF_PREFIX_RE = re.compile(r"^(?:REF\.|REF)", re.IGNORECASE)
 _REF_KEEP_RE = re.compile(r"[^A-Z0-9/]")
@@ -18,7 +21,8 @@ def normalize_serial(raw: Optional[str]) -> str:
     """Upper-case, drop leading prefixes (NO., NO, CASE, S/N, SN, #), spaces, hyphens, dots.
 
     Prefixes may be stacked ("Case No. 123") and are only removed at the start, and only
-    when something follows, so a serial that is just "SN" stays "SN".
+    when something follows, so a serial that is just "SN" stays "SN". Word prefixes need a
+    separator after them, so "NOA123" and "SN123" are left as they are.
     """
     s = (raw or "").strip().upper()
     while True:

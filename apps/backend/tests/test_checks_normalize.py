@@ -90,3 +90,20 @@ def test_normalize_country_code():
     assert normalize_country_code("+852 ") == "+852"
     assert normalize_country_code("00852") == "+852"
     assert normalize_country_code("") is None
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("NOA123", "NOA123"),
+        ("SN123", "SN123"),
+        ("CASEY42", "CASEY42"),
+        ("No. 123", "123"),
+        ("SN: 605", "605"),
+        ("sn-605", "605"),
+    ],
+)
+def test_word_prefix_needs_separator(raw, expected):
+    """A serial that merely starts with NO/SN/CASE must not lose those letters,
+    otherwise "NOA123" would match a report for "A123"."""
+    assert normalize_serial(raw) == expected
