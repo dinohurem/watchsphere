@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal, ScrollView, Linking, Alert, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, ScrollView, Linking, Alert, Pressable } from 'react-native';
+import { AppImage as Image } from '@/components/AppImage';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';

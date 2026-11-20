@@ -462,7 +462,7 @@ async def create_or_get_direct_conversation(
         return {
             "id": str(existing_conversation.id),
             "name": recipient.name or recipient.email or "User",
-            "avatar": recipient.profile_image_url or recipient.profile_image_thumbnail_url,
+            "avatar": recipient.profile_image_thumbnail_url or recipient.profile_image_url,
             "is_new": False,
         }
 
@@ -479,7 +479,7 @@ async def create_or_get_direct_conversation(
     return {
         "id": str(conversation.id),
         "name": recipient.name or recipient.email or "User",
-        "avatar": recipient.profile_image_url or recipient.profile_image_thumbnail_url,
+        "avatar": recipient.profile_image_thumbnail_url or recipient.profile_image_url,
         "is_new": True,
     }
 
@@ -921,7 +921,7 @@ async def send_conversation_message(
         "conversationId": conversation_id,
         "senderId": str(current_user.id),
         "senderName": current_user.name,
-        "senderAvatar": current_user.profile_image_url or current_user.profile_image_thumbnail_url,
+        "senderAvatar": current_user.profile_image_thumbnail_url or current_user.profile_image_url,
         "content": data.content,
         "type": "text",
         "status": "sent",
@@ -1432,7 +1432,7 @@ async def send_group_message(
         "conversationId": group_id,
         "senderId": str(current_user.id),
         "senderName": current_user.name,
-        "senderAvatar": current_user.profile_image_url or current_user.profile_image_thumbnail_url,
+        "senderAvatar": current_user.profile_image_thumbnail_url or current_user.profile_image_url,
         "content": data.content,
         "type": "text",
         "status": "sent",
