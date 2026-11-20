@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal, Pressable, Linking, Alert } from 'react-native';
+import { SheetModal } from '@/components/SheetModal';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
@@ -705,17 +706,9 @@ export default function ChatDetailScreen() {
       justifyContent: 'center',
     },
     // Message options modal
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
     modalContent: {
       backgroundColor: colors.background,
-      borderTopLeftRadius: sp(20),
-      borderTopRightRadius: sp(20),
       paddingTop: hp(8),
-      paddingBottom: hp(34),
     },
     modalHandle: {
       width: sp(36),
@@ -738,18 +731,10 @@ export default function ChatDetailScreen() {
       color: colors.text,
     },
     // Profile modal styles
-    profileModalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
     profileModalContent: {
       backgroundColor: colors.background,
-      borderTopLeftRadius: sp(20),
-      borderTopRightRadius: sp(20),
       paddingHorizontal: wp(24),
       paddingTop: hp(20),
-      paddingBottom: hp(40),
       alignItems: 'center',
     },
     profileCloseButton: {
@@ -942,39 +927,20 @@ export default function ChatDetailScreen() {
         </KeyboardAvoidingView>
 
         {/* Message Options Modal */}
-        <Modal
-          visible={showMessageOptions}
-          animationType="none"
-          transparent={true}
-          onRequestClose={() => setShowMessageOptions(false)}
-        >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setShowMessageOptions(false)}
-          >
-            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+        <SheetModal visible={showMessageOptions} onClose={() => setShowMessageOptions(false)} sheetStyle={styles.modalContent}>
+            <View style={{ flexShrink: 1 }}>
               <View style={styles.modalHandle} />
 
               <TouchableOpacity style={styles.modalOption} onPress={handleReply}>
                 <ReplyIcon size={sp(24)} color={colors.text} />
                 <Text style={styles.modalOptionText}>Reply</Text>
               </TouchableOpacity>
-            </Pressable>
-          </Pressable>
-        </Modal>
+            </View>
+          </SheetModal>
 
         {/* User Profile Modal */}
-        <Modal
-          visible={showProfileModal}
-          animationType="none"
-          transparent={true}
-          onRequestClose={() => setShowProfileModal(false)}
-        >
-          <Pressable
-            style={styles.profileModalOverlay}
-            onPress={() => setShowProfileModal(false)}
-          >
-            <Pressable style={styles.profileModalContent} onPress={(e) => e.stopPropagation()}>
+        <SheetModal visible={showProfileModal} onClose={() => setShowProfileModal(false)} sheetStyle={styles.profileModalContent}>
+            <View style={{ flexShrink: 1, alignSelf: 'stretch', alignItems: 'center' }}>
               <TouchableOpacity
                 onPress={() => setShowProfileModal(false)}
                 style={styles.profileCloseButton}
@@ -1050,9 +1016,8 @@ export default function ChatDetailScreen() {
               >
                 <Text style={styles.viewProfileButtonText}>View Profile</Text>
               </TouchableOpacity>
-            </Pressable>
-          </Pressable>
-        </Modal>
+            </View>
+          </SheetModal>
       </SafeAreaView>
     </>
   );

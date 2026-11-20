@@ -11,19 +11,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 
+import { SheetModal } from '@/components/SheetModal';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export const PICKER_COLORS = {
@@ -146,37 +142,28 @@ export function BottomSheet({
   maxHeightPercent?: number;
 }) {
   const { fonts } = useTheme();
-  const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdropContainer}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
-          <View style={styles.backdrop} />
-        </Pressable>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View
-            style={[
-              styles.sheet,
-              { paddingBottom: Math.max(insets.bottom, 16), maxHeight: `${maxHeightPercent * 100}%` as `${number}%` },
-            ]}
-          >
-            <View style={styles.grabber} />
-            <View style={styles.header}>
-              <Text style={[styles.title, { fontFamily: fonts.bold }]} numberOfLines={1}>
-                {title}
-              </Text>
-              <CloseButton onPress={onClose} />
-            </View>
-            {subtitle ? (
-              <Text style={[styles.subtitle, { fontFamily: fonts.regular }]}>{subtitle}</Text>
-            ) : null}
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-            <View style={styles.body}>{children as any}</View>
-            {footer as any}
-          </View>
-        </KeyboardAvoidingView>
+    <SheetModal
+      visible={visible}
+      onClose={onClose}
+      maxHeightPercent={maxHeightPercent}
+      sheetStyle={styles.sheet}
+    >
+      <View style={styles.grabber} />
+      <View style={styles.header}>
+        <Text style={[styles.title, { fontFamily: fonts.bold }]} numberOfLines={1}>
+          {title}
+        </Text>
+        <CloseButton onPress={onClose} />
       </View>
-    </Modal>
+      {subtitle ? (
+        <Text style={[styles.subtitle, { fontFamily: fonts.regular }]}>{subtitle}</Text>
+      ) : null}
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      <View style={styles.body}>{children as any}</View>
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      {footer as any}
+    </SheetModal>
   );
 }
 
@@ -323,14 +310,7 @@ export function PickerSheet<T extends string>(props: PickerSheetProps<T>) {
 }
 
 const styles = StyleSheet.create({
-  backdropContainer: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
-  sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-  },
+  sheet: { paddingHorizontal: 20 },
   grabber: {
     alignSelf: 'center',
     width: 36,

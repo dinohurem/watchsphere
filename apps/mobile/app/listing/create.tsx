@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, Image, Alert, Keyboard, InputAccessoryView } from 'react-native';
+import { SheetModal } from '@/components/SheetModal';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -679,17 +680,7 @@ export default function CreateListingScreen() {
     },
 
     // Dropdown Modal
-    dropdownOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
-    dropdownContent: {
-      backgroundColor: '#FFFFFF',
-      borderTopLeftRadius: sp(24),
-      borderTopRightRadius: sp(24),
-      maxHeight: '70%',
-    },
+    dropdownContent: {},
     dropdownHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1111,19 +1102,8 @@ export default function CreateListingScreen() {
       </View>
 
       {/* Dropdown Modal */}
-      <Modal
-        visible={showDropdown}
-        animationType="none"
-        transparent={true}
-        onRequestClose={() => setShowDropdown(false)}
-      >
-        <View style={styles.dropdownOverlay}>
-          <TouchableOpacity
-            style={{ flex: 1 }}
-            activeOpacity={1}
-            onPress={() => setShowDropdown(false)}
-          />
-          <View style={styles.dropdownContent}>
+      <SheetModal visible={showDropdown} onClose={() => setShowDropdown(false)} maxHeightPercent={0.7}>
+<View style={{ flexShrink: 1 }}>
             <View style={styles.dropdownHeader}>
               <Text style={styles.dropdownTitle}>{dropdownTitle}</Text>
               <TouchableOpacity
@@ -1158,8 +1138,7 @@ export default function CreateListingScreen() {
               })}
             </ScrollView>
           </View>
-        </View>
-      </Modal>
+</SheetModal>
 
       {/* iOS keyboard toolbar for numeric fields — renders above the keyboard natively */}
       {Platform.OS === 'ios' && (
