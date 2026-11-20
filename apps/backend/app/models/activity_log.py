@@ -80,6 +80,7 @@ class EntityType(str, Enum):
     DISPUTE = "dispute"
     ISSUE = "issue"
     REPORT = "report"
+    CHECK = "check"
 
 
 class Platform(str, Enum):
