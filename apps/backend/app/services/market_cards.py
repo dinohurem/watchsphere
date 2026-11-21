@@ -40,6 +40,17 @@ async def _fallback_counts(ws_codes: list[str]) -> dict[str, dict]:
     out = {c: empty_stats() for c in ws_codes}
     if not ws_codes:
         return out
+    live = await _live_counts(ws_codes)
+    for ws, counts in (live or {}).items():
+        if ws in out:
+            out[ws].update(counts)
+    return out
+
+
+async def _live_counts(ws_codes: list[str]) -> Optional[dict[str, dict]]:
+    """Active WTS/WTB order counts per ws_code, straight from the orders (None if the query fails)."""
+    if not ws_codes:
+        return {}
     pipeline = [
         {"$match": {"ws_code": {"$in": ws_codes}, "status": OrderStatus.ACTIVE.value}},
         {"$group": {"_id": {"ws": "$ws_code", "t": "$order_type"}, "n": {"$sum": 1}}},
@@ -47,15 +58,13 @@ async def _fallback_counts(ws_codes: list[str]) -> dict[str, dict]:
     try:
         rows = await Order.get_motor_collection().aggregate(pipeline).to_list(length=None)
     except Exception as e:
-        logger.warning("card count fallback failed: %s", e)
-        return out
+        logger.warning("live card counts failed: %s", e)
+        return None
+    counts: dict[str, dict] = {}
     for r in rows:
-        ws = r["_id"]["ws"]
-        if ws not in out:
-            continue
         key = "wts_count" if r["_id"]["t"] == OrderType.SELL.value else "wtb_count"
-        out[ws][key] = int(r["n"])
-    return out
+        counts.setdefault(r["_id"]["ws"], {})[key] = int(r["n"])
+    return counts
 
 
 async def stats_for(ws_codes: Iterable[str]) -> dict[str, dict]:
@@ -71,7 +80,16 @@ async def stats_for(ws_codes: Iterable[str]) -> dict[str, dict]:
     except Exception as e:
         logger.error("card_stats failed, using fallback counts: %s", e, exc_info=True)
         return await _fallback_counts(codes)
-    return {c: {**empty_stats(), **(stats.get(c) or {})} for c in codes}
+    out = {c: {**empty_stats(), **(stats.get(c) or {})} for c in codes}
+    # WTS/WTB counts are always live. The stored stats are only refreshed on imports, edits and
+    # the daily run, so their counts drift as listings change; the watch page counts live orders,
+    # and a card showing the stored number made the page count jump on open.
+    live = await _live_counts(codes)
+    if live is not None:
+        for c in codes:
+            out[c]["wts_count"] = live.get(c, {}).get("wts_count", 0)
+            out[c]["wtb_count"] = live.get(c, {}).get("wtb_count", 0)
+    return out
 
 
 def build_card(watch: Watch, stats: Optional[dict]) -> dict:
