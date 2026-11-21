@@ -6,7 +6,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 
-import { WatchOutline } from '@/components/icons';
+import { LogoIcon } from '@/components/LogoIcon';
 import { ChangeChip } from '@/components/market/ChangeChip';
 import { CountChips } from '@/components/market/CountChips';
 import { UI } from '@/components/market/tokens';
@@ -42,7 +42,7 @@ export function WatchlistEmpty() {
         {SAMPLES.map((s) => (
           <View key={s.reference} style={[styles.mini, { transform: [{ rotate: s.rotate }] }]}>
             <View style={styles.miniImage}>
-              <WatchOutline size={sp(34)} />
+              <LogoIcon size={sp(34)} color="rgba(33, 33, 33, 0.15)" />
               <View style={styles.miniChip}>
                 <ChangeChip value={s.change} />
               </View>
