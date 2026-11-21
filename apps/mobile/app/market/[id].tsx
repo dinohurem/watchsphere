@@ -15,7 +15,17 @@ import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCH_DETAILS, GUIDE_MOCK_BUY_ORDERS, GUIDE_MOCK_SELL_ORDERS } from '@/data/guideMockData';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useTrackRecentlyViewed } from '@/hooks/useTrackRecentlyViewed';
-import { convertAmount, formatAge, formatApprox, formatCount, formatPrice } from '@/utils/marketFormat';
+import {
+  AGE_TONE_COLORS,
+  ageTone,
+  convertAmount,
+  flagEmoji,
+  formatAge,
+  formatApprox,
+  formatCount,
+  formatPrice,
+  signedRemark,
+} from '@/utils/marketFormat';
 import {
   ChipMenu,
   CurrencyPickerSheet,
@@ -42,18 +52,12 @@ import { RetailPricesSheet } from '@/components/detail/RetailPricesSheet';
 import { AlertsSheet, AlertsSheetStart } from '@/components/alerts/AlertsSheet';
 import { WatchAlert, fetchAlertsForWatch } from '@/components/alerts/alertModel';
 
-// Country flag component using flag CDN
-function countryCodeToEmoji(code: string): string {
-  const upper = code.toUpperCase();
-  return String.fromCodePoint(
-    ...Array.from(upper).map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
-  );
-}
+// Country flag as emoji; flagEmoji maps the server code "UK" to the ISO code GB.
 
 function CountryFlag({ countryCode, size = 14 }: { countryCode: string; size?: number }) {
   return (
     <Text style={{ fontSize: size, lineHeight: size * 1.3 }}>
-      {countryCodeToEmoji(countryCode)}
+      {flagEmoji(countryCode)}
     </Text>
   );
 }
@@ -431,7 +435,7 @@ function splitRemarks(raw: string): string[] {
   return raw
     .split(/\s*[;|]\s*/)
     .flatMap((part) => (LOCATION_REMARK_RE.test(part.trim()) ? [part] : part.split(/\s*,\s*/)))
-    .map((part) => part.trim())
+    .map((part) => signedRemark(part.trim()))
     .filter(Boolean);
 }
 
@@ -1938,8 +1942,20 @@ export default function WatchDetailsScreen() {
                     </TouchableOpacity>
                     {!v2Enabled && order.created_at && formatAge(order.created_at) ? (
                       <View style={styles.ageTag}>
-                        <View style={styles.ageDot} />
-                        <Text style={styles.ageText}>{formatAge(order.created_at)}</Text>
+                        <View
+                          style={[
+                            styles.ageDot,
+                            { backgroundColor: AGE_TONE_COLORS[ageTone(order.created_at)].dot },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.ageText,
+                            { color: AGE_TONE_COLORS[ageTone(order.created_at)].text },
+                          ]}
+                        >
+                          {formatAge(order.created_at)}
+                        </Text>
                       </View>
                     ) : null}
                   </View>
