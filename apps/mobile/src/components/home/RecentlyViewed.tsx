@@ -3,10 +3,11 @@
  * Row: small image in a grey square, reference bold, brand + model grey, 1M % chip, chevron.
  */
 import React from 'react';
+import { LogoIcon } from '@/components/LogoIcon';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AppImage as Image } from '@/components/AppImage';
 
-import { ChevronRight, WatchOutline } from '@/components/icons';
+import { ChevronRight } from '@/components/icons';
 import { ChangeChip } from '@/components/market/ChangeChip';
 import { openCard } from '@/components/market/MarketCard';
 import { StaggerIn } from '@/components/market/StaggerIn';
@@ -32,7 +33,7 @@ export function RecentlyViewed({ items, animate }: { items: MarketCardData[]; an
                 {uri ? (
                   <Image source={{ uri }} style={styles.thumbImage} resizeMode="contain" />
                 ) : (
-                  <WatchOutline size={sp(26)} />
+                  <LogoIcon size={sp(26)} color="rgba(33, 33, 33, 0.15)" />
                 )}
               </View>
               <View style={styles.texts}>
