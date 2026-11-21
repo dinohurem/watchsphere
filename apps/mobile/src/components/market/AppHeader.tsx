@@ -5,6 +5,7 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
+import { GuideTarget } from '@/contexts/GuideContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Magnifier, User } from '@/components/icons';
@@ -36,6 +37,7 @@ export function AppHeader({
       <View style={styles.row}>
         <LogoIcon width={sp(33)} height={sp(28)} color={UI.black} />
         {search ? (
+          <GuideTarget id="search" radius={sp(22)} style={{ flex: 1 }}>
           <TouchableOpacity
             style={styles.search}
             activeOpacity={0.8}
@@ -47,10 +49,12 @@ export function AppHeader({
               {SEARCH_PLACEHOLDER}
             </Text>
           </TouchableOpacity>
+          </GuideTarget>
         ) : (
           <View style={{ flex: 1 }} />
         )}
         {profile ? (
+          <GuideTarget id="profile" radius={sp(22)}>
           <TouchableOpacity
             style={styles.profile}
             onPress={openProfile}
@@ -59,6 +63,7 @@ export function AppHeader({
           >
             <User size={sp(22)} color={UI.text} />
           </TouchableOpacity>
+          </GuideTarget>
         ) : null}
       </View>
     </SafeAreaView>

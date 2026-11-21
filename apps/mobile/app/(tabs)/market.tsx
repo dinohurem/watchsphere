@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { AppHeader } from '@/components/market/AppHeader';
+import { GuideTarget } from '@/contexts/GuideContext';
 import { BrandTabs } from '@/components/market/BrandTabs';
 import { FilterButton } from '@/components/market/FilterButton';
 import { MarketCard, MarketCardSkeleton } from '@/components/market/MarketCard';
@@ -246,15 +247,23 @@ export default function MarketScreen() {
 
   const renderItem = ({ item, index }: { item: MarketCardData; index: number }) => (
     <StaggerIn index={index} animate={animateEntrance}>
-      <MarketCard card={item} width={CARD_WIDTH} />
+      {index === 0 ? (
+        <GuideTarget id="watch-details" radius={sp(16)}>
+          <MarketCard card={item} width={CARD_WIDTH} />
+        </GuideTarget>
+      ) : (
+        <MarketCard card={item} width={CARD_WIDTH} />
+      )}
     </StaggerIn>
   );
 
   return (
     <SubscriptionOverlay feature="market" header={header}>
       <View style={styles.container}>
-        <BrandTabs brands={brandTabs.data ?? []} selected={brand} onSelect={selectBrand} />
-        {renderFilters()}
+        <GuideTarget id="filters" radius={sp(16)}>
+          <BrandTabs brands={brandTabs.data ?? []} selected={brand} onSelect={selectBrand} />
+          {renderFilters()}
+        </GuideTarget>
         <SkeletonCrossFade
           loading={cards.showSkeleton}
           style={styles.fadeBox}

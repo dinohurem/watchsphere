@@ -2,11 +2,11 @@
  * Market / Watchlist card (spec M2, H1): image, 1M % chip top right, brand, model, reference,
  * WTS / WTB all-time count chips. No prices, no badges.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { LogoIcon } from '@/components/LogoIcon';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AppImage as Image, prefetchImages } from '@/components/AppImage';
 
-import { WatchOutline } from '@/components/icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { openWatchDetail } from '@/utils/navigation';
 import { fp, hp, sp, wp } from '@/utils/responsive';
@@ -41,6 +41,9 @@ export function MarketCard({
   const { fonts } = useTheme();
   // Lists show the 400px thumbnail; the full-size image is only loaded on the detail screen.
   const uri = card.thumbnail || card.image;
+  // A URL that fails to load (deleted file, bad link) shows the same grey logo as no image.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [uri]);
   return (
     <TouchableOpacity
       style={[styles.card, { width }]}
@@ -48,15 +51,16 @@ export function MarketCard({
       onPress={() => (onPress ? onPress(card) : openCard(card))}
     >
       <View style={styles.imageBox}>
-        {uri ? (
+        {uri && !failed ? (
           <Image
             source={{ uri }}
             style={styles.image}
             resizeMode="contain"
             recyclingKey={card.id}
+            onError={() => setFailed(true)}
           />
         ) : (
-          <WatchOutline size={sp(56)} />
+          <LogoIcon size={sp(56)} color="rgba(33, 33, 33, 0.15)" />
         )}
         <View style={styles.chip}>
           <ChangeChip value={card.change_1m_pct} />
