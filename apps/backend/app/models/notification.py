@@ -23,6 +23,7 @@ class NotificationType(str, Enum):
     BUY_ORDER_OFFER = "buy_order_offer"  # New listing matches buyer's bid
     PRICE_UNDERCUT = "price_undercut"  # Another seller listed at lower price
     ALERT_MATCH = "alert_match"  # New WTS/WTB matched one of the user's alerts (redesign v3 §7)
+    CHECK_REPORT = "check_report"  # A user report in Checks was published or rejected
 
 
 class Notification(Document):

@@ -325,15 +325,19 @@ def is_aftermarket(text: str, cfg: Optional[RemarkConfig] = None) -> Optional[st
 
 
 _LINKS_RE = re.compile(
-    r"(?<![\w.,/])(?:missing\s+)?(\d{1,2}(?:[.,]5)?)\s*links?(?![a-z])(?:\s+missing)?"
+    r"(?<![\w.,/])(?P<sign>[-+]\s?)?(?P<pre>(?:missing|extra)\s+)?(?P<num>\d{1,2}(?:[.,]5)?)\s*links?(?![a-z])"
+    r"(?:\s+(?P<post>missing|extra))?"
 )
+# Fewer links than this without a sign means links are missing ("1 link", "2 links");
+# from here on the number is the bracelet's link count ("12 links").
+LINK_COUNT_MIN = 5
 _SERVICED_RE = re.compile(
     r"(?<![a-z0-9])(?:new\s+|patek\s+|rolex\s+|ap\s+|official\s+)?servic(?:e|ed)\s+(?:in\s+)?"
     r"(?:\d{1,2}[/.\-])?(20[0-3]\d)(?![0-9])"
 )
 _LC_RE = re.compile(r"(?<![a-z0-9])lc[\s\-]?(\d{2,3})(?![a-z0-9])")
 _DISCOUNT_RES = [
-    re.compile(r"(?<![\d.,])-?\s?(\d{1,2}(?:[.,]\d)?)\s?%"),
+    re.compile(r"(?<![\d.,])(?P<sign>[-+])?\s?(?P<num>\d{1,2}(?:[.,]\d)?)\s?%"),
     re.compile(r"(?<![a-z0-9])less\s+(\d{1,2})(?![\d%k])"),
 ]
 _WOOD_W_RE = re.compile(r"(?<![a-z0-9&+])w(\d{1,2})(?:\s?[/\-]\s?(\d{2,4}))?(?![a-z0-9/&+])")
@@ -361,6 +365,19 @@ def _fmt_number(raw: str) -> str:
     return raw[:-2] if raw.endswith(".0") else raw
 
 
+def link_remark(n: str, sign: Optional[str] = None, pre: Optional[str] = None,
+                post: Optional[str] = None) -> str:
+    """'-1 link' (missing), '+1 link' (extra) or '12 links' (link count)."""
+    words = {(pre or "").strip(), (post or "").strip()}
+    sign = (sign or "").strip()
+    unit = "link" if float(n) <= 1 else "links"
+    if sign == "+" or "extra" in words:
+        return f"+{n} {unit}"
+    if sign == "-" or "missing" in words or float(n) < LINK_COUNT_MIN:
+        return f"-{n} {unit}"
+    return f"{n} {unit}"
+
+
 def numeric_remarks(text: str) -> list[str]:
     """Remarks that carry a number — built in code, not editable (§6)."""
     t = fold(text)
@@ -371,27 +388,28 @@ def numeric_remarks(text: str) -> list[str]:
             out.append(r)
 
     for m in _LINKS_RE.finditer(t):
-        n = _fmt_number(m.group(1))
+        n = _fmt_number(m.group("num"))
         try:
             val = float(n)
         except ValueError:
             continue
         if val <= 0:
             continue
-        add(f"{n} link" if val <= 1 else f"{n} links")
+        add(link_remark(n, m.group("sign"), m.group("pre"), m.group("post")))
     for m in _SERVICED_RE.finditer(t):
         add(f"Serviced {m.group(1)}")
     for m in _LC_RE.finditer(t):
         add(f"LC{m.group(1)}")
     for rx in _DISCOUNT_RES:
         for m in rx.finditer(t):
-            n = _fmt_number(m.group(1))
+            n = _fmt_number(m.group("num") if "num" in rx.groupindex else m.group(1))
             try:
                 val = float(n)
             except ValueError:
                 continue
             if 1 <= val <= 60:
-                add(f"{n}% Retail")
+                sign = "+" if "sign" in rx.groupindex and m.group("sign") == "+" else "-"
+                add(f"{sign}{n}% Retail")
     if wood_card_month(t):
         add("Wood Card")
     return out

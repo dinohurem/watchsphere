@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     # Verification
     TEST_VERIFICATION_CODE: str = "123456"  # Default test code for development
 
+    # Checks: the WhatsApp number of the support team (digits, with country code)
+    SUPPORT_WHATSAPP: str = ""
+
     # WhatsApp bridge (apps/whatsapp-bridge)
     # Shared secret the bridge client presents in the X-Bridge-Token header.
     # Empty means the bridge endpoints are disabled.
