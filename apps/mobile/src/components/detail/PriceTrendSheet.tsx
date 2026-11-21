@@ -57,6 +57,15 @@ export function PriceTrendSheet({
     if (visible) setPeriod(initialPeriod);
   }, [visible, initialPeriod]);
 
+  // Every time the sheet opens it shows the skeleton, then the values count up and the chart
+  // draws in (M2), instead of re-showing the previous open's finished chart.
+  useEffect(() => {
+    if (visible) {
+      hasAnimated.current = false;
+      setState('loading');
+    }
+  }, [visible]);
+
   useEffect(() => {
     if (!visible || !wsCode) return;
     let cancelled = false;
@@ -104,9 +113,18 @@ export function PriceTrendSheet({
         style={[styles.valueNumber, { fontFamily: fonts.bold }]}
         numberOfLines={1}
       />
-      <Text style={[styles.valueChange, { fontFamily: fonts.semiBold, color: changeColor(series?.change_pct) }]}>
-        {formatPercent(series?.change_pct)}
-      </Text>
+      {/*
+        change_pct is null when the previous period has too few listings to compare (the backend
+        needs at least MIN_LISTINGS on both sides), so there is nothing to show: hide the line
+        instead of a bare dash. A real 0 % change shows as "0,0%".
+      */}
+      {typeof series?.change_pct === 'number' && Number.isFinite(series.change_pct) ? (
+        <Text
+          style={[styles.valueChange, { fontFamily: fonts.semiBold, color: changeColor(series.change_pct) }]}
+        >
+          {trendOf(series.change_pct) === 'flat' ? '0,0%' : formatPercent(series.change_pct)}
+        </Text>
+      ) : null}
     </View>
   );
 
