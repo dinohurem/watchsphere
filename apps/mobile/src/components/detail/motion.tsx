@@ -32,18 +32,23 @@ export function CountUpText({
   const target = value ?? 0;
   const [display, setDisplay] = useState<number>(animate && !reduce ? 0 : target);
   const frame = useRef<number | null>(null);
+  const shown = useRef(display);
+  shown.current = display;
 
   useEffect(() => {
     if (!animate || reduce || value === null || value === undefined) {
       setDisplay(target);
       return;
     }
+    // Count from what is on screen now, so a late, corrected value glides on instead of
+    // restarting from zero.
+    const from = shown.current;
     const start = Date.now();
     const duration = 500;
     const tick = () => {
       const t = Math.min(1, (Date.now() - start) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
-      setDisplay(target * eased);
+      setDisplay(from + (target - from) * eased);
       if (t < 1) frame.current = requestAnimationFrame(tick);
     };
     frame.current = requestAnimationFrame(tick);

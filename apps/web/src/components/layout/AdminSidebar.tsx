@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -26,13 +26,19 @@ import {
   Tags,
   ClipboardCheck,
   Scale,
+  ShieldAlert,
+  PhoneCall,
+  Link2,
 } from 'lucide-react'
+import { DRAFT_COUNTS_EVENT, fetchDraftCounts } from '@/features/admin/components/checks/checksApi'
 
 interface NavItem {
   nameKey: string
   label?: string
   to: string
   icon: React.ComponentType<{ className?: string }>
+  /** Key into the Checks draft counts, shown as a badge. */
+  badge?: 'serial_reports' | 'dealer_numbers'
 }
 
 interface NavSection {
@@ -57,6 +63,9 @@ const adminNavigationConfig: NavSection[] = [
     titleKey: 'sidebar.content',
     items: [
       { nameKey: 'sidebar.watches', to: '/admin/watches', icon: Watch },
+      { nameKey: 'sidebar.serialReports', to: '/admin/serial-reports', icon: ShieldAlert, label: 'Serial reports', badge: 'serial_reports' },
+      { nameKey: 'sidebar.dealerNumbers', to: '/admin/dealer-numbers', icon: PhoneCall, label: 'Dealer numbers', badge: 'dealer_numbers' },
+      { nameKey: 'sidebar.bracelets', to: '/admin/bracelets', icon: Link2, label: 'Bracelets' },
       { nameKey: 'sidebar.news', to: '/admin/news', icon: Newspaper },
       { nameKey: 'sidebar.watchlist', to: '/admin/watchlist', icon: Heart },
       { nameKey: 'sidebar.listingFields', to: '/admin/listing-fields', icon: List },
@@ -111,6 +120,23 @@ export function AdminSidebar() {
     adminNavigationConfig.map(s => s.titleKey)
   )
   const [showPreviewMenu, setShowPreviewMenu] = useState(false)
+  const [draftCounts, setDraftCounts] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    const load = () =>
+      fetchDraftCounts()
+        .then((c) => !cancelled && setDraftCounts({ ...c }))
+        .catch(() => undefined)
+    void load()
+    const timer = setInterval(load, 60000)
+    window.addEventListener(DRAFT_COUNTS_EVENT, load)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+      window.removeEventListener(DRAFT_COUNTS_EVENT, load)
+    }
+  }, [])
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev =>
@@ -162,7 +188,16 @@ export function AdminSidebar() {
                     }
                   >
                     <item.icon className="w-5 h-5 mr-3" />
-                    {t(`admin.${item.nameKey}`, { defaultValue: item.label })}
+                    <span className="flex-1">{t(`admin.${item.nameKey}`, { defaultValue: item.label })}</span>
+                    {item.badge && (draftCounts[item.badge] ?? 0) > 0 && (
+                      <span
+                        data-testid={`badge-${item.badge}`}
+                        aria-label={`${draftCounts[item.badge]} drafts waiting`}
+                        className="ml-2 min-w-5 h-5 px-1.5 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-semibold"
+                      >
+                        {draftCounts[item.badge]}
+                      </span>
+                    )}
                   </NavLink>
                 ))}
               </div>

@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, Dimensions, Animated, Easing } from 'react-native';
+import { SheetModal } from '@/components/SheetModal';
 import { AppImage as Image } from '@/components/AppImage';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +17,17 @@ import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCH_DETAILS, GUIDE_MOCK_BUY_ORDERS, GUIDE_MOCK_SELL_ORDERS } from '@/data/guideMockData';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useTrackRecentlyViewed } from '@/hooks/useTrackRecentlyViewed';
-import { convertAmount, formatAge, formatApprox, formatCount, formatPrice } from '@/utils/marketFormat';
+import {
+  AGE_TONE_COLORS,
+  ageTone,
+  convertAmount,
+  flagEmoji,
+  formatAge,
+  formatApprox,
+  formatCount,
+  formatPrice,
+  signedRemark,
+} from '@/utils/marketFormat';
 import {
   ChipMenu,
   CurrencyPickerSheet,
@@ -43,18 +54,12 @@ import { RetailPricesSheet } from '@/components/detail/RetailPricesSheet';
 import { AlertsSheet, AlertsSheetStart } from '@/components/alerts/AlertsSheet';
 import { WatchAlert, fetchAlertsForWatch } from '@/components/alerts/alertModel';
 
-// Country flag component using flag CDN
-function countryCodeToEmoji(code: string): string {
-  const upper = code.toUpperCase();
-  return String.fromCodePoint(
-    ...Array.from(upper).map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
-  );
-}
+// Country flag as emoji; flagEmoji maps the server code "UK" to the ISO code GB.
 
 function CountryFlag({ countryCode, size = 14 }: { countryCode: string; size?: number }) {
   return (
     <Text style={{ fontSize: size, lineHeight: size * 1.3 }}>
-      {countryCodeToEmoji(countryCode)}
+      {flagEmoji(countryCode)}
     </Text>
   );
 }
@@ -432,7 +437,7 @@ function splitRemarks(raw: string): string[] {
   return raw
     .split(/\s*[;|]\s*/)
     .flatMap((part) => (LOCATION_REMARK_RE.test(part.trim()) ? [part] : part.split(/\s*,\s*/)))
-    .map((part) => part.trim())
+    .map((part) => signedRemark(part.trim()))
     .filter(Boolean);
 }
 
@@ -1948,8 +1953,20 @@ export default function WatchDetailsScreen() {
                     </TouchableOpacity>
                     {!v2Enabled && order.created_at && formatAge(order.created_at) ? (
                       <View style={styles.ageTag}>
-                        <View style={styles.ageDot} />
-                        <Text style={styles.ageText}>{formatAge(order.created_at)}</Text>
+                        <View
+                          style={[
+                            styles.ageDot,
+                            { backgroundColor: AGE_TONE_COLORS[ageTone(order.created_at)].dot },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.ageText,
+                            { color: AGE_TONE_COLORS[ageTone(order.created_at)].text },
+                          ]}
+                        >
+                          {formatAge(order.created_at)}
+                        </Text>
                       </View>
                     ) : null}
                   </View>
@@ -2013,23 +2030,12 @@ export default function WatchDetailsScreen() {
       </LinearGradient>
 
       {/* Make an Offer Modal */}
-      <Modal
+      <SheetModal
         visible={showMakeOfferModal}
-        animationType="fade"
-        transparent={true}
-        statusBarTranslucent={true}
-        onRequestClose={handleCloseOfferModal}
+        onClose={handleCloseOfferModal}
+        sheetStyle={styles.offerModalContent}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.offerModalOverlay}
-        >
-          <TouchableOpacity
-            style={{ flex: 1 }}
-            activeOpacity={1}
-            onPress={handleCloseOfferModal}
-          />
-          <View style={styles.offerModalContent}>
+        <View>
             {/* Modal Header */}
             <View style={styles.offerModalHeader}>
               <Text style={styles.offerModalTitle}>Make an offer</Text>
@@ -2099,9 +2105,8 @@ export default function WatchDetailsScreen() {
                 <Text style={styles.offerSubmittedAmount}>{watch.currency === 'EUR' ? '€' : watch.currency + ' '}{submittedOfferAmount}</Text>
               </View>
             )}
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      </SheetModal>
 
       {/* Location Filter Modal */}
       <Modal
@@ -2320,19 +2325,13 @@ export default function WatchDetailsScreen() {
       ) : null}
 
       {/* Year Filter Modal */}
-      <Modal
+      <SheetModal
         visible={showYearFilter}
-        animationType="fade"
-        transparent={true}
-        statusBarTranslucent={true}
-        onRequestClose={() => setShowYearFilter(false)}
+        onClose={() => setShowYearFilter(false)}
+        maxHeightPercent={0.7}
+        sheetStyle={styles.filterModalContent}
       >
-        <TouchableOpacity
-          style={styles.filterModalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowYearFilter(false)}
-        >
-          <View style={styles.filterModalContent} onStartShouldSetResponder={() => true}>
+          <View style={{ flexShrink: 1 }}>
             <View style={styles.filterModalHandle} />
             <Text style={styles.filterModalTitle}>Month / Year</Text>
 
@@ -2393,8 +2392,7 @@ export default function WatchDetailsScreen() {
               <Text style={styles.yearFilterApplyText}>Apply</Text>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </Modal>
+      </SheetModal>
 
       {/* Remarks tooltip — chat-bubble anchored to the tapped pill */}
       <Modal
@@ -3042,17 +3040,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   // Make an Offer Modal Styles
-  offerModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
   offerModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: sp(24),
-    borderTopRightRadius: sp(24),
     paddingTop: hp(16),
-    paddingBottom: Platform.OS === 'ios' ? hp(34) : hp(24),
   },
   offerModalHeader: {
     flexDirection: 'row',
@@ -3235,18 +3224,8 @@ const styles = StyleSheet.create({
     fontFamily: 'HankenGrotesk_600SemiBold',
   },
   // Filter Modals
-  filterModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end',
-  },
   filterModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: sp(24),
-    borderTopRightRadius: sp(24),
     paddingTop: hp(12),
-    paddingBottom: Platform.OS === 'ios' ? hp(34) : hp(24),
-    maxHeight: '70%',
   },
   filterModalHandle: {
     width: sp(36),

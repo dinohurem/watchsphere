@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, ScrollView, Linking, Alert, Pressable } from 'react-native';
+import { SheetModal } from '@/components/SheetModal';
 import { AppImage as Image } from '@/components/AppImage';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -728,22 +729,8 @@ export default function GroupChatScreen() {
       textAlign: 'center',
     },
     // Modal styles
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
-    profileModalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
     modalContent: {
       backgroundColor: colors.background,
-      borderTopLeftRadius: sp(20),
-      borderTopRightRadius: sp(20),
-      maxHeight: '70%',
-      paddingBottom: hp(34),
     },
     modalHeader: {
       flexDirection: 'row',
@@ -809,11 +796,8 @@ export default function GroupChatScreen() {
     // Profile Modal styles
     profileModalContent: {
       backgroundColor: colors.background,
-      borderTopLeftRadius: sp(20),
-      borderTopRightRadius: sp(20),
       paddingHorizontal: wp(24),
       paddingTop: hp(20),
-      paddingBottom: hp(40),
       alignItems: 'center',
     },
     profileCloseButton: {
@@ -896,10 +880,7 @@ export default function GroupChatScreen() {
     // Message options modal styles
     messageOptionsContent: {
       backgroundColor: colors.background,
-      borderTopLeftRadius: sp(20),
-      borderTopRightRadius: sp(20),
       paddingTop: hp(8),
-      paddingBottom: hp(34),
     },
     modalHandle: {
       width: sp(36),
@@ -1000,17 +981,8 @@ export default function GroupChatScreen() {
         </KeyboardAvoidingView>
 
         {/* Members Modal */}
-        <Modal
-          visible={showMembersModal}
-          animationType="none"
-          transparent={true}
-          onRequestClose={() => setShowMembersModal(false)}
-        >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setShowMembersModal(false)}
-          >
-            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+        <SheetModal visible={showMembersModal} onClose={() => setShowMembersModal(false)} sheetStyle={styles.modalContent}>
+            <View style={{ flexShrink: 1 }}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Group Members</Text>
                 <TouchableOpacity
@@ -1057,22 +1029,12 @@ export default function GroupChatScreen() {
                   );
                 })}
               </ScrollView>
-            </Pressable>
-          </Pressable>
-        </Modal>
+            </View>
+          </SheetModal>
 
         {/* Member Profile Modal */}
-        <Modal
-          visible={showProfileModal}
-          animationType="none"
-          transparent={true}
-          onRequestClose={() => setShowProfileModal(false)}
-        >
-          <Pressable
-            style={styles.profileModalOverlay}
-            onPress={() => setShowProfileModal(false)}
-          >
-            <Pressable style={styles.profileModalContent} onPress={(e) => e.stopPropagation()}>
+        <SheetModal visible={showProfileModal} onClose={() => setShowProfileModal(false)} sheetStyle={styles.profileModalContent}>
+            <View style={{ flexShrink: 1, alignSelf: 'stretch', alignItems: 'center' }}>
               <TouchableOpacity
                 onPress={() => setShowProfileModal(false)}
                 style={styles.profileCloseButton}
@@ -1145,22 +1107,12 @@ export default function GroupChatScreen() {
               >
                 <Text style={styles.viewProfileButtonText}>View Profile</Text>
               </TouchableOpacity>
-            </Pressable>
-          </Pressable>
-        </Modal>
+            </View>
+          </SheetModal>
 
         {/* Message Options Modal */}
-        <Modal
-          visible={showMessageOptions}
-          animationType="none"
-          transparent={true}
-          onRequestClose={() => setShowMessageOptions(false)}
-        >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setShowMessageOptions(false)}
-          >
-            <Pressable style={styles.messageOptionsContent} onPress={(e) => e.stopPropagation()}>
+        <SheetModal visible={showMessageOptions} onClose={() => setShowMessageOptions(false)} sheetStyle={styles.messageOptionsContent}>
+            <View style={{ flexShrink: 1 }}>
               <View style={styles.modalHandle} />
 
               {/* Reply option - always available */}
@@ -1183,9 +1135,8 @@ export default function GroupChatScreen() {
                   </TouchableOpacity>
                 </>
               )}
-            </Pressable>
-          </Pressable>
-        </Modal>
+            </View>
+          </SheetModal>
       </SafeAreaView>
     </>
   );

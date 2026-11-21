@@ -15,11 +15,15 @@ from app.api.v1.endpoints import remarks_admin
 
 from app.api.v1.endpoints import market_browse
 
+from app.api.v1.endpoints import checks, checks_admin
+
 api_router = APIRouter()
 
 # Include routers
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
+api_router.include_router(checks_admin.router, prefix="/admin/checks", tags=["checks-admin"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(checks.router, prefix="/checks", tags=["checks"])
 # market_browse must come before market: market.py ends with a /{watch_id:path} catch-all.
 api_router.include_router(market_browse.router, prefix="/market", tags=["market"])
 api_router.include_router(market.router, prefix="/market", tags=["market"])

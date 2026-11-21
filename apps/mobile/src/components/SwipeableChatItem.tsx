@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { SheetModal } from '@/components/SheetModal';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Pressable, TextInput, Alert } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -118,15 +119,9 @@ export function SwipeableChatItem({ children, onMore, onDelete, isGroup = false,
       marginHorizontal: 20,
     },
     // Report modal styles
-    reportModalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
     reportModalContent: {
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-      paddingBottom: 40,
     },
     reportModalHeader: {
       flexDirection: 'row',
@@ -419,14 +414,12 @@ export function SwipeableChatItem({ children, onMore, onDelete, isGroup = false,
       </Modal>
 
       {/* Report Modal */}
-      <Modal
+      <SheetModal
         visible={showReportModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowReportModal(false)}
+        onClose={() => setShowReportModal(false)}
+        sheetStyle={[styles.reportModalContent, { backgroundColor: colors.card }]}
       >
-        <View style={styles.reportModalOverlay}>
-          <View style={[styles.reportModalContent, { backgroundColor: colors.card }]}>
+          <View>
             {/* Header */}
             <View style={[styles.reportModalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[styles.reportModalTitle, { color: colors.text }]}>Report Conversation</Text>
@@ -493,8 +486,7 @@ export function SwipeableChatItem({ children, onMore, onDelete, isGroup = false,
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
+      </SheetModal>
     </>
   );
 }
