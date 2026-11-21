@@ -4,6 +4,7 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 
 import { Home, BarChart, TradeArrows, ShieldCheckmark, InboxTray } from '@/components/icons';
 import { GlassWrapper } from '@/components/LiquidGlassWrapper';
+import { GuideTarget } from '@/contexts/GuideContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useActivityUnread } from '@/hooks/useActivityUnread';
 import { fp, hp, sp, wp } from '@/utils/responsive';
@@ -51,7 +52,7 @@ function CustomTabBar() {
           const Icon = tab.icon;
           const color = active ? ACTIVE : INACTIVE;
           const badge = tab.name === 'activity' && unread > 0 ? unread : 0;
-          return (
+          const item = (
             <TouchableOpacity
               key={tab.name}
               style={styles.tabItem}
@@ -83,6 +84,13 @@ function CustomTabBar() {
                 </Text>
               </View>
             </TouchableOpacity>
+          );
+          return tab.name === 'market' ? (
+            <GuideTarget key={tab.name} id="market" radius={sp(20)} style={styles.tabItem}>
+              {item}
+            </GuideTarget>
+          ) : (
+            item
           );
         })}
       </GlassWrapper>

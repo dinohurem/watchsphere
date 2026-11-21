@@ -1,9 +1,21 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, StatusBar } from 'react-native';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  Dimensions,
+  Platform,
+  StatusBar,
+  StyleProp,
+  ViewStyle,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { useV2 } from '@/contexts/V2Context';
 import Svg, { Defs, Rect, Mask, Circle, Path, G, ClipPath } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -19,189 +31,110 @@ interface HighlightArea {
   borderRadius?: number;
 }
 
-interface GuideStep {
-  id: string;
-  titleKey: string;
-  descriptionKey: string;
-  route?: string;
-  routeParams?: Record<string, string>;
-  getHighlightArea: () => HighlightArea;
-}
-
 // ── Measurement registry ──────────────────────────────────────
-// Screens call `registerGuideMeasurement(stepId, layout)` via onLayout
-// so the highlight positions come from the actual rendered elements.
-const measurements = new Map<string, HighlightArea>();
+// Screens mark the element each step points at with `useGuideTarget(stepId)`; the element is
+// measured in window coordinates, so the cutout always sits on the real, rendered element.
+// There are no hardcoded fallback positions: until a target is measured the card is shown
+// centred over a plain dim, instead of a cutout in the wrong place.
+interface Measurement {
+  area: HighlightArea;
+  at: number;
+}
+const measurements = new Map<string, Measurement>();
+const listeners = new Set<() => void>();
 
 export function registerGuideMeasurement(stepId: string, area: HighlightArea) {
-  measurements.set(stepId, area);
+  measurements.set(stepId, { area, at: Date.now() });
+  listeners.forEach((l) => l());
 }
 
 export function clearGuideMeasurements() {
   measurements.clear();
 }
 
-/** Return the measured area if available, otherwise the fallback. */
-function measured(stepId: string, fallback: HighlightArea): HighlightArea {
-  return measurements.get(stepId) ?? fallback;
+/**
+ * Attach to the element a guide step highlights: `<View {...useGuideTarget('search')}>`.
+ * Measures on layout and again while its step is showing (after navigation and entrance
+ * animations settle).
+ */
+export function useGuideTarget(stepId: string, borderRadius?: number) {
+  const ref = useRef<View>(null);
+  const context = useContext(GuideContext);
+  const active = context?.currentGuideStep?.id === stepId;
+
+  const measure = useCallback(() => {
+    const node = ref.current as unknown as {
+      measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void;
+    } | null;
+    node?.measureInWindow?.((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        registerGuideMeasurement(stepId, { x, y, width, height, borderRadius });
+      }
+    });
+  }, [stepId, borderRadius]);
+
+  useEffect(() => {
+    if (!active) return;
+    const timers = [0, 300, 700, 1200].map((ms) => setTimeout(measure, ms));
+    return () => timers.forEach(clearTimeout);
+  }, [active, measure]);
+
+  return { ref, onLayout: measure, collapsable: false as const };
 }
 
-// ── Fallback (hardcoded) highlight positions ──────────────────
+/** Wraps the element a guide step points at. */
+export function GuideTarget({
+  id,
+  radius,
+  style,
+  children,
+}: {
+  id: string;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+  children?: React.ReactNode;
+}) {
+  const target = useGuideTarget(id, radius);
+  return (
+    <View {...target} style={style}>
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      {children as any}
+    </View>
+  );
+}
 
-// Step 1: Profile icon (top right on home)
-const profileHighlight = (): HighlightArea => measured('profile', {
-  x: SCREEN_WIDTH - wp(16) - sp(44),
-  y: STATUS_BAR_HEIGHT + hp(24),
-  width: sp(44),
-  height: sp(44),
-  borderRadius: sp(22),
-});
+interface GuideStepDef {
+  id: string;
+  titleKey: string;
+  descriptionKey: string;
+  route?: string;
+  routeParams?: Record<string, string>;
+  /** Only shown when the element exists, i.e. with the v2 watch page. */
+  requiresV2?: boolean;
+}
 
-// Step 2: Search input (on home page)
-const searchHighlight = (): HighlightArea => measured('search', {
-  x: wp(16) + sp(33) + wp(16),
-  y: STATUS_BAR_HEIGHT + hp(24),
-  width: SCREEN_WIDTH - wp(16) - sp(33) - wp(16) - wp(16) - sp(44) - wp(16),
-  height: sp(44),
-  borderRadius: sp(22),
-});
+const DETAIL_ROUTE = '/market/[id]';
+const DETAIL_PARAMS = { id: '126610LN', reference: '126610LN' };
 
-// Step 3: Market tab in bottom navigation
-const marketTabHighlight = (): HighlightArea => {
-  const stored = measurements.get('market');
-  if (stored) return stored;
-  const tabBarPadding = wp(25);
-  const aiButtonWidth = sp(54) + wp(16);
-  const pillWidth = SCREEN_WIDTH - tabBarPadding * 2 - aiButtonWidth;
-  const tabWidth = pillWidth / 4;
-  const marketTabX = tabBarPadding + tabWidth;
-  return {
-    x: marketTabX,
-    y: SCREEN_HEIGHT - hp(85),
-    width: tabWidth,
-    height: hp(55),
-    borderRadius: sp(12),
-  };
-};
-
-// Step 4: Filters button on market page
-const filtersHighlight = (): HighlightArea => measured('filters', {
-  x: SCREEN_WIDTH - wp(16) - wp(120),
-  y: STATUS_BAR_HEIGHT + hp(260),
-  width: wp(120),
-  height: hp(40),
-  borderRadius: sp(20),
-});
-
-// Step 5: First watch row on market page
-const watchRowHighlight = (): HighlightArea => measured('watch-details', {
-  x: wp(16),
-  y: STATUS_BAR_HEIGHT + hp(400),
-  width: SCREEN_WIDTH - wp(32),
-  height: hp(50),
-  borderRadius: wp(8),
-});
-
-// Step 6: Order book icon on watch details
-const orderBookHighlight = (): HighlightArea => {
-  const stored = measurements.get('order-book');
-  if (stored) return stored;
-  const buttonWidth = wp(70);
-  const spacing = (SCREEN_WIDTH - wp(16) - buttonWidth * 4) / 5;
-  return {
-    x: spacing,
-    y: STATUS_BAR_HEIGHT + hp(490),
-    width: buttonWidth,
-    height: hp(60),
-    borderRadius: sp(12),
-  };
-};
-
-// Step 7: AI chat button on watch details
-const aiChatHighlight = (): HighlightArea => measured('ai-assistant', {
-  x: SCREEN_WIDTH - wp(16) - sp(42),
-  y: SCREEN_HEIGHT - hp(70),
-  width: sp(42),
-  height: sp(42),
-  borderRadius: sp(21),
-});
-
-// Step 8: Buy/Sell buttons on watch details
-const orderButtonsHighlight = (): HighlightArea => measured('place-orders', {
-  x: wp(16),
-  y: SCREEN_HEIGHT - hp(78),
-  width: SCREEN_WIDTH - wp(16) - wp(12) - sp(42) - wp(16),
-  height: sp(48),
-  borderRadius: sp(24),
-});
-
-const guideSteps: GuideStep[] = [
-  {
-    id: 'profile',
-    titleKey: 'guide.profileTitle',
-    descriptionKey: 'guide.profileDescription',
-    route: '/(tabs)',
-    getHighlightArea: profileHighlight,
-  },
-  {
-    id: 'search',
-    titleKey: 'guide.searchTitle',
-    descriptionKey: 'guide.searchDescription',
-    route: '/(tabs)',
-    getHighlightArea: searchHighlight,
-  },
-  {
-    id: 'market',
-    titleKey: 'guide.marketTitle',
-    descriptionKey: 'guide.marketDescription',
-    route: '/(tabs)',
-    getHighlightArea: marketTabHighlight,
-  },
-  {
-    id: 'filters',
-    titleKey: 'guide.filtersTitle',
-    descriptionKey: 'guide.filtersDescription',
-    route: '/(tabs)/market',
-    getHighlightArea: filtersHighlight,
-  },
-  {
-    id: 'watch-details',
-    titleKey: 'guide.watchDetailsTitle',
-    descriptionKey: 'guide.watchDetailsDescription',
-    route: '/(tabs)/market',
-    getHighlightArea: watchRowHighlight,
-  },
-  {
-    id: 'order-book',
-    titleKey: 'guide.orderBookTitle',
-    descriptionKey: 'guide.orderBookDescription',
-    route: '/market/[id]',
-    routeParams: { id: '126610LN', reference: '126610LN' },
-    getHighlightArea: orderBookHighlight,
-  },
-  {
-    id: 'ai-assistant',
-    titleKey: 'guide.aiAssistantTitle',
-    descriptionKey: 'guide.aiAssistantDescription',
-    route: '/market/[id]',
-    routeParams: { id: '126610LN', reference: '126610LN' },
-    getHighlightArea: aiChatHighlight,
-  },
-  {
-    id: 'place-orders',
-    titleKey: 'guide.placeOrdersTitle',
-    descriptionKey: 'guide.placeOrdersDescription',
-    route: '/market/[id]',
-    routeParams: { id: '126610LN', reference: '126610LN' },
-    getHighlightArea: orderButtonsHighlight,
-  },
+const allGuideSteps: GuideStepDef[] = [
+  { id: 'profile', titleKey: 'guide.profileTitle', descriptionKey: 'guide.profileDescription', route: '/(tabs)' },
+  { id: 'search', titleKey: 'guide.searchTitle', descriptionKey: 'guide.searchDescription', route: '/(tabs)' },
+  { id: 'market', titleKey: 'guide.marketTitle', descriptionKey: 'guide.marketDescription', route: '/(tabs)' },
+  { id: 'filters', titleKey: 'guide.filtersTitle', descriptionKey: 'guide.filtersDescription', route: '/(tabs)/market' },
+  { id: 'watch-details', titleKey: 'guide.watchDetailsTitle', descriptionKey: 'guide.watchDetailsDescription', route: '/(tabs)/market' },
+  { id: 'order-book', titleKey: 'guide.orderBookTitle', descriptionKey: 'guide.orderBookDescription', route: DETAIL_ROUTE, routeParams: DETAIL_PARAMS },
+  { id: 'ai-assistant', titleKey: 'guide.aiAssistantTitle', descriptionKey: 'guide.aiAssistantDescription', route: DETAIL_ROUTE, routeParams: DETAIL_PARAMS, requiresV2: true },
+  { id: 'place-orders', titleKey: 'guide.placeOrdersTitle', descriptionKey: 'guide.placeOrdersDescription', route: DETAIL_ROUTE, routeParams: DETAIL_PARAMS, requiresV2: true },
 ];
+
+const sameScreen = (a?: GuideStepDef, b?: GuideStepDef) =>
+  !!a && !!b && a.route === b.route && JSON.stringify(a.routeParams) === JSON.stringify(b.routeParams);
 
 interface GuideContextType {
   isGuideActive: boolean;
   currentStep: number;
   totalSteps: number;
-  currentGuideStep: GuideStep | null;
+  currentGuideStep: GuideStepDef | null;
   startGuide: () => void;
   endGuide: () => void;
   nextStep: () => void;
@@ -217,38 +150,41 @@ const GuideContext = createContext<GuideContextType | undefined>(undefined);
 const GUIDE_SEEN_KEY = 'watchsphere_guide_seen';
 
 export function GuideProvider({ children }: { children: React.ReactNode }) {
+  const { v2Enabled } = useV2();
+  const guideSteps = useMemo(
+    () => allGuideSteps.filter((step) => !step.requiresV2 || v2Enabled),
+    [v2Enabled]
+  );
   const [isGuideActive, setIsGuideActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [hasSeenGuide, setHasSeenGuideState] = useState(true);
   const isNavigating = useRef(false);
 
-  const navigateToStep = useCallback((step: GuideStep) => {
-    if (step.route && !isNavigating.current) {
-      isNavigating.current = true;
-      try {
-        if (step.routeParams) {
-          router.push({ pathname: step.route as any, params: step.routeParams });
-        } else {
-          router.push(step.route as any);
-        }
-      } catch (e) {
-        console.log('Navigation error:', e);
+  /** Navigate only when the step lives on another screen (re-pushing the same route stacked
+   *  duplicate screens and re-mounted the one being highlighted). */
+  const navigateToStep = useCallback((step: GuideStepDef, from?: GuideStepDef) => {
+    if (!step.route || sameScreen(step, from) || isNavigating.current) return;
+    isNavigating.current = true;
+    try {
+      if (step.routeParams) {
+        router.push({ pathname: step.route as never, params: step.routeParams });
+      } else {
+        router.navigate(step.route as never);
       }
-      setTimeout(() => {
-        isNavigating.current = false;
-      }, 500);
+    } catch (e) {
+      console.log('Navigation error:', e);
     }
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 500);
   }, []);
 
   const startGuide = useCallback(() => {
     setCurrentStep(0);
     setIsGuideActive(true);
-    // Navigate to first step's route
     const firstStep = guideSteps[0];
-    if (firstStep.route) {
-      router.push(firstStep.route as any);
-    }
-  }, []);
+    if (firstStep?.route) router.navigate(firstStep.route as never);
+  }, [guideSteps]);
 
   const endGuide = useCallback(async () => {
     setIsGuideActive(false);
@@ -259,31 +195,23 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     router.replace('/(tabs)');
   }, []);
 
+  const goToStep = useCallback(
+    (stepIndex: number) => {
+      if (stepIndex < 0 || stepIndex >= guideSteps.length || stepIndex === currentStep) return;
+      setCurrentStep(stepIndex);
+      navigateToStep(guideSteps[stepIndex], guideSteps[currentStep]);
+    },
+    [currentStep, guideSteps, navigateToStep]
+  );
+
   const nextStep = useCallback(() => {
-    if (currentStep < guideSteps.length - 1) {
-      const nextStepData = guideSteps[currentStep + 1];
-      setCurrentStep(currentStep + 1);
-      navigateToStep(nextStepData);
-    } else {
-      endGuide();
-    }
-  }, [currentStep, endGuide, navigateToStep]);
+    if (currentStep < guideSteps.length - 1) goToStep(currentStep + 1);
+    else endGuide();
+  }, [currentStep, guideSteps.length, endGuide, goToStep]);
 
   const previousStep = useCallback(() => {
-    if (currentStep > 0) {
-      const prevStepData = guideSteps[currentStep - 1];
-      setCurrentStep(currentStep - 1);
-      navigateToStep(prevStepData);
-    }
-  }, [currentStep, navigateToStep]);
-
-  const goToStep = useCallback((stepIndex: number) => {
-    if (stepIndex >= 0 && stepIndex < guideSteps.length && stepIndex !== currentStep) {
-      const targetStep = guideSteps[stepIndex];
-      setCurrentStep(stepIndex);
-      navigateToStep(targetStep);
-    }
-  }, [currentStep, navigateToStep]);
+    if (currentStep > 0) goToStep(currentStep - 1);
+  }, [currentStep, goToStep]);
 
   const setHasSeenGuide = useCallback((seen: boolean) => {
     setHasSeenGuideState(seen);
@@ -296,7 +224,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     return isFirstLogin;
   }, []);
 
-  const currentGuideStep = isGuideActive ? guideSteps[currentStep] : null;
+  const currentGuideStep = isGuideActive ? guideSteps[currentStep] ?? null : null;
 
   return (
     <GuideContext.Provider
@@ -324,40 +252,50 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
 function GuideOverlay() {
   const { t } = useTranslation();
   const context = useContext(GuideContext);
-  // Force re-render after step navigation so measurements are available
   const [, forceUpdate] = useState(0);
-  const prevStep = useRef(-1);
+  const stepStartedAt = useRef(0);
+  const prevStep = useRef<string | null>(null);
 
-  const currentStep = context?.currentStep ?? -1;
+  // Re-render whenever a target reports its position.
   useEffect(() => {
-    if (currentStep !== prevStep.current) {
-      prevStep.current = currentStep;
-      // Wait for the target screen to mount & measure before reading positions
-      const timer = setTimeout(() => forceUpdate(n => n + 1), 600);
-      return () => clearTimeout(timer);
-    }
-  }, [currentStep]);
+    const listener = () => forceUpdate((n) => n + 1);
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
+
+  const stepId = context?.currentGuideStep?.id ?? null;
+  if (stepId !== prevStep.current) {
+    prevStep.current = stepId;
+    stepStartedAt.current = Date.now();
+  }
 
   if (!context || !context.isGuideActive || !context.currentGuideStep) {
     return null;
   }
 
-  const { currentGuideStep, totalSteps, nextStep, previousStep, goToStep, endGuide } = context;
+  const { currentStep, currentGuideStep, totalSteps, nextStep, previousStep, goToStep, endGuide } = context;
   const isLastStep = currentStep === totalSteps - 1;
   const isFirstStep = currentStep === 0;
 
-  const highlightArea = currentGuideStep.getHighlightArea();
-  const padding = wp(8); // Padding around highlight
+  // Only trust a position measured while this step is showing (an older one may come from
+  // another scroll position or screen).
+  const m = measurements.get(currentGuideStep.id);
+  const highlightArea = m && m.at >= stepStartedAt.current - 50 ? m.area : null;
+  const padding = wp(8);
 
-  // Calculate card position (below or above highlight)
-  const highlightBottom = highlightArea.y + highlightArea.height;
-  const cardHeight = hp(180);
-  const spaceBelow = SCREEN_HEIGHT - highlightBottom;
-  const showCardBelow = spaceBelow > cardHeight + hp(40);
-
-  const cardTop = showCardBelow
-    ? highlightBottom + hp(20)
-    : highlightArea.y - cardHeight - hp(20);
+  const cardHeight = hp(200);
+  let cardTop = (SCREEN_HEIGHT - cardHeight) / 2;
+  if (highlightArea) {
+    const highlightBottom = highlightArea.y + highlightArea.height + padding;
+    const spaceBelow = SCREEN_HEIGHT - highlightBottom;
+    cardTop =
+      spaceBelow > cardHeight + hp(40)
+        ? highlightBottom + hp(16)
+        : Math.max(STATUS_BAR_HEIGHT + hp(8), highlightArea.y - padding - cardHeight - hp(16));
+  }
+  const radius = highlightArea ? (highlightArea.borderRadius ?? wp(12)) + padding / 2 : 0;
 
   return (
     <Modal
@@ -365,27 +303,27 @@ function GuideOverlay() {
       transparent
       animationType="fade"
       statusBarTranslucent
+      onRequestClose={endGuide}
     >
       <View style={styles.overlay}>
         {/* SVG Overlay with cutout */}
         <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={StyleSheet.absoluteFill}>
           <Defs>
             <Mask id="mask">
-              {/* Full white background */}
               <Rect x="0" y="0" width={SCREEN_WIDTH} height={SCREEN_HEIGHT} fill="white" />
-              {/* Black cutout for highlight area */}
-              <Rect
-                x={highlightArea.x - padding}
-                y={highlightArea.y - padding}
-                width={highlightArea.width + padding * 2}
-                height={highlightArea.height + padding * 2}
-                rx={highlightArea.borderRadius || wp(8)}
-                ry={highlightArea.borderRadius || wp(8)}
-                fill="black"
-              />
+              {highlightArea ? (
+                <Rect
+                  x={highlightArea.x - padding}
+                  y={highlightArea.y - padding}
+                  width={highlightArea.width + padding * 2}
+                  height={highlightArea.height + padding * 2}
+                  rx={radius}
+                  ry={radius}
+                  fill="black"
+                />
+              ) : null}
             </Mask>
           </Defs>
-          {/* Dark overlay with mask */}
           <Rect
             x="0"
             y="0"
@@ -394,31 +332,23 @@ function GuideOverlay() {
             fill="rgba(0, 0, 0, 0.75)"
             mask="url(#mask)"
           />
-          {/* White border around highlight */}
-          <Rect
-            x={highlightArea.x - padding}
-            y={highlightArea.y - padding}
-            width={highlightArea.width + padding * 2}
-            height={highlightArea.height + padding * 2}
-            rx={highlightArea.borderRadius || wp(8)}
-            ry={highlightArea.borderRadius || wp(8)}
-            fill="none"
-            stroke="white"
-            strokeWidth={2}
-          />
+          {highlightArea ? (
+            <Rect
+              x={highlightArea.x - padding}
+              y={highlightArea.y - padding}
+              width={highlightArea.width + padding * 2}
+              height={highlightArea.height + padding * 2}
+              rx={radius}
+              ry={radius}
+              fill="none"
+              stroke="white"
+              strokeWidth={2}
+            />
+          ) : null}
         </Svg>
 
         {/* Content card */}
         <View style={[styles.contentCard, { top: cardTop }]}>
-          {/* Skip button */}
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={endGuide}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.skipButtonText}>{t('guide.skip')}</Text>
-          </TouchableOpacity>
-
           <Text style={styles.title}>{t(currentGuideStep.titleKey)}</Text>
           <Text style={styles.description}>{t(currentGuideStep.descriptionKey)}</Text>
 
@@ -463,6 +393,17 @@ function GuideOverlay() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Skip: rendered last so nothing in the card is drawn over it and steals the tap. */}
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={endGuide}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.skipButtonText}>{t('guide.skip')}</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -491,6 +432,7 @@ const styles = StyleSheet.create({
     top: wp(16),
     right: wp(16),
     padding: wp(8),
+    zIndex: 2,
   },
   skipButtonText: {
     fontFamily: 'HankenGrotesk_500Medium',
@@ -503,6 +445,7 @@ const styles = StyleSheet.create({
     color: '#1D1D1F',
     marginBottom: hp(8),
     marginTop: hp(8),
+    paddingRight: wp(56),
   },
   description: {
     fontFamily: 'HankenGrotesk_400Regular',

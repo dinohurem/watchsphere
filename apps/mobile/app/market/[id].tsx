@@ -11,7 +11,7 @@ import { useAuthStore } from '@watchsphere/shared/stores';
 import { useFilters, OrderBookFilterState } from '@/contexts/FilterContext';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
-import { useGuide } from '@/contexts/GuideContext';
+import { GuideTarget, useGuide } from '@/contexts/GuideContext';
 import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCH_DETAILS, GUIDE_MOCK_BUY_ORDERS, GUIDE_MOCK_SELL_ORDERS } from '@/data/guideMockData';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -1757,6 +1757,7 @@ export default function WatchDetailsScreen() {
           {v2Enabled && <Text style={styles.sectionTitle}>Order Book</Text>}
 
           {/* Tab Selector */}
+          <GuideTarget id="order-book" radius={sp(20)}>
           <View style={styles.tabSelector}>
             <TouchableOpacity
               style={[styles.tab, selectedTab === 'Sell' && styles.tabActive]}
@@ -1771,6 +1772,7 @@ export default function WatchDetailsScreen() {
               <Text style={[styles.tabText, selectedTab === 'Buy' && styles.tabTextActive]}>WTB</Text>
             </TouchableOpacity>
           </View>
+          </GuideTarget>
 
           {/* Toolbar: sort (2) · period (1) · currency (3) – spec 1.1 */}
           {!v2Enabled && (
@@ -1991,6 +1993,7 @@ export default function WatchDetailsScreen() {
       >
         {v2Enabled ? (
           <View style={styles.bottomBarContent}>
+            <GuideTarget id="place-orders" radius={sp(24)} style={{ flex: 1 }}>
             <View style={styles.orderButtons}>
               <TouchableOpacity style={styles.buyButton} onPress={handlePlaceBuyOrder}>
                 <Text style={styles.orderButtonText} numberOfLines={1}>Place Buy Order</Text>
@@ -1999,16 +2002,19 @@ export default function WatchDetailsScreen() {
                 <Text style={styles.orderButtonText} numberOfLines={1}>Place Sell Order</Text>
               </TouchableOpacity>
             </View>
+            </GuideTarget>
           </View>
         ) : (
           <View style={{ height: sp(42) }} />
         )}
         {v2Enabled && (
+          <GuideTarget id="ai-assistant" radius={sp(30)}>
           <TouchableOpacity style={styles.aiButtonOuter} onPress={() => router.push('/chat/ai')}>
             <View style={styles.aiButtonInner}>
               <SparkleIcon />
             </View>
           </TouchableOpacity>
+          </GuideTarget>
         )}
       </LinearGradient>
 
