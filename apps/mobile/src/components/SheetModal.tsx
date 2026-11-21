@@ -33,9 +33,13 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const SHEET_RADIUS = 24;
-const OPEN_MS = 320;
-const CLOSE_MS = 240;
-const REDUCED_MS = 160;
+const OPEN_MS = 280;
+const CLOSE_MS = 200;
+const REDUCED_MS = 150;
+// Open: decelerate into place. Close: start moving on the very first frame (an ease-IN curve
+// barely moves for the first ~100 ms, which reads as the sheet reacting late to the tap).
+const OPEN_EASING = Easing.bezier(0.22, 1, 0.36, 1);
+const CLOSE_EASING = Easing.bezier(0.4, 0, 1, 1);
 const BACKDROP = 'rgba(0,0,0,0.35)';
 
 /** Same type as PickerSheet's SheetNode (the monorepo resolves two @types/react copies). */
@@ -91,19 +95,35 @@ export function SheetModal({
     };
   }, []);
 
+  // Mount in the same render that turns `visible` on (not one effect + re-render later), so the
+  // native Modal is presented on the tap's own commit.
+  if (visible && !mounted) setMounted(true);
+
   const finishClose = useCallback(() => setMounted(false), []);
+
+  const startOpen = useCallback(() => {
+    progress.value = withTiming(1, {
+      duration: reduceMotion ? REDUCED_MS : OPEN_MS,
+      easing: OPEN_EASING,
+    });
+  }, [progress, reduceMotion]);
 
   useEffect(() => {
     if (visible) {
-      setMounted(true);
-      progress.value = withTiming(1, {
-        duration: reduceMotion ? REDUCED_MS : OPEN_MS,
-        easing: Easing.out(Easing.cubic),
-      });
+      // Re-opened while still closing: the Modal is already on screen, so slide straight back.
+      if (progress.value > 0) {
+        startOpen();
+        return;
+      }
+      // Safety net in case onShow does not fire: never leave an invisible sheet up.
+      const fallback = setTimeout(() => {
+        if (progress.value === 0) startOpen();
+      }, 250);
+      return () => clearTimeout(fallback);
     } else if (mounted) {
       progress.value = withTiming(
         0,
-        { duration: reduceMotion ? REDUCED_MS : CLOSE_MS, easing: Easing.in(Easing.cubic) },
+        { duration: reduceMotion ? REDUCED_MS : CLOSE_MS, easing: CLOSE_EASING },
         (finished) => {
           if (finished) runOnJS(finishClose)();
         }
@@ -134,6 +154,11 @@ export function SheetModal({
       animationType="none"
       statusBarTranslucent
       onRequestClose={onClose}
+      // Start the slide when the Modal is actually on screen. Started earlier, part of it runs
+      // while iOS is still presenting the Modal and the sheet appears late and mid-way.
+      onShow={() => {
+        if (visible) startOpen();
+      }}
     >
       <View style={styles.root} pointerEvents="box-none">
         <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
