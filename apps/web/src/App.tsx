@@ -46,6 +46,9 @@ const AdminDashboard = lazy(() => import('./features/admin/pages/AdminDashboard'
 const AdminUsers = lazy(() => import('./features/admin/pages/AdminUsers').then(m => ({ default: m.AdminUsers })))
 const AdminPendingUsers = lazy(() => import('./features/admin/pages/AdminPendingUsers').then(m => ({ default: m.AdminPendingUsers })))
 const AdminWatches = lazy(() => import('./features/admin/pages/AdminWatches').then(m => ({ default: m.AdminWatches })))
+const AdminSerialReports = lazy(() => import('./features/admin/pages/AdminSerialReports').then(m => ({ default: m.AdminSerialReports })))
+const AdminDealerNumbers = lazy(() => import('./features/admin/pages/AdminDealerNumbers').then(m => ({ default: m.AdminDealerNumbers })))
+const AdminBracelets = lazy(() => import('./features/admin/pages/AdminBracelets').then(m => ({ default: m.AdminBracelets })))
 const AdminNews = lazy(() => import('./features/admin/pages/AdminNews').then(m => ({ default: m.AdminNews })))
 const AdminWatchlist = lazy(() => import('./features/admin/pages/AdminWatchlist').then(m => ({ default: m.AdminWatchlist })))
 const AdminChatGroups = lazy(() => import('./features/admin/pages/AdminChatGroups').then(m => ({ default: m.AdminChatGroups })))
@@ -170,6 +173,9 @@ function App() {
           <Route path="users" element={<AdminUsers />} />
           <Route path="users/pending" element={<AdminPendingUsers />} />
           <Route path="watches" element={<AdminWatches />} />
+          <Route path="serial-reports" element={<AdminSerialReports />} />
+          <Route path="dealer-numbers" element={<AdminDealerNumbers />} />
+          <Route path="bracelets" element={<AdminBracelets />} />
           <Route path="news" element={<AdminNews />} />
           <Route path="watchlist" element={<AdminWatchlist />} />
           <Route path="chat-groups" element={<AdminChatGroups />} />
