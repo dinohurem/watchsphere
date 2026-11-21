@@ -115,6 +115,37 @@ export function formatAge(dateIso: string | null | undefined, now: Date = new Da
   return `${Math.floor(hours / 24)}d`;
 }
 
+/**
+ * Older listings store numeric remarks without a sign ("1 link", "18% Retail"). The
+ * parser now writes "-1 link" / "-18% Retail"; this gives old rows the same label.
+ * Fewer than 5 links without a sign means links are missing; 5+ is a link count.
+ */
+export function signedRemark(remark: string): string {
+  const retail = /^(\d{1,2}(?:[.,]\d)?)\s?% Retail$/i.exec(remark);
+  if (retail) return `-${retail[1]}% Retail`;
+  const links = /^(\d{1,2}(?:[.,]5)?) (links?)$/i.exec(remark);
+  if (links && parseFloat(links[1].replace(',', '.')) < 5) return `-${links[1]} ${links[2]}`;
+  return remark;
+}
+
+/** Listing age colour: green up to 3 days, yellow 4-7 days, red from 8 days. */
+export type AgeTone = 'fresh' | 'aging' | 'stale';
+
+export const AGE_TONE_COLORS: Record<AgeTone, { dot: string; text: string }> = {
+  fresh: { dot: '#34C759', text: '#2FA84F' },
+  aging: { dot: '#FFB800', text: '#A86A00' },
+  stale: { dot: '#FF3B30', text: '#D70015' },
+};
+
+export function ageTone(dateIso: string | null | undefined, now: Date = new Date()): AgeTone {
+  const then = dateIso ? new Date(dateIso).getTime() : NaN;
+  if (!Number.isFinite(then)) return 'stale';
+  const days = Math.floor(Math.max(0, now.getTime() - then) / 86_400_000);
+  if (days <= 3) return 'fresh';
+  if (days <= 7) return 'aging';
+  return 'stale';
+}
+
 /** Rates are "units of currency per 1 USD" (USD = 1), as returned by GET /fx/rates. */
 export type FxRates = Record<string, number>;
 

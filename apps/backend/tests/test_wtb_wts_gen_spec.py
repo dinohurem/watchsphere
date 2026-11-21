@@ -509,12 +509,12 @@ def test_remarks_map_is_appendix_a():
     ("126610LN margin invoice", "margin scheme"),      # not Original Invoice
     ("126610LN + invoice", ""),                        # plain "+ invoice" is no remark
     ("126610LN original invoice", "Original Invoice"),
-    ("126610LN 1 link missing", "1 link"),
+    ("126610LN 1 link missing", "-1 link"),
     ("126610LN 12 links", "12 links"),
-    ("126610LN 1.5 links", "1.5 links"),
+    ("126610LN 1.5 links", "-1.5 links"),
     ("126610LN serviced 2026", "Serviced 2026"),
     ("126610LN patek service 2025", "Serviced 2025"),
-    ("126610LN less 15%", "15% Retail"),
+    ("126610LN less 15%", "-15% Retail"),
     ("126610LN lc de", "LC Germany"),
     ("126610LN 🪵", "Wood Card"),
 ])
@@ -642,7 +642,7 @@ def test_unmarked_discount_without_list_price_goes_to_review():
 
 
 def test_discount_remark_only_when_written():
-    assert "15% Retail" in svc.normalize_remarks("5167A hkr 68500 -15%", "WTS")
+    assert "-15% Retail" in svc.normalize_remarks("5167A hkr 68500 -15%", "WTS")
     assert "Retail" not in svc.normalize_remarks("5167A hkd 58225", "WTS")
 
 
@@ -756,3 +756,24 @@ _REAL_BUILD_INDEX = svc.build_watch_index
 
 async def _index_from_catalog(jsonl_content=None):
     return await _REAL_BUILD_INDEX(CATALOG)
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("126610LN -1 link", ["-1 link"]),
+        ("126610LN 1 link", ["-1 link"]),
+        ("126610LN missing 2 links", ["-2 links"]),
+        ("126610LN +1 link", ["+1 link"]),
+        ("126610LN extra 1 link", ["+1 link"]),
+        ("126610LN 12 links", ["12 links"]),
+        ("126610LN -18%", ["-18% Retail"]),
+        ("126610LN +5%", ["+5% Retail"]),
+        ("126610LN less 10", ["-10% Retail"]),
+    ],
+)
+def test_numeric_remarks_keep_the_sign(text, expected):
+    """Missing links and discounts read as negatives ("-1 link", "-18% Retail")."""
+    from app.services.remark_rules import numeric_remarks
+
+    assert numeric_remarks(text) == expected

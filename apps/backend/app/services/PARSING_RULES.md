@@ -1407,10 +1407,10 @@ every trigger):
 
 | Text | Remark |
 |---|---|
-| `11 links`, `missing 1 link` | `11 links` / `1 link` |
+| `12 links`, `missing 1 link`, `-1 link`, `1 link`, `+1 link` | `12 links` / `-1 link` / `-1 link` / `-1 link` / `+1 link` (fewer than 5 without a sign = missing) |
 | `serviced 2024`, `rolex service 2023` | `Serviced 2024` |
 | `LC100`, `lc-470` | `LC100` |
-| `-5%`, `less 5%` | `5% Retail` |
+| `-5%`, `less 5%`, `+5%` | `-5% Retail` / `-5% Retail` / `+5% Retail` |
 | `W10`, `W10/26`, `W9-2026` | `Wood Card`, and the month/year goes to `Monat/Jahr` |
 
 **Aftermarket.** A row whose text contains an aftermarket trigger (`aftermarket`,
