@@ -3,7 +3,8 @@
  * Row: small image in a grey square, reference bold, brand + model grey, 1M % chip, chevron.
  */
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppImage as Image } from '@/components/AppImage';
 
 import { ChevronRight, WatchOutline } from '@/components/icons';
 import { ChangeChip } from '@/components/market/ChangeChip';

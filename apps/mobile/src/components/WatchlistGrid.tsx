@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { AppImage as Image } from '@/components/AppImage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ChevronRight, TriangleUp, TriangleDown } from './icons';
 

@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, Dimensions, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, Dimensions, Animated, Easing } from 'react-native';
 import { SheetModal } from '@/components/SheetModal';
+import { AppImage as Image } from '@/components/AppImage';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -447,6 +448,7 @@ interface WatchDetails {
   reference: string;
   ws_code?: string;
   image?: string;
+  imageThumbnail?: string;
   currency: string;
   marketPriceMin: number;
   marketPriceMax: number;
@@ -1104,6 +1106,7 @@ export default function WatchDetailsScreen() {
             reference: data.reference || '',
             ws_code: data.ws_code,
             image: data.cover_image,
+            imageThumbnail: data.cover_image_thumbnail || undefined,
             currency: data.currency || 'EUR',
             marketPriceMin: data.lowest_order_price || data.admin_price || 0,
             marketPriceMax: data.admin_price || data.display_price || 0,
@@ -1132,6 +1135,7 @@ export default function WatchDetailsScreen() {
             reference: response.data.reference || '',
             ws_code: response.data.ws_code,
             image: response.data.cover_image,
+            imageThumbnail: response.data.cover_image_thumbnail || undefined,
             currency: response.data.currency || 'EUR',
             marketPriceMin: response.data.price || 0,
             marketPriceMax: response.data.price || 0,
@@ -1409,7 +1413,13 @@ export default function WatchDetailsScreen() {
             style={styles.heroGradient}
           />
           {watch.image ? (
-            <Image source={{ uri: watch.image }} style={styles.heroImage} resizeMode="contain" />
+            <Image
+              source={{ uri: watch.image }}
+              placeholder={watch.imageThumbnail ? { uri: watch.imageThumbnail } : undefined}
+              style={styles.heroImage}
+              resizeMode="contain"
+              priority="high"
+            />
           ) : (
             <View style={styles.heroPlaceholder}>
               <LogoIcon size={sp(80)} color="rgba(33, 33, 33, 0.15)" />

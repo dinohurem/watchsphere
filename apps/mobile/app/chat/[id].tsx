@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal, Pressable, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, Pressable, Linking, Alert } from 'react-native';
 import { SheetModal } from '@/components/SheetModal';
+import { AppImage as Image } from '@/components/AppImage';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';

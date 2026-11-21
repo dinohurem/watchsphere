@@ -3,7 +3,8 @@
  * WTS / WTB all-time count chips. No prices, no badges.
  */
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppImage as Image, prefetchImages } from '@/components/AppImage';
 
 import { WatchOutline } from '@/components/icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -17,6 +18,8 @@ import { UI } from './tokens';
 import type { MarketCardData } from './types';
 
 export function openCard(card: MarketCardData) {
+  // Start downloading the detail hero now; it is ready by the time the detail screen has loaded.
+  prefetchImages([card.image]);
   openWatchDetail({
     id: card.ws_code || card.id,
     wsCode: card.ws_code,
@@ -36,7 +39,8 @@ export function MarketCard({
   onPress?: (card: MarketCardData) => void;
 }) {
   const { fonts } = useTheme();
-  const uri = card.image || card.thumbnail;
+  // Lists show the 400px thumbnail; the full-size image is only loaded on the detail screen.
+  const uri = card.thumbnail || card.image;
   return (
     <TouchableOpacity
       style={[styles.card, { width }]}
@@ -45,7 +49,12 @@ export function MarketCard({
     >
       <View style={styles.imageBox}>
         {uri ? (
-          <Image source={{ uri }} style={styles.image} resizeMode="contain" />
+          <Image
+            source={{ uri }}
+            style={styles.image}
+            resizeMode="contain"
+            recyclingKey={card.id}
+          />
         ) : (
           <WatchOutline size={sp(56)} />
         )}

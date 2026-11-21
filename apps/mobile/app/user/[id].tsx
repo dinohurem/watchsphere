@@ -8,7 +8,7 @@ import { useAuthStore } from '@watchsphere/shared/stores';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
 import Svg, { Path } from 'react-native-svg';
-import { Image } from 'react-native';
+import { AppImage as Image } from '@/components/AppImage';
 
 interface UserProfile {
   id: string;
