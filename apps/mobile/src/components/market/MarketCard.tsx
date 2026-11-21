@@ -61,7 +61,7 @@ export function MarketCard({
           {card.model || ' '}
         </Text>
         <Text style={[styles.reference, { fontFamily: fonts.regular }]} numberOfLines={1}>
-          {card.reference}
+          {card.ws_code || card.reference}
         </Text>
         <View style={styles.counts}>
           <CountChips wts={card.wts_count} wtb={card.wtb_count} />
