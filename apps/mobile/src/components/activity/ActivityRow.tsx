@@ -4,9 +4,11 @@
  * Right: round chat button (opens WhatsApp with the dealer) with the age underneath.
  */
 import React from 'react';
-import { Alert, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { LogoIcon } from '@/components/LogoIcon';
+import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppImage as Image } from '@/components/AppImage';
 
-import { ChatBubbleLines, WatchOutline } from '@/components/icons';
+import { ChatBubbleLines } from '@/components/icons';
 import { KindChip } from '@/components/market/CountChips';
 import { Shimmer } from '@/components/market/Shimmer';
 import { UI } from '@/components/market/tokens';
@@ -64,7 +66,7 @@ export function ActivityRow({
         {d.thumbnail ? (
           <Image source={{ uri: d.thumbnail }} style={styles.thumbImage} resizeMode="contain" />
         ) : (
-          <WatchOutline size={sp(26)} />
+          <LogoIcon size={sp(26)} color="rgba(33, 33, 33, 0.15)" />
         )}
       </View>
       <View style={styles.texts}>

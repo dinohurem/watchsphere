@@ -165,7 +165,7 @@ async def websocket_endpoint(
             return
 
         user_name = user.name
-        user_avatar = user.profile_image_url or user.profile_image_thumbnail_url
+        user_avatar = user.profile_image_thumbnail_url or user.profile_image_url
 
         # Connect the user
         await manager.connect(websocket, user_id, user_name)

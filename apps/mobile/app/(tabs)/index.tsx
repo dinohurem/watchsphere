@@ -6,7 +6,7 @@
  * Trending news is removed.
  */
 import React, { useCallback, useRef } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, InteractionManager } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
 import { RecentlyViewed } from '@/components/home/RecentlyViewed';
@@ -51,8 +51,12 @@ export default function HomeScreen() {
         firstFocus.current = false;
         return;
       }
-      watchlist.reload();
-      recent.reload();
+      // After the Back animation, so the refresh never competes with it.
+      const task = InteractionManager.runAfterInteractions(() => {
+        watchlist.reload();
+        recent.reload();
+      });
+      return () => task.cancel();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );

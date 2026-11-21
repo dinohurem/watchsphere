@@ -122,7 +122,7 @@ async def connect(sid, environ, auth):
             return False
 
         # Register user with avatar
-        user_avatar = user.profile_image_url or user.profile_image_thumbnail_url
+        user_avatar = user.profile_image_thumbnail_url or user.profile_image_url
         manager.register_user(sid, user_id, user.name, user_avatar)
         logger.info(f"Socket.IO: Registered user {user_id} ({user.name}) with sid {sid}")
 

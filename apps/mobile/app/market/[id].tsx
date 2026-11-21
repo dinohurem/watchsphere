@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, Dimensions, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, GestureResponderEvent, Linking, Alert, Dimensions, Animated, Easing, InteractionManager } from 'react-native';
+import { AppImage as Image } from '@/components/AppImage';
 import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -10,7 +11,7 @@ import { useAuthStore } from '@watchsphere/shared/stores';
 import { useFilters, OrderBookFilterState } from '@/contexts/FilterContext';
 import { wp, hp, sp, fp, SCREEN_WIDTH } from '@/utils/responsive';
 import { LogoIcon } from '@/components/LogoIcon';
-import { useGuide } from '@/contexts/GuideContext';
+import { GuideTarget, useGuide } from '@/contexts/GuideContext';
 import { useV2 } from '@/contexts/V2Context';
 import { GUIDE_MOCK_WATCH_DETAILS, GUIDE_MOCK_BUY_ORDERS, GUIDE_MOCK_SELL_ORDERS } from '@/data/guideMockData';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -442,6 +443,7 @@ interface WatchDetails {
   reference: string;
   ws_code?: string;
   image?: string;
+  imageThumbnail?: string;
   currency: string;
   marketPriceMin: number;
   marketPriceMax: number;
@@ -549,11 +551,33 @@ export default function WatchDetailsScreen() {
 
   // ScrollView refs for scrolling to inputs
   const locationFilterScrollRef = useRef<ScrollView>(null);
+  // Responses that arrive after Back must not be processed: parsing and sorting a large order
+  // book on a screen that is being popped kept the JS thread busy and made Back feel slow.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   // Detail redesign (spec v3, section 1): period / sort / currency chips, trend + retail chips
   const { currency, setCurrency, rates } = useCurrency();
   const [tablePeriod, setTablePeriod] = useState<DetailPeriod>('1M');
   const [sortMode, setSortMode] = useState<SortMode>('cheapest');
+  // The table renders in pages: a watch can have hundreds of listings, and mounting (and on Back,
+  // unmounting) them all at once is what made opening and leaving this screen slow.
+  const [rowLimit, setRowLimit] = useState(ROW_PAGE);
+  const totalRows = useRef(0);
+  useEffect(() => {
+    setRowLimit(ROW_PAGE);
+  }, [selectedTab, tablePeriod, sortMode, currency]);
+  const onTableScroll = useCallback((e: { nativeEvent: { layoutMeasurement: { height: number }; contentOffset: { y: number }; contentSize: { height: number } } }) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - hp(900)) {
+      setRowLimit((n) => (n < totalRows.current ? n + ROW_PAGE : n));
+    }
+  }, []);
   const sortMenu = useChipMenu();
   const periodMenu = useChipMenu();
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
@@ -820,6 +844,7 @@ export default function WatchDetailsScreen() {
     try {
       const encodedRef = encodeURIComponent(watchReference);
       const response = await api.get(`/orders/price-history/${encodedRef}?days=365`);
+      if (!alive.current) return;
       if (response.data?.points) {
         setFullPriceHistory(response.data.points);
       }
@@ -828,24 +853,39 @@ export default function WatchDetailsScreen() {
     }
   };
 
+  // Initial load. The price history only feeds the v2 market chart, so it is not fetched (365
+  // days of points) when that section is hidden.
   useEffect(() => {
     loadWatchDetails();
     loadOrderBook();
-    loadPriceHistory();
   }, [id, reference]);
 
-  // Reload data when screen comes into focus (e.g., after creating an order)
+  useEffect(() => {
+    if (!v2Enabled) return;
+    const task = InteractionManager.runAfterInteractions(() => loadPriceHistory());
+    return () => task.cancel();
+  }, [id, reference, v2Enabled]);
+
+  // Reload when the screen comes BACK into focus (e.g. after creating an order). The first focus
+  // is skipped: it fires on mount too, which loaded everything (incl. the full order book) twice.
+  const focusedOnce = useRef(false);
   useFocusEffect(
     useCallback(() => {
+      if (!focusedOnce.current) {
+        focusedOnce.current = true;
+        return;
+      }
       loadWatchDetails();
       loadOrderBook();
-      loadPriceHistory();
-    }, [id, reference])
+      if (v2Enabled) loadPriceHistory();
+    }, [id, reference, v2Enabled])
   );
 
-  // Check watchlist status when authentication changes or reference changes
+  // Check watchlist status when authentication changes or reference changes (not needed for the
+  // first frame, so it waits for the push animation).
   useEffect(() => {
-    checkWatchlistStatus();
+    const task = InteractionManager.runAfterInteractions(() => checkWatchlistStatus());
+    return () => task.cancel();
   }, [id, reference, isAuthenticated]);
 
   // Alerts of this watch (GET /watch-alerts/{ws_code})
@@ -1090,6 +1130,7 @@ export default function WatchDetailsScreen() {
 
         // Try aggregated endpoint — backend tries ws_code first, then reference
         const response = await api.get(`/market/aggregated/${encodedReference}`);
+      if (!alive.current) return;
         if (response.data) {
           const data = response.data;
           setWatch({
@@ -1099,6 +1140,7 @@ export default function WatchDetailsScreen() {
             reference: data.reference || '',
             ws_code: data.ws_code,
             image: data.cover_image,
+            imageThumbnail: data.cover_image_thumbnail || undefined,
             currency: data.currency || 'EUR',
             marketPriceMin: data.lowest_order_price || data.admin_price || 0,
             marketPriceMax: data.admin_price || data.display_price || 0,
@@ -1119,6 +1161,7 @@ export default function WatchDetailsScreen() {
       if (id) {
         const encodedId = encodeURIComponent(id);
         const response = await api.get(`/market/watches/${encodedId}`);
+      if (!alive.current) return;
         if (response.data) {
           setWatch({
             id: response.data.id,
@@ -1127,6 +1170,7 @@ export default function WatchDetailsScreen() {
             reference: response.data.reference || '',
             ws_code: response.data.ws_code,
             image: response.data.cover_image,
+            imageThumbnail: response.data.cover_image_thumbnail || undefined,
             currency: response.data.currency || 'EUR',
             marketPriceMin: response.data.price || 0,
             marketPriceMax: response.data.price || 0,
@@ -1175,6 +1219,7 @@ export default function WatchDetailsScreen() {
       const response = await api.get(`/orders/book/${encodedReference}`, {
         params: { limit: 5000 }
       });
+      if (!alive.current) return;
       if (response.data) {
         const { buy_orders, sell_orders } = response.data;
 
@@ -1394,6 +1439,8 @@ export default function WatchDetailsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={highlightActive ? dismissHighlight : undefined}
+        onScroll={v2Enabled ? undefined : onTableScroll}
+        scrollEventThrottle={64}
       >
         {/* Hero Image with gradient background that extends to price section */}
         <View style={styles.heroContainer}>
@@ -1404,7 +1451,13 @@ export default function WatchDetailsScreen() {
             style={styles.heroGradient}
           />
           {watch.image ? (
-            <Image source={{ uri: watch.image }} style={styles.heroImage} resizeMode="contain" />
+            <Image
+              source={{ uri: watch.image }}
+              placeholder={watch.imageThumbnail ? { uri: watch.imageThumbnail } : undefined}
+              style={styles.heroImage}
+              resizeMode="contain"
+              priority="high"
+            />
           ) : (
             <View style={styles.heroPlaceholder}>
               <LogoIcon size={sp(80)} color="rgba(33, 33, 33, 0.15)" />
@@ -1747,6 +1800,7 @@ export default function WatchDetailsScreen() {
           {v2Enabled && <Text style={styles.sectionTitle}>Order Book</Text>}
 
           {/* Tab Selector */}
+          <GuideTarget id="order-book" radius={sp(20)}>
           <View style={styles.tabSelector}>
             <TouchableOpacity
               style={[styles.tab, selectedTab === 'Sell' && styles.tabActive]}
@@ -1761,6 +1815,7 @@ export default function WatchDetailsScreen() {
               <Text style={[styles.tabText, selectedTab === 'Buy' && styles.tabTextActive]}>WTB</Text>
             </TouchableOpacity>
           </View>
+          </GuideTarget>
 
           {/* Toolbar: sort (2) · period (1) · currency (3) – spec 1.1 */}
           {!v2Enabled && (
@@ -1793,7 +1848,12 @@ export default function WatchDetailsScreen() {
             const rawOrders = selectedTab === 'Buy' ? v2OffFilteredBuyOrders : v2OffFilteredSellOrders;
             const currentOrders = v2Enabled ? rawOrders : arrangeOrders(rawOrders);
             const hasRemarks = !v2Enabled;
-            const firstHighlight = currentOrders.find((o) => highlightIds.includes(o.id))?.id;
+            const highlightIndex = currentOrders.findIndex((o) => highlightIds.includes(o.id));
+            const firstHighlight = highlightIndex >= 0 ? currentOrders[highlightIndex].id : undefined;
+            totalRows.current = currentOrders.length;
+            const shownRows = v2Enabled
+              ? currentOrders.slice(0, 5)
+              : currentOrders.slice(0, Math.max(rowLimit, highlightIndex + ROW_PAGE));
             return (<View
               style={styles.orderBookTable}
               onLayout={(e) => {
@@ -1826,7 +1886,7 @@ export default function WatchDetailsScreen() {
                 </Text>
               </View>
             ) : (
-              (v2Enabled ? currentOrders.slice(0, 5) : currentOrders).map((order, index) => (
+              shownRows.map((order, index) => (
                 <StaggerIn
                   key={order.id || index}
                   index={index}
@@ -1981,6 +2041,7 @@ export default function WatchDetailsScreen() {
       >
         {v2Enabled ? (
           <View style={styles.bottomBarContent}>
+            <GuideTarget id="place-orders" radius={sp(24)} style={{ flex: 1 }}>
             <View style={styles.orderButtons}>
               <TouchableOpacity style={styles.buyButton} onPress={handlePlaceBuyOrder}>
                 <Text style={styles.orderButtonText} numberOfLines={1}>Place Buy Order</Text>
@@ -1989,16 +2050,19 @@ export default function WatchDetailsScreen() {
                 <Text style={styles.orderButtonText} numberOfLines={1}>Place Sell Order</Text>
               </TouchableOpacity>
             </View>
+            </GuideTarget>
           </View>
         ) : (
           <View style={{ height: sp(42) }} />
         )}
         {v2Enabled && (
+          <GuideTarget id="ai-assistant" radius={sp(30)}>
           <TouchableOpacity style={styles.aiButtonOuter} onPress={() => router.push('/chat/ai')}>
             <View style={styles.aiButtonInner}>
               <SparkleIcon />
             </View>
           </TouchableOpacity>
+          </GuideTarget>
         )}
       </LinearGradient>
 
@@ -3343,6 +3407,8 @@ const styles = StyleSheet.create({
 });
 
 /** M5: grey placeholder rows in the shape of the listing table rows. */
+const ROW_PAGE = 30;
+
 function OrderRowsSkeleton() {
   return (
     <View>
