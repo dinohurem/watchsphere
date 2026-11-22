@@ -15,7 +15,7 @@
       "**/*"
     ],
     "ios": {
-      "buildNumber": "40",
+      "buildNumber": "42",
       "supportsTablet": true,
       "bundleIdentifier": "com.watchsphere.watchsphere",
       "infoPlist": {
