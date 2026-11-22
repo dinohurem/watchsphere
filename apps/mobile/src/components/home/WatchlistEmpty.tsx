@@ -6,7 +6,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 
-import { LogoIcon } from '@/components/LogoIcon';
+import { AppImage } from '@/components/AppImage';
 import { ChangeChip } from '@/components/market/ChangeChip';
 import { CountChips } from '@/components/market/CountChips';
 import { UI } from '@/components/market/tokens';
@@ -18,6 +18,7 @@ const SAMPLES = [
     brand: 'Patek Philippe',
     model: 'Nautilus',
     reference: '5811/1G',
+    image: require('../../../assets/images/sample-nautilus-5811-1g.jpg'),
     change: 4.2,
     wts: 2200,
     wtb: 1300,
@@ -27,6 +28,7 @@ const SAMPLES = [
     brand: 'Rolex',
     model: 'Daytona',
     reference: '126518LN Pikachu',
+    image: require('../../../assets/images/sample-daytona-126518ln.jpg'),
     change: 1.8,
     wts: 4500,
     wtb: 2800,
@@ -42,7 +44,7 @@ export function WatchlistEmpty() {
         {SAMPLES.map((s) => (
           <View key={s.reference} style={[styles.mini, { transform: [{ rotate: s.rotate }] }]}>
             <View style={styles.miniImage}>
-              <LogoIcon size={sp(34)} color="rgba(33, 33, 33, 0.15)" />
+              <AppImage source={s.image} style={styles.miniPhoto} contentFit="contain" transition={0} />
               <View style={styles.miniChip}>
                 <ChangeChip value={s.change} />
               </View>
@@ -101,10 +103,11 @@ const styles = StyleSheet.create({
   },
   miniImage: {
     height: sp(66),
-    backgroundColor: '#F7F7F8',
+    backgroundColor: UI.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  miniPhoto: { width: '100%', height: '100%' },
   miniChip: { position: 'absolute', top: sp(4), right: sp(4), transform: [{ scale: 0.8 }] },
   miniBody: { padding: sp(7) },
   miniBrand: { fontSize: fp(9), color: UI.text },
