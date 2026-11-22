@@ -15,6 +15,8 @@ export interface SubscriptionStatus {
   price_monthly: number | null;
   currency: string | null;
   auto_renew: boolean | null;
+  /** Global paywall switch (admin setting). Missing means off. */
+  paywall_enabled?: boolean;
 }
 
 interface SubscriptionContextType {
@@ -54,19 +56,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     } catch (err: any) {
       console.error('Failed to load subscription:', err);
       setError(err.response?.data?.detail || 'Failed to load subscription');
-      // Set default expired state if can't load
-      setSubscription({
-        has_subscription: false,
-        status: 'expired',
-        plan: null,
-        is_trial: false,
-        trial_days_remaining: 0,
-        subscription_days_remaining: 0,
-        expires_at: null,
-        price_monthly: null,
-        currency: null,
-        auto_renew: null,
-      });
+      // Never lock anyone out because the status call failed: keep the last
+      // known status (null = unknown, which does not gate).
     } finally {
       setLoading(false);
     }
@@ -77,9 +68,13 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [loadSubscription]);
 
   // Computed properties
-  // Admin users always have access (no paywalls)
-  const hasActiveSubscription = isAdmin || (subscription?.has_subscription ?? false);
-  const isExpired = !hasActiveSubscription && subscription !== null;
+  // The paywall only applies when the server says it is switched on
+  // (admin setting, off by default). Admins never see it; an unknown status
+  // (not loaded or failed) never gates either.
+  const paywallOn = subscription?.paywall_enabled === true;
+  const hasActiveSubscription =
+    isAdmin || !paywallOn || (subscription?.has_subscription ?? false);
+  const isExpired = !hasActiveSubscription;
   const isTrial = subscription?.is_trial ?? false;
   const daysRemaining = isTrial
     ? subscription?.trial_days_remaining ?? 0

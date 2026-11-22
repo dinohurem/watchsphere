@@ -38,19 +38,8 @@ export function useSubscription() {
     } catch (err: any) {
       console.error('Failed to load subscription:', err);
       setError(err.response?.data?.detail || 'Failed to load subscription');
-      // Set default expired state if can't load
-      setSubscription({
-        has_subscription: false,
-        status: 'expired',
-        plan: null,
-        is_trial: false,
-        trial_days_remaining: 0,
-        subscription_days_remaining: 0,
-        expires_at: null,
-        price_monthly: null,
-        currency: null,
-        auto_renew: null,
-      });
+      // Never lock anyone out because the status call failed: keep the last
+      // known status (null = unknown, which does not gate).
     } finally {
       setLoading(false);
     }
@@ -61,8 +50,12 @@ export function useSubscription() {
   }, [loadSubscription]);
 
   // Computed properties - admin users always have full access
-  const hasActiveSubscription = isAdmin || (subscription?.has_subscription ?? false);
-  const isExpired = !isAdmin && !hasActiveSubscription && subscription !== null;
+  // The paywall only applies when the server says it is switched on (admin
+  // setting, off by default); an unknown status never gates.
+  const paywallOn = subscription?.paywall_enabled === true;
+  const hasActiveSubscription =
+    isAdmin || !paywallOn || (subscription?.has_subscription ?? false);
+  const isExpired = !hasActiveSubscription;
   const isTrial = !isAdmin && (subscription?.is_trial ?? false);
   const daysRemaining = isTrial
     ? subscription?.trial_days_remaining ?? 0
