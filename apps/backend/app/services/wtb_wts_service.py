@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import logging
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 from typing import Optional
 from app.models.watch import Watch
@@ -16,6 +17,11 @@ from app.services.vision_matching import (
     strip_attachment_markers,
 )
 from app.services import remark_rules
+from app.services.ws_quality.classify import WTB_WORDS, is_advert, split_sections
+from app.services.ws_quality.evidence import names_watch, watch_forms
+from app.services.ws_quality.normalize import clean as _ws_clean
+from app.services.ws_quality.prices import _dollar_currency, message_currency, parse_price
+from app.services.ws_quality.wtb import parse_wtb_line
 from rapidfuzz import fuzz, process
 
 logger = logging.getLogger(__name__)
@@ -205,7 +211,10 @@ WTB_CONDITIONS = {
 }
 
 WTS_KEYWORDS = ["wts", "want to sell", "for sale", "selling", "fs", "stock list", "stocklist", "price list", "pricelist"]
-WTB_KEYWORDS = ["wtb", "want to buy", "looking for", "lf"]
+# Buy-request wording: the regex alternation of ws_quality.classify (wtb, want to buy, looking (for), lf, ltb,
+# ntq, need, suche, cerco, sold order, ...). Post type is decided per section by split_sections(); this stays
+# exported for callers that want the keyword set.
+WTB_KEYWORDS = WTB_WORDS
 
 # Patterns that skip the ENTIRE message (structural markers — deleted, system).
 SKIP_PATTERNS = [
@@ -573,8 +582,12 @@ def get_country_from_phone(phone: str) -> Optional[str]:
 # (LRM, RLM, LTR/RTL embedding, zero-width joiners, BOM, etc.). These must
 # be stripped before regex matching or lines get mis-classified as
 # continuations and messages get merged together.
+# Extended set (same as ws_quality.normalize): also U+180E (Mongolian vowel separator, the most frequent one),
+# U+034F, U+00AD, U+061C, the bidi isolates U+2066-2069 and the Hangul/Khmer fillers that broadcast tools insert
+# inside references and prices. Variation selectors (U+FE0E/F) stay: they are part of emoji, not noise.
 _INVISIBLE_CHARS_RE = re.compile(
-    r'[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\u2060-\u2064\ufeff\xa0]'
+    r'[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff\xa0'
+    r'\u180e\u034f\u00ad\u061c\u115f\u1160\u17b4\u17b5\u3164\uffa0]'
 )
 
 
@@ -583,14 +596,17 @@ _INVISIBLE_CHARS_RE = re.compile(
 _HYPHENS_RE = re.compile(r'[\u2010\u2011\u2012\u2013\u2212\ufe63\uff0d]')
 
 
+_SPACE_TABLE = {c: " " for c in (0x00A0, 0x202F, 0x2009, 0x2007, 0x2002, 0x2003, 0x3000)}
+
+
 def _normalize_hyphens(s: str) -> str:
     return _HYPHENS_RE.sub('-', s)
 
 
 def _strip_invisible(s: str) -> str:
     """Replace invisible Unicode marks with nothing (and \xa0 with space)."""
-    # Replace non-breaking space with regular space, then strip other invisibles
-    s = s.replace('\xa0', ' ').replace('\u202f', ' ')
+    # Non-breaking/thin spaces become spaces, then the extended invisible set goes
+    s = s.translate(_SPACE_TABLE)
     return _normalize_hyphens(_INVISIBLE_CHARS_RE.sub('', s))
 
 
@@ -742,98 +758,29 @@ def detect_brand_from_content(content: str) -> Optional[str]:
 
 
 
-def _find_keyword_pos(content_lower: str, keywords: list[str]) -> Optional[int]:
-    """Find the earliest position of any keyword in content, using word-boundary
-    matching so 'looking for' doesn't match inside 'looking forward'."""
-    earliest = None
-    for kw in keywords:
-        # Word boundaries on both sides for multi-word keywords too
-        pattern = r'(?<![a-zA-Z])' + re.escape(kw) + r'(?![a-zA-Z])'
-        m = re.search(pattern, content_lower)
-        if m:
-            pos = m.start()
-            if earliest is None or pos < earliest:
-                earliest = pos
-    return earliest
+def _clean_message(content: str) -> str:
+    """Line-wise ws_quality.normalize.clean: invisible characters, hyphen look-alikes, full-width forms,
+    apostrophe/space thousands separators (1'480'000), '11.300,-' and '74,500/-' endings."""
+    return "\n".join(_ws_clean(line) for line in content.split("\n"))
 
 
-# A number tagged with a currency on either side: "€ 13.199", "69.000€", "46000€",
-# "4m hkd", "hkd1.763 m", "S$ 20k", "350k dhs".
-_CURRENCY_PRICE_RE = re.compile(
-    r'(?:\$|€|£|¥|hk\$|s\$|hkd|usdt|usd|eur|gbp|chf|aed|sgd|cny|rmb|jpy)\s*[\d][\d,.]*'
-    r'|\d[\d,.]*[ \t]?[kKmM]?[ \t]*(?:hkd|usdt|usd|eur|euro|gbp|chf|aed|dhs|sgd|cny|rmb|jpy|yen|€|£|¥|\$)(?![a-z])(?![ \t]*:?[ \t]*\d[\d,.]*(?:[ \t]?[kKmM])?(?![A-Za-z0-9]))',
-    re.IGNORECASE,
-)
+def message_sections(content: str) -> list[tuple[str, str]]:
+    """[(mode, text)] sections of one message, mode 'WTS' or 'WTB'. A post can carry both (a wanted list on
+    top, the dealer's own stock below); each section is processed in its own mode. [] for SOLD, deleted,
+    media and system messages, adverts and chatter."""
+    if should_skip_message(content):
+        return []
+    return split_sections(_clean_message(content))
 
 
 def detect_post_type(content: str) -> Optional[str]:
-    """Detect if a message is WTS, WTB, or neither. Returns 'WTS', 'WTB', or None.
-    Returns None for SOLD, deleted, media, and system messages.
-
-    Both WTS and WTB keywords are checked; if BOTH are present the first one
-    found (by position) wins.  This prevents cross-contamination where a long
-    stock list has e.g. a WTB sub-section inside a WTS post.
-
-    Uses word-boundary matching so 'looking for' doesn't match inside 'looking
-    forward' and 'fs' doesn't match inside 'ofs'."""
-    # Skip SOLD, deleted, media, system messages entirely
-    if should_skip_message(content):
+    """'WTS', 'WTB', 'MIXED' (both sections in one message) or None (SOLD, deleted, media, system
+    messages, adverts, chatter). Decided per section by ws_quality.classify.split_sections, not by
+    whichever keyword comes first."""
+    modes = {m for m, _ in message_sections(content)}
+    if not modes:
         return None
-
-    content = _normalize_price_text(content)
-    content_lower = content.lower()
-
-    wts_pos = _find_keyword_pos(content_lower, WTS_KEYWORDS)
-    wtb_pos = _find_keyword_pos(content_lower, WTB_KEYWORDS)
-
-    def _has_heavy_wts_signal(txt: str) -> bool:
-        """A message with multiple currency-tagged prices is a WTS stock list
-        regardless of how it starts. Catches messages like 'Looking for USDT
-        pay HKD cash' followed by 40 lines of priced inventory."""
-        price_hits = len(_CURRENCY_PRICE_RE.findall(txt))
-        # 3+ priced lines → definitely a seller's stock list
-        return price_hits >= 3
-
-    # If both found, whichever appears first wins — UNLESS the WTB keyword is
-    # just a header on an obvious WTS stock list. Only flip when WTB won AND
-    # the rest of the message reads as a seller's priced inventory.
-    if wts_pos is not None and wtb_pos is not None:
-        winner = "WTS" if wts_pos <= wtb_pos else "WTB"
-        if winner == "WTB" and _has_heavy_wts_signal(content):
-            return "WTS"
-        return winner
-    if wts_pos is not None:
-        return "WTS"
-    if wtb_pos is not None:
-        # Pure WTB header but body is priced inventory → reclassify as WTS.
-        if _has_heavy_wts_signal(content):
-            return "WTS"
-        return "WTB"
-
-    # Currency-tagged price → clear WTS signal
-    has_currency_price = bool(_CURRENCY_PRICE_RE.search(content)) or bool(
-        re.search(r'\d\s?k\b', content, re.IGNORECASE))
-    if has_currency_price:
-        return "WTS"
-
-    # Stock-list style message: ref-shaped token + large number (no currency).
-    # Watch dealers often omit currency in their stock lists because context
-    # makes it obvious. "5167R N2 790,000" or "126518LN Black N1 397,000"
-    # are clearly WTS even without HKD/USD tag.
-    # Require: a ref-like token AND a 4+ digit number (typical watch price).
-    # Ref pattern: optional letter prefix, 4-6 digits, optional letter/number suffix
-    has_ref_like = bool(re.search(
-        r'\b[A-Za-z]{0,4}\d{4,6}[A-Za-z]{0,6}(?:[/\-][A-Za-z0-9]+)?\b',
-        content,
-    ))
-    has_big_number = bool(re.search(
-        r'\d{3}[,.]\d{3}|\b\d{1,3}[kK]\b|\b\d\.\d+[mM]\b',
-        content,
-    ))
-    if has_ref_like and has_big_number:
-        return "WTS"
-
-    return None
+    return "MIXED" if len(modes) > 1 else modes.pop()
 
 
 def ref_stem(ref: str) -> str:
@@ -1043,11 +990,16 @@ _CURRENCY_SEP_RE = re.compile(
     r'(?<![a-z])(hk\$|hkd|usdt|usd|eur|gbp|chf|aed|sgd|cny|rmb|jpy)\s*(?:/{1,3}|:)\s*(?=\d)', re.IGNORECASE)
 
 
+# "S$ 160k" / "SG$160k" -> SGD, "u$ 5k" -> USD (parse_price reads a letter-prefixed '$' as a plain dollar)
+_SG_USD_PREFIX_RE = re.compile(r'(?<![A-Za-z])(s\$|sg\$|u\$)\s*(?=\d)', re.I)
+
+
 def _normalize_price_text(text: str) -> str:
     """Fix currency spellings before any price/currency regex runs."""
     if not text:
         return text
     text = text.replace('💲', '$').replace('：', ':').replace('＄', '$')
+    text = _SG_USD_PREFIX_RE.sub(lambda m: 'sgd ' if m.group(1).lower().startswith('s') else 'usd ', text)
     text = _CURRENCY_TYPO_RE.sub('hkd', text)
     text = _CURRENCY_SEP_RE.sub(lambda m: m.group(1) + ' ', text)
     return text
@@ -1458,10 +1410,10 @@ _fuzzy_match_count = 0
 
 # Minimum score to even consider a fuzzy candidate.
 FUZZY_SCORE_THRESHOLD = 85
-# Minimum score to auto-accept a fuzzy match as "confident". Matches in the
-# [FUZZY_SCORE_THRESHOLD, FUZZY_CONFIDENT_THRESHOLD) band are surfaced as
-# "similar reference — please verify" and routed to needs_review.
-FUZZY_CONFIDENT_THRESHOLD = 95
+# A fuzzy hit is never "confident": a reference the text does not literally name is not that watch, however
+# similar (5712R -> 5712/1R, 5167/1A -> 5167A, 77450SR -> 77450ST, 279171G -> 279171 scored 85-100). Every fuzzy
+# match is routed to needs_review as "similar reference - please verify"; the catalogue watch stays a candidate.
+FUZZY_CONFIDENT_THRESHOLD = 101  # > any rapidfuzz score
 
 
 def fuzzy_match_ref(
@@ -1678,6 +1630,14 @@ async def _run_ai_batches(items: list[dict], request, label: str, timeout: Optio
     return results
 
 
+def _line_names_watch(text: str, watch: dict) -> bool:
+    """True when `text` literally names the catalogue watch's reference (ws_quality.evidence.names_watch):
+    '5712R' does not name 5712/1R, '5167/1A' does not name 5167A, '279171G' does not name 279171."""
+    forms, short = watch_forms(watch.get("ws_code") or "", watch.get("reference") or "",
+                               watch.get("oem_references") or [], watch.get("aliases") or [])
+    return names_watch(text or "", forms, short)
+
+
 async def batch_ai_match(
     unmatched_lines: list[dict],
     watch_index: dict,
@@ -1773,7 +1733,7 @@ Currency: HKD (Hong Kong Dollar), USDT/USD, EUR, GBP, CHF — HKD is default for
 MATCHING RULES:
 1. NEVER match across brands — a Tudor ref must stay Tudor, never become Rolex. A 5990 (Patek) must not match a 5905 (also Patek but different model).
 2. Match the EXACT reference first. If the catalog has "126710BLNR Jub" and the line says "126710 blnr jub", that's a match.
-3. If the catalog has the reference but with a different descriptor (e.g., "126500LN White" but line says "126500 blk"), match to the BLACK variant if it exists, otherwise flag the closest.
+3. If the catalog has the reference but with a different descriptor (e.g., "126500LN White" but line says "126500 blk"), match to the BLACK variant if it exists; otherwise ws_code null (put your best guess in suggested_ws_code). A reference that is not in the catalog is NEVER mapped to a similar one: 5712R is not 5712/1R, 5167/1A is not 5167A, 279171G is not 279171, 77450SR is not 77450ST. ws_code is only set when the line literally names that watch's reference.
 4. Common confusions to avoid: 5990 ≠ 5905, 7118 ≠ 7128, 5268 ≠ 5269, 228348 ≠ 228398, 128238 ≠ 228238
 5. If no catalog match exists but you can confidently identify the watch, provide a suggested_ws_code.
 6. A ws_code typically = reference + key descriptor (e.g., "126710BLNR Jub", "5711/1A White", "15500ST Blue")
@@ -2471,158 +2431,73 @@ def _canonicalize_currency(cur: Optional[str]) -> Optional[str]:
     return u
 
 
-# A price number: '850k', '110.5k', '1.763 m', '1,265,000', '13.950,-'
-_PRICE_NUM = r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-zA-Z]))?)'
+# Currency that applies to untagged prices of the message being processed (set per message by
+# _process_messages_sync from ws_quality.prices.message_currency: explicit "prices in HKD", the currency
+# most tagged lines use, "HK stock", the sender's country, the group's market).
+_MESSAGE_CURRENCY: ContextVar[Optional[str]] = ContextVar("ws_message_currency", default=None)
+
+_PRICE_CTX = r"(?:[.,]\d{3}|\s?(?:k|m|hkd|hk\$|usdt?|usd|eur|euros?|aed|rmb|cny|u|€|\$|£)(?![a-z]))"
+_PRICE_BEFORE = re.compile(r"(?:hk\$|hkd|usdt?|eur|euros?|aed|€|\$|£)\s*[:=\-]?\s*$", re.I)
+
+
+def _is_price_token(token: str, line: str) -> bool:
+    """A 'reference' the extractor found that is really a price: '112' in '112,000$', '71500' in '71500 usdt', '336k'."""
+    if re.fullmatch(r"\d[\d.,]*\s?[km]", token, re.I):
+        return True
+    for m in re.finditer(re.escape(token), line):
+        if not token.isdigit():
+            return False
+        if re.match(_PRICE_CTX, line[m.end():m.end() + 8], re.I) or _PRICE_BEFORE.search(line[max(0, m.start() - 8):m.start()]):
+            return True
+    return False
+
+
+_REF_SHAPES_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:\d{5,6}[A-Za-z]{1,6}|\d{4}/\d{1,4}[A-Za-z]{0,3}(?:-\d{3})?|\d{4}[A-Za-z]{1,3}(?:-\d{3})?)(?![A-Za-z0-9])")
+
+
+def _reference_tokens(text: str) -> list[str]:
+    """References written in `text`; their digits are masked so they can never be read as a price
+    ('Looking for 126518 black' has no price, '228235 white rom w11 448k' costs 448k)."""
+    out: list[str] = []
+    for line in text.split("\n"):
+        r = _extract_ref_from_line(line)
+        if r and len(re.sub(r"[^A-Za-z0-9]", "", r)) >= 4 and not _is_price_token(r, line):
+            out.append(r)
+        for m in _REF_SHAPES_RE.findall(line):
+            if not re.fullmatch(r"\d+(?:usdt?|hkd|eur|aed|rmb|cny|k|m|u|y|yr|year|mm)", m, re.I):
+                out.append(m)
+    return out
+
+
+def _fmt_amount(amount: Optional[int]) -> Optional[str]:
+    return f"{amount:,}" if amount else None
+
+
+def _bare_currency(sender_country: Optional[str]) -> str:
+    """Currency of an untagged price: the message context, else the sender's home currency."""
+    return _MESSAGE_CURRENCY.get() or _default_currency_for_country(sender_country)
 
 
 def extract_price(content: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-    """Extract price and currency from message text.
-    Returns (formatted_price, currency) or (None, None).
-
-    Price formats: 387k, 1.17m, 1.763 m, 435,000, 138,000, 162k, 1.265m
-    Currency can follow (with/without space): 387k hkd, 435,000hkd, 300k usdt, 69.000€
-    Currency can precede: HK$387k, $300k, €5,000, hkd850k, S$20k, CHF 12.5k
-    Typos are fixed first: hkld/khd/hkdd/HKKD/h kd → HKD, 'HKD//390k', '💲 149k', 'usdt ：'.
-    'hkd850k usd110.5k' = 850,000 HKD (the first quote wins; the USD that follows
-    is a second price, not a suffix of the first).
-    Chinese: '97w人民币' = 97 × 10,000 RMB = 970,000 CNY.
-    If $ is used by HK/CN/MO/SG sender without USD/USDT qualifier -> HKD.
-    """
-    content = _normalize_price_text(content)
-    # Remove serial code prefixes that can interfere with price parsing
-    # SC = Serial Code, SN = Serial Number, Ref = Reference
-    content = re.sub(r'\b(?:SC|SN|REF|ser\.?)\s*[\d,]+', '', content, flags=re.IGNORECASE)
-
-    def _extract_chinese_price() -> tuple[Optional[str], Optional[str]]:
-        m = re.search(
-            r'(\d+(?:[.,]\d+)?)\s*w\s*(\d)?\s*(?:人民币|rmb|cny)',
-            content, re.IGNORECASE
-        )
-        if not m:
-            return None, None
-        base = m.group(1).replace(',', '.')
-        extra = m.group(2)  # "84w5" → base=84, extra=5 (meaning 84.5×10,000)
-        try:
-            value = float(base)
-            if extra:
-                value = value + float(extra) / 10
-            total = round(value * 10000)
-            if 0 < total <= 50_000_000:
-                return f"{total:,}", "CNY"
-        except ValueError:
-            pass
-        return None, None
-
-    num = _PRICE_NUM
-    _sep = r'[:\s]*'
-    prefix_patterns = [
-        (rf'hk\${_sep}{num}', "HKD"),
-        (rf'(?:us\$|u\$){_sep}{num}', "USD"),
-        (rf'(?:s\$|sg\$|sgd){_sep}{num}', "SGD"),
-        (rf'(?<![a-z])hkd{_sep}{num}', "HKD"),
-        (rf'(?<![a-z])usdt{_sep}{num}', "USDT"),
-        (rf'(?<![a-z])usd{_sep}{num}', "USD"),
-        (rf'(?<![a-z])(?:eur|euro){_sep}{num}', "EUR"),
-        (rf'(?<![a-z])gbp{_sep}{num}', "GBP"),
-        (rf'(?<![a-z])chf{_sep}{num}', "CHF"),
-        (rf'(?<![a-z])(?:aed|dhs){_sep}{num}', "AED"),
-        (rf'(?<![a-z])jpy{_sep}{num}', "JPY"),
-        (rf'(?<![a-z])(?:rmb|cny){_sep}{num}', "CNY"),
-        (rf'€{_sep}{num}', "EUR"),
-        (rf'£{_sep}{num}', "GBP"),
-        (rf'¥{_sep}{num}', "CNY"),
-        (rf'\${_sep}{num}', None),  # $ — resolved by sender country
-    ]
-    suffix_re = re.compile(
-        r'(?<![A-Za-z\d./\-])' + num
-        + r'[ \t]*(hkd|usdt|usd|eur|euro|gbp|chf|aed|dhs|sgd|jpy|yen|cny|rmb|€|£|¥|\$)(?![a-z])(?![ \t]*:?[ \t]*\d[\d,.]*(?:[ \t]?[kKmM])?(?![A-Za-z0-9]))',
-        re.IGNORECASE,
-    )
-
-    # Currency-prefixed forms first (in list order), then suffixed forms.
-    best: Optional[tuple[int, str, Optional[str], str]] = None  # (pos, raw, currency, kind)
-    for pattern, currency in prefix_patterns:
-        m = re.search(pattern, content, re.IGNORECASE)
-        if not m:
-            continue
-        raw = m.group(1).strip()
-        if not _format_price(_normalize_adjacent_currency_price(raw)):
-            continue
-        # '$505,000 HKD': a trailing tag names the currency of a bare '$' — but
-        # only when that tag is not itself the prefix of the next price
-        # ('hkd850k usd110.5k' stays HKD).
-        cur = currency
-        tail = content[m.end():m.end() + 12]
-        tm = re.match(r'\s*(usdt|hkd|usd|eur|gbp|chf|cny|rmb|sgd|aed|jpy)(?![a-z])(?!\s*:?\s*\d)',
-                      tail, re.IGNORECASE)
-        if tm and (cur is None or cur in ("USD",)):
-            cur = tm.group(1)
-        if cur is None:
-            cur = _default_currency_for_country(sender_country)
-        best = (m.start(), raw, cur, "prefix")
-        break
-    if best is None:
-        for m in suffix_re.finditer(content):
-            raw = m.group(1).strip()
-            if not _format_price(_normalize_adjacent_currency_price(raw)):
-                continue
-            tag = m.group(2).lower()
-            cur = {"€": "EUR", "£": "GBP", "¥": "CNY", "euro": "EUR", "dhs": "AED", "yen": "JPY"}.get(tag, tag.upper())
-            if tag == "$":
-                cur = _default_currency_for_country(sender_country)
-            best = (m.start(), raw, cur, "suffix")
-            break
-
-    if best:
-        formatted = _format_price(_normalize_adjacent_currency_price(best[1]))
-        if formatted:
-            return formatted, _canonicalize_currency(best[2])
-
-    # Last-resort Chinese pattern (only fires when no standard currency found)
-    cn_result = _extract_chinese_price()
-    if cn_result[0]:
-        return cn_result
-
+    """Currency-tagged (or k/m) price of a text. Returns (formatted_price, currency) or (None, None).
+    One parser for the whole generator: ws_quality.prices.parse_price, with the message currency as context.
+    Reference tokens are never read as prices, '$' is HKD in a Hong Kong context and USD elsewhere (never
+    GBP/EUR), '160000 hkd 12/2025' is 160,000, apostrophe thousands separators work, a currency written
+    after one number is not attached to the next one ('212000aed 450000hkd')."""
+    t = _normalize_price_text(content)
+    p = parse_price(t, sender_country, _MESSAGE_CURRENCY.get(), _reference_tokens(t))
+    if p.amount and p.how != "bare":
+        return _fmt_amount(p.amount), p.currency
     return None, None
 
 
-
-def extract_wtb_price(content: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-    """WTB-specific price extractor. Buyers express a budget via phrases like
-    'target: 105k HKD', 'budget: 105k', 'up to: 105k', 'can confirm: 105k',
-    'max 105k hkd', 'offer 105k'. Peel off the prefix phrase (everything up to
-    the colon or the keyword) and feed the remainder to the regular extractor,
-    so existing currency logic (HKD/USDT/RMB/etc) continues to work.
-    """
-    # Ordered longest-first so "can confirm" matches before "confirm" would.
-    # Covers every variant the user listed: target/budget/up to/can confirm/
-    # can pay/pay max/willing to pay/offer/max/at. Each is allowed an optional
-    # "[:\-]" separator before the price.
-    prefixes = [
-        r'can\s+confirm',
-        r'willing\s+to\s+pay',
-        r'pay\s+max',
-        r'can\s+pay',
-        r'up\s+to',
-        r'target\s+price',
-        r'price\s+target',
-        r'any\s+year\s+target',
-        r'any\s+year\s+budget',
-        r'target',
-        r'budget',
-        r'offer',
-        r'max',
-        r'at',
-    ]
-    pattern = r'\b(?:' + '|'.join(prefixes) + r')\s*[:\-]?\s*(.+)$'
-    m = re.search(pattern, content, re.IGNORECASE)
-    if m:
-        tail = m.group(1)
-        p, c = extract_price(tail, sender_country)
-        if p:
-            return p, c
-    # Fall back to the standard extractor
-    return extract_price(content, sender_country)
+def extract_wtb_price(content: str, sender_country: Optional[str] = None, message: str = "") -> tuple[Optional[str], Optional[str]]:
+    """Target price of a buy request, from ws_quality.wtb.parse_wtb_line: 'target 80k', 'budget: 105k HKD',
+    'Price Target 15-16k' (upper end), 'n11 136000 can confirm', '2.39M can confirm'. A bare number is never
+    a price ('Looking for 126518 black' has none), and no target means (None, None) - never a default currency."""
+    f = parse_wtb_line(_normalize_price_text(content), message, sender_country)
+    return (_fmt_amount(f["price"]), f["currency"]) if f["price"] else (None, None)
 
 
 def _apply_discount(price_val: float, discount_pct: float) -> str:
@@ -2696,7 +2571,7 @@ def price_info(text: str, sender_country: Optional[str] = None, line_level: bool
         m = marked[0]
         base = _format_price(m.group(1))
         cur = _base(m.group(0))[1] or ("HKD" if re.search(r'hk', m.group(0), re.I) else
-                                       _default_currency_for_country(sender_country))
+                                       _bare_currency(sender_country))
         if m.group(3):
             info.update(price=_format_price(m.group(3)), currency=cur, base_price=base)
             return info
@@ -2712,11 +2587,11 @@ def price_info(text: str, sender_country: Optional[str] = None, line_level: bool
         if base:
             cur_tag = (d.group(1) or d.group(3) or "").lower()
             if cur_tag in ("$", ):
-                cur = _default_currency_for_country(sender_country)
+                cur = _dollar_currency(sender_country, _MESSAGE_CURRENCY.get())
             elif cur_tag:
                 cur = _canonicalize_currency({"€": "EUR", "£": "GBP", "hk$": "HKD", "us$": "USD"}.get(cur_tag, cur_tag))
             else:
-                cur = _default_currency_for_country(sender_country)
+                cur = _bare_currency(sender_country)
             pct = _pct(d.group(4))
             if d.group(5):
                 info.update(price=_format_price(d.group(5)), currency=cur, discount_pct=pct, base_price=base)
@@ -2769,50 +2644,12 @@ def apply_list_price_rule(info: dict, watch: Optional[dict], rates: Optional[dic
 
 
 def _extract_price_from_line_basic(line: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-    """Currency-tagged price, else the most price-like bare number on the line.
-    A bare number counts only with k/m or 4+ digits — '143k Datejust 28' is
-    143,000, never 28 (a case size)."""
-    line = _normalize_price_text(line)
-    price, currency = extract_price(line, sender_country)
-    if price:
-        return price, currency
-
-    tokens = _clean_text(line).strip().split()
-    first_token = tokens[0].strip().rstrip('.').lower() if tokens else ""
-    line_ref = (_extract_ref_from_line(line) or "").lower()
-    best_suffixed = None
-    best_plain = None
-    for idx, token in enumerate(tokens):
-        token_clean = token.strip().rstrip('.,;:)').lstrip('(')
-        if re.match(r'^[nNwW]\d', token_clean):
-            continue
-        if re.match(r'^20[1-3]\d(?:year|y)?$', token_clean, re.IGNORECASE):
-            continue
-        if re.match(r'^\d{2}y$', token_clean, re.IGNORECASE):
-            continue
-        if not re.match(r'^[\d,.]+[kKmM]?$', token_clean):
-            # '1.2 m' — number followed by a lone k/m token
-            if re.match(r'^[kKmM]$', token_clean) and idx > 0 and re.match(r'^[\d,.]+$', tokens[idx - 1]):
-                cand = tokens[idx - 1] + token_clean
-                if _format_price(cand) and best_suffixed is None:
-                    best_suffixed = cand
-            continue
-        if idx == 0 and token_clean.lower() == first_token and not re.search(r'[kKmM]$', token_clean):
-            continue  # likely the reference
-        if re.search(r'[kKmM]$', token_clean):
-            if best_suffixed is None:
-                best_suffixed = token_clean
-            continue
-        digits = re.sub(r'\D', '', token_clean)
-        if len(digits) < 4 or token_clean.lower() == line_ref:
-            continue
-        best_plain = token_clean  # last plain number wins (prices end the line)
-    for cand in (best_suffixed, best_plain):
-        if cand:
-            formatted = _format_price(cand)
-            if formatted:
-                return formatted, _default_currency_for_country(sender_country)
-    return None, None
+    """Currency-tagged price, else the most price-like bare number on the line (k/m first, else the last
+    plain number). A bare number counts only with k/m or 4+ digits - '143k Datejust 28' is 143,000, never 28
+    (a case size). Reference tokens and N/W month codes are masked. Currency of a bare number: message context."""
+    t = _normalize_price_text(line)
+    p = parse_price(t, sender_country, _MESSAGE_CURRENCY.get(), _reference_tokens(t))
+    return (_fmt_amount(p.amount), p.currency) if p.amount else (None, None)
 
 
 def extract_price_from_line(line: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
@@ -3473,12 +3310,10 @@ def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, lin
     row["Bemerkungen"] = "; ".join(parts)
 
     if mode == "WTB":
-        info = {"price": None, "currency": None}
-        p, c = extract_wtb_price(scope, ctx["sender_country"])
-        if not p:
-            info = price_info(scope, ctx["sender_country"], line_level=False)
-            p, c = info["price"], info["currency"]
-        price, currency, rule_reason = p, c, None
+        # A buy request has a price only when the dealer states a target; no fallback to a bare number
+        # (that is how "Looking for 126518 black" became HKD 126,518).
+        price, currency = extract_wtb_price(scope, ctx["sender_country"], ctx.get("content") or "")
+        rule_reason = None
     else:
         info = price_info(scope, ctx["sender_country"], line_level=line_level)
         price, currency, rule_reason = apply_list_price_rule(info, watch, ctx.get("rates"))
@@ -3508,7 +3343,7 @@ def _finish_row(row: dict, ctx: dict, scope: str, *, reason: str = "", candidate
     if extracted_ref:
         row["Extracted Ref"] = extracted_ref
     row["_original_content"] = scope.strip()
-    row["_message_text"] = ctx["content"]
+    row["_message_text"] = ctx.get("message") or ctx["content"]
     row["_attachments"] = list(ctx.get("attachments") or [])
     row["_msg_index"] = ctx["msg_index"]
     row["_sender_phone"] = ctx["phone"]
@@ -3979,7 +3814,7 @@ def _process_messages_sync(
             progress_state["detail"] = f"Processing messages... {idx:,}/{total_messages:,}"
         if msg.get("_photo_attached"):
             continue
-        content = _strip_media_markers(msg["content"]).strip()
+        content = _clean_message(_strip_media_markers(msg["content"]).strip())
         sender = msg["sender"]
         timestamp = msg["timestamp"]
         attachments = msg.get("attachments") or []
@@ -3988,7 +3823,7 @@ def _process_messages_sync(
         ctx = {"mode": mode, "watch_index": watch_index, "sender": sender, "timestamp": timestamp,
                "group_name": group_name, "ref_month": ref_month, "ref_year": ref_year, "phone": phone,
                "sender_country": sender_country, "attachments": attachments, "msg_index": idx,
-               "content": content, "rates": rates}
+               "content": content, "message": content, "rates": rates}
 
         if not content:
             if attachments:
@@ -4000,30 +3835,38 @@ def _process_messages_sync(
             buckets["discarded"].append(_discard_row(ctx, content, "Photo with only WTB / ? / price? / pm"))
             continue
 
-        post_type = detect_post_type(content)
-        if post_type is None:
+        # Post type per section: one message can yield WTS and WTB sections, each processed in its own
+        # mode. Adverts (is_advert) and chatter produce no section.
+        sections = message_sections(content)
+        if not sections:
             if not should_skip_message(content):
-                buckets["discarded"].append(_discard_row(ctx, content, discard_reason_for_chat(content)))
+                reason = "Advert / promotion" if is_advert(content) else discard_reason_for_chat(content)
+                buckets["discarded"].append(_discard_row(ctx, content, reason))
             continue
-        if post_type != mode:
+        sections = [(m, t) for m, t in sections if m == mode]
+        if not sections:
             continue
         detected_posts += 1
+        # Untagged prices of this message: explicit "prices in HKD", majority currency, "HK stock", sender country
+        _MESSAGE_CURRENCY.set(message_currency(content, sender_country, group_name))
 
         before = {k: len(v) for k, v in buckets.items()}
-        kind, texts = split_message_into_listings(content, watch_index)
-        if kind == "list" or (kind == "single" and _is_stock_list_message(content)
-                              and len(find_references(content, watch_index)) > 1):
-            parse_stock_list(content=content, mode=mode, watch_index=watch_index, sender=sender,
-                             timestamp=timestamp, group_name=group_name, ref_month=ref_month,
-                             ref_year=ref_year, phone=phone, sender_country=sender_country,
-                             ctx=ctx, buckets=buckets)
-        else:
-            for text in texts:
-                brand_hint = detect_brand_from_content(text) or detect_brand_from_content(content)
-                matches, diag, fuzzy_score, extracted = _match_listing_text(text, watch_index, brand_hint)
-                _route_listing(buckets, ctx, text, matches, diag, line_level=False, extracted_ref=extracted,
-                               brand_hint=brand_hint, fuzzy_score=fuzzy_score,
-                               location_text=content if len(texts) == 1 else text)
+        for _mode, section in sections:
+            sctx = {**ctx, "content": section}
+            kind, texts = split_message_into_listings(section, watch_index)
+            if kind == "list" or (kind == "single" and _is_stock_list_message(section)
+                                  and len(find_references(section, watch_index)) > 1):
+                parse_stock_list(content=section, mode=mode, watch_index=watch_index, sender=sender,
+                                 timestamp=timestamp, group_name=group_name, ref_month=ref_month,
+                                 ref_year=ref_year, phone=phone, sender_country=sender_country,
+                                 ctx=sctx, buckets=buckets)
+            else:
+                for text in texts:
+                    brand_hint = detect_brand_from_content(text) or detect_brand_from_content(section)
+                    matches, diag, fuzzy_score, extracted = _match_listing_text(text, watch_index, brand_hint)
+                    _route_listing(buckets, sctx, text, matches, diag, line_level=False, extracted_ref=extracted,
+                                   brand_hint=brand_hint, fuzzy_score=fuzzy_score,
+                                   location_text=section if len(texts) == 1 else text)
 
         # A photo belongs to a listing only when the message holds exactly one watch.
         new_rows = [r for k in ("matched", "needs_review", "not_in_database", "aftermarket")
@@ -4034,6 +3877,7 @@ def _process_messages_sync(
         for r in new_rows:
             r["_listing_count"] = len(new_rows)
 
+    _MESSAGE_CURRENCY.set(None)
     return {
         "matched_rows": buckets["matched"],
         "needs_review_rows": buckets["needs_review"],
@@ -4397,6 +4241,14 @@ async def process_generation(
                     })
                 continue
 
+            if not _line_names_watch(original_content, watch):
+                # The AI picked a catalogue watch whose reference the text does not literally name (an
+                # uncatalogued reference mapped to a similar one): a suggestion for the reviewer, never a match.
+                _note(f"AI suggestion ({confidence}%): {watch['ws_code']} — reference not written in the text")
+                row["_candidates"] = _candidate_meta([watch], "AI suggestion", float(confidence)) + [
+                    c for c in row.get("_candidates", []) if c["ws_code"] != watch["ws_code"]][:2]
+                indices_to_move_to_review.append(nid_idx)
+                continue
             row["WS-Code"] = watch["ws_code"]
             row["Marke"] = watch["brand"]
             row["_candidates"] = _candidate_meta([watch], "AI match", float(confidence))
@@ -4527,7 +4379,13 @@ async def process_generation(
 
             if tier == "matched":
                 row = matched_rows[row_idx]
-                if action == "flip" and conf >= 95 and cat_watch:
+                if action == "flip" and conf >= 95 and cat_watch and not _line_names_watch(src_text, cat_watch):
+                    row["Review Reason"] = (
+                        f"AI suggests {cat_watch['ws_code']} ({conf}%), reference not written in the text"
+                        if not row.get("Review Reason") else
+                        f"{row['Review Reason']}; AI suggests {cat_watch['ws_code']} ({conf}%), reference not written in the text")
+                    matched_to_demote.append(row_idx)
+                elif action == "flip" and conf >= 95 and cat_watch:
                     row["WS-Code"] = cat_watch["ws_code"]
                     row["Marke"] = cat_watch["brand"]
                     row["_ai_reason"] = f"AI verify ({conf}%): {reason}"
