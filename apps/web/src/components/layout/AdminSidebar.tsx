@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   PhoneCall,
   Link2,
+  Wrench,
 } from 'lucide-react'
 import { DRAFT_COUNTS_EVENT, fetchDraftCounts } from '@/features/admin/components/checks/checksApi'
 
@@ -86,6 +87,7 @@ const adminNavigationConfig: NavSection[] = [
       { nameKey: 'sidebar.remarks', to: '/admin/remarks', icon: Tags, label: 'Remarks' },
       { nameKey: 'sidebar.approval', to: '/admin/approval', icon: ClipboardCheck, label: 'Approval' },
       { nameKey: 'sidebar.priceCheck', to: '/admin/price-check', icon: Scale, label: 'Price check' },
+      { nameKey: 'sidebar.bulkFix', to: '/admin/bulk-fix', icon: Wrench, label: 'Bulk fix' },
       { nameKey: 'sidebar.whatsappImport', to: '/admin/whatsapp', icon: Upload },
       { nameKey: 'sidebar.whatsappBridge', to: '/admin/whatsapp-bridge', icon: Radio },
       { nameKey: 'sidebar.activity', to: '/admin/activity', icon: Activity },

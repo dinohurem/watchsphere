@@ -17,6 +17,8 @@ from app.api.v1.endpoints import market_browse
 
 from app.api.v1.endpoints import checks, checks_admin
 
+from app.api.v1.endpoints import orders_bulk_fix
+
 api_router = APIRouter()
 
 # Include routers
@@ -39,6 +41,8 @@ api_router.include_router(activity.router, prefix="/activity", tags=["activity"]
 api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["whatsapp"])
 api_router.include_router(ai_insights.router, prefix="/insights", tags=["ai-insights"])
 api_router.include_router(upload.router, prefix="/upload", tags=["upload"])
+# Before orders.router: its /admin/{order_id} routes would read "bulk-fix" as an id.
+api_router.include_router(orders_bulk_fix.router, prefix="/orders/admin/bulk-fix", tags=["orders-admin"])
 api_router.include_router(orders.router, prefix="/orders", tags=["orders"])
 api_router.include_router(assistant.router, tags=["assistant"])
 api_router.include_router(ai_chat.router, tags=["ai-chat"])
