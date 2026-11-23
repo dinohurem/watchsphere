@@ -288,12 +288,14 @@
     "goBack": "Zurück",
     "orderBook": "Orderbuch",
     "noOrdersAvailable": "Keine {{type}}-Orders verfügbar",
+    "soldOrder": "Fester Auftrag",
     "makeAnOffer": "Angebot machen",
     "yourOffer": "Ihr Angebot",
     "submitting": "Wird gesendet...",
     "failedToCreateOrder": "Order konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
   },
   "orderDetails": {
+    "soldOrder": "Fester Auftrag",
     "buyOrder": "Kauforder",
     "sellOrder": "Verkaufsorder",
     "sold": "Verkauft",

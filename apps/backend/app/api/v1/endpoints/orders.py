@@ -66,7 +66,7 @@ class OrderResponse(BaseModel):
     watch_id: Optional[str] = None
     # Optional: WTB (buy) orders are allowed without a published price.
     price: Optional[float] = None
-    currency: str
+    currency: Optional[str] = None
     condition: Optional[OrderCondition] = None
     country_code: Optional[str] = None
     country_name: Optional[str] = None
@@ -75,6 +75,7 @@ class OrderResponse(BaseModel):
     status: OrderStatus
     has_box: bool = False
     has_papers: bool = False
+    firm_order: bool = False
     notes: Optional[str] = None
     remarks: Optional[str] = None
     cover_image: Optional[str] = None
@@ -91,10 +92,10 @@ class OrderBookEntry(BaseModel):
     """Entry for order book display"""
     id: str
     date: str  # Formatted date MM.DD.YY
-    condition: str  # "Used" or "Unworn"
-    # Optional: WTB rows can omit price.
+    condition: Optional[str] = None  # "Used" or "Unworn"; WTB: "Only Unworn" / "Can be Used" / None (not stated)
+    # Optional: WTB rows can omit price (and then have no currency either).
     price: Optional[float] = None
-    currency: str
+    currency: Optional[str] = None
     country_code: str
     country_name: Optional[str] = None
     has_box: bool
@@ -110,6 +111,7 @@ class OrderBookEntry(BaseModel):
     watch_month: Optional[int] = None
     year_raw: Optional[str] = None
     condition_raw: Optional[str] = None
+    firm_order: bool = False
     usd_price: Optional[float] = None
     first_seen_at: Optional[datetime] = None
 
@@ -465,7 +467,7 @@ async def get_order_book(
 
         # Use condition_raw if available (e.g., "Unworn only"), otherwise use enum value
         condition_raw = getattr(order, 'condition_raw', None)
-        condition_str = condition_raw if condition_raw else order.condition.value
+        condition_str = condition_raw if condition_raw else (order.condition.value if order.condition else None)
 
         # Enforce WTB display vocabulary: WTB orders may ONLY show
         # "Only Unworn" or "Can be Used". Map any leaked WTS labels
@@ -499,6 +501,7 @@ async def get_order_book(
             watch_month=order.watch_month,
             year_raw=year_raw,
             condition_raw=condition_raw,
+            firm_order=bool(getattr(order, 'firm_order', False)),
             usd_price=order.usd_price,
             first_seen_at=order.first_seen_at,
         )
@@ -1058,6 +1061,7 @@ async def create_order(
         price=order.price,
         currency=order.currency,
         condition=order.condition,
+        firm_order=bool(getattr(order, 'firm_order', False)),
         country_code=order.country_code,
         country_name=order.country_name,
         user_id=order.user_id,
@@ -1142,8 +1146,9 @@ async def get_my_orders(
             reference=order.reference,
             watch_id=order.watch_id,
             price=order.price,
-            currency=order.currency or "EUR",
+            currency=order.currency,
             condition=order.condition,
+            firm_order=bool(getattr(order, 'firm_order', False)),
             country_code=getattr(order, 'country_code', None),
             country_name=getattr(order, 'country_name', None),
             user_id=order.user_id,
@@ -1172,9 +1177,12 @@ class OrderDetailResponse(BaseModel):
     model: str
     reference: str
     watch_id: Optional[str] = None
-    price: float
-    currency: str
-    condition: OrderCondition
+    price: Optional[float] = None  # a buy request without a target has no price
+    currency: Optional[str] = None
+    condition: Optional[OrderCondition] = None
+    condition_raw: Optional[str] = None
+    firm_order: bool = False
+    remarks: Optional[str] = None
     country_code: str
     country_name: Optional[str] = None
     user_id: str
@@ -1276,6 +1284,9 @@ async def get_order(
         price=order.price,
         currency=order.currency,
         condition=order.condition,
+        condition_raw=getattr(order, 'condition_raw', None),
+        firm_order=bool(getattr(order, 'firm_order', False)),
+        remarks=getattr(order, 'remarks', None),
         country_code=order.country_code,
         country_name=order.country_name,
         user_id=order.user_id,
@@ -1388,6 +1399,7 @@ async def update_order(
         price=order.price,
         currency=order.currency,
         condition=order.condition,
+        firm_order=bool(getattr(order, 'firm_order', False)),
         country_code=order.country_code,
         country_name=order.country_name,
         user_id=order.user_id,
@@ -1522,6 +1534,7 @@ async def mark_order_as_sold(
         price=order.price,
         currency=order.currency,
         condition=order.condition,
+        firm_order=bool(getattr(order, 'firm_order', False)),
         country_code=order.country_code,
         country_name=order.country_name,
         user_id=order.user_id,
@@ -1600,6 +1613,7 @@ async def mark_order_as_completed(
         price=order.price,
         currency=order.currency,
         condition=order.condition,
+        firm_order=bool(getattr(order, 'firm_order', False)),
         country_code=order.country_code,
         country_name=order.country_name,
         user_id=order.user_id,
@@ -1654,6 +1668,7 @@ async def admin_list_all_orders(
             price=order.price,
             currency=order.currency,
             condition=order.condition,
+            firm_order=bool(getattr(order, 'firm_order', False)),
             country_code=order.country_code,
             country_name=order.country_name,
             user_id=order.user_id,
@@ -1855,6 +1870,7 @@ async def admin_get_orders_by_reference(
             price=order.price,
             currency=order.currency,
             condition=order.condition,
+            firm_order=bool(getattr(order, 'firm_order', False)),
             country_code=order.country_code,
             country_name=order.country_name,
             user_id=order.user_id,
@@ -1973,6 +1989,7 @@ async def admin_create_order(
         price=order.price,
         currency=order.currency,
         condition=order.condition,
+        firm_order=bool(getattr(order, 'firm_order', False)),
         country_code=order.country_code,
         country_name=order.country_name,
         user_id=order.user_id,
@@ -2031,6 +2048,7 @@ async def admin_update_order(
         price=order.price,
         currency=order.currency,
         condition=order.condition,
+        firm_order=bool(getattr(order, 'firm_order', False)),
         country_code=order.country_code,
         country_name=order.country_name,
         user_id=order.user_id,

@@ -59,13 +59,16 @@ interface OrderBookEntry {
   market: string;
   flag: string;
   date: string;
-  condition: 'Unworn' | 'Used';
-  price: number;
+  // Buy requests may state no condition (empty) and no target price.
+  condition: string;
+  price: number | null;
   order_type: 'buy' | 'sell';
   whatsapp_phone?: string;
   currency?: string;
   remarks?: string;
   country_name?: string;
+  // Buy requests only: the buyer already has a customer ("sold order").
+  firm_order?: boolean;
 }
 
 interface WatchDetails {
@@ -262,13 +265,15 @@ export function WatchDetailsPage() {
               market: o.country_code || 'US',
               flag: getFlagEmoji(o.country_code || 'US'),
               date: dateStr,
-              condition: o.condition || 'Unworn',
-              price: o.price,
+              // A buy request may state no condition and no target: show none, never invent one.
+              condition: o.condition || '',
+              price: o.price ?? null,
               order_type: 'buy' as const,
               whatsapp_phone: o.whatsapp_phone,
-              currency: o.currency || 'EUR',
+              currency: o.price != null ? o.currency || 'EUR' : undefined,
               remarks: o.remarks,
               country_name: o.country_name,
+              firm_order: !!o.firm_order,
             };
           });
 
@@ -313,7 +318,7 @@ export function WatchDetailsPage() {
 
       // Use the lowest sell order's currency when available (matches order book display)
       const lowestSellOrder = sellOrders.length > 0
-        ? sellOrders.reduce((min, o) => o.price < min.price ? o : min, sellOrders[0])
+        ? sellOrders.reduce((min, o) => (o.price ?? Infinity) < (min.price ?? Infinity) ? o : min, sellOrders[0])
         : null;
       const displayCurrency = lowestSellOrder?.currency || watch.currency || 'EUR';
 
@@ -329,7 +334,7 @@ export function WatchDetailsPage() {
           bestBid: bestBid || watch.price * 0.95,
           bestAsk: bestAsk || watch.price,
           spread: (bestAsk || watch.price) - (bestBid || watch.price * 0.95),
-          currentPrice: lowestSellOrder ? lowestSellOrder.price : watch.price,
+          currentPrice: lowestSellOrder?.price ?? watch.price,
           priceChange: watch.price_change || 0,
           minPrice,
           maxPrice,
@@ -475,7 +480,8 @@ export function WatchDetailsPage() {
     // Apply condition filter if present
     const conditionFilter = appliedFilters['condition'] || [];
     if (conditionFilter.length > 0) {
-      filtered = filtered.filter(entry => conditionFilter.includes(entry.condition));
+      // Requests that state no condition stay visible: a filter only hides entries with another condition.
+      filtered = filtered.filter(entry => !entry.condition || conditionFilter.includes(entry.condition));
     }
 
     // Apply market/country filter if present
@@ -942,8 +948,15 @@ export function WatchDetailsPage() {
                         <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{!v2Enabled ? (entry.country_name || entry.market.toUpperCase()) : entry.market.toUpperCase()}</span>
                       </span>
                       <span className={`${!v2Enabled ? 'w-[20%]' : 'w-[28%]'} px-[4px] py-[6px] flex flex-col`}>
-                        <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
+                        {entry.condition && (
+                          <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
+                        )}
                         <span className="text-[12px] font-normal text-[#212121]/50 tracking-[-0.3px]">{entry.date}</span>
+                        {entry.firm_order && (
+                          <span className="mt-[2px] inline-flex w-fit rounded-full bg-[#D4AF37]/15 px-[8px] py-[1px] text-[11px] font-semibold text-[#8a6d00]">
+                            {t('watchDetails.soldOrder')}
+                          </span>
+                        )}
                       </span>
                       {!v2Enabled && (
                         <span className="w-[22%] px-[4px] py-[8px] text-[13px] font-normal text-[#212121]/70 tracking-[-0.3px] truncate">
@@ -1154,8 +1167,15 @@ export function WatchDetailsPage() {
                         <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{!v2Enabled ? (entry.country_name || entry.market.toUpperCase()) : entry.market.toUpperCase()}</span>
                       </span>
                       <span className={`${!v2Enabled ? 'w-[20%]' : 'w-[28%]'} px-[4px] py-[6px] flex flex-col`}>
-                        <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
+                        {entry.condition && (
+                          <span className="text-[15px] font-medium text-[#212121] tracking-[-0.3px]">{entry.condition}</span>
+                        )}
                         <span className="text-[12px] font-normal text-[#212121]/50 tracking-[-0.3px]">{entry.date}</span>
+                        {entry.firm_order && (
+                          <span className="mt-[2px] inline-flex w-fit rounded-full bg-[#D4AF37]/15 px-[8px] py-[1px] text-[11px] font-semibold text-[#8a6d00]">
+                            {t('watchDetails.soldOrder')}
+                          </span>
+                        )}
                       </span>
                       {!v2Enabled && (
                         <span className="w-[22%] px-[4px] py-[8px] text-[13px] font-normal text-[#212121]/70 tracking-[-0.3px] truncate">

@@ -3288,6 +3288,33 @@ def _ctx_base_row(ctx: dict, watch: Optional[dict], brand: str = "") -> dict:
     }
 
 
+_WTB_CONDITION_LABEL = {"only_unworn": "Only Unworn", "used": "Can be Used", "any": "Can be Used"}
+_FULL_SET_RE = re.compile(r"full\s*set|box\s*(?:&|and|\+)\s*papers?", re.I)
+_WATCH_ONLY_RE = re.compile(r"watch\s*only|naked", re.I)
+
+
+def _apply_wtb_fields(row: dict, wtb: dict) -> None:
+    """Buy-request fields from ws_quality.wtb.parse_wtb_line:
+    condition   only_unworn -> "Only Unworn", used / any -> "Can be Used", None -> "" (not stated, no status)
+    firm_order  "sold order" / "confirm order" / "strong call" -> CSV column "Sold Order" = "Yes"
+    year        "2022-2024" range or, when the text gave none, "2022+" / "10/26+" (year_from, year_to, month_from)
+    full set / watch only are added to the remarks."""
+    row["Zustand"] = _WTB_CONDITION_LABEL.get(wtb.get("condition") or "", "")
+    row["Sold Order"] = "Yes" if wtb.get("firm_order") else ""
+    y1, y2, m1 = wtb.get("year_from"), wtb.get("year_to"), wtb.get("month_from")
+    if y1 and y2 and y2 != y1:
+        row["Monat/Jahr"] = f"{y1}-{y2}"
+    elif y1 and not row.get("Monat/Jahr"):
+        row["Monat/Jahr"] = f"{m1:02d}/{y1 % 100:02d}+" if m1 else f"{y1}+"
+    extra = []
+    if wtb.get("full_set_required") and not _FULL_SET_RE.search(row.get("Bemerkungen") or ""):
+        extra.append("Fullset")
+    if wtb.get("watch_only_ok") and not _WATCH_ONLY_RE.search(row.get("Bemerkungen") or ""):
+        extra.append("Watch only OK")
+    if extra:
+        row["Bemerkungen"] = "; ".join([p for p in (row.get("Bemerkungen"), *extra) if p])
+
+
 def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, line_level: bool,
                  section_condition: Optional[str] = None, location_text: Optional[str] = None,
                  extra_remarks: str = "") -> list[str]:
@@ -3312,8 +3339,11 @@ def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, lin
     if mode == "WTB":
         # A buy request has a price only when the dealer states a target; no fallback to a bare number
         # (that is how "Looking for 126518 black" became HKD 126,518).
-        price, currency = extract_wtb_price(scope, ctx["sender_country"], ctx.get("content") or "")
+        wtb = parse_wtb_line(_normalize_price_text(scope), ctx.get("content") or "", ctx["sender_country"],
+                             reference=(watch or {}).get("reference"))
+        price, currency = _fmt_amount(wtb["price"]), (wtb["currency"] if wtb["price"] else None)
         rule_reason = None
+        _apply_wtb_fields(row, wtb)
     else:
         info = price_info(scope, ctx["sender_country"], line_level=line_level)
         price, currency, rule_reason = apply_list_price_rule(info, watch, ctx.get("rates"))

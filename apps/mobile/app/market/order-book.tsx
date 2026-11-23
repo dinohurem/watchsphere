@@ -64,9 +64,12 @@ function GrabberBar() {
 interface OrderBookEntry {
   id: string;
   date: string;
-  condition: string;
-  price: number;
-  currency: string;
+  // Buy requests may state no condition (empty) and no target price (null).
+  condition?: string | null;
+  price: number | null;
+  currency?: string | null;
+  // Buy requests only: the buyer already has a customer ("sold order").
+  firm_order?: boolean;
   country_code: string;
   country_name?: string;
   has_box: boolean;
@@ -263,10 +266,15 @@ export default function OrderBookScreen() {
           <Text style={styles.marketCodeText}>{item.country_code?.toUpperCase()}</Text>
         </View>
         <View style={[styles.tableCell, styles.detailsCell, { alignItems: 'center' }]}>
-          <Text style={styles.tableCellText}>{item.condition}</Text>
+          {!!item.condition && <Text style={styles.tableCellText}>{item.condition}</Text>}
           <Text style={[styles.tableCellText, { fontSize: fp(11), color: '#999999' }]}>{formatOrderDate(item.date)}</Text>
+          {!!item.firm_order && (
+            <View style={{ backgroundColor: 'rgba(212,175,55,0.15)', paddingHorizontal: wp(6), paddingVertical: hp(1), borderRadius: sp(6), marginTop: hp(2) }}>
+              <Text style={[styles.tableCellText, { fontSize: fp(10), color: '#8A6D00' }]}>{t('orders.soldOrder')}</Text>
+            </View>
+          )}
         </View>
-        <Text style={[styles.tableCell, styles.tableCellTextBold, styles.priceCell]}>{formatPrice(item.price, item.currency)}</Text>
+        <Text style={[styles.tableCell, styles.tableCellTextBold, styles.priceCell]}>{formatPrice(item.price, item.currency || 'EUR')}</Text>
         <TouchableOpacity
             style={[styles.tableCell, styles.chatCell]}
             onPress={() => handleWhatsAppChat(item)}

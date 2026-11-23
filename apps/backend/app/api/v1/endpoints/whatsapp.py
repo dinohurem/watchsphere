@@ -289,10 +289,11 @@ COUNTRY_NAMES = {
 }
 
 
-def parse_csv_price(price_str: str) -> tuple[Optional[float], str]:
-    """Parse price string like '62.000 HKD' → (62000.0, 'HKD')"""
+def parse_csv_price(price_str: str) -> tuple[Optional[float], Optional[str]]:
+    """Parse price string like '62.000 HKD' → (62000.0, 'HKD'). No price → (None, None): a row without a
+    price (a buy request without a target) has no currency either, never a default one."""
     if not price_str or not price_str.strip():
-        return None, "EUR"
+        return None, None
     price_str = price_str.strip()
     # Extract currency (last word if it's letters)
     parts = price_str.split()
@@ -464,6 +465,8 @@ async def import_order_rows(
         phone = (row.get("Nummer") or row.get("nummer") or "").strip()
         group = (row.get("Gruppe") or row.get("gruppe") or "").strip()
         posted_at_str = (row.get("Nachricht gepostet am") or row.get("nachricht gepostet am") or "").strip()
+        # Buy requests: the buyer already has a customer ("sold order", "confirm order", "strong call")
+        firm_order = (row.get("Sold Order") or row.get("sold order") or "").strip().lower() in ("yes", "true", "1", "y", "ja")
 
         if not group_name and group:
             group_name = group
@@ -584,7 +587,7 @@ async def import_order_rows(
             ws_code=ws_code or None,
             model=watch_model,
             price=price,
-            currency=currency,
+            currency=currency or "",
             condition=condition,
             seller_name=phone,
             seller_phone=phone,
@@ -611,12 +614,12 @@ async def import_order_rows(
             order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
             order_reference = watch_reference or ws_code
 
-            # WTB orders must display only WTB-vocabulary conditions
-            # ("Only Unworn" / "Can be Used"). Force condition_raw so the
-            # order book never renders WTS labels like "Used"/"Unworn" on
-            # a WTB row, regardless of what the parser emitted.
+            # WTB orders must display only WTB-vocabulary conditions ("Only Unworn" / "Can be Used"),
+            # and a request that states no condition has none (empty, not "Can be Used").
             if offer_type == OfferType.WTB:
-                condition_raw = "Only Unworn" if condition == "Unworn" else "Can be Used"
+                condition_raw = ("Only Unworn" if condition == "Unworn" else "Can be Used") if condition else None
+                if not condition:
+                    order_condition = None
 
             # Check for duplicate orders (5-field dedup key)
             dup_ws = (matched_watch.ws_code or ws_code or "").strip().upper()
@@ -629,7 +632,8 @@ async def import_order_rows(
             elif year_raw:
                 dup_month_year = year_raw.strip().lower()
             dup_key = (
-                dup_ws, dup_phone, dup_price, dup_currency, dup_month_year, order_condition.value,
+                dup_ws, dup_phone, dup_price, dup_currency, dup_month_year,
+                order_condition.value if order_condition else "",
             )
 
             existing_order = existing_order_map.get(dup_key)
@@ -700,6 +704,7 @@ async def import_order_rows(
                 watch_month=watch_month,
                 year_raw=year_raw,
                 condition_raw=condition_raw,
+                firm_order=firm_order and offer_type == OfferType.WTB,
                 remarks=remarks or None,
                 notes=f"Imported from {group or 'CSV'}. {remarks}".strip() if remarks else f"Imported from {group or 'CSV'}",
                 description=ws_code if ws_code != order_reference else None,

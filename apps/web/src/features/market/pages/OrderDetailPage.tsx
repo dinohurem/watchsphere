@@ -93,9 +93,12 @@ interface OrderDetail {
   model: string;
   reference: string;
   watch_id?: string;
-  price: number;
-  currency: string;
-  condition: string;
+  price: number | null;
+  currency: string | null;
+  condition: string | null;
+  condition_raw?: string | null;
+  // Buy requests only: the buyer already has a customer ("sold order").
+  firm_order?: boolean;
   country_code: string;
   country_name?: string;
   user_id: string;
@@ -581,11 +584,20 @@ export function OrderDetailPage() {
 
           {/* 4 Info Rows - matching Figma design */}
           <div className="space-y-0">
-            {/* Condition Row */}
-            <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
-              <span className="text-[15px] text-[#1d1d1f] opacity-50">{t('orderDetails.condition')}</span>
-              <span className="text-[15px] text-[#1d1d1f] font-semibold">{order.condition}</span>
-            </div>
+            {/* Condition Row (a buy request may state no condition: no row) */}
+            {(order.condition_raw || order.condition) && (
+              <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
+                <span className="text-[15px] text-[#1d1d1f] opacity-50">{t('orderDetails.condition')}</span>
+                <span className="text-[15px] text-[#1d1d1f] font-semibold">{order.condition_raw || order.condition}</span>
+              </div>
+            )}
+            {order.firm_order && (
+              <div className="flex items-center py-[12px] border-b border-[rgba(0,0,0,0.1)]">
+                <span className="inline-flex rounded-full bg-[#D4AF37]/15 px-[10px] py-[2px] text-[13px] font-semibold text-[#8a6d00]">
+                  {t('orderDetails.soldOrder')}
+                </span>
+              </div>
+            )}
             {/* Case Size Row */}
             <div className="flex items-center justify-between py-[12px] border-b border-[rgba(0,0,0,0.1)]">
               <span className="text-[15px] text-[#1d1d1f] opacity-50">{t('orderDetails.caseSize')}</span>
@@ -623,7 +635,7 @@ export function OrderDetailPage() {
                 <MessageCircle className="w-5 h-5" />
                 {t('orderDetails.contact')}
               </button>
-              {order.order_type === 'sell' && order.whatsapp_phone && (
+              {order.order_type === 'sell' && order.whatsapp_phone && order.price != null && (
                 <button
                   onClick={() => {
                     const phone = order.whatsapp_phone!.replace(/[^0-9]/g, '');
