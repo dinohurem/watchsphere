@@ -18,6 +18,8 @@ class OrderCondition(str, Enum):
 class OrderStatus(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
+    # Imported dealer offer nobody reposted within its TTL; a repost reactivates it.
+    EXPIRED = "expired"
 
 
 class Order(Document):
@@ -137,6 +139,8 @@ class Order(Document):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
+    # Earlier prices of this offer, newest last: [{"price", "currency", "until"}]
+    price_history: List[dict] = Field(default_factory=list)
 
     class Settings:
         name = "orders"

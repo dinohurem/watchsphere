@@ -382,6 +382,14 @@ async def startup():
         _asyncio.create_task(recover_interrupted_uploads())
     except Exception as e:
         logger.warning(f"Startup: pipeline recovery not scheduled: {e}")
+    # Imported offers expire 10 (WTS) / 14 (WTB) days after the dealer's last
+    # post: hourly sweep, first run now.
+    try:
+        import asyncio as _asyncio
+        from app.services.offer_lifecycle import expiry_loop
+        _asyncio.create_task(expiry_loop())
+    except Exception as e:
+        logger.warning(f"Startup: offer expiry not scheduled: {e}")
 
 app = Starlette(
     routes=[

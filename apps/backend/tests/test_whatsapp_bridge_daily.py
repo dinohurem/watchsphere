@@ -202,7 +202,7 @@ async def test_publishes_matched_rows_and_reports_quarantine(db, app_client, mon
             "matched_csv": "Marke;WS-Code\nRolex;WS-1\n",
         }
 
-    async def fake_import(csv_content, import_record, admin):
+    async def fake_import(csv_content, import_record, admin, **kwargs):
         return {
             "matched_orders": 4,
             "price_quarantined_rows": 1,
