@@ -351,6 +351,8 @@ async def process_csv_import(
     csv_content: str,
     import_record: WhatsAppImport,
     admin: User,
+    *,
+    guard: bool = False,
 ) -> dict:
     """Process CSV import. Returns stats dict."""
     # Remove BOM if present
@@ -360,13 +362,25 @@ async def process_csv_import(
     reader = csv.DictReader(io.StringIO(csv_content))
     # Preserve headers for unmatched CSV output
     fieldnames = list(reader.fieldnames or [])
-    return await import_order_rows(list(reader), fieldnames, import_record, admin)
+    return await import_order_rows(list(reader), fieldnames, import_record, admin, guard=guard)
 
 
 def _row_import_meta(row: dict) -> dict:
     """Per-row extras set by the pipeline (match method, source text, ...)."""
     meta = row.get("_import")
     return meta if isinstance(meta, dict) else {}
+
+
+def _row_texts(row: dict) -> tuple[str, str]:
+    """(dealer's line(s) the row was built from, whole message) for the offer guard."""
+    imp = _row_import_meta(row)
+    meta = row.get("_meta") if isinstance(row.get("_meta"), dict) else {}
+    line = (
+        imp.get("source_text") or meta.get("source_text") or row.get("Original Text")
+        or row.get("_original_content") or ""
+    )
+    message = meta.get("message_text") or row.get("_message_text") or ""
+    return str(line), str(message)
 
 
 async def import_order_rows(
@@ -377,6 +391,7 @@ async def import_order_rows(
     *,
     require_phone: bool = False,
     dispatch_alerts: bool = True,
+    guard: bool = False,
 ) -> dict:
     """Turn generator/CSV rows into orders. Shared by the manual CSV import, the
     bridge daily-ingest and the automatic pipeline (generator spec §1).
@@ -385,12 +400,20 @@ async def import_order_rows(
     ``_import`` dict with ``match_method``, ``ai_reason``, ``source_text``,
     ``source_image``, ``source_group`` and ``source_run_id``.
 
-    A repost (same dealer phone + WS code + price + currency + card date +
-    condition as an active order) only refreshes that order — it is not new and
-    triggers no alert. Returns stats plus ``new_order_ids``,
+    One offer per dealer + side + WS code + card date + condition (the price is
+    not part of it). A repost of that offer only refreshes it — it is not new and
+    triggers no alert; a repost with a new price replaces the price (the old one
+    goes to ``price_history``), and a repost of an expired offer reactivates it.
+    Every offer expires 10 days (WTS) / 14 days (WTB) after its last post.
+
+    With ``guard`` every row is checked against the dealer's own text before it
+    is published (``offer_lifecycle.check_row``): rows without evidence come back
+    in ``guard_held_row_list``, references-as-prices, adverts and the like in
+    ``guard_rejected_row_list``. Returns stats plus ``new_order_ids``,
     ``refreshed_order_ids``, ``unmatched_row_list`` and ``quarantined_row_list``.
     """
     from app.services import fx as fx_service
+    from app.services import offer_lifecycle as lifecycle
 
     fx_rates = await fx_service.load_rates()
     fieldnames = [f for f in (fieldnames or []) if not str(f).startswith("_")]
@@ -421,19 +444,31 @@ async def import_order_rows(
     group_name = None
 
     refreshed_count = 0
+    guard_held_rows: list[dict] = []
+    guard_rejected_rows: list[dict] = []
+    guard_fixed_count = 0
+    # Existing offers whose price a newer message changes. Applied after the
+    # cross-record price check, so a new price that looks wrong is held back
+    # and the offer keeps its old price.
+    price_updates: list[tuple[Order, dict, dict]] = []  # (order, new fields, source row)
 
-    # Build a map of existing orders for dedup + freshness update:
-    # key = (ws_code_upper, phone, price, currency, month_year)
+    # Existing offers by offer key (no price in it). Expired ones from the last
+    # weeks are included so a repost brings the same offer back.
     existing_orders = await Order.find(
         Order.status == OrderStatus.ACTIVE,
     ).to_list()
-    existing_order_map: dict[tuple, Order] = {}
-    for eo in existing_orders:
+    revivable = await Order.find(
+        Order.status == OrderStatus.EXPIRED,
+        Order.created_at >= now - timedelta(days=lifecycle.REVIVE_WINDOW_DAYS),
+    ).to_list()
+    existing_order_map: dict[tuple, Any] = {}
+    for eo in sorted(revivable, key=lambda o: o.created_at or now) + sorted(
+        existing_orders, key=lambda o: o.created_at or now
+    ):
+        # Active after expired, newest last: when the old key put several offers
+        # on one dealer + watch, the newest active one is the offer from now on.
         eo_ws = (eo.ws_code or "").strip().upper()
         eo_phone = (eo.whatsapp_phone or eo.user_name or "").strip()
-        eo_price = str(int(eo.price)) if eo.price else ""
-        eo_currency = (eo.currency or "").strip().upper()
-        # Build month_year from order fields
         eo_month_year = ""
         if eo.watch_month and eo.year:
             eo_month_year = f"{eo.watch_month:02d}/{eo.year % 100:02d}"
@@ -441,7 +476,13 @@ async def import_order_rows(
             eo_month_year = eo.year_raw.strip().lower()
         eo_condition = eo.condition.value if eo.condition else ""
         if eo_ws and eo_phone:
-            existing_order_map[(eo_ws, eo_phone, eo_price, eo_currency, eo_month_year, eo_condition)] = eo
+            key = lifecycle.offer_key(eo.order_type.value, eo_ws, eo_phone, eo_month_year, eo_condition)
+            existing_order_map[key] = eo
+
+    use_guard = guard and lifecycle.guard_enabled()
+    reference_prices = lifecycle.reference_prices(existing_orders) if use_guard else {}
+    if use_guard:
+        lifecycle.set_fx(fx_rates)
 
     for row in reader:
         total_rows += 1
@@ -571,6 +612,25 @@ async def import_order_rows(
         if remarks:
             raw_text += f" - {remarks}"
 
+        # Offer guard: is the dealer's own text evidence for this offer?
+        if use_guard and offer_type in (OfferType.WTS, OfferType.WTB):
+            line_text, message_text = _row_texts(row)
+            verdict = lifecycle.check_row(
+                order_type="sell" if offer_type == OfferType.WTS else "buy",
+                ws_code=matched_watch.ws_code or ws_code, price=price, currency=currency,
+                source_line=line_text, message=message_text, watch=matched_watch,
+                reference=reference_prices.get((matched_watch.ws_code or ws_code).strip().upper()),
+            )
+            if verdict.decision in ("hold", "reject"):
+                flagged = dict(row)
+                flagged["Guard"] = lifecycle.describe(verdict.reasons)
+                flagged["_guard_reasons"] = verdict.reasons
+                (guard_held_rows if verdict.decision == "hold" else guard_rejected_rows).append(flagged)
+                continue
+            if verdict.decision == "fix" and verdict.currency:
+                currency = verdict.currency
+                guard_fixed_count += 1
+
         # Use matched watch data (always present — we skip unmatched above)
         watch_brand = matched_watch.brand
         watch_model = matched_watch.model
@@ -618,30 +678,48 @@ async def import_order_rows(
             if offer_type == OfferType.WTB:
                 condition_raw = "Only Unworn" if condition == "Unworn" else "Can be Used"
 
-            # Check for duplicate orders (5-field dedup key)
+            # One offer per dealer + side + watch + card date + condition.
             dup_ws = (matched_watch.ws_code or ws_code or "").strip().upper()
             dup_phone = phone.strip() if phone else ""
-            dup_price = str(int(price)) if price else ""
-            dup_currency = (currency or "").strip().upper()
             dup_month_year = ""
             if watch_month and watch_year:
                 dup_month_year = f"{watch_month:02d}/{watch_year % 100:02d}"
             elif year_raw:
                 dup_month_year = year_raw.strip().lower()
-            dup_key = (
-                dup_ws, dup_phone, dup_price, dup_currency, dup_month_year, order_condition.value,
+            dup_key = lifecycle.offer_key(
+                order_type.value, dup_ws, dup_phone, dup_month_year, order_condition.value,
             )
+            posted = message_timestamp or now
 
             existing_order = existing_order_map.get(dup_key)
-            if existing_order is not None:
-                # Existing DB order — freshness update: bump timestamp so "28d"
-                # becomes "1d", and backfill remarks if the existing row is
-                # missing them (older imports dropped the Bemerkungen column).
-                # A repost (same dealer in another group) is not new: only
-                # last_seen_at moves, and no alert is sent (spec §1.11).
-                existing_order.created_at = message_timestamp or now
+            if isinstance(existing_order, Order):
+                if existing_order.created_at and posted < existing_order.created_at:
+                    # An older export processed late must not overwrite a newer post.
+                    skipped_duplicates += 1
+                    continue
+                new_price = price if price else None
+                price_changed = bool(new_price) and (
+                    round(new_price) != round(existing_order.price or 0)
+                    or (currency or "").upper() != (existing_order.currency or "").upper()
+                )
+                if price_changed:
+                    usd_value = fx_service.convert(new_price, currency, "USD", fx_rates)
+                    price_updates.append((existing_order, {
+                        "price": new_price,
+                        "currency": currency,
+                        "usd_price": round(usd_value, 2) if usd_value is not None else None,
+                        "posted": posted,
+                        "remarks": remarks or None,
+                    }, row))
+                    continue
+                # Same offer reposted: not new, no alert (spec §1.11). Bump the
+                # post time so "28d" becomes "1d", move the expiry forward, bring
+                # an expired offer back, backfill remarks older imports dropped.
+                existing_order.created_at = posted
                 existing_order.updated_at = now
                 existing_order.last_seen_at = now
+                existing_order.expires_at = lifecycle.expires_at(order_type.value, posted)
+                existing_order.status = OrderStatus.ACTIVE
                 if not existing_order.first_seen_at:
                     existing_order.first_seen_at = existing_order.created_at
                 if remarks and not existing_order.remarks:
@@ -650,14 +728,19 @@ async def import_order_rows(
                 refreshed_count += 1
                 refreshed_ids.append(str(existing_order.id))
                 continue
-            elif dup_key in existing_order_map:
-                # Intra-batch duplicate (key exists but value is None)
+            elif isinstance(existing_order, int):
+                # Same offer twice in this import: the newer post decides the price.
+                pending = order_docs[existing_order]
+                if posted >= (pending.created_at or posted) and price and round(price) != round(pending.price or 0):
+                    usd_value = fx_service.convert(price, currency, "USD", fx_rates)
+                    pending.price = price
+                    pending.currency = currency
+                    pending.usd_price = round(usd_value, 2) if usd_value is not None else None
+                    pending.created_at = posted
+                    pending.expires_at = lifecycle.expires_at(order_type.value, posted)
+                    order_source_rows[existing_order] = row
                 skipped_duplicates += 1
                 continue
-
-            # Mark as seen for intra-batch dedup
-            if dup_ws and dup_phone:
-                existing_order_map[dup_key] = None
 
             # Validate price against brand minimums (only when we have a price)
             if price:
@@ -678,6 +761,8 @@ async def import_order_rows(
                 usd_value = fx_service.convert(price, currency, "USD", fx_rates)
                 usd_price = round(usd_value, 2) if usd_value is not None else None
 
+            if dup_ws and dup_phone:
+                existing_order_map[dup_key] = len(order_docs)  # index of the pending new order
             order_source_rows.append(row)
             order_docs.append(Order(
                 order_type=order_type,
@@ -707,6 +792,7 @@ async def import_order_rows(
                 created_at=message_timestamp or now,
                 first_seen_at=now,
                 last_seen_at=now,
+                expires_at=lifecycle.expires_at(order_type.value, message_timestamp or now),
                 match_method=row_meta.get("match_method"),
                 ai_reason=row_meta.get("ai_reason"),
                 source_text=row_meta.get("source_text"),
@@ -732,6 +818,7 @@ async def import_order_rows(
         if eo_usd and eo_usd > 0:
             peer_usd_prices.setdefault(f"{eo.order_type.value}:{eo_ws}", []).append(eo_usd)
 
+    n_new = len(order_docs)
     outliers = find_price_outliers(
         [
             PriceRow(
@@ -742,13 +829,54 @@ async def import_order_rows(
                 currency=o.currency,
             )
             for i, o in enumerate(order_docs)
+        ] + [
+            PriceRow(
+                index=n_new + j,
+                ws_code=f"{o.order_type.value}:{(o.ws_code or o.reference or '').strip().upper()}",
+                label=(o.ws_code or o.reference or "").strip().upper(),
+                price=upd["price"],
+                currency=upd["currency"],
+            )
+            for j, (o, upd, _r) in enumerate(price_updates)
         ],
         peer_usd_prices,
     )
 
     quarantined_rows: list[dict] = []
-    if outliers:
-        quarantined_indexes = {o.index: o.reason for o in outliers}
+    quarantined_indexes: dict[int, str] = {o.index: o.reason for o in outliers} if outliers else {}
+    # Price changes of existing offers: an outlier keeps the old price.
+    price_updated_ids: list[str] = []
+    for j, (eo, upd, src_row) in enumerate(price_updates):
+        if n_new + j in quarantined_indexes:
+            flagged_row = dict(src_row)
+            flagged_row["Preis-Flag"] = quarantined_indexes[n_new + j]
+            quarantined_rows.append(flagged_row)
+            flagged_price_count += 1
+            continue
+        posted = upd["posted"]
+        if eo.created_at and posted < eo.created_at:
+            continue  # a newer post of this offer was applied above
+        eo.price_history = list(eo.price_history or []) + [
+            {"price": eo.price, "currency": eo.currency, "until": posted}
+        ]
+        eo.price = upd["price"]
+        eo.currency = upd["currency"]
+        eo.usd_price = upd["usd_price"]
+        if upd.get("remarks"):
+            eo.remarks = upd["remarks"]
+        eo.created_at = posted
+        eo.updated_at = now
+        eo.last_seen_at = now
+        eo.expires_at = lifecycle.expires_at(eo.order_type.value, posted)
+        eo.status = OrderStatus.ACTIVE
+        if not eo.first_seen_at:
+            eo.first_seen_at = posted
+        await eo.save()
+        refreshed_count += 1
+        refreshed_ids.append(str(eo.id))
+        price_updated_ids.append(str(eo.id))
+    quarantined_indexes = {i: r for i, r in quarantined_indexes.items() if i < n_new}
+    if quarantined_indexes:
         for i, reason in quarantined_indexes.items():
             flagged_row = dict(order_source_rows[i]) if i < len(order_source_rows) else {}
             flagged_row["Preis-Flag"] = reason
@@ -824,8 +952,9 @@ async def import_order_rows(
     # Medians / counts for every touched watch (generator spec §9).
     touched_ws = {o.ws_code for o in order_docs if o.ws_code}
     if refreshed_ids:
+        refreshed_set = set(refreshed_ids)
         touched_ws.update(
-            (eo.ws_code for eo in existing_orders if str(eo.id) in set(refreshed_ids) and eo.ws_code)
+            (eo.ws_code for eo in existing_orders + revivable if str(eo.id) in refreshed_set and eo.ws_code)
         )
     if touched_ws:
         from app.services.market_stats import recompute_for_safe
@@ -858,6 +987,12 @@ async def import_order_rows(
         "price_quarantined_rows": len(quarantined_rows),
         "price_quarantine_reasons": [o.reason for o in outliers[:20]],
         "no_phone_rows": len(no_phone_rows),
+        "price_updated_orders": len(price_updated_ids),
+        "guard_held": len(guard_held_rows),
+        "guard_rejected": len(guard_rejected_rows),
+        "guard_fixed_currency": guard_fixed_count,
+        "guard_held_row_list": guard_held_rows,
+        "guard_rejected_row_list": guard_rejected_rows,
         "new_order_ids": new_order_ids,
         "refreshed_order_ids": refreshed_ids,
         "unmatched_row_list": unmatched_raw_rows,

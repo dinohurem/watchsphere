@@ -628,7 +628,7 @@ async def daily_ingest(
                 )
                 await import_record.insert()
 
-                stats = await process_csv_import(matched_csv, import_record, admin)
+                stats = await process_csv_import(matched_csv, import_record, admin, guard=True)
                 result.orders_created = stats.get("matched_orders", 0)
                 result.price_quarantined = stats.get("price_quarantined_rows", 0)
                 result.quarantine_reasons = stats.get("price_quarantine_reasons", [])
