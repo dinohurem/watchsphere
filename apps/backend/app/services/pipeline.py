@@ -500,14 +500,19 @@ async def _find_order_for_row(ws_code: str, phone: str, text: str) -> Optional[s
     return str(o.id) if o else None
 
 
-async def import_rows(rows: list[dict], admin, label: str, group_name: Optional[str]) -> dict:
-    """Import generator rows through the shared order import (repost-aware)."""
+async def import_rows(rows: list[dict], admin, label: str, group_name: Optional[str],
+                      *, guard: bool = False) -> dict:
+    """Import generator rows through the shared order import (repost-aware).
+
+    ``guard``: check each row against the dealer's text before publishing (the
+    automatic pipeline). Rows an admin confirmed on the approval page skip it."""
     from app.api.v1.endpoints.whatsapp import import_order_rows
     from app.models.whatsapp_import import ImportStatus, WhatsAppImport
 
     if not rows:
         return {"new_order_ids": [], "refreshed_order_ids": [], "unmatched_row_list": [],
-                "quarantined_row_list": [], "no_phone_row_list": []}
+                "quarantined_row_list": [], "no_phone_row_list": [],
+                "guard_held_row_list": [], "guard_rejected_row_list": []}
     fieldnames = [k for k in rows[0].keys() if not str(k).startswith("_")]
     record = WhatsAppImport(
         filename=label,
@@ -519,7 +524,7 @@ async def import_rows(rows: list[dict], admin, label: str, group_name: Optional[
     await record.insert()
     try:
         return await import_order_rows(
-            rows, fieldnames, record, admin, require_phone=True, dispatch_alerts=False,
+            rows, fieldnames, record, admin, require_phone=True, dispatch_alerts=False, guard=guard,
         )
     except Exception as exc:
         record.status = ImportStatus.FAILED
@@ -583,14 +588,16 @@ async def route_rows(buckets: dict[str, list[dict]], mode: str, ctx: dict, media
             r["_reason"] = (d.reason if d else None) or row.get("Review Reason") or "AI was not sure"
             unsure_rows.append(r)
 
-    auto_result = await import_rows(auto, admin, f"pipeline-{mode.lower()}-{run_id}.csv", group_name)
-    ai_result = await import_rows([r for r, _ in ai_rows], admin, f"pipeline-ai-{mode.lower()}-{run_id}.csv", group_name)
+    auto_result = await import_rows(auto, admin, f"pipeline-{mode.lower()}-{run_id}.csv", group_name, guard=True)
+    ai_result = await import_rows([r for r, _ in ai_rows], admin, f"pipeline-ai-{mode.lower()}-{run_id}.csv",
+                                  group_name, guard=True)
 
     # AI decisions tab: one entry per AI-imported row (with the order it became).
     ai_unimported_texts = {
         (row_source_text(r), row_phone(r))
         for r in ai_result.get("unmatched_row_list", []) + ai_result.get("quarantined_row_list", [])
-        + ai_result.get("no_phone_row_list", [])
+        + ai_result.get("no_phone_row_list", []) + ai_result.get("guard_held_row_list", [])
+        + ai_result.get("guard_rejected_row_list", [])
     }
     ai_items = 0
     for r, d in ai_rows:
@@ -613,6 +620,15 @@ async def route_rows(buckets: dict[str, list[dict]], mode: str, ctx: dict, media
             r = dict(r)
             r["_reason"] = r.get("Preis-Flag") or "Price check"
             unsure_rows.append(r)
+        # The guard found no evidence in the dealer's text: a human decides.
+        for r in result.get("guard_held_row_list", []):
+            r = dict(r)
+            r["_reason"] = f"Guard: {r.get('Guard') or 'no evidence in the text'}"
+            unsure_rows.append(r)
+    guard_rejected = [
+        dict(r, _reason=f"Guard: {r.get('Guard') or 'rejected'}")
+        for result in (auto_result, ai_result) for r in result.get("guard_rejected_row_list", [])
+    ]
 
     no_phone = auto_result.get("no_phone_row_list", []) + ai_result.get("no_phone_row_list", [])
     discarded = list(buckets.get("discarded", []))
@@ -627,6 +643,9 @@ async def route_rows(buckets: dict[str, list[dict]], mode: str, ctx: dict, media
         ReviewKind.NOT_IN_DATABASE, buckets.get("not_in_database", []), mode, ctx, media, img_cache)
     stats["discarded"] = await _create_items(ReviewKind.DISCARDED, discarded, mode, ctx, media, img_cache)
     stats["discarded"] += await _create_items(ReviewKind.DISCARDED, aftermarket, mode, ctx, media, img_cache)
+    stats["discarded"] += await _create_items(ReviewKind.DISCARDED, guard_rejected, mode, ctx, media, img_cache)
+    stats["guard_held"] = sum(len(r.get("guard_held_row_list", [])) for r in (auto_result, ai_result))
+    stats["guard_rejected"] = len(guard_rejected)
     stats["discarded"] += await _create_items(
         ReviewKind.DISCARDED, no_phone, mode, ctx, media, img_cache, reason="No phone number")
     stats["new_order_ids"] = auto_result.get("new_order_ids", []) + ai_result.get("new_order_ids", [])

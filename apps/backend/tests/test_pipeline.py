@@ -169,10 +169,13 @@ async def test_repost_refreshes_instead_of_creating(import_db, monkeypatch):
     assert len(second["refreshed_order_ids"]) == 1
     assert await Order.find_all().count() == 1
 
-    # Different price → really new.
+    # Different price → same offer, new price (the old one is kept in the history).
     third = await run([_row(price="99.000 HKD")])
-    assert len(third["new_order_ids"]) == 1
-    assert dispatched == [first["new_order_ids"], third["new_order_ids"]]
+    assert third["new_order_ids"] == [] and third["price_updated_orders"] == 1
+    assert await Order.find_all().count() == 1
+    order = await Order.find_one({})
+    assert order.price == 99000 and order.price_history[-1]["price"] == 105000
+    assert dispatched == [first["new_order_ids"]]
 
 
 @pytest_asyncio.fixture
