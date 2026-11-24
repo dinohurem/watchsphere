@@ -102,6 +102,16 @@ async def list_uploads(
     ]
 
 
+@router.get("/admin/status")
+async def pipeline_status(current_admin: User = Depends(get_current_admin_user)) -> Any:
+    """Is the worker paused (and why), how many uploads wait, when was the last order
+    created, and would the stall alert fire right now."""
+    from app.services import pipeline_alert
+
+    status = await pipeline_alert.pipeline_status()
+    return {**status, "stalled": pipeline_alert.is_stalled(status)}
+
+
 @router.get("/admin/groups")
 async def list_groups(current_admin: User = Depends(get_current_admin_user)) -> Any:
     states = await PipelineGroupState.find_all().sort("+group_name").to_list()

@@ -382,6 +382,13 @@ async def startup():
         _asyncio.create_task(recover_interrupted_uploads())
     except Exception as e:
         logger.warning(f"Startup: pipeline recovery not scheduled: {e}")
+    # Email the admins when exports arrive but no order is created for two hours.
+    try:
+        import asyncio as _asyncio
+        from app.services.pipeline_alert import stall_alert_loop
+        _asyncio.create_task(stall_alert_loop())
+    except Exception as e:
+        logger.warning(f"Startup: pipeline stall alert not scheduled: {e}")
 
 app = Starlette(
     routes=[
