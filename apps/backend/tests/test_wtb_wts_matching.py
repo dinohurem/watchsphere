@@ -92,13 +92,13 @@ CATALOG = json.dumps({
 CHAT = "[05.03.26, 16:38:28] +852 6547 2648: WTS 999999X 500k hkd\n"
 
 
-def _run_generation(monkeypatch, ai_result):
+def _run_generation(monkeypatch, ai_result, chat=CHAT):
     async def fake_match(unmatched_lines, watch_index, timeout=None):
         return [dict(ai_result, index=0)]
 
     monkeypatch.setattr(svc, "batch_ai_match", fake_match)
     return asyncio.run(svc.process_generation(
-        txt_content=CHAT, mode="WTS", ref_month=3, ref_year=2026,
+        txt_content=chat, mode="WTS", ref_month=3, ref_year=2026,
         group_name="Test group", jsonl_content=CATALOG,
     ))
 
@@ -116,7 +116,9 @@ def test_ai_match_outside_catalog_goes_to_review(monkeypatch):
     assert result["suggested_additions_count"] == 1
 
 
-def test_ai_match_in_catalog_is_matched(monkeypatch):
+def test_ai_match_to_a_reference_the_text_does_not_name_goes_to_review(monkeypatch):
+    """The AI mapped an uncatalogued reference (999999X) to a catalogue watch: that is a suggestion for the
+    reviewer, never a match (the text does not literally name 126610LN)."""
     watch = {"ws_code": "126610LN", "brand": "Rolex", "model": "Submariner Date",
              "reference": "126610LN", "aliases": [], "oem_references": []}
     result = _run_generation(monkeypatch, {
@@ -124,6 +126,21 @@ def test_ai_match_in_catalog_is_matched(monkeypatch):
         "ai_model": "Submariner Date", "ai_ws_code": "126610LN",
         "confidence": 92, "in_catalog": True,
     })
+
+    assert result["matched_count"] == 0
+    assert result["needs_review_count"] == 1
+    assert "AI suggestion (92%): 126610LN" in result["needs_review_csv"]
+
+
+def test_ai_match_in_catalog_is_matched(monkeypatch):
+    """The AI resolves a line whose reference the text literally names but the parser could not read."""
+    watch = {"ws_code": "126610LN", "brand": "Rolex", "model": "Submariner Date",
+             "reference": "126610LN", "aliases": [], "oem_references": []}
+    result = _run_generation(monkeypatch, {
+        "ws_code": "126610LN", "watch": watch, "ai_brand": "Rolex",
+        "ai_model": "Submariner Date", "ai_ws_code": "126610LN",
+        "confidence": 92, "in_catalog": True,
+    }, chat="[05.03.26, 16:38:28] +852 6547 2648: WTS 126610LN submariner 500k hkd 999999X\n")
 
     assert result["matched_count"] == 1
     assert "126610LN" in result["matched_csv"]
