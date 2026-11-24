@@ -208,3 +208,14 @@ async def test_repost_brings_expired_offer_back(odb):
     assert res["new_order_ids"] == [] and res["refreshed_order_ids"] == [str(o.id)]
     back = await Order.get(o.id)
     assert back.status == OrderStatus.ACTIVE and back.expires_at > datetime.utcnow()
+
+
+@pytest.mark.asyncio
+async def test_repost_marks_buy_request_as_sold_order(odb):
+    from app.models.order import Order
+
+    await _run([_row(kind="WTB", price="", text="WTB 126610LN")])
+    row = _row(kind="WTB", price="", text="sold order WTB 126610LN", posted="21.11.26 10:00:00")
+    row["Sold Order"] = "Yes"
+    await _run([row])
+    assert (await Order.find_one({"order_type": "buy"})).firm_order is True

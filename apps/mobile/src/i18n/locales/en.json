@@ -204,6 +204,7 @@
     "ref": "Ref"
   },
   "orders": {
+    "soldOrder": "Sold order",
     "orders": "Orders",
     "buyOrders": "Buy Orders",
     "sellOrders": "Sell Orders",

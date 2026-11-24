@@ -5,6 +5,7 @@ import { LoadingAnimation } from '@/components/LoadingAnimation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import Svg, { Path, Circle, Line, Rect, G, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/services/api';
@@ -483,9 +484,12 @@ interface OrderBookItem {
   country_code: string;
   country_name?: string;
   date: string;
+  // Buy requests may state no condition (empty) and no target price (null).
   condition: string;
-  price: number;
+  price: number | null;
   currency?: string;
+  // Buy requests only: the buyer already has a customer ("sold order").
+  firm_order?: boolean;
   has_box?: boolean;
   has_papers?: boolean;
   user_id?: string;
@@ -519,6 +523,7 @@ export default function WatchDetailsScreen() {
   }>();
   // Decode the ID to handle references with special characters (e.g., 5711/1A-010)
   const id = rawId ? decodeURIComponent(rawId) : rawId;
+  const { t } = useTranslation();
   const { isAuthenticated, user } = useAuthStore();
   const { isGuideActive } = useGuide();
   const { v2Enabled } = useV2();
@@ -635,8 +640,8 @@ export default function WatchDetailsScreen() {
   const filterOrders = useCallback((orders: OrderBookItem[], filters: OrderBookFilterState): OrderBookItem[] => {
     return orders.filter(order => {
       // Price filter
-      if (filters.priceMin !== null && order.price < filters.priceMin) return false;
-      if (filters.priceMax !== null && order.price > filters.priceMax) return false;
+      if (filters.priceMin !== null && (order.price ?? 0) < filters.priceMin) return false;
+      if (filters.priceMax !== null && (order.price ?? 0) > filters.priceMax) return false;
 
       // Location filter
       if (filters.locations.length > 0 && !filters.locations.includes(order.country_code?.toUpperCase())) {
@@ -644,7 +649,8 @@ export default function WatchDetailsScreen() {
       }
 
       // Condition filter
-      if (filters.condition.length > 0 && !filters.condition.includes(order.condition)) {
+      // Requests that state no condition stay visible; the filter only hides another condition.
+      if (filters.condition.length > 0 && order.condition && !filters.condition.includes(order.condition)) {
         return false;
       }
 
@@ -1252,8 +1258,9 @@ export default function WatchDetailsScreen() {
           country_name: order.country_name,
           date: formatOrderDate(order.date),
           condition: order.condition || '',
-          price: order.price,
-          currency: order.currency || 'EUR',
+          price: order.price ?? null,
+          currency: order.price != null ? order.currency || 'EUR' : undefined,
+          firm_order: !!order.firm_order,
           has_box: order.has_box,
           has_papers: order.has_papers,
           user_id: order.user_id,
@@ -1271,8 +1278,9 @@ export default function WatchDetailsScreen() {
           country_name: order.country_name,
           date: formatOrderDate(order.date),
           condition: order.condition || '',
-          price: order.price,
-          currency: order.currency || 'EUR',
+          price: order.price ?? null,
+          currency: order.price != null ? order.currency || 'EUR' : undefined,
+          firm_order: !!order.firm_order,
           has_box: order.has_box,
           has_papers: order.has_papers,
           user_id: order.user_id,
@@ -1302,7 +1310,7 @@ export default function WatchDetailsScreen() {
 
         // Calculate best bid/ask from orders
         if (formattedBuyOrders.length > 0) {
-          const highestBid = Math.max(...formattedBuyOrders.map(o => o.price));
+          const highestBid = Math.max(...formattedBuyOrders.map(o => o.price ?? 0));
           setWatch(prev => ({
             ...prev,
             bestBid: highestBid,
@@ -1311,13 +1319,14 @@ export default function WatchDetailsScreen() {
         }
         if (formattedSellOrders.length > 0) {
           // Find the lowest-priced sell order to get its currency
-          const lowestSellOrder = formattedSellOrders.reduce((min, o) => o.price < min.price ? o : min, formattedSellOrders[0]);
+          const lowestSellOrder = formattedSellOrders.reduce((min, o) => (o.price ?? Infinity) < (min.price ?? Infinity) ? o : min, formattedSellOrders[0]);
+          const lowestSellPrice = lowestSellOrder.price ?? 0;
           setWatch(prev => ({
             ...prev,
-            bestAsk: lowestSellOrder.price,
+            bestAsk: lowestSellPrice,
             currency: lowestSellOrder.currency || prev.currency,
-            marketPriceMin: lowestSellOrder.price,
-            spread: prev.bestBid ? lowestSellOrder.price - prev.bestBid : 0,
+            marketPriceMin: lowestSellPrice,
+            spread: prev.bestBid ? lowestSellPrice - prev.bestBid : 0,
           }));
         }
       }
@@ -1701,12 +1710,12 @@ export default function WatchDetailsScreen() {
                   if (sellOrders.length > 0 && sellOrders[0].price != null) {
                     const o = sellOrders[0];
                     const prefix = o.currency && o.currency !== 'EUR' ? `${o.currency} ` : '€';
-                    return `${prefix}${o.price.toLocaleString('de-DE')}`;
+                    return `${prefix}${o.price!.toLocaleString('de-DE')}`;
                   }
                   if (buyOrders.length > 0 && buyOrders[0].price != null) {
                     const o = buyOrders[0];
                     const prefix = o.currency && o.currency !== 'EUR' ? `${o.currency} ` : '€';
-                    return `${prefix}${o.price.toLocaleString('de-DE')}`;
+                    return `${prefix}${o.price!.toLocaleString('de-DE')}`;
                   }
                   return formatPriceEurBefore(
                     filteredPriceHistory.length > 0
@@ -1921,8 +1930,15 @@ export default function WatchDetailsScreen() {
                     </Text>
                   </View>
                   <View style={[styles.tableCell, { flex: v2Enabled ? 1 : 0.8, alignItems: 'center' }]}>
-                    <Text style={[styles.tableCellText, { textAlign: 'center' }]}>{order.condition}</Text>
+                    {!!order.condition && (
+                      <Text style={[styles.tableCellText, { textAlign: 'center' }]}>{order.condition}</Text>
+                    )}
                     <Text style={[styles.tableCellText, { textAlign: 'center', fontSize: fp(11), color: '#999999' }]}>{order.date}</Text>
+                    {!!order.firm_order && (
+                      <View style={{ backgroundColor: 'rgba(212,175,55,0.15)', paddingHorizontal: wp(6), paddingVertical: hp(1), borderRadius: sp(6), marginTop: hp(2) }}>
+                        <Text style={[styles.tableCellText, { fontSize: fp(10), color: '#8A6D00' }]}>{t('orders.soldOrder')}</Text>
+                      </View>
+                    )}
                   </View>
                   {hasRemarks && (
                     <View style={[styles.tableCell, { flex: 0.8, alignItems: 'center' }]}>

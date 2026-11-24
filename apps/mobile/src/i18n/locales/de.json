@@ -204,6 +204,7 @@
     "ref": "Ref"
   },
   "orders": {
+    "soldOrder": "Fester Auftrag",
     "orders": "Bestellungen",
     "buyOrders": "Kaufaufträge",
     "sellOrders": "Verkaufsaufträge",

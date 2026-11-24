@@ -40,8 +40,12 @@ class Order(Document):
 
     # Order details
     price: Optional[float] = None  # User's asking/offering price (optional for WTB)
-    currency: str = "EUR"
-    condition: OrderCondition = OrderCondition.UNWORN
+    # No default currency: a buy request without a target has price = None and currency = None.
+    # Order-creating endpoints set their own default (OrderCreate.currency = "EUR").
+    currency: Optional[str] = None
+    # None = the dealer stated no condition (a third state for buy requests; the API schemas
+    # for user-created orders still default to Unworn explicitly).
+    condition: Optional[OrderCondition] = None
 
     # Location/Market
     country_code: str = Field(..., index=True)  # ISO country code (e.g., "US", "IT", "UAE")
@@ -73,6 +77,9 @@ class Order(Document):
     condition_raw: Optional[str] = None  # Raw condition text (e.g., "Unworn only")
     has_box: bool = False
     has_papers: bool = False
+    # Buy requests only: the buyer already has a customer ("sold order", "confirm order", "strong call").
+    # Shown as a "Sold order" remark on the request.
+    firm_order: bool = False
 
     # Images (for sell orders)
     images: list[str] = Field(default_factory=list)

@@ -99,9 +99,13 @@ interface OrderDetail {
   model: string;
   reference: string;
   watch_id?: string;
-  price: number;
-  currency: string;
-  condition: string;
+  // A buy request may state no target (price/currency null) and no condition.
+  price: number | null;
+  currency: string | null;
+  condition: string | null;
+  condition_raw?: string | null;
+  // Buy requests only: the buyer already has a customer ("sold order").
+  firm_order?: boolean;
   country_code: string;
   country_name?: string;
   user_id: string;
@@ -151,8 +155,9 @@ export default function OrderDetailScreen() {
     }
   };
 
-  const formatPrice = (price: number, currency: string = 'EUR') => {
-    const symbol = currency === 'EUR' ? '€' : currency;
+  const formatPrice = (price: number | null, currency: string | null = 'EUR') => {
+    if (price == null) return '–';
+    const symbol = !currency || currency === 'EUR' ? '€' : currency;
     return `${symbol}${price.toLocaleString('de-DE')}`;
   };
 
@@ -183,7 +188,7 @@ export default function OrderDetailScreen() {
             watchId: order.id,
             watchBrand: order.brand,
             watchModel: order.model,
-            watchPrice: order.price.toString(),
+            watchPrice: order.price != null ? order.price.toString() : '',
           },
         } as any);
       }
@@ -273,12 +278,20 @@ export default function OrderDetailScreen() {
             <Text style={styles.addedTime}>{t('common.added')} {formatDate(order.created_at)}</Text>
           </View>
 
+          {!!order.firm_order && (
+            <View style={{ alignSelf: 'flex-start', backgroundColor: 'rgba(212,175,55,0.15)', paddingHorizontal: wp(10), paddingVertical: hp(3), borderRadius: sp(8), marginBottom: hp(8) }}>
+              <Text style={{ fontSize: fp(12), color: '#8A6D00', fontWeight: '600' }}>{t('orders.soldOrder')}</Text>
+            </View>
+          )}
+
           {/* Quick Info */}
           <View style={styles.quickInfoRow}>
-            <View style={styles.quickInfoItem}>
-              <Text style={styles.quickInfoLabel}>{t('orders.condition')}</Text>
-              <Text style={styles.quickInfoValue}>{order.condition}</Text>
-            </View>
+            {!!(order.condition_raw || order.condition) && (
+              <View style={styles.quickInfoItem}>
+                <Text style={styles.quickInfoLabel}>{t('orders.condition')}</Text>
+                <Text style={styles.quickInfoValue}>{order.condition_raw || order.condition}</Text>
+              </View>
+            )}
             <View style={styles.quickInfoItem}>
               <Text style={styles.quickInfoLabel}>{t('orders.location')}</Text>
               <View style={styles.locationRow}>

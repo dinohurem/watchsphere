@@ -288,12 +288,14 @@
     "goBack": "Go back",
     "orderBook": "Order Book",
     "noOrdersAvailable": "No {{type}} orders available",
+    "soldOrder": "Sold order",
     "makeAnOffer": "Make an offer",
     "yourOffer": "Your offer",
     "submitting": "Submitting...",
     "failedToCreateOrder": "Failed to create order. Please try again."
   },
   "orderDetails": {
+    "soldOrder": "Sold order",
     "buyOrder": "Buy Order",
     "sellOrder": "Sell Order",
     "sold": "Sold",
