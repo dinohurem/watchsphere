@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     # replaces the queued one, so the queue stays one export per group. The Flex
     # tier blocks every write at 5120 MB. 0 disables the check.
     PIPELINE_PAUSE_DATA_MB: int = 4600
+    # Email the admins when exports arrived but no order was created for this many
+    # hours (paused worker, empty AI credit, ...). 0 disables the alert.
+    PIPELINE_STALL_ALERT_HOURS: float = 2
+    # While it stays stalled, repeat the email at most this often.
+    PIPELINE_STALL_ALERT_REPEAT_HOURS: float = 6
     # Claude API for the needs-review pass (generator spec §1.5). Empty → every
     # needs-review row goes to the approval page's "Unsure" tab.
     ANTHROPIC_API_KEY: str = ""

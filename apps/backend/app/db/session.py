@@ -50,6 +50,7 @@ async def connect_to_mongo():
     from app.models.change_batch import ChangeBatch, ChangeBatchEntry
     from app.models.remark_rule import RemarkRule, RemarkPlace
     from app.models.checks import SerialReport, DealerNumber, Bracelet, CheckImportPreview
+    from app.models.order_fix import OrderFixBatch, OrderFixItem, OrderArchive
 
     models = [
         User, Watch, Message, Conversation,
@@ -67,6 +68,7 @@ async def connect_to_mongo():
         ChangeBatch, ChangeBatchEntry,
         RemarkRule, RemarkPlace,
         SerialReport, DealerNumber, Bracelet, CheckImportPreview,
+        OrderFixBatch, OrderFixItem, OrderArchive,
     ]
     database = mongodb_client[settings.MONGODB_DB_NAME]
     try:

@@ -1710,12 +1710,12 @@ export default function WatchDetailsScreen() {
                   if (sellOrders.length > 0 && sellOrders[0].price != null) {
                     const o = sellOrders[0];
                     const prefix = o.currency && o.currency !== 'EUR' ? `${o.currency} ` : '€';
-                    return `${prefix}${o.price.toLocaleString('de-DE')}`;
+                    return `${prefix}${o.price!.toLocaleString('de-DE')}`;
                   }
                   if (buyOrders.length > 0 && buyOrders[0].price != null) {
                     const o = buyOrders[0];
                     const prefix = o.currency && o.currency !== 'EUR' ? `${o.currency} ` : '€';
-                    return `${prefix}${o.price.toLocaleString('de-DE')}`;
+                    return `${prefix}${o.price!.toLocaleString('de-DE')}`;
                   }
                   return formatPriceEurBefore(
                     filteredPriceHistory.length > 0

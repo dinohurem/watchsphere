@@ -57,6 +57,7 @@ const AdminWhatsAppImport = lazy(() => import('./features/admin/pages/AdminWhats
 const AdminWtbWtsGenerator = lazy(() => import('./features/admin/pages/AdminWtbWtsGenerator').then(m => ({ default: m.AdminWtbWtsGenerator })))
 const AdminWhatsAppBridge = lazy(() => import('./features/admin/pages/AdminWhatsAppBridge').then(m => ({ default: m.AdminWhatsAppBridge })))
 const AdminApproval = lazy(() => import('./features/admin/pages/AdminApproval').then(m => ({ default: m.AdminApproval })))
+const AdminBulkFix = lazy(() => import('./features/admin/pages/AdminBulkFix').then(m => ({ default: m.AdminBulkFix })))
 const AdminPriceCheck = lazy(() => import('./features/admin/pages/AdminPriceCheck').then(m => ({ default: m.AdminPriceCheck })))
 const AdminRemarks = lazy(() => import('./features/admin/pages/AdminRemarks').then(m => ({ default: m.AdminRemarks })))
 const AdminActivity = lazy(() => import('./features/admin/pages/AdminActivity').then(m => ({ default: m.AdminActivity })))
@@ -186,6 +187,7 @@ function App() {
           <Route path="remarks" element={<AdminRemarks />} />
           <Route path="approval" element={<AdminApproval />} />
           <Route path="price-check" element={<AdminPriceCheck />} />
+          <Route path="bulk-fix" element={<AdminBulkFix />} />
           <Route path="activity" element={<AdminActivity />} />
           <Route path="billing" element={<AdminBilling />} />
           <Route path="settings" element={<AdminSettings />} />

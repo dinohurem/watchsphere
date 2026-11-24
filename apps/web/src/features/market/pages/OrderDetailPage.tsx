@@ -639,7 +639,7 @@ export function OrderDetailPage() {
                 <button
                   onClick={() => {
                     const phone = order.whatsapp_phone!.replace(/[^0-9]/g, '');
-                    const message = `Hi, I'm interested in your ${order.brand} ${order.model} ${order.reference} listed at ${order.currency} ${order.price.toLocaleString()} on WatchSphere.`;
+                    const message = `Hi, I'm interested in your ${order.brand} ${order.model} ${order.reference} listed at ${order.currency} ${order.price?.toLocaleString()} on WatchSphere.`;
                     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
                   }}
                   className="h-[48px] w-[48px] shrink-0 bg-[#212121] text-white rounded-full hover:bg-black transition-colors flex items-center justify-center"
