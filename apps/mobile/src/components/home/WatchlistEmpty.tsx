@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(16),
     alignItems: 'center',
   },
-  previews: { flexDirection: 'row', justifyContent: 'center', gap: wp(10), marginBottom: hp(18) },
+  previews: { flexDirection: 'row', justifyContent: 'center', gap: wp(22), marginBottom: hp(18) },
   mini: {
     width: wp(118),
     backgroundColor: UI.white,

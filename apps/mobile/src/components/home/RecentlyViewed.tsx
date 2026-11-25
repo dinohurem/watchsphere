@@ -1,6 +1,6 @@
 /**
- * H1 – Recently viewed: one white box with the last 5 opened references, newest on top.
- * Row: small image in a grey square, reference bold, brand + model grey, 1M % chip, chevron.
+ * H1 – Recently viewed: one white box with the last 5 opened watches, newest on top.
+ * Row: small image in a grey square, WS code bold, brand + model grey, 1M % chip, chevron.
  */
 import React from 'react';
 import { LogoIcon } from '@/components/LogoIcon';
@@ -38,7 +38,7 @@ export function RecentlyViewed({ items, animate }: { items: MarketCardData[]; an
               </View>
               <View style={styles.texts}>
                 <Text style={[styles.reference, { fontFamily: fonts.semiBold }]} numberOfLines={1}>
-                  {card.reference}
+                  {card.ws_code || card.reference}
                 </Text>
                 <Text style={[styles.sub, { fontFamily: fonts.regular }]} numberOfLines={1}>
                   {[card.brand, card.model].filter(Boolean).join(' ')}
