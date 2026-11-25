@@ -4086,6 +4086,43 @@ async def _image_analysis_pass(
     return matched_via_image_rows, analyzed, enriched
 
 
+MIN_PEER_DEALERS = 3
+_BARE_DOLLAR = re.compile(r'(?<![A-Za-z])\$')
+_EXPLICIT_DOLLAR = re.compile(r'\b(?:US|HK|U|S|SG|AU|CA|NZ)\s?\$|\bUSDT?\b|\bHKD\b|\$\s?(?:US|HK)\b', re.I)
+
+
+def bare_dollar(text: str) -> bool:
+    """The price was written with a plain "$" ("$141000"), not "US$", "HK$" or a currency word."""
+    return bool(_BARE_DOLLAR.search(text or "")) and not _EXPLICIT_DOLLAR.search(text or "")
+
+
+async def _load_app_peers(ws_codes: list[str], rates: dict) -> dict[str, list[tuple]]:
+    """Active sell offers already in the app for these WS codes, as
+    (condition lower, year, price in HKD, dealer) per WS code."""
+    from app.models.order import Order
+    from app.services import fx as fx_service
+
+    out: dict[str, list[tuple]] = {}
+    if not ws_codes:
+        return out
+    try:
+        cursor = Order.get_motor_collection().find(
+            {"ws_code": {"$in": ws_codes}, "order_type": "sell", "status": "active",
+             "price": {"$gt": 0}, "excluded_from_median": {"$ne": True}},
+            {"ws_code": 1, "condition": 1, "year": 1, "price": 1, "currency": 1,
+             "whatsapp_phone": 1, "user_id": 1},
+        )
+        async for d in cursor:
+            hkd = fx_service.convert(d.get("price"), (d.get("currency") or "USD").upper(), "HKD", rates)
+            dealer = (d.get("whatsapp_phone") or d.get("user_id") or "").strip()
+            if hkd and dealer:
+                out.setdefault(d["ws_code"], []).append(
+                    ((d.get("condition") or "").lower(), d.get("year"), hkd, dealer))
+    except Exception as exc:  # no database (offline runs): no basis, nothing flagged
+        logger.warning("price check: app orders not available: %s", exc)
+    return out
+
+
 async def process_generation(
     txt_content: str,
     mode: str,
@@ -4583,54 +4620,46 @@ async def process_generation(
                 return 2000 + yy
         return None
 
-    # Bucket by (ws_code, condition, year) for year-based peers,
-    # and by ws_code alone for the global-median fallback.
-    year_buckets: dict[tuple[str, str, int], list[float]] = {}
-    peers_by_ws: dict[str, list[float]] = {}
-    for row in matched_rows:
-        ws = (row.get("WS-Code") or "").strip()
-        cond = (row.get("Zustand") or "").strip().lower()
-        num, _, cur = (row.get("Preis") or "").partition(' ')
-        if not ws or not num or not cur:
-            continue
-        v = _to_hkd(num, cur)
-        if v is None:
-            continue
-        peers_by_ws.setdefault(ws, []).append(v)
-        year = _extract_year(row.get("Monat/Jahr") or "")
+    # Peers come from the orders already in the app, never from this file: a misread
+    # price in the upload became the median and held four correct offers as outliers
+    # (test chats, Nov 2026). One value per dealer (their median), converted to HKD;
+    # a basis needs at least MIN_PEER_DEALERS different dealers.
+    ws_codes = sorted({(r.get("WS-Code") or "").strip() for r in matched_rows} - {""})
+    app_peers = await _load_app_peers(ws_codes, rates)
+
+    def _basis(values_by_dealer: dict[str, list[float]]) -> Optional[float]:
+        if len(values_by_dealer) < MIN_PEER_DEALERS:
+            return None
+        per_dealer = sorted(sorted(v)[len(v) // 2] for v in values_by_dealer.values())
+        return per_dealer[len(per_dealer) // 2]
+
+    def _app_median(ws: str, cond: str, year: Optional[int]) -> tuple[Optional[float], Optional[str], float]:
+        """(median HKD, label, tolerance): same year, else the nearest year (±10),
+        else the WS code overall (wide band)."""
+        rows = app_peers.get(ws) or []
         if year is not None:
-            year_buckets.setdefault((ws, cond, year), []).append(v)
+            for offset in [0] + [o for k in range(1, 11) for o in (k, -k)]:
+                by_dealer: dict[str, list[float]] = {}
+                for p_cond, p_year, p_hkd, dealer in rows:
+                    if p_cond == cond and p_year == year + offset:
+                        by_dealer.setdefault(dealer, []).append(p_hkd)
+                med = _basis(by_dealer)
+                if med:
+                    label = f"{year}" if offset == 0 else f"{year + offset} (nearest to {year})"
+                    return med, label, (0.25 if offset == 0 else 0.35)
+        by_dealer = {}
+        for _, _, p_hkd, dealer in rows:
+            by_dealer.setdefault(dealer, []).append(p_hkd)
+        med = _basis(by_dealer)
+        return (med, None, 0.0) if med else (None, None, 0.0)
 
-    def _peers_for_year(ws: str, cond: str, year: int, self_hkd: float) -> tuple[Optional[list[float]], int]:
-        """Return (peers list excluding one instance of self, year_used). Tries
-        exact year first, then nearest higher, then nearest lower, requiring
-        ≥3 peers in the chosen bucket (i.e. ≥2 after self is removed).
-        Returns (None, 0) when no bucket qualifies."""
-        def _without_self(bucket: list[float]) -> list[float]:
-            # Remove one occurrence of self_hkd so the row doesn't self-anchor.
-            out = list(bucket)
-            try:
-                out.remove(self_hkd)
-            except ValueError:
-                pass
-            return out
-
-        exact = year_buckets.get((ws, cond, year))
-        if exact and len(exact) >= 3:
-            return _without_self(exact), year
-        # Nearest higher years (up to +10)
-        for offset in range(1, 11):
-            b = year_buckets.get((ws, cond, year + offset))
-            if b and len(b) >= 3:
-                return _without_self(b), year + offset
-        # Nearest lower years (up to -10)
-        for offset in range(1, 11):
-            b = year_buckets.get((ws, cond, year - offset))
-            if b and len(b) >= 3:
-                return _without_self(b), year - offset
-        return None, 0
+    def _fits(v: float, med: float, label: Optional[str], tolerance: float) -> bool:
+        if label is None:  # WS-code-wide fallback: only gross errors
+            return 0.33 <= v / med <= 3.0
+        return med * (1 - tolerance) <= v <= med * (1 + tolerance)
 
     outlier_indices: list[int] = []
+    dollar_flips = 0
     for idx, row in enumerate(matched_rows):
         ws = (row.get("WS-Code") or "").strip()
         cond = (row.get("Zustand") or "").strip().lower()
@@ -4640,56 +4669,36 @@ async def process_generation(
         v = _to_hkd(num, cur)
         if v is None:
             continue
-
         year = _extract_year(row.get("Monat/Jahr") or "")
-        year_check_fired = False
-
-        if year is not None:
-            peers, year_used = _peers_for_year(ws, cond, year, v)
-            if peers and len(peers) >= 2:
-                year_check_fired = True
-                # Median-based band. Median is robust to bucket contamination
-                # by duplicated outliers (a bad price reposted N times doesn't
-                # drag the median the way min/max or IQR does). The tolerance
-                # widens around the median value.
-                sp = sorted(peers)
-                median = sp[len(sp) // 2]
-                tolerance = 0.25 if year_used == year else 0.35
-                lo_bound = median * (1 - tolerance)
-                hi_bound = median * (1 + tolerance)
-                if not (lo_bound <= v <= hi_bound):
-                    year_tag = f"{year_used}" if year_used == year else f"{year_used} (nearest to {year})"
-                    reason = (
-                        f"Price outlier: {num} {cur} (~{int(v):,} HKD) outside "
-                        f"{int(tolerance*100)}% of median {int(median):,} HKD "
-                        f"for {ws} {cond or '?'} {year_tag}"
-                    )
-                    row["_review_reason"] = reason
-                    row["Review Reason"] = reason
-                    row["_original_content"] = row.get("Original Text", "")
-                    outlier_indices.append(idx)
-
-        # Fallback: global-median per ws_code — only when the year-based check
-        # didn't fire (no year, or no qualifying peer bucket anywhere).
-        if year_check_fired:
+        med, label, tolerance = _app_median(ws, cond, year)
+        if not med or _fits(v, med, label, tolerance):
             continue
-        peers = peers_by_ws.get(ws, [])
-        if len(peers) < 3:
-            continue
-        sorted_peers = sorted(peers)
-        median = sorted_peers[len(sorted_peers) // 2]
-        if median <= 0:
-            continue
-        ratio = v / median
-        if ratio < 0.33 or ratio > 3.0:
+        # A bare "$" is HKD or USD (factor ~7.8): when the app median fits only the
+        # other one, the median decides.
+        if cur.upper() in ("HKD", "USD") and bare_dollar(row.get("Original Text") or ""):
+            other = "USD" if cur.upper() == "HKD" else "HKD"
+            v_other = _to_hkd(num, other)
+            if v_other is not None and _fits(v_other, med, label, tolerance):
+                row["Preis"] = f"{num} {other}"
+                dollar_flips += 1
+                continue
+        if label is not None:
             reason = (
-                f"Price outlier: {num} {cur} (~{int(v):,} HKD) vs market median "
-                f"~{int(median):,} HKD for {ws}"
+                f"Price outlier: {num} {cur} (~{int(v):,} HKD) outside "
+                f"{int(tolerance*100)}% of app median {int(med):,} HKD "
+                f"for {ws} {cond or '?'} {label}"
             )
-            row["_review_reason"] = reason
-            row["Review Reason"] = reason
-            row["_original_content"] = row.get("Original Text", "")
-            outlier_indices.append(idx)
+        else:
+            reason = (
+                f"Price outlier: {num} {cur} (~{int(v):,} HKD) vs app median "
+                f"~{int(med):,} HKD for {ws}"
+            )
+        row["_review_reason"] = reason
+        row["Review Reason"] = reason
+        row["_original_content"] = row.get("Original Text", "")
+        outlier_indices.append(idx)
+    if dollar_flips:
+        logger.info(f"process_generation: {dollar_flips} '$' price(s) re-read by the app median")
 
     for idx in sorted(set(outlier_indices), reverse=True):
         needs_review_rows.append(matched_rows[idx])
