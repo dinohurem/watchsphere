@@ -39,13 +39,15 @@ import {
 } from '@/components/detail/DetailChips';
 import { ChatBubbleIcon, DetailBellIcon, DetailStarIcon } from '@/components/detail/DetailIcons';
 import {
-  DETAIL_PERIODS,
-  DetailPeriod,
-  PERIOD_DAYS,
+  DEFAULT_TABLE_PERIOD,
   PriceTrend,
   RetailComparison,
   SortMode,
+  TABLE_PERIODS,
+  TABLE_PERIOD_DAYS,
+  TablePeriod,
   periodLabel,
+  toTrendPeriod,
 } from '@/components/detail/detailTypes';
 import { CountUpText, PopIcon, useReduceMotion } from '@/components/detail/motion';
 import { Shimmer, SkeletonCrossFade } from '@/components/market/Shimmer';
@@ -579,7 +581,7 @@ export default function WatchDetailsScreen() {
 
   // Detail redesign (spec v3, section 1): period / sort / currency chips, trend + retail chips
   const { currency, setCurrency, rates } = useCurrency();
-  const [tablePeriod, setTablePeriod] = useState<DetailPeriod>('1M');
+  const [tablePeriod, setTablePeriod] = useState<TablePeriod>(DEFAULT_TABLE_PERIOD);
   const [sortMode, setSortMode] = useState<SortMode>('cheapest');
   // The table renders in pages: a watch can have hundreds of listings, and mounting (and on Back,
   // unmounting) them all at once is what made opening and leaving this screen slow.
@@ -942,7 +944,7 @@ export default function WatchDetailsScreen() {
     let cancelled = false;
     api
       .get(`/market/detail/${encodeURIComponent(detailWsCode)}/trend`, {
-        params: { period: tablePeriod, currency },
+        params: { period: toTrendPeriod(tablePeriod), currency },
       })
       .then((res) => {
         if (!cancelled) setTrend(res.data as PriceTrend);
@@ -1004,7 +1006,7 @@ export default function WatchDetailsScreen() {
   /** Period filter (listing age) + sort for the listing table (spec 1.1, items 1 and 2). */
   const arrangeOrders = useCallback(
     (orders: OrderBookItem[]): OrderBookItem[] => {
-      const days = PERIOD_DAYS[tablePeriod];
+      const days = TABLE_PERIOD_DAYS[tablePeriod];
       const now = Date.now();
       const inPeriod =
         days === null
@@ -1961,11 +1963,6 @@ export default function WatchDetailsScreen() {
                         <Text style={[styles.tableCellText, { fontSize: fp(10), color: '#8A6D00' }]}>{t('orders.soldOrder')}</Text>
                       </View>
                     )}
-                    {!!order.expired && (
-                      <View style={{ backgroundColor: 'rgba(33,33,33,0.08)', paddingHorizontal: wp(6), paddingVertical: hp(1), borderRadius: sp(6), marginTop: hp(2) }}>
-                        <Text style={[styles.tableCellText, { fontSize: fp(10), color: '#757575' }]}>{t('orders.expired')}</Text>
-                      </View>
-                    )}
                   </View>
                   {hasRemarks && (
                     <View style={[styles.tableCell, { flex: 0.8, alignItems: 'center' }]}>
@@ -2380,9 +2377,9 @@ export default function WatchDetailsScreen() {
         onSelect={setSortMode}
         onClose={sortMenu.close}
       />
-      <ChipMenu<DetailPeriod>
+      <ChipMenu<TablePeriod>
         anchor={periodMenu.anchor}
-        options={DETAIL_PERIODS.map((p) => ({ value: p.value, label: `${p.label} · ${p.long}` }))}
+        options={TABLE_PERIODS.map((p) => ({ value: p.value, label: `${p.label} · ${p.long}` }))}
         selected={tablePeriod}
         onSelect={setTablePeriod}
         onClose={periodMenu.close}
@@ -2399,7 +2396,7 @@ export default function WatchDetailsScreen() {
         visible={showTrendSheet}
         onClose={() => setShowTrendSheet(false)}
         wsCode={detailWsCode}
-        initialPeriod={tablePeriod}
+        initialPeriod={toTrendPeriod(tablePeriod)}
       />
       <RetailPricesSheet
         visible={showRetailSheet}

@@ -250,7 +250,7 @@ export function WatchDetailsPage() {
       if (orderBookLookup) {
         try {
           const orderBookResponse = await api.get(`/orders/book/${encodeURIComponent(orderBookLookup)}`, {
-            params: { limit: 5000 }
+            params: { limit: 5000, range: 'ACTIVE' }
           });
           const orderBookData = orderBookResponse.data;
 

@@ -146,7 +146,7 @@ export default function OrderBookScreen() {
     try {
       const encodedReference = encodeURIComponent(params.reference || '');
       const response = await api.get(`/orders/book/${encodedReference}`, {
-        params: { limit: ORDER_PAGE_SIZE, skip: 0 }
+        params: { limit: ORDER_PAGE_SIZE, skip: 0, range: 'ACTIVE' }
       });
       if (response.data) {
         setOrderBook(response.data);
@@ -189,7 +189,7 @@ export default function OrderBookScreen() {
     try {
       const encodedReference = encodeURIComponent(params.reference || '');
       const response = await api.get(`/orders/book/${encodedReference}`, {
-        params: { limit: ORDER_PAGE_SIZE, skip: currentPage * ORDER_PAGE_SIZE }
+        params: { limit: ORDER_PAGE_SIZE, skip: currentPage * ORDER_PAGE_SIZE, range: 'ACTIVE' }
       });
       if (response.data) {
         const newSellOrders = response.data.sell_orders || [];

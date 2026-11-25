@@ -41,12 +41,36 @@ async def _o(price, days_ago, status="active", side="sell"):
 
 
 @pytest.mark.asyncio
-async def test_without_range_only_active_offers(db):
+async def test_without_range_defaults_to_10d(db):
     from app.api.v1.endpoints.orders import get_order_book
 
     await _o(14_000, 2)
-    await _o(12_000, 20, status="expired")
+    await _o(12_000, 5, status="expired")     # inside 10D
+    await _o(11_000, 20, status="expired")    # outside 10D
     book = await get_order_book("126610LN", limit=50, skip=0, range=None)
+    assert [(e.price, e.expired) for e in book.sell_orders] == [(12_000, True), (14_000, False)]
+    assert book.range == "10D"
+
+
+@pytest.mark.asyncio
+async def test_10d_window_and_legacy_1w_still_accepted(db):
+    from app.api.v1.endpoints.orders import get_order_book
+
+    await _o(12_000, 9, status="expired")     # inside 10D, outside 1W
+    await _o(11_000, 11, status="expired")    # outside both
+    book = await get_order_book("126610LN", limit=50, skip=0, range="10d")
+    assert [e.price for e in book.sell_orders] == [12_000]
+    book = await get_order_book("126610LN", limit=50, skip=0, range="1W")
+    assert book.sell_orders == [] and book.range == "1W"
+
+
+@pytest.mark.asyncio
+async def test_active_range_hides_expired(db):
+    from app.api.v1.endpoints.orders import get_order_book
+
+    await _o(14_000, 2)
+    await _o(12_000, 5, status="expired")
+    book = await get_order_book("126610LN", limit=50, skip=0, range="ACTIVE")
     assert [e.price for e in book.sell_orders] == [14_000]
     assert book.range is None
 
