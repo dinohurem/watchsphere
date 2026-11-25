@@ -197,8 +197,8 @@ export interface DialCountry {
 
 export const DIAL_CODES: DialCountry[] = [
   { code: 'HK', name: 'Hong Kong', dial: '+852' },
-  { code: 'AE', name: 'United Arab Emirates', dial: '+971' },
-  { code: 'GB', name: 'United Kingdom', dial: '+44' },
+  { code: 'AE', name: 'UAE', dial: '+971' },
+  { code: 'GB', name: 'UK', dial: '+44' },
   { code: 'US', name: 'United States', dial: '+1' },
   { code: 'CH', name: 'Switzerland', dial: '+41' },
   { code: 'CN', name: 'China', dial: '+86' },

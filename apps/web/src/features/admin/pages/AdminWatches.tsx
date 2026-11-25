@@ -249,12 +249,12 @@ const emptyNewOrderForm: NewOrderFormData = {
 
 const COUNTRIES = [
   { code: 'US', name: 'United States' },
-  { code: 'GB', name: 'United Kingdom' },
+  { code: 'GB', name: 'UK' },
   { code: 'DE', name: 'Germany' },
   { code: 'FR', name: 'France' },
   { code: 'IT', name: 'Italy' },
   { code: 'CH', name: 'Switzerland' },
-  { code: 'AE', name: 'United Arab Emirates' },
+  { code: 'AE', name: 'UAE' },
   { code: 'HK', name: 'Hong Kong' },
   { code: 'SG', name: 'Singapore' },
   { code: 'JP', name: 'Japan' },

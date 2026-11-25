@@ -38,7 +38,7 @@ const FALLBACK_COUNTRIES: Pick<RetailCountry, 'code' | 'name' | 'tax_label' | 'l
   { code: 'DE', name: 'Germany', tax_label: 'incl. 19% VAT', list_currency: 'EUR' },
   { code: 'AE', name: 'UAE', tax_label: 'incl. 5% VAT', list_currency: 'AED' },
   { code: 'US', name: 'United States', tax_label: 'excl. sales tax', list_currency: 'USD' },
-  { code: 'GB', name: 'United Kingdom', tax_label: 'incl. 20% VAT', list_currency: 'GBP' },
+  { code: 'GB', name: 'UK', tax_label: 'incl. 20% VAT', list_currency: 'GBP' },
   { code: 'CN', name: 'China', tax_label: 'incl. 13% VAT', list_currency: 'CNY' },
   { code: 'CH', name: 'Switzerland', tax_label: 'incl. 8.1% VAT', list_currency: 'CHF' },
   { code: 'IT', name: 'Italy', tax_label: 'incl. 22% VAT', list_currency: 'EUR' },
