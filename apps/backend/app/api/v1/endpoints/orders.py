@@ -302,69 +302,78 @@ class PriceHistoryPoint(BaseModel):
 
 
 class PriceHistoryResponse(BaseModel):
-    """Price history from real sell orders"""
+    """Price history from real sell orders, all in ``currency``"""
     reference: str
     points: List[PriceHistoryPoint]
     current_price: float
     price_change: float
+    currency: str = "USD"
 
 
 @router.get("/price-history/{reference:path}", response_model=PriceHistoryResponse)
 async def get_price_history(
     reference: str,
     days: int = Query(default=365, le=730),
+    currency: str = Query(default="USD", min_length=3, max_length=3),
 ) -> Any:
     """
     Get real price history from sell orders for chart display.
 
-    Returns the lowest sell order price per day for the given reference or ws_code,
-    covering up to the requested number of days. Includes both active
-    and completed orders to show historical pricing.
+    Returns the lowest sell order price per day for the given ws_code (or reference),
+    covering up to the requested number of days, converted to ``currency`` with the
+    central FX table first: comparing raw prices put a 268,000 USD offer below
+    2.1m HKD ones. Offers in a currency without a rate are left out. Includes both
+    active and completed orders to show historical pricing.
     """
     import re as re_mod
 
-    # Try ws_code-first lookup for the watch to resolve reference
+    from app.services import fx
+
+    cur = currency.upper()
+    rates = await fx.load_rates()
+
+    # Try ws_code-first lookup: a reference can cover several WS codes (dials).
     ws_regex = re_mod.compile(f"^{re_mod.escape(reference)}$", re_mod.IGNORECASE)
     watch_match = await Watch.find_one({"ws_code": {"$regex": ws_regex}})
-    lookup_ref = watch_match.reference if watch_match else reference
+    if watch_match and watch_match.ws_code:
+        scope: dict = {"ws_code": watch_match.ws_code}
+    else:
+        scope = {"reference": reference}
+
+    def converted(order) -> Optional[float]:
+        if not order.price:
+            return None
+        return fx.convert(order.price, order.currency or "USD", cur, rates)
 
     cutoff_date = datetime.utcnow() - timedelta(days=days)
-
-    # Get all sell orders (active + completed) created within the time range
     sell_orders = await Order.find(
-        Order.reference == lookup_ref,
-        Order.order_type == OrderType.SELL,
-        Order.created_at >= cutoff_date,
-    ).sort([("created_at", 1)]).to_list()
+        scope, Order.order_type == OrderType.SELL, Order.created_at >= cutoff_date,
+    ).to_list()
 
-    # Group by date (day), take the lowest price per day
+    # Group by date (day), take the lowest converted price per day
     daily_prices: dict[str, float] = {}
     for order in sell_orders:
+        value = converted(order)
+        if value is None:
+            continue
         day_key = order.created_at.strftime("%Y-%m-%d")
-        if day_key not in daily_prices or order.price < daily_prices[day_key]:
-            daily_prices[day_key] = order.price
+        if day_key not in daily_prices or value < daily_prices[day_key]:
+            daily_prices[day_key] = round(value, 2)
 
     points = [
         PriceHistoryPoint(date=day, price=price)
         for day, price in sorted(daily_prices.items())
     ]
 
-    # Calculate current price (lowest active sell, or last recorded price)
-    current_price = 0.0
-    lowest_active = await Order.find(
-        Order.reference == lookup_ref,
-        Order.order_type == OrderType.SELL,
-        Order.status == OrderStatus.ACTIVE,
-    ).sort([("price", 1)]).limit(1).to_list()
+    # Current price: lowest active sell (converted), or the last recorded point
+    active = await Order.find(scope, Order.order_type == OrderType.SELL,
+                              Order.status == OrderStatus.ACTIVE).to_list()
+    active_values = [v for v in (converted(o) for o in active) if v is not None]
+    current_price = round(min(active_values), 2) if active_values else (points[-1].price if points else 0.0)
 
-    if lowest_active:
-        current_price = lowest_active[0].price
-    elif points:
-        current_price = points[-1].price
-
-    # Get admin price for price_change calculation
-    watch = watch_match or await Watch.find_one(Watch.reference == lookup_ref, Watch.status == WatchStatus.ACTIVE)
-    admin_price = watch.price if watch else 0
+    # Admin price (in the watch's own currency) for the price_change calculation
+    watch = watch_match or await Watch.find_one(Watch.reference == reference, Watch.status == WatchStatus.ACTIVE)
+    admin_price = fx.convert(watch.price, watch.currency or "EUR", cur, rates) if watch and watch.price else None
 
     price_change = 0.0
     if admin_price and admin_price > 0 and current_price > 0:
@@ -375,6 +384,7 @@ async def get_price_history(
         points=points,
         current_price=current_price,
         price_change=price_change,
+        currency=cur,
     )
 
 
