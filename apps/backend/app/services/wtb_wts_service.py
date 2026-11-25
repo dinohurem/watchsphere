@@ -3188,6 +3188,79 @@ def own_listing_lines(text: str, watch_index: dict) -> str:
         return text
     return "\n".join(lines[start:end + 1])
 
+_SEG_YEAR_RE = re.compile(r"(?<![\d/])(?:19[5-9]\d|20[0-4]\d)(?!\d)|(?<![a-z0-9])[nw]\s?\d{1,2}(?![\d])|(?<!\d)\d{1,2}\s?/\s?(?:20)?\d{2}(?!\d)", re.I)
+_SEG_SPLIT_RE = re.compile(r"\s*(?:[,;|]|\s/\s)\s*")
+_SEG_STRIP_RE = re.compile(
+    r"(?:hk\$|us\$|hkd|usdt?|eur|€|\$|£|aed|chf|sgd)?\s*:?\s*\d[\d.,']*\s?[km]?\s*(?:hkd|usdt?|usd|eur|€|aed|chf|sgd)?"
+    r"(?:\s?y(?:ear)?s?)?(?![a-z])", re.I)
+
+
+def _strip_prices_and_years(text: str, refs: list[str]) -> str:
+    """The watch part of a priced line ('228238A Black 2024 Like New 510,000HKD' -> '228238A Black Like New'),
+    used as context for the other priced lines of the same watch."""
+    keep = text
+    for i, r in enumerate(refs):
+        keep = re.sub(re.escape(r), f"\x00{chr(65 + i)}\x00", keep, flags=re.I)
+    keep = _SEG_STRIP_RE.sub(" ", keep)
+    for i, r in enumerate(refs):
+        keep = keep.replace(f"\x00{chr(65 + i)}\x00", r)
+    return re.sub(r"\s{2,}", " ", keep).strip()
+
+
+def _same_watch_segments(lines: list[str], ref_lines: dict, watch_index: dict) -> Optional[list[str]]:
+    """One watch listed several times in one message, usually different years (Kenan, 25 Nov 2026):
+        228238a champ 2019 hkd359k / 228238a champ 2022 hkd397k ...     (the reference on every line)
+        5167A / 2013Y HKD534k / 2024Y HKD716k                           (the reference once, a year per line)
+        5167A used full set 2013Y HKD534k, 2024Y HKD716k                (pieces of one line)
+    -> one listing per priced line/piece, each with the watch's own lines (reference, header, remarks) as
+    context. Two prices without their own year/reference ('126610LN / hkd 150k / usdt 19.2k': two
+    currencies for one watch) stay ONE listing."""
+    segs: list[tuple[int, str]] = []
+    for i, line in enumerate(lines):
+        if not _line_has_price(line):
+            continue
+        pieces = [p for p in _SEG_SPLIT_RE.split(line) if p.strip()]
+        priced = [p for p in pieces if _line_has_price(p)]
+        if len(priced) >= 2 and all(_SEG_YEAR_RE.search(p) for p in priced):
+            # leading pieces without a price belong to the first priced piece ("Patek 5167A, 2013Y HKD534k")
+            lead = []
+            for p in pieces:
+                if _line_has_price(p):
+                    break
+                lead.append(p)
+            first = True
+            for p in pieces:
+                if _line_has_price(p):
+                    segs.append((i, " ".join(lead + [p]) if first and lead else p))
+                    first = False
+        else:
+            segs.append((i, line))
+    if len(segs) < 2:
+        return None
+    ref_of = {i: refs for i, refs in ref_lines.items()}
+    with_ref = [bool(find_references(t, watch_index)) for _, t in segs]
+    with_year = [bool(_SEG_YEAR_RE.search(_strip_ref_tokens(t, ref_of.get(i, [])))) for i, t in segs]
+    if not (all(with_ref) or all(with_year)):
+        return None
+    seg_lines = {i for i, _ in segs}
+    context = [l for i, l in enumerate(lines) if i not in seg_lines]
+    ref_text = next((t for (i, t), has in zip(segs, with_ref) if has), None)
+    watch_part = _strip_prices_and_years(ref_text, ref_of.get(segs[with_ref.index(True)][0], [])) if ref_text else ""
+    out = []
+    for (i, t), has in zip(segs, with_ref):
+        parts = list(context)
+        if not has and watch_part and not any(watch_part in c for c in context):
+            parts.append(watch_part)
+        parts.append(t)
+        out.append("\n".join(parts))
+    return out
+
+
+def _strip_ref_tokens(text: str, refs: list[str]) -> str:
+    for r in refs:
+        text = re.sub(re.escape(r), " ", text, flags=re.I)
+    return text
+
 
 def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, list[str]]:
     """Decide how a message splits into listings (§3).
@@ -3214,6 +3287,10 @@ def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, l
                 st = r.lower() if r.count(".") >= 3 else ref_stem(r)
                 if st not in distinct:
                     distinct.append(st)
+    if len(distinct) == 1:
+        segs = _same_watch_segments(lines, ref_lines, watch_index)
+        if segs:
+            return "blocks", segs
     if len(distinct) <= 1:
         return "single", [own_listing_lines(content, watch_index)]
     if all(_line_has_price(lines[i]) for i in ref_lines):
