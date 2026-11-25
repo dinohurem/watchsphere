@@ -1,5 +1,5 @@
 /**
- * N1 entry: thumbnail · reference (bold when unread, blue dot) · "flag Country · year · condition"
+ * N1 entry: thumbnail · WS code (reference when missing; bold when unread, blue dot) · "flag Country · year · condition"
  * · "Price: 1.428.000 HKD" / "Target: 1.350.000 HKD" / "Target: /" · WTS / WTB chip.
  * Right: round chat button (opens WhatsApp with the dealer) with the age underneath.
  */
@@ -74,7 +74,7 @@ export function ActivityRow({
           style={[styles.reference, { fontFamily: unread ? fonts.bold : fonts.semiBold }]}
           numberOfLines={1}
         >
-          {d.reference}
+          {d.ws_code || d.reference}
         </Text>
         {line2 ? (
           <Text style={[styles.line, { fontFamily: fonts.regular }]} numberOfLines={1}>
