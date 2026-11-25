@@ -301,24 +301,17 @@ def retail_breakdown(
     }
 
 
-def outlier_check(target: Listing, peers: list[Listing]) -> Optional[dict]:
-    """Compare a listing with the median of the same condition + year.
-
-    Same year needs ≥2 other listings (±25 %); otherwise the nearest year with
-    ≥2 listings is used (±35 %). Returns {"median_usd", "deviation_pct",
-    "basis_year", "basis_count" (offers the median rests on), "tolerance_pct", "is_outlier"} or None when there is no basis.
-    Mirrors the generator's price guardrail so the two never disagree.
-    """
-    if target.price_usd is None:
-        return None
+def outlier_basis(target: Listing, peers: list[Listing]) -> Optional[tuple]:
+    """The offers a listing is compared with: same condition, same year (≥2 others, ±25 %),
+    else the nearest year with ≥2 (±35 %). -> (basis_year, tolerance, [Listing]) or None."""
     cond = (target.condition or "").lower()
     others = [
         p for p in peers
         if p.id != target.id and (p.condition or "").lower() == cond and p.price_usd
     ]
-    by_year: dict[Optional[int], list[float]] = {}
+    by_year: dict[Optional[int], list[Listing]] = {}
     for p in others:
-        by_year.setdefault(p.year, []).append(p.price_usd)
+        by_year.setdefault(p.year, []).append(p)
 
     basis = None
     tolerance = OUTLIER_SAME_YEAR
@@ -335,7 +328,25 @@ def outlier_check(target: Listing, peers: list[Listing]) -> Optional[dict]:
         tolerance = OUTLIER_NEIGHBOUR_YEAR
     if basis is None and not (target.year is None and len(by_year.get(None, [])) >= 2):
         return None
-    values = by_year.get(basis, [])
+    return basis, tolerance, by_year.get(basis, [])
+
+
+def outlier_check(target: Listing, peers: list[Listing]) -> Optional[dict]:
+    """Compare a listing with the median of the same condition + year.
+
+    Same year needs ≥2 other listings (±25 %); otherwise the nearest year with
+    ≥2 listings is used (±35 %). Returns {"median_usd", "deviation_pct",
+    "basis_year", "basis_count" (offers the median rests on), "tolerance_pct",
+    "is_outlier"} or None when there is no basis.
+    Mirrors the generator's price guardrail so the two never disagree.
+    """
+    if target.price_usd is None:
+        return None
+    found = outlier_basis(target, peers)
+    if found is None:
+        return None
+    basis, tolerance, basis_listings = found
+    values = [p.price_usd for p in basis_listings]
     med = float(_median(values))
     deviation = (target.price_usd - med) / med * 100.0 if med else 0.0
     return {
@@ -396,7 +407,9 @@ async def _load_listings(ws_codes: list[str], rates: dict[str, float]) -> dict[s
     from app.models.order import Order
 
     out: dict[str, list[Listing]] = {c: [] for c in ws_codes}
-    cursor = Order.get_motor_collection().find({"ws_code": {"$in": ws_codes}}, ORDER_PROJECTION)
+    # Held-back offers (suspicious price, not decided yet) count nowhere.
+    cursor = Order.get_motor_collection().find(
+        {"ws_code": {"$in": ws_codes}, "status": {"$ne": "held"}}, ORDER_PROJECTION)
     async for doc in cursor:
         l = listing_from_order(doc, rates)
         out.setdefault(l.ws_code, []).append(l)
@@ -624,7 +637,7 @@ async def median_listings(ws_code: str, period: str = "1M") -> list[Listing]:
 
     rates = await load_rates()
     days = PERIOD_DAYS.get((period or "1M").upper())
-    query: dict = {"ws_code": ws_code, "order_type": "sell"}
+    query: dict = {"ws_code": ws_code, "order_type": "sell", "status": {"$ne": "held"}}
     if days is not None:
         query["created_at"] = {"$gte": datetime.utcnow() - timedelta(days=days)}
     docs = await Order.find(query).to_list()

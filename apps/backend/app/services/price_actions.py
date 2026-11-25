@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import HTTPException
 
-from app.models.order import Order
+from app.models.order import Order, OrderStatus
 from app.services import fx
 from app.services import market_stats as ms
 
@@ -33,18 +33,30 @@ def parse_price(value) -> Optional[float]:
 
 async def apply_price_action(order: Order, action: str, value=None, rates: Optional[dict] = None) -> None:
     """Changes and saves the order (never deletes: reject is the caller's job, it archives
-    first). Raises HTTPException(400) for bad input; the caller refreshes the stats."""
+    first). ``value`` "suggested" takes the currency / price the flag suggested. A held offer
+    that gets any of the three decisions becomes visible and is never flagged again.
+    Raises HTTPException(400) for bad input; the caller refreshes the stats."""
     if rates is None:
         rates = await fx.load_rates()
+    flag = order.price_flag or {}
+    was_held = order.status == OrderStatus.HELD
     if action == "approve":
         order.price_approved = True
     elif action == "fix_currency":
+        if str(value or "").strip().lower() == "suggested":
+            value = flag.get("suggested_currency")
+            if not value:
+                raise HTTPException(status_code=400, detail="No suggested currency for this offer")
         cur = fx.normalize_currency(str(value or ""))
         if not cur or cur not in rates:
             raise HTTPException(status_code=400, detail=f"Unknown currency '{value}'")
         order.currency = cur
         order.usd_price = await fx.to_usd(order.price, cur)
     elif action == "correct_price":
+        if str(value or "").strip().lower() == "suggested":
+            value = flag.get("suggested_price")
+            if not value:
+                raise HTTPException(status_code=400, detail="No suggested price for this offer")
         price = value if isinstance(value, (int, float)) else parse_price(value)
         if not price or price <= 0:
             raise HTTPException(status_code=400, detail="Price must be a positive number")
@@ -52,6 +64,10 @@ async def apply_price_action(order: Order, action: str, value=None, rates: Optio
         order.usd_price = await fx.to_usd(order.price, order.currency)
     else:
         raise HTTPException(status_code=400, detail="Unknown action")
+    if was_held:
+        order.status = OrderStatus.ACTIVE
+        order.price_flag = None
+        order.price_approved = True
     order.updated_at = datetime.utcnow()
     await order.save()
 

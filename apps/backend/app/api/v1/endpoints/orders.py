@@ -17,6 +17,7 @@ from app.models.watch import Watch, WatchStatus
 from app.api.v1.endpoints.activity import log_activity
 from app.models.activity_log import ActivityType, EntityType
 from app.models.notification import Notification, NotificationType as NotifType
+from app.services import price_flags
 from app.services.email import email_service
 from app.services.notifications import notify_buy_offer, send_notification_to_multiple
 from app.services.broadcast import broadcast_service
@@ -1041,6 +1042,8 @@ async def create_order(
         clasp_material=order_data.clasp_material,
     )
     order.usd_price = await fx_to_usd(order.price, order.currency)
+    # A suspicious price is created held back (status HELD) and waits on the Approval page.
+    await price_flags.check_new_orders([order])
 
     await order.insert()
     await _refresh_stats(order.ws_code)
@@ -2004,6 +2007,8 @@ async def admin_create_order(
         order_kwargs["created_at"] = order_data.created_at
     order = Order(**order_kwargs)
     order.usd_price = await fx_to_usd(order.price, order.currency)
+    # A suspicious price is created held back (status HELD) and waits on the Approval page.
+    await price_flags.check_new_orders([order])
 
     await order.insert()
     await _refresh_stats(order.ws_code)

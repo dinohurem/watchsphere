@@ -5,7 +5,7 @@ outliers highlighted against the median of the same condition and year (±25 %,
 else the nearest year ±35 %). Per listing: correct price, exclude from median,
 delete. Every change recomputes the stats for that WS code.
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Optional
 
 from beanie import PydanticObjectId
@@ -13,8 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.core.deps import get_current_admin_user
-from app.core.market_constants import PERIOD_DAYS
-from app.models.order import Order, OrderType
+from app.models.order import Order
 from app.models.user import User
 from app.models.watch import Watch
 from app.services import fx
@@ -70,33 +69,6 @@ def listing_payload(l: ms.Listing, currency: str, rates: dict, outlier: Optional
             if outlier else None
         ),
     }
-
-
-async def suspicious_listings(currency: str, period: str = "1M", limit: int = 200) -> list[dict]:
-    """All WTS listings far from the median of their WS code + condition + year,
-    worst first (approval page tab 6)."""
-    rates = await fx.load_rates()
-    days = PERIOD_DAYS.get(period.upper())
-    query: dict = {"order_type": OrderType.SELL.value, "ws_code": {"$nin": [None, ""]}, "price": {"$ne": None}}
-    if days is not None:
-        query["created_at"] = {"$gte": datetime.utcnow() - timedelta(days=days)}
-    orders = await Order.find(query).to_list()
-    by_ws: dict[str, list[ms.Listing]] = {}
-    for o in orders:
-        l = ms.listing_from_order(o, rates)
-        l.extra = {"order": o}
-        by_ws.setdefault(l.ws_code, []).append(l)
-    flagged = []
-    for ws, items in by_ws.items():
-        pool = ms.median_eligible(items)
-        for l in pool:
-            if getattr(l.extra.get("order"), "price_approved", False):
-                continue  # an admin approved this price: never flagged again
-            res = ms.outlier_check(l, pool)
-            if res and res["is_outlier"]:
-                flagged.append(listing_payload(l, currency, rates, res))
-    flagged.sort(key=lambda x: abs(x["outlier"]["deviation_pct"]), reverse=True)
-    return flagged[:limit]
 
 
 @router.get("/search")

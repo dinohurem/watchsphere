@@ -76,7 +76,7 @@ async function downloadSkipped(batchId: string) {
 }
 
 /** Decisions by file: upload the filled CSV, check the preview, confirm, undo later. */
-export function ApprovalFilePanel({ onChanged }: { onChanged: () => void }) {
+export function ApprovalFilePanel({ onChanged, reloadKey = 0 }: { onChanged: () => void; reloadKey?: number }) {
   const [open, setOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -96,7 +96,7 @@ export function ApprovalFilePanel({ onChanged }: { onChanged: () => void }) {
 
   useEffect(() => {
     if (open) loadHistory()
-  }, [open, loadHistory])
+  }, [open, loadHistory, reloadKey])
 
   const runPreview = async () => {
     if (!file) return
@@ -190,8 +190,8 @@ export function ApprovalFilePanel({ onChanged }: { onChanged: () => void }) {
               AI decisions / Unsure: <code>confirm</code>, <code>correct</code> (new_value = WS code), <code>not_in_catalogue</code>,{' '}
               <code>discard</code>. Aliases: <code>approve</code>, <code>reject</code>, <code>assign</code> (WS code). New watches:{' '}
               <code>import</code> (WS code), <code>dismiss</code>. Prices: <code>approve</code>, <code>reject</code>,{' '}
-              <code>fix_currency</code> (ISO code), <code>correct_price</code> (number). Rows without a decision stay untouched. Nothing
-              changes until you confirm.
+              <code>fix_currency</code> (ISO code), <code>correct_price</code> (number); for both <code>suggested</code> takes the flag's
+              suggestion. Rows without a decision stay untouched. Nothing changes until you confirm.
             </p>
           </div>
 

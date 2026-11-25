@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom'
 import { Check, RefreshCw } from 'lucide-react'
 import { api } from '@/services/api'
 import { cn } from '@/lib/utils'
-import { AuthImage, CURRENCIES, ListingTable, PriceListing, WatchSearch, WatchSummary, formatDate } from '../components/pricecheck/shared'
+import { AuthImage, WatchSearch, WatchSummary, formatDate } from '../components/pricecheck/shared'
 import { AI_ACTIONS, BulkBar, UNSURE_ACTIONS, useSelection } from '../components/approval/BulkBar'
 import { ApprovalFilePanel } from '../components/approval/ApprovalFilePanel'
+import { SuspiciousPrices } from '../components/approval/SuspiciousPrices'
 import { DownloadCsvButton } from '../components/approval/csvDownload'
 import { NO_FILTERS, ReviewFilters, ReviewFilterValues } from '../components/approval/ReviewFilters'
 
@@ -82,6 +83,7 @@ interface Summary {
   aliases: number
   new_watches: number
   discarded: number
+  suspicious_prices: number
 }
 
 const PAGE_SIZE = 100
@@ -108,7 +110,7 @@ const TABS: { key: Tab; label: string; count?: keyof Summary }[] = [
   { key: 'aliases', label: 'Alias suggestions', count: 'aliases' },
   { key: 'new', label: 'New watches', count: 'new_watches' },
   { key: 'discarded', label: 'Discarded', count: 'discarded' },
-  { key: 'prices', label: 'Suspicious prices' },
+  { key: 'prices', label: 'Suspicious prices', count: 'suspicious_prices' },
 ]
 
 function SourceText({ text }: { text: string | null }) {
@@ -145,8 +147,7 @@ export function AdminApproval() {
   const [selectedAliases, setSelectedAliases] = useState<string[]>([])
   const [newWatches, setNewWatches] = useState<NewWatch[]>([])
   const [discarded, setDiscarded] = useState<Item[]>([])
-  const [prices, setPrices] = useState<PriceListing[]>([])
-  const [currency, setCurrency] = useState('EUR')
+  const [fileKey, setFileKey] = useState(0)
   const [correcting, setCorrecting] = useState<string | null>(null)
   const [searching, setSearching] = useState<string | null>(null)
   const [aiFilters, setAiFilters] = useState<ReviewFilterValues>(NO_FILTERS)
@@ -203,15 +204,12 @@ export function AdminApproval() {
       }
       if (tab === 'new') setNewWatches((await api.get('/approval/new-watches')).data)
       if (tab === 'discarded') setDiscarded((await api.get('/approval/discarded')).data.items)
-      if (tab === 'prices') {
-        setPrices((await api.get('/approval/suspicious-prices', { params: { currency } })).data.items)
-      }
     } catch (error) {
       console.error('Failed to load approval tab:', error)
     } finally {
       setLoading(false)
     }
-  }, [tab, currency, aiFilters, aiPage, unsureFilters, unsurePage])
+  }, [tab, aiFilters, aiPage, unsureFilters, unsurePage])
 
   useEffect(() => {
     load()
@@ -621,25 +619,6 @@ export function AdminApproval() {
     </div>
   )
 
-  const renderPrices = () => (
-    <div>
-      <div className="flex items-center justify-between px-4 py-2 border-b">
-        <p className="text-xs text-gray-500">
-          Listings far from the median of the same WS code, condition and year (last month), worst first.
-        </p>
-        <div className="flex items-center gap-2">
-          <DownloadCsvButton tab="prices" params={{ currency }} />
-          <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="px-2 py-1 border rounded text-sm">
-            {CURRENCIES.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <ListingTable listings={prices} currency={currency} onChanged={refresh} showWsCode />
-    </div>
-  )
-
   return (
     <div>
       <div className="flex items-center justify-between gap-4 mb-6">
@@ -652,7 +631,7 @@ export function AdminApproval() {
         </button>
       </div>
 
-      <ApprovalFilePanel onChanged={refresh} />
+      <ApprovalFilePanel onChanged={refresh} reloadKey={fileKey} />
 
       <div className="flex flex-wrap gap-1 border-b mb-4">
         {TABS.map((t) => (
@@ -673,7 +652,15 @@ export function AdminApproval() {
       </div>
 
       <div className="bg-white rounded-lg shadow">
-        {loading ? (
+        {tab === 'prices' ? (
+          <SuspiciousPrices
+            onChanged={() => {
+              loadSummary()
+              setFileKey((k) => k + 1)
+            }}
+            onUndone={() => setFileKey((k) => k + 1)}
+          />
+        ) : loading ? (
           <div className="flex items-center justify-center h-32">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
@@ -684,7 +671,6 @@ export function AdminApproval() {
             {tab === 'aliases' && renderAliases()}
             {tab === 'new' && renderNew()}
             {tab === 'discarded' && renderDiscarded()}
-            {tab === 'prices' && renderPrices()}
           </>
         )}
       </div>
