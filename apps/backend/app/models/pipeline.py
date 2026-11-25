@@ -157,6 +157,23 @@ class AliasSuggestion(Document):
         ]
 
 
+class PipelineSeenMessage(Document):
+    """A dealer message that was already run through the generator. The same list arrives again
+    hourly and in 10-20 groups; a copy seen in the last days is not parsed again, its offers are
+    only refreshed (Nov 2026: parsing every copy left the queue hours behind)."""
+    key: str
+    sender: str = ""
+    last_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+    class Settings:
+        name = "pipeline_seen_messages"
+        indexes = [
+            IndexModel([("key", ASCENDING)], unique=True),
+            IndexModel([("expires_at", ASCENDING)], expireAfterSeconds=0),
+        ]
+
+
 class PipelineReportState(Document):
     """When the last daily report was sent (one row)."""
     key: str = "daily"
