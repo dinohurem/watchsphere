@@ -25,7 +25,7 @@ function WhatsAppIcon({ size = 18 }: { size?: number }) {
 interface OrderBookEntry {
   country: 'US' | 'EU' | 'UAE' | 'HK';
   date: string;
-  condition: string;
+  condition?: string | null;
   price: string;
   whatsapp_phone?: string;
   currency?: string;
@@ -259,7 +259,7 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
                   <Text style={styles.marketName}>{abbr}</Text>
                 </View>
                 <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.date}</Text>
-                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.condition}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{order.condition || '–'}</Text>
                 <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>
                   {order.currency && order.currency !== 'EUR' ? `${order.currency} ` : '€'}{order.price}
                 </Text>
