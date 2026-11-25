@@ -136,6 +136,41 @@ def filter_new_messages(chat_txt: str, after: Optional[datetime]) -> dict:
     }
 
 
+SEEN_DAYS = 10            # an offer lives 10 days (WTS) after its last post
+SEEN_MIN_CHARS = 15       # "ok", "pm", "?" are never worth remembering
+_SENDER_RE = re.compile(r'^\[[^\]]+\]\s*([^:]+):\s?(.*)$|^\d{1,2}[./]\d{1,2}[./]\d{2,4},\s*[\d:]+\s*-\s*([^:]+):\s?(.*)$')
+
+
+def split_messages(text: str) -> list[dict]:
+    """[{"ts", "sender", "body", "lines"}] of an export text (continuation lines stay with
+    their message)."""
+    out: list[dict] = []
+    for line in text.splitlines():
+        ts = parse_header_timestamp(line)
+        if ts is not None:
+            clean = _INVISIBLE.sub('', line).replace('\xa0', ' ').strip()
+            m = _SENDER_RE.match(clean)
+            sender = ((m.group(1) or m.group(3)) if m else "").strip()
+            body = ((m.group(2) or m.group(4)) if m else "") or ""
+            out.append({"ts": ts, "sender": sender, "body": [body], "lines": [line]})
+        elif out:
+            out[-1]["body"].append(line)
+            out[-1]["lines"].append(line)
+    for msg in out:
+        msg["body"] = "\n".join(msg["body"]).strip()
+    return out
+
+
+def message_key(sender: str, body: str) -> Optional[str]:
+    """Same dealer + same text (spacing, case and invisible characters ignored); None for
+    messages too short to be a listing."""
+    tk = text_key(body)
+    if len(tk) < SEEN_MIN_CHARS or not sender:
+        return None
+    who = re.sub(r"[^\d+]", "", sender) or sender.strip().lower()
+    return hashlib.sha1(f"{who}|{tk}".encode("utf-8")).hexdigest()
+
+
 def text_key(text: Optional[str]) -> str:
     """Grouping key for identical texts on the Unsure tab."""
     t = _INVISIBLE.sub('', (text or "")).lower()
@@ -1218,6 +1253,23 @@ async def _process_claimed(upload) -> dict:
         stats["new_order_ids"] = []
         return stats
 
+    # Reposts: a message this dealer already posted (any group, last SEEN_DAYS) is not parsed
+    # again; its offers are only refreshed, like the import does for a repost.
+    messages = split_messages(filtered["text"])
+    seen = await _seen_keys([k for k in (message_key(m["sender"], m["body"]) for m in messages) if k])
+    fresh = [m for m in messages if message_key(m["sender"], m["body"]) not in seen]
+    reposts = [m for m in messages if message_key(m["sender"], m["body"]) in seen]
+    stats["reposts_skipped"] = len(reposts)
+    stats["reposts_refreshed_offers"] = await _refresh_reposts(reposts)
+    if not fresh:
+        await _remember(reposts)
+        await _advance_watermark(state, filtered["last"])
+        stats["new_order_ids"] = []
+        return stats
+    filtered["text"] = "".join(l + "\n" for m in fresh for l in m["lines"])
+    filtered["attachments"] = [a for m in fresh for l in m["lines"] for a in
+                               ((x.group(1) or x.group(2) or "").strip() for x in _ATTACHED_RE.finditer(l)) if a]
+
     media_zip = await _get(UPLOAD_BUCKET, upload.media_gridfs_id) if upload.media_gridfs_id else None
     media = await asyncio.to_thread(_extract_media, media_zip, filtered["attachments"])
     ref = filtered["last"] or datetime.utcnow()
@@ -1236,17 +1288,94 @@ async def _process_claimed(upload) -> dict:
         stats["modes"][mode] = mode_stats
 
     # Watermark only moves after both modes went through, and never back.
-    if filtered["last"] and (state.last_message_at is None or filtered["last"] > state.last_message_at):
-        state.last_message_at = filtered["last"]
-    state.last_upload_at = datetime.utcnow()
-    state.uploads += 1
-    await state.save()
+    await _advance_watermark(state, filtered["last"])
+    await _remember(fresh + reposts)
 
     # One alert dispatch per import run, only for really new listings (spec §1.11).
     await dispatch_new_listings_safe(new_ids)
     stats["new_orders"] = len(new_ids)
     stats["new_order_ids"] = new_ids
     return stats
+
+
+async def _advance_watermark(state, last: Optional[datetime]) -> None:
+    if last and (state.last_message_at is None or last > state.last_message_at):
+        state.last_message_at = last
+    state.last_upload_at = datetime.utcnow()
+    state.uploads += 1
+    await state.save()
+
+
+async def _seen_keys(keys: list[str]) -> set[str]:
+    from app.models.pipeline import PipelineSeenMessage
+
+    if not keys:
+        return set()
+    now = datetime.utcnow()
+    docs = await PipelineSeenMessage.get_motor_collection().find(
+        {"key": {"$in": list(set(keys))}, "expires_at": {"$gt": now}}, {"key": 1}).to_list(None)
+    return {d["key"] for d in docs}
+
+
+async def _remember(messages: list[dict]) -> None:
+    """Mark messages as parsed (after the run went through, so a failed run is retried)."""
+    from app.models.pipeline import PipelineSeenMessage
+
+    now = datetime.utcnow()
+    ops = []
+    for m in messages:
+        k = message_key(m["sender"], m["body"])
+        if k:
+            ops.append(UpdateOne({"key": k}, {"$set": {"key": k, "sender": m["sender"], "last_at": m["ts"],
+                                                       "expires_at": now + timedelta(days=SEEN_DAYS)}}, upsert=True))
+    if ops:
+        await PipelineSeenMessage.get_motor_collection().bulk_write(ops, ordered=False)
+
+
+def _line_keys(text: Optional[str]) -> set[str]:
+    """Comparable forms of a line: as written and as the generator normalises it."""
+    from app.services.wtb_wts_service import _clean_message
+
+    raw = text_key(text)
+    if not raw:
+        return set()
+    return {raw, text_key(_clean_message(text or ""))} - {""}
+
+
+async def _refresh_reposts(reposts: list[dict]) -> int:
+    """A reposted message refreshes the dealer's offers that came from its lines: post time,
+    expiry, an expired offer comes back (same as the import does for a repost)."""
+    from app.models.order import Order, OrderStatus
+    from app.services import offer_lifecycle as lifecycle
+    from app.services.wtb_wts_service import extract_phone_number
+
+    by_phone: dict[str, list[dict]] = {}
+    for m in reposts:
+        phone = extract_phone_number(m["sender"]) or ""
+        if phone:
+            by_phone.setdefault(phone, []).append(m)
+    now = datetime.utcnow()
+    ops = []
+    for phone, msgs in by_phone.items():
+        wanted: dict[str, datetime] = {}
+        for m in msgs:
+            for part in [m["body"], *m["body"].split("\n")]:
+                for k in _line_keys(part):
+                    wanted[k] = max(wanted.get(k, m["ts"]), m["ts"])
+        cur = Order.get_motor_collection().find(
+            {"whatsapp_phone": phone, "status": {"$in": [OrderStatus.ACTIVE.value, OrderStatus.EXPIRED.value]}},
+            {"source_text": 1, "order_type": 1, "created_at": 1, "status": 1})
+        async for o in cur:
+            ts = max((wanted[k] for k in _line_keys(o.get("source_text")) if k in wanted), default=None)
+            if ts is None or (o.get("created_at") and ts <= o["created_at"]):
+                continue
+            ops.append(UpdateOne({"_id": o["_id"]}, {"$set": {
+                "created_at": ts, "updated_at": now, "last_seen_at": now,
+                "expires_at": lifecycle.expires_at(o.get("order_type") or "sell", ts),
+                "status": OrderStatus.ACTIVE.value}}))
+    if ops:
+        await Order.get_motor_collection().bulk_write(ops, ordered=False)
+    return len(ops)
 
 
 # --------------------------------------------------------------------------- #

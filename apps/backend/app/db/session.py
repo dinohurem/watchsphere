@@ -46,6 +46,7 @@ async def connect_to_mongo():
     from app.models.market_stats import WatchMarketStats
     from app.models.pipeline import (
         PipelineUpload, PipelineGroupState, PipelineItem, AliasSuggestion, PipelineReportState,
+        PipelineSeenMessage,
     )
     from app.models.change_batch import ChangeBatch, ChangeBatchEntry
     from app.models.remark_rule import RemarkRule, RemarkPlace
@@ -66,6 +67,7 @@ async def connect_to_mongo():
         WtbWtsRun, BridgeMessage, BridgeStatus,
         FxRate, FxRateHistory, WatchMarketStats,
         PipelineUpload, PipelineGroupState, PipelineItem, AliasSuggestion, PipelineReportState,
+        PipelineSeenMessage,
         ChangeBatch, ChangeBatchEntry,
         RemarkRule, RemarkPlace,
         SerialReport, DealerNumber, Bracelet, CheckImportPreview,
