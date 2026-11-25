@@ -462,8 +462,11 @@ async def import_order_rows(
         Order.status == OrderStatus.EXPIRED,
         Order.created_at >= now - timedelta(days=lifecycle.REVIVE_WINDOW_DAYS),
     ).to_list()
+    # Held offers (suspicious price, waiting on the Approval page): a repost refreshes them,
+    # it must not create a second copy. They are no peers of anything (not in existing_orders).
+    held_orders = await Order.find(Order.status == OrderStatus.HELD).to_list()
     existing_order_map: dict[tuple, Any] = {}
-    for eo in sorted(revivable, key=lambda o: o.created_at or now) + sorted(
+    for eo in sorted(revivable + held_orders, key=lambda o: o.created_at or now) + sorted(
         existing_orders, key=lambda o: o.created_at or now
     ):
         # Active after expired, newest last: when the old key put several offers
@@ -725,7 +728,8 @@ async def import_order_rows(
                 existing_order.updated_at = now
                 existing_order.last_seen_at = now
                 existing_order.expires_at = lifecycle.expires_at(order_type.value, posted)
-                existing_order.status = OrderStatus.ACTIVE
+                if existing_order.status != OrderStatus.HELD:  # a held offer waits for its decision
+                    existing_order.status = OrderStatus.ACTIVE
                 if not existing_order.first_seen_at:
                     existing_order.first_seen_at = existing_order.created_at
                 if remarks and not existing_order.remarks:
@@ -877,9 +881,17 @@ async def import_order_rows(
         eo.updated_at = now
         eo.last_seen_at = now
         eo.expires_at = lifecycle.expires_at(eo.order_type.value, posted)
-        eo.status = OrderStatus.ACTIVE
+        was_held = eo.status == OrderStatus.HELD
+        if not was_held:
+            eo.status = OrderStatus.ACTIVE
+        eo.price_approved = False  # an approved price was approved for the old amount
         if not eo.first_seen_at:
             eo.first_seen_at = posted
+        if was_held:
+            # New price on a held offer: check again, fine now -> visible, else new flag.
+            from app.services import price_flags
+
+            await price_flags.recheck_held(eo, fx_rates)
         await eo.save()
         refreshed_count += 1
         refreshed_ids.append(str(eo.id))
@@ -900,6 +912,13 @@ async def import_order_rows(
             len(quarantined_indexes),
             "; ".join(o.reason for o in outliers[:5]),
         )
+
+    # Hold back suspicious prices: a new offer far from the other offers of the same WS code, year
+    # and condition is created with status HELD and shows up on the Approval page (tab
+    # "Suspicious prices") instead of in the order book. Alerts skip it (they only send active offers).
+    from app.services import price_flags
+
+    held_new = await price_flags.check_new_orders(order_docs, fx_rates) if order_docs else []
 
     # Bulk insert
     BATCH_SIZE = 500
@@ -963,7 +982,8 @@ async def import_order_rows(
     if refreshed_ids:
         refreshed_set = set(refreshed_ids)
         touched_ws.update(
-            (eo.ws_code for eo in existing_orders + revivable if str(eo.id) in refreshed_set and eo.ws_code)
+            (eo.ws_code for eo in existing_orders + revivable + held_orders
+             if str(eo.id) in refreshed_set and eo.ws_code)
         )
     if touched_ws:
         from app.services.market_stats import recompute_for_safe
@@ -997,6 +1017,7 @@ async def import_order_rows(
         "price_quarantine_reasons": [o.reason for o in outliers[:20]],
         "no_phone_rows": len(no_phone_rows),
         "price_updated_orders": len(price_updated_ids),
+        "held_prices": len(held_new),
         "guard_held": len(guard_held_rows),
         "guard_rejected": len(guard_rejected_rows),
         "guard_fixed_currency": guard_fixed_count,

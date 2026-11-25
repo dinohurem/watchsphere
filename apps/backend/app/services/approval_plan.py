@@ -7,6 +7,7 @@ with or without BOM), with the admin's answer in ``decision`` / ``new_value``:
     price, currency, median, median_currency, offer_count, info, version, decision, new_value
 
 Columns the server reads: ``tab``, ``id``, ``decision``, ``new_value``, ``version``.
+``new_value`` of a price row may also be ``suggested`` (the currency / price the flag suggests).
 ``version`` is a fingerprint of the case when the file was built. If the case looks different
 now (other candidates, other price, already decided ...) the row is skipped: what the system
 did in between wins. A row with an empty ``decision`` is left alone.
@@ -158,7 +159,13 @@ def build_plan(
             if not r.new_value:
                 out.append(Item(r, "invalid", "new_value is empty"))
                 continue
-            if r.decision == "fix_currency":
+            suggested = r.new_value.lower() == "suggested"
+            if r.decision in ("fix_currency", "correct_price") and suggested:
+                need = "suggested_currency" if r.decision == "fix_currency" else "suggested_price"
+                if not st.info.get(need):
+                    out.append(Item(r, "invalid", "This offer has no suggestion"))
+                    continue
+            elif r.decision == "fix_currency":
                 if r.new_value.upper() not in currencies:
                     out.append(Item(r, "invalid", f"Unknown currency '{r.new_value}'"))
                     continue

@@ -20,6 +20,10 @@ class OrderStatus(str, Enum):
     COMPLETED = "completed"
     # Imported dealer offer nobody reposted within its TTL; a repost reactivates it.
     EXPIRED = "expired"
+    # Created with a suspicious price (far from the other offers of the same watch, year and
+    # condition). Invisible everywhere (app, order book, lowest price, medians, counts) until an
+    # admin decides on the Approval page; the reason is in ``Order.price_flag``.
+    HELD = "held"
 
 
 class Order(Document):
@@ -136,6 +140,10 @@ class Order(Document):
     excluded_from_median: bool = False
     # An admin looked at the price and said it is right: never flagged as suspicious again.
     price_approved: bool = False
+    # Why the order is held (status HELD): {"cause", "deviation_pct", "median_usd", "offer_count",
+    # "basis_year", "tolerance_pct", "suggested_currency", "suggested_price", "peers_currency",
+    # "flagged_at", "price", "currency"}. See app/services/price_flags.py.
+    price_flag: Optional[dict] = None
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)

@@ -300,6 +300,8 @@ async def test_prices_export_median_and_offer_count(ap_app):
     for v in (10000, 10100, 9900):
         await make_order("5167A", v, "USD")
     odd = await make_order("5167A", 100000, "USD")
+    from app.services import price_flags
+    assert (await price_flags.scan_active(dry_run=False))["held"] == 1
     rows = table((await c.get("/approval/file/export/prices")).text)
     assert [r["id"] for r in rows] == [str(odd.id)]
     r = rows[0]
@@ -333,6 +335,8 @@ async def test_file_preview_commit_undo_all_tabs(ap_app):
         await make_order("5167A", v)
     pr = {k: await make_order("5167A", 100000 + n) for n, k in enumerate(("approve", "reject", "currency", "price"))}
 
+    from app.services import price_flags
+    assert (await price_flags.scan_active(dry_run=False))["held"] == 4  # the four 10x offers
     exp = {t: table((await c.get(f"/approval/file/export/{t}")).text) for t in
            ("ai", "unsure", "aliases", "new_watches", "prices")}
     ver = {(t, r["id"]): r["version"] for t, rs in exp.items() for r in rs}
