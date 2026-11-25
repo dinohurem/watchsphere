@@ -26,7 +26,6 @@ from pydantic import BaseModel
 
 from app.api.v1.endpoints import approval as ap
 from app.api.v1.endpoints.approval_bulk import decide_ai_items, decide_unsure_items, group_clause
-from app.api.v1.endpoints.price_check import suspicious_listings
 from app.core.deps import get_current_admin_user
 from app.models.approval_file import ApprovalFileBatch, ApprovalFileItem, ApprovalFileSnapshot
 from app.models.order import Order, OrderStatus, OrderType
@@ -59,7 +58,7 @@ GUARD_FIELDS = {
     "pipeline_items": ("status", "kind", "resolution", "resolved_ws_code"),
     "alias_suggestions": ("status", "ws_code"),
     "watches": ("aliases",),
-    "orders": ("ws_code", "price", "currency", "price_approved"),
+    "orders": ("status", "ws_code", "price", "currency", "price_approved"),
 }
 COLLECTIONS = {"pipeline_items": PipelineItem, "alias_suggestions": AliasSuggestion,
                "watches": Watch, "orders": Order}
@@ -188,16 +187,32 @@ async def _export_new_watches(f: dict) -> AsyncIterator[list]:
 
 
 async def _export_prices(f: dict) -> AsyncIterator[list]:
+    from app.api.v1.endpoints.approval_prices import held_filter, held_sort
+
     currency = (f.get("currency") or "EUR").upper()
-    for l in await suspicious_listings(currency, f.get("period") or "1M", limit=100_000):
-        o = l.get("outlier") or {}
-        yield _row("prices", id=l["id"], original_text=l.get("source_text") or "",
-                   dealer=l.get("dealer_phone") or "", chat_group=l.get("source_group") or "",
-                   date=_date(l.get("created_at")), suggested_ws_code=l.get("ws_code") or "",
-                   price=l.get("price") if l.get("price") is not None else "",
-                   currency=l.get("currency") or "", median=o.get("median", ""), median_currency=currency,
-                   offer_count=o.get("offer_count", ""), info=f"{o.get('deviation_pct', '')}% vs median",
-                   version=plan.price_version(l))
+    rates = await fx.load_rates()
+    cursor = Order.get_motor_collection().find(
+        held_filter(f.get("cause"), f.get("brand"), f.get("ws_code"), f.get("direction"))
+    ).sort(held_sort(f.get("sort")))
+    async for d in cursor:
+        flag = d.get("price_flag") or {}
+        med = flag.get("median_usd")
+        hint = []
+        if flag.get("suggested_currency"):
+            hint.append(f"suggested currency {flag['suggested_currency']}")
+        if flag.get("suggested_price"):
+            hint.append(f"suggested price {flag['suggested_price']}")
+        if flag.get("peers_currency"):
+            hint.append(f"the other offers look like {flag['peers_currency']}")
+        yield _row("prices", id=str(d["_id"]), original_text=d.get("source_text") or "",
+                   dealer=d.get("whatsapp_phone") or "", chat_group=d.get("source_group") or "",
+                   date=_date(d.get("created_at")), suggested_ws_code=d.get("ws_code") or "",
+                   price=d.get("price") if d.get("price") is not None else "",
+                   currency=d.get("currency") or "",
+                   median=round(fx.convert(med, "USD", currency, rates), 2) if med else "",
+                   median_currency=currency, offer_count=flag.get("offer_count", ""),
+                   info="; ".join([f"{flag.get('cause')}", f"{flag.get('deviation_pct')}% vs median"] + hint),
+                   version=plan.price_version(d))
 
 
 EXPORTERS = {"ai": _export_ai, "unsure": _export_unsure, "aliases": _export_aliases,
@@ -210,14 +225,19 @@ async def export_cases(
     brand: Optional[str] = None,
     group: Optional[str] = None,
     reason: Optional[str] = None,
+    cause: Optional[str] = None,
+    ws_code: Optional[str] = None,
+    direction: Optional[str] = None,
+    sort: Optional[str] = None,
     currency: str = Query("EUR"),
-    period: str = Query("1M"),
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """One row per case, empty ``decision`` / ``new_value`` columns for the admin to fill in."""
+    """One row per case, empty ``decision`` / ``new_value`` columns for the admin to fill in.
+    AI / Unsure take brand, group, reason; Suspicious prices take brand, cause, ws_code, direction."""
     if tab not in EXPORTERS:
         raise HTTPException(status_code=404, detail="Unknown tab")
-    filters = {"brand": brand, "group": group, "reason": reason, "currency": currency, "period": period}
+    filters = {"brand": brand, "group": group, "reason": reason, "currency": currency, "cause": cause,
+               "ws_code": ws_code, "direction": direction, "sort": sort}
 
     async def body() -> AsyncIterator[str]:
         yield chr(0xFEFF) + _csv_chunk([plan.HEADER])
@@ -277,11 +297,14 @@ async def load_states(tab: str, ids: List[str]) -> Dict[tuple, plan.State]:
                                              {"item_ids": [d["_id"] for d in docs]})
     elif tab == "prices":
         async for d in Order.get_motor_collection().find(
-            {"_id": {"$in": _oids(ids)}, "status": OrderStatus.ACTIVE.value,
-             "order_type": OrderType.SELL.value, "price": {"$ne": None}},
-            {"ws_code": 1, "price": 1, "currency": 1},
+            {"_id": {"$in": _oids(ids)}, "status": OrderStatus.HELD.value,
+             "order_type": OrderType.SELL.value, "price_flag": {"$ne": None}},
+            {"ws_code": 1, "price": 1, "currency": 1, "price_flag": 1},
         ):
-            out[(tab, str(d["_id"]))] = plan.State(plan.price_version(d), {"order_ids": [d["_id"]]})
+            flag = d.get("price_flag") or {}
+            out[(tab, str(d["_id"]))] = plan.State(plan.price_version(d), {
+                "order_ids": [d["_id"]], "suggested_currency": flag.get("suggested_currency"),
+                "suggested_price": flag.get("suggested_price")})
     return out
 
 
@@ -444,6 +467,34 @@ async def _split_current(tab: str, group: List[ApprovalFileItem]) -> tuple[list,
     return fine, states
 
 
+async def apply_price_decisions(oids: list, decision: str, value: str, admin: User, snap: Snapper,
+                                touched: set) -> tuple[list, dict]:
+    """Suspicious-price decisions on orders (same code for a file row, a bulk action and a click).
+    Snapshots first, so a rejected order is archived and everything can be undone.
+    -> (ids done, {id: reason})."""
+    done: list = []
+    failed: dict = {}
+    await snap.before("orders", oids)
+    rates = await fx.load_rates()
+    for oid in oids:
+        order = await Order.get(oid)
+        if not order:
+            failed[str(oid)] = "Order disappeared"
+            continue
+        ws = order.ws_code
+        try:
+            if decision == "reject":
+                await order.delete()
+            else:
+                await price_actions.apply_price_action(order, decision, value, rates)
+        except HTTPException as exc:
+            failed[str(oid)] = str(exc.detail)
+            continue
+        touched.add(ws)
+        done.append(str(oid))
+    return done, failed
+
+
 async def _commit_group(tab: str, decision: str, value: str, group: List[ApprovalFileItem],
                         admin: User, snap: Snapper, touched: set, batch_id: str) -> tuple[int, int]:
     """Apply one (tab, decision, new_value) chunk. -> (done, failed)."""
@@ -503,23 +554,7 @@ async def _commit_group(tab: str, decision: str, value: str, group: List[Approva
                 done_ids.append(it.case_id)
     elif tab == "prices":
         oids = [states[(tab, it.case_id)].info["order_ids"][0] for it in fine]
-        await snap.before("orders", oids)
-        rates = await fx.load_rates()
-        for oid, it in zip(oids, fine):
-            order = await Order.get(oid)
-            if not order:
-                failed_ids[it.case_id] = "Order disappeared"
-                continue
-            try:
-                if decision == "reject":
-                    await order.delete()
-                else:
-                    await price_actions.apply_price_action(order, decision, value, rates)
-            except HTTPException as exc:
-                failed_ids[it.case_id] = str(exc.detail)
-                continue
-            touched.add(order.ws_code)
-            done_ids.append(it.case_id)
+        done_ids, failed_ids = await apply_price_decisions(oids, decision, value, admin, snap, touched)
     await snap.finish()
     touched.update(snap.touched_codes)
     snap.touched_codes = set()

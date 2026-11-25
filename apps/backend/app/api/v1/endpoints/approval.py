@@ -1,7 +1,7 @@
 """Approval page backend (generator spec §2).
 
 Tabs: AI decisions · Unsure · Alias suggestions · New watches · Discarded ·
-Suspicious prices. Everything here is admin-only.
+Suspicious prices (approval_prices.py). Everything here is admin-only.
 """
 import re
 from datetime import datetime, timedelta
@@ -13,9 +13,9 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from pymongo import UpdateOne
 
-from app.api.v1.endpoints.price_check import suspicious_listings, watch_summary
+from app.api.v1.endpoints.price_check import watch_summary
 from app.core.deps import get_current_admin_user
-from app.models.order import Order
+from app.models.order import Order, OrderStatus
 from app.models.pipeline import (
     AliasStatus, AliasSuggestion, PipelineItem, ReviewKind, ReviewStatus,
 )
@@ -223,6 +223,7 @@ async def summary(current_admin: User = Depends(get_current_admin_user)) -> Any:
         "aliases": await AliasSuggestion.find({"status": AliasStatus.PENDING.value}).count(),
         "new_watches": len([r for r in new_watch_refs if r]),
         "discarded": await PipelineItem.find({"kind": ReviewKind.DISCARDED.value}).count(),
+        "suspicious_prices": await Order.find({"status": OrderStatus.HELD.value, "order_type": "sell"}).count(),
     }
 
 
@@ -672,15 +673,3 @@ async def discarded(
     query = {"kind": ReviewKind.DISCARDED.value}
     items = await PipelineItem.find(query).sort("-created_at").skip(offset).limit(limit).to_list()
     return {"items": [_item_payload(i) for i in items], "total": await PipelineItem.find(query).count()}
-
-
-# --- Tab 6: Suspicious prices -----------------------------------------------
-
-@router.get("/suspicious-prices")
-async def suspicious_prices(
-    currency: str = Query("EUR"),
-    period: str = Query("1M"),
-    limit: int = Query(200, ge=1, le=1000),
-    current_admin: User = Depends(get_current_admin_user),
-) -> Any:
-    return {"items": await suspicious_listings(currency.upper(), period, limit)}
