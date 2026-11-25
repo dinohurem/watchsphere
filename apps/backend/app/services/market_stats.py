@@ -55,7 +55,7 @@ class Listing:
     price: Optional[float]
     currency: Optional[str]
     price_usd: Optional[float]
-    condition: Optional[str]  # "Unworn" | "Used"
+    condition: Optional[str]  # "Unworn" | "Used" | None (not stated)
     year: Optional[int]
     month: Optional[int]
     created_at: datetime
@@ -130,9 +130,17 @@ def median_eligible(listings: Iterable[Listing]) -> list[Listing]:
     return dedup_listings(eligible)
 
 
+def has_condition(l: Listing) -> bool:
+    """WTS offers can state no condition (None / empty): they count for "all" only."""
+    return (l.condition or "").strip().lower() in ("unworn", "used")
+
+
 def split_fresh_used(listings: Iterable[Listing]) -> tuple[list[Listing], list[Listing]]:
+    """Fresh / Used. Offers without a stated condition are in neither (never read as Unworn or Used)."""
     fresh, used = [], []
     for l in listings:
+        if not has_condition(l):
+            continue
         (fresh if is_fresh(l.condition, l.year, l.month, l.created_at) else used).append(l)
     return fresh, used
 
@@ -234,6 +242,8 @@ def period_stats(listings: list[Listing], period: str, now: datetime) -> dict:
     return {
         "enough_data": fresh_median is not None or used_median is not None,
         "wts_change_pct": _round(wts_change),
+        # Every offer with a price, including those without a stated condition
+        "all": {"median_usd": median_or_none(l.price_usd for l in current), "count": len(current)},
         "fresh": {
             "median_usd": fresh_median,
             "change_pct": _round(fresh_change),

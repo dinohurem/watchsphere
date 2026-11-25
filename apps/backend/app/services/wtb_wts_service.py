@@ -2850,7 +2850,7 @@ def _format_price(raw: str) -> Optional[str]:
 # watch's condition ("New Clasp" on a used watch). Removed before condition
 # keywords are matched.
 _NEW_PART_RE = re.compile(
-    r'(?<![a-z0-9])new\s+(?:clasps?|buckles?|papers?|certificates?|cards?|calibers?|calibres?|straps?|bracelets?|bezels?|dials?|hands|crystals?|movements?)(?![a-z0-9])'
+    r'(?<![a-z0-9])new\s+(?:clasps?|buckles?|papers?|certificates?|cards?|calibers?|calibres?|straps?|bracelets?|bezels?|dials?|hands|crystals?|movements?|styles?|models?)(?![a-z0-9])'
 )
 
 
@@ -2867,37 +2867,96 @@ def _find_condition(text: str, conditions: dict[str, str]) -> Optional[str]:
 _N_DATE = re.compile(r"(?<![A-Za-z0-9])N\s?(?:0?[1-9]|1[0-2])(?:\s?[/.\-]\s?(?:20)?\d{2})?(?![0-9])", re.I)
 
 
-def extract_condition(content: str, mode: str, month_year: Optional[str] = None, ref_month: int = 1, ref_year: int = 2026) -> Optional[str]:
-    """Extract and normalize condition from message text.
-    For WTS: defaults to 'Unworn' when no explicit condition keyword is found."""
-    conditions = WTS_CONDITIONS if mode == "WTS" else WTB_CONDITIONS
-    found = _find_condition(content, conditions)
-    if found:
-        return found
+# --- WTS condition: three states (Unworn / Used / none), first matching rule wins ------------------
+# 1. condition word in the line  2. N-month (card date)  3. section header above  4. the year.
+# "none" (None here, "" in the CSV) = the line does not tell us; such offers stay out of the
+# Unworn and Used prices and only count for "all".
+_WTS_USED_RE = re.compile(
+    r"(?<![a-z])(?:like\s*new|as\s*new|used|pre[\s-]?owned|polished|scratch\w*|worn)(?![a-z])"
+    r"|(?<![\d.,])9\d\s*%(?!\s*(?:off|deposit|discount))|二手"
+)
+_WTS_UNWORN_RE = re.compile(
+    r"(?<![a-z])(?:brand\s*new|bnib|b\.n\.i\.b|unworn|un-worn|nos|fresh|sealed|stickers?|stickered|unsized|new)(?![a-z])"
+    "|\U0001F195"
+)
+_NEW_NOT_CONDITION_RE = re.compile(
+    r"(?<![a-z])new\s+(?:style|model|bracelet|dial|buckle|card|clasp|strap)s?(?![a-z])"
+)
 
-    # WTS: no condition word means no condition, except an "N" card date ("N11", "N10/2026"),
-    # which dealers only write for new pieces ("5164R naked 2019" is not Unworn).
-    if mode == "WTS" and _N_DATE.search(content or ""):
+
+def _wts_word_condition(text: str) -> Optional[str]:
+    """Rule 1. Used words win over Unworn words ("like new", "99% new" are Used)."""
+    low = _NEW_PART_RE.sub(" ", (text or "").lower())
+    low = _NEW_NOT_CONDITION_RE.sub(" ", low).replace("un-worn", "unworn")
+    if _WTS_USED_RE.search(low):
+        return "Used"
+    if _WTS_UNWORN_RE.search(low):
         return "Unworn"
-
     return None
 
 
-def extract_condition_from_line(line: str, section_condition: Optional[str] = None, mode: str = "WTS") -> Optional[str]:
-    """Extract condition from a single watch line, falling back to section condition.
-    section_condition comes from the brand header (e.g., 'Patek Used' -> 'Used').
-    For WTS, defaults to 'Unworn' when no condition is found (stock list items are
-    typically unworn). For WTB, condition vocabulary is different ('Only Unworn' /
-    'Can be Used') and there is no per-line default — fall back to section_condition
-    or None."""
-    conditions = WTS_CONDITIONS if mode == "WTS" else WTB_CONDITIONS
-    found = _find_condition(line, conditions)
+def _wts_year_month(line: str) -> tuple[Optional[int], bool]:
+    """(year, has_month) of the watch in the line. A W-month (wood card) is not a month."""
+    masked = _PRICE_SPAN_RE.sub(lambda m: " " * (m.end() - m.start()), _normalize_hyphens(line or ""))
+    raw = extract_month_year_from_text(masked)
+    if raw:
+        low = raw.lower()
+        m = re.search(r"(\d{1,2})[/\-](\d{2}|\d{4})$", low)
+        if m:
+            yr = int(m.group(2))
+            yr = yr + 2000 if yr < 100 else yr
+            return yr, not low.startswith("w")
+        m = re.fullmatch(r"[a-z]+\s*(\d{2,4})", low)
+        if m and not low.startswith(("n", "w")):
+            yr = int(m.group(1))
+            return (yr + 2000 if yr < 100 else yr), True
+    y = extract_year_from_line(masked)
+    return (int(y) if y else None), False
+
+
+def _wts_year_condition(year: Optional[int], has_month: bool, ref_year: int) -> Optional[str]:
+    """Rule 4. Current year with a month -> Unworn, without -> none; the two years before
+    -> none; ref_year - 3 or older -> Used; no year -> none."""
+    if year is None:
+        return None
+    if year >= ref_year:
+        return "Unworn" if has_month else None
+    if year <= ref_year - 3:
+        return "Used"
+    return None
+
+
+def wts_condition(line: str, section_condition: Optional[str] = None, ref_year: int = 2026) -> Optional[str]:
+    """Condition of a WTS line: "Unworn", "Used" or None (not told)."""
+    found = _wts_word_condition(line)
     if found:
         return found
+    if _N_DATE.search(line or ""):
+        return "Unworn"
+    year, has_month = _wts_year_month(line)
+    if section_condition == "Unworn":
+        return "Unworn"
+    if section_condition == "Used":
+        return None if (year is not None and year >= ref_year) else "Used"
+    return _wts_year_condition(year, has_month, ref_year)
 
+
+def extract_condition(content: str, mode: str, month_year: Optional[str] = None, ref_month: int = 1, ref_year: int = 2026) -> Optional[str]:
+    """Extract and normalize condition from message text. WTS: see wts_condition (three states)."""
     if mode == "WTS":
-        return section_condition or ("Unworn" if _N_DATE.search(line or "") else None)
-    return section_condition
+        return wts_condition(content, None, ref_year)
+    return _find_condition(content, WTB_CONDITIONS)
+
+
+def extract_condition_from_line(line: str, section_condition: Optional[str] = None, mode: str = "WTS",
+                                ref_year: int = 2026) -> Optional[str]:
+    """Extract condition from a single watch line, falling back to section condition.
+    section_condition comes from the section header ('Patek Used' -> 'Used').
+    WTS: three states, see wts_condition. WTB: vocabulary is 'Only Unworn' / 'Can be Used';
+    no per-line default, fall back to section_condition or None."""
+    if mode == "WTS":
+        return wts_condition(line, section_condition, ref_year)
+    return _find_condition(line, WTB_CONDITIONS) or section_condition
 
 
 def extract_location(content: str, sender_country: Optional[str], mode: str) -> Optional[str]:
@@ -2969,10 +3028,15 @@ def _detect_section_condition(line: str, mode: str = "WTS") -> Optional[str]:
     """Detect condition from a brand section header line.
     WTS vocabulary: 'Unworn' / 'Used'. WTB vocabulary: 'Only Unworn' / 'Can be Used'.
     E.g., 'Patek Used ✨✨' -> 'Used' (WTS) or 'Can be Used' (WTB)."""
+    raw_lower = (line or "").lower()
     cleaned = _clean_text(line).lower().strip()
     is_wtb = mode == "WTB"
     used_label = "Can be Used" if is_wtb else "Used"
     unworn_label = "Only Unworn" if is_wtb else "Unworn"
+    if "\u4e8c\u624b" in raw_lower or re.search(r"(?<![\d.,])9\d\s*%", raw_lower):
+        return used_label
+    if "\U0001F195" in raw_lower:
+        return unworn_label
 
     def has(*words: str) -> bool:
         return any(re.search(r'(?<![a-z0-9])' + re.escape(w) + r'(?![a-z0-9])', cleaned) for w in words)
@@ -2981,9 +3045,9 @@ def _detect_section_condition(line: str, mode: str = "WTS") -> Optional[str]:
         return used_label
     if re.match(r'^like\s*$', cleaned):
         return used_label
-    if has('unworn', 'brand new', 'bnib', 'nos', 'stickered', 'sealed', 'new'):
+    if has('unworn', 'brand new', 'bnib', 'nos', 'stickered', 'sticker', 'stickers', 'sealed', 'fresh', 'new'):
         return unworn_label
-    if has('used', 'pre-owned', 'preowned'):
+    if has('used', 'pre-owned', 'preowned', 'polished'):
         return used_label
     return None
 
@@ -3347,9 +3411,9 @@ def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, lin
     row["Standort"] = (extract_location(location_text or scope, ctx["sender_country"], mode)
                        if not line_level else (ctx["sender_country"] or "")) or ""
     if line_level:
-        row["Zustand"] = extract_condition_from_line(scope, section_condition, mode) or ""
+        row["Zustand"] = extract_condition_from_line(scope, section_condition, mode, ctx["ref_year"]) or ""
     else:
-        row["Zustand"] = extract_condition(scope, mode) or ""
+        row["Zustand"] = extract_condition(scope, mode, ref_year=ctx["ref_year"]) or ""
 
     remarks = normalize_remarks(scope, mode)
     loc = extract_location_remarks(location_text or scope, mode)
@@ -3611,6 +3675,9 @@ def parse_stock_list(
             cond = _detect_section_condition(stripped, mode)
             if cond:
                 section_condition = cond
+            elif re.search(r"[A-Za-z0-9\u4e00-\u9fff]", _clean_text(stripped)):
+                # Another header (not just decoration) ends the one above it
+                section_condition = None
             continue
 
         ref = _extract_ref_from_line(stripped)

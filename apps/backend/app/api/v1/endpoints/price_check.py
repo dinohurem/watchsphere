@@ -125,6 +125,8 @@ async def price_check(
         "currency": currency,
         "fresh": side(fresh),
         "used": side(used),
+        # No stated condition: in neither the Fresh nor the Used median
+        "no_condition": side([l for l in pool if not ms.has_condition(l)]),
         "not_counted": others,
     }
 
