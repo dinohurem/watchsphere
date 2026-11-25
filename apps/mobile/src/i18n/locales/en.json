@@ -205,6 +205,7 @@
   },
   "orders": {
     "soldOrder": "Sold order",
+    "expired": "Expired",
     "orders": "Orders",
     "buyOrders": "Buy Orders",
     "sellOrders": "Sell Orders",

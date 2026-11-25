@@ -48,11 +48,13 @@ async def _fallback_counts(ws_codes: list[str]) -> dict[str, dict]:
 
 
 async def _live_counts(ws_codes: list[str]) -> Optional[dict[str, dict]]:
-    """Active WTS/WTB order counts per ws_code, straight from the orders (None if the query fails)."""
+    """All-time WTS/WTB order counts per ws_code (active and expired: an expired offer
+    stays in the history), straight from the orders (None if the query fails)."""
     if not ws_codes:
         return {}
     pipeline = [
-        {"$match": {"ws_code": {"$in": ws_codes}, "status": OrderStatus.ACTIVE.value}},
+        {"$match": {"ws_code": {"$in": ws_codes},
+                    "status": {"$in": [OrderStatus.ACTIVE.value, OrderStatus.EXPIRED.value]}}},
         {"$group": {"_id": {"ws": "$ws_code", "t": "$order_type"}, "n": {"$sum": 1}}},
     ]
     try:

@@ -498,6 +498,8 @@ interface OrderBookItem {
   remarks?: string;
   created_at?: string;
   usd_price?: number | null;
+  // No longer counted for the lowest price / median; listed while the period includes it.
+  expired?: boolean;
 }
 
 export default function WatchDetailsScreen() {
@@ -866,6 +868,16 @@ export default function WatchDetailsScreen() {
     }
   };
 
+  // The table period decides which expired offers the order book returns.
+  const periodLoaded = useRef(false);
+  useEffect(() => {
+    if (!periodLoaded.current) {
+      periodLoaded.current = true;
+      return;
+    }
+    loadOrderBook();
+  }, [tablePeriod]);
+
   // Initial load. The price history only feeds the v2 market chart, so it is not fetched (365
   // days of points) when that section is hidden.
   useEffect(() => {
@@ -1230,7 +1242,8 @@ export default function WatchDetailsScreen() {
       // Encode the reference to handle special characters in URLs (e.g., 5711/1A-010)
       const encodedReference = encodeURIComponent(watchReference || '');
       const response = await api.get(`/orders/book/${encodedReference}`, {
-        params: { limit: 5000 }
+        // range: also the expired offers posted inside the table period (marked).
+        params: { limit: 5000, range: tablePeriod }
       });
       if (!alive.current) return;
       if (response.data) {
@@ -1271,6 +1284,7 @@ export default function WatchDetailsScreen() {
           remarks: order.remarks,
           created_at: order.created_at,
           usd_price: order.usd_price ?? null,
+          expired: !!order.expired,
         }));
 
         // Transform sell orders
@@ -1291,6 +1305,7 @@ export default function WatchDetailsScreen() {
           remarks: order.remarks,
           created_at: order.created_at,
           usd_price: order.usd_price ?? null,
+          expired: !!order.expired,
         }));
 
         setBuyOrders(formattedBuyOrders);
@@ -1915,7 +1930,7 @@ export default function WatchDetailsScreen() {
                     }
                   }}
                 >
-                <View style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}>
+                <View style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt, order.expired && { opacity: 0.55 }]}>
                   {/* N2 / M4 highlight: light blue row with a 4 pt blue bar on the left */}
                   {highlightActive && highlightIds.includes(order.id) ? (
                     <Animated.View
@@ -1939,6 +1954,11 @@ export default function WatchDetailsScreen() {
                     {!!order.firm_order && (
                       <View style={{ backgroundColor: 'rgba(212,175,55,0.15)', paddingHorizontal: wp(6), paddingVertical: hp(1), borderRadius: sp(6), marginTop: hp(2) }}>
                         <Text style={[styles.tableCellText, { fontSize: fp(10), color: '#8A6D00' }]}>{t('orders.soldOrder')}</Text>
+                      </View>
+                    )}
+                    {!!order.expired && (
+                      <View style={{ backgroundColor: 'rgba(33,33,33,0.08)', paddingHorizontal: wp(6), paddingVertical: hp(1), borderRadius: sp(6), marginTop: hp(2) }}>
+                        <Text style={[styles.tableCellText, { fontSize: fp(10), color: '#757575' }]}>{t('orders.expired')}</Text>
                       </View>
                     )}
                   </View>

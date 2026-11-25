@@ -205,6 +205,7 @@
   },
   "orders": {
     "soldOrder": "Fester Auftrag",
+    "expired": "Abgelaufen",
     "orders": "Bestellungen",
     "buyOrders": "Kaufaufträge",
     "sellOrders": "Verkaufsaufträge",
