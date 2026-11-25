@@ -415,6 +415,14 @@ async def _watch_info(ws_codes: list[str]) -> dict[str, dict]:
     return info
 
 
+def trend_pct(periods: dict) -> Optional[float]:
+    for p in ("1M", "1W"):
+        value = (periods.get(p) or {}).get("wts_change_pct")
+        if value is not None:
+            return value
+    return None
+
+
 def compute_stats(ws_code: str, listings: list[Listing], watch: Optional[dict],
                   rates: dict[str, float], now: datetime) -> dict:
     """Everything stored on WatchMarketStats for one ws_code (pure)."""
@@ -442,7 +450,10 @@ def compute_stats(ws_code: str, listings: list[Listing], watch: Optional[dict],
         "brand": (watch or {}).get("brand"),
         "wts_count": sum(1 for l in active if l.order_type == "sell"),
         "wtb_count": sum(1 for l in active if l.order_type == "buy"),
-        "change_1m_pct": periods["1M"]["wts_change_pct"],
+        # Card chip and Rising/Falling: the 1M change, else the 1W one. The 1M change
+        # needs listings in the month before last; until a watch has two months of
+        # history it is always empty, and Rising/Falling showed nothing.
+        "change_1m_pct": trend_pct(periods),
         "retail_pct": retail["avg_vs_retail_pct"],
         "retail_status": retail["status"],
         "fresh_median_usd": fresh_median_usd,

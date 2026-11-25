@@ -295,7 +295,14 @@ export default function MarketScreen() {
               />
             }
             ListEmptyComponent={
-              cards.loading ? null : (
+              cards.loading ? null : cards.error ? (
+                // A failed request is not an empty result: say so and offer a retry.
+                <TouchableOpacity onPress={() => cards.refresh()} accessibilityRole="button">
+                  <Text style={[styles.empty, { fontFamily: fonts.regular }]}>
+                    Could not load watches. Tap to try again.
+                  </Text>
+                </TouchableOpacity>
+              ) : (
                 <Text style={[styles.empty, { fontFamily: fonts.regular }]}>No watches found</Text>
               )
             }
