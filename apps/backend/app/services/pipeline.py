@@ -4,9 +4,9 @@ Flow per upload (one group's ``_chat.txt`` + ``<group>_Medien.zip``):
 
 1. ``store_upload`` writes both files to GridFS *before* the endpoint answers, so
    the Mac mini only deletes its copy once the server holds it durably.
-2. ``process_upload`` keeps only messages newer than the group's watermark
-   (every export contains the whole history), runs the generator for WTS and WTB,
-   and routes the rows:
+2. ``process_upload`` keeps only messages newer than the group's watermark (the
+   Mac mini sends hourly exports of the newest messages; a full export works the
+   same way), runs the generator for WTS and WTB, and routes the rows:
    - matched / matched_via_image → imported (``match_method`` exact / image)
    - needs_review → Claude review: sure → imported (``match_method="ai"``) and
      listed on the "AI decisions" tab; unsure → "Unsure" tab
@@ -46,11 +46,15 @@ UPLOAD_BUCKET = "pipeline_uploads"
 IMAGE_BUCKET = "pipeline_images"
 MAX_ATTEMPTS = 3
 
-# One upload is processed at a time, across all groups. Each run holds the chat,
-# the media and the generator state in memory and calls the AI models; running a
-# whole Mac mini batch at once (~60 groups) made the server too slow to answer new
-# uploads, the Mac mini re-sent them, and the instance ran out of memory.
-_processing_lock = asyncio.Lock()
+# Uploads are processed a few at a time (``PIPELINE_WORKERS``), never two of the
+# same group at once: a group's watermark and its reposts must be handled in order.
+# Each run holds the chat, the media and the generator state in memory and calls
+# the AI models; running a whole Mac mini batch at once (~60 groups) made the
+# server too slow to answer new uploads, the Mac mini re-sent them, and the
+# instance ran out of memory.
+_slots: dict = {}  # event loop → Semaphore(PIPELINE_WORKERS)
+_group_locks: dict = {}  # (event loop, group) → Lock
+_active_groups: set[str] = set()
 _drain_task: Optional[asyncio.Task] = None
 # A restarted instance waits this long before taking over interrupted uploads, so
 # an old instance still finishing during a deploy is not processed twice.
@@ -193,18 +197,28 @@ async def get_image(image_id: str) -> tuple[bytes, str]:
     return data, ctype
 
 
-async def store_upload(group_name: str, chat_bytes: bytes, media_bytes: Optional[bytes]):
-    """Durably store one export. Returns the PipelineUpload (existing one when the
-    identical chat file for this group was already received and processed)."""
+async def store_upload(group_name: str, chat_bytes: bytes, media_bytes: Optional[bytes],
+                       backfill: bool = False):
+    """Durably store one export. Returns (PipelineUpload, duplicate): the existing
+    upload when the identical chat file for this group is queued or was processed.
+
+    ``backfill``: the export holds messages the group's watermark already passed
+    (re-sent after it was lost); all of them are processed. An identical file of
+    an upload that was superseded (dropped unprocessed, until Nov 2026 the server
+    assumed every export held the whole history) is a backfill on its own."""
     from app.models.pipeline import PipelineUpload, UploadStatus
 
     sha = hashlib.sha256(chat_bytes).hexdigest()
-    existing = await PipelineUpload.find_one(
-        {"group_name": group_name, "chat_sha256": sha,
-         "status": {"$in": [UploadStatus.DONE.value, UploadStatus.RECEIVED.value, UploadStatus.PROCESSING.value]}}
-    )
+    same = {"group_name": group_name, "chat_sha256": sha}
+    existing = await PipelineUpload.find_one({
+        **same,
+        "status": {"$in": [UploadStatus.DONE.value, UploadStatus.RECEIVED.value, UploadStatus.PROCESSING.value]},
+        "stats.superseded_by": {"$exists": False},
+    })
     if existing:
         return existing, True
+    if not backfill and await PipelineUpload.find_one({**same, "stats.superseded_by": {"$exists": True}}):
+        backfill = True
 
     if media_bytes:
         # The export's ZIP holds the media of the group's whole history. Keep only the
@@ -214,10 +228,11 @@ async def store_upload(group_name: str, chat_bytes: bytes, media_bytes: Optional
         from app.models.pipeline import PipelineGroupState
 
         state = await PipelineGroupState.find_one({"group_name": group_name})
+        watermark = None if backfill or not state else state.last_message_at
         # Parsing the chat and rebuilding the ZIP is CPU work on tens of MB. Off the
         # event loop, so the server keeps answering other uploads meanwhile.
         wanted, slim = await asyncio.to_thread(
-            _slim_for_watermark, chat_bytes, media_bytes, state.last_message_at if state else None)
+            _slim_for_watermark, chat_bytes, media_bytes, watermark)
         logger.info("pipeline: %s media zip %d → %d bytes (%d attachment(s) kept)",
                     group_name, len(media_bytes), len(slim or b""), len(wanted))
         media_bytes = slim
@@ -233,56 +248,10 @@ async def store_upload(group_name: str, chat_bytes: bytes, media_bytes: Optional
         chat_sha256=sha,
         chat_bytes=len(chat_bytes),
         media_bytes=len(media_bytes or b""),
+        backfill=backfill,
     )
     await upload.insert()
-    try:
-        await supersede_queued(group_name)
-    except Exception as exc:  # the new upload is stored; this is housekeeping only
-        logger.warning("pipeline: superseding older uploads of %s failed: %s", group_name, exc)
     return upload, False
-
-
-async def supersede_queued(group_name: Optional[str] = None, delete_only: bool = False,
-                           statuses: tuple = ("received",)) -> int:
-    """Every export holds the group's whole history, so a newer queued export makes
-    the older queued ones of the same group redundant: processing the newest one
-    imports everything past the watermark. Delete their files and mark them done
-    (``stats.superseded_by``). While the Mac mini kept re-sending during a backlog,
-    the stale copies (up to 10 per group, ~3.5 GB) pushed Atlas over its quota.
-
-    ``delete_only`` only deletes the files (Atlas allows deletes over quota); the
-    status update follows once writes work again, and ``process_upload`` skips a
-    superseded upload without reading its files either way."""
-    from app.models.pipeline import PipelineUpload
-
-    coll = PipelineUpload.get_motor_collection()
-    query: dict[str, Any] = {"status": {"$in": list(statuses)}}
-    if group_name:
-        query["group_name"] = group_name
-    by_group: dict[str, list[dict]] = {}
-    async for doc in coll.find(query, {"group_name": 1, "received_at": 1,
-                                       "chat_gridfs_id": 1, "media_gridfs_id": 1}):
-        by_group.setdefault(doc["group_name"], []).append(doc)
-    count = 0
-    for docs in by_group.values():
-        if len(docs) < 2:
-            continue
-        docs.sort(key=lambda d: d["received_at"])
-        newest, older = docs[-1], docs[:-1]
-        for doc in older:
-            await _delete(UPLOAD_BUCKET, doc.get("chat_gridfs_id"))
-            await _delete(UPLOAD_BUCKET, doc.get("media_gridfs_id"))
-        if not delete_only:
-            await coll.update_many(
-                {"_id": {"$in": [d["_id"] for d in older]}, "status": {"$in": list(statuses)}},
-                {"$set": {"status": "done", "stats": {"superseded_by": str(newest["_id"])},
-                          "error": None, "processed_at": datetime.utcnow()}},
-            )
-        count += len(older)
-    if count:
-        logger.info("pipeline: %d older queued upload(s) superseded%s", count,
-                    " (files deleted)" if delete_only else "")
-    return count
 
 
 def _slim_for_watermark(chat_bytes: bytes, media_bytes: bytes, watermark: Optional[datetime]):
@@ -693,99 +662,145 @@ async def _run_generator(chat_txt: str, media: dict, group_name: str, mode: str,
     }
 
 
+def _slot() -> asyncio.Semaphore:
+    from app.core.config import settings
+
+    loop = asyncio.get_running_loop()
+    if loop not in _slots:
+        _slots.clear()
+        _group_locks.clear()
+        _slots[loop] = asyncio.Semaphore(max(1, settings.PIPELINE_WORKERS))
+    return _slots[loop]
+
+
+def _group_lock(group_name: str) -> asyncio.Lock:
+    _slot()  # resets the locks when the event loop changed
+    key = (asyncio.get_running_loop(), group_name)
+    if key not in _group_locks:
+        _group_locks[key] = asyncio.Lock()
+    return _group_locks[key]
+
+
 async def process_upload(upload_id: str) -> dict:
     """Process one stored upload. Safe to call more than once (status-guarded).
 
-    Waits for the global processing lock *before* claiming, so queued uploads stay
-    ``received`` (not ``processing``) until their turn."""
+    Waits for a free slot and for the group's other upload *before* claiming, so
+    queued uploads stay ``received`` (not ``processing``) until their turn."""
+    from app.models.pipeline import PipelineUpload
+
+    doc = await PipelineUpload.get_motor_collection().find_one({"_id": ObjectId(upload_id)}, {"group_name": 1})
+    if not doc:
+        return {"skipped": True}
+    async with _group_lock(doc["group_name"]), _slot():
+        return await _process_one(upload_id)
+
+
+async def _process_one(upload_id: str) -> dict:
     from app.models.pipeline import PipelineUpload, UploadStatus
 
-    async with _processing_lock:
-        claimed = await PipelineUpload.get_motor_collection().find_one_and_update(
-            {"_id": ObjectId(upload_id), "status": {"$in": [UploadStatus.RECEIVED.value, UploadStatus.FAILED.value]},
-             "attempts": {"$lt": MAX_ATTEMPTS}},
-            {"$set": {"status": UploadStatus.PROCESSING.value}, "$inc": {"attempts": 1}},
-        )
-        if not claimed:
-            return {"skipped": True}
-        upload = await PipelineUpload.get(ObjectId(upload_id))
-        newer = await PipelineUpload.find_one({
-            "group_name": upload.group_name, "_id": {"$ne": upload.id},
-            "received_at": {"$gt": upload.received_at},
-            "status": {"$in": [UploadStatus.RECEIVED.value, UploadStatus.PROCESSING.value,
-                               UploadStatus.DONE.value]},
-        })
-        if newer:
-            # A newer export of the group covers everything this one holds.
-            await _delete(UPLOAD_BUCKET, upload.chat_gridfs_id)
-            await _delete(UPLOAD_BUCKET, upload.media_gridfs_id)
-            upload.status = UploadStatus.DONE
-            upload.stats = {"superseded_by": str(newer.id)}
-            upload.error = None
-            upload.processed_at = datetime.utcnow()
-            await upload.save()
-            return {"superseded": True}
-        try:
-            reason = await pause_reason()
-            if reason:
-                raise ProcessingPaused(reason)
-            stats = await _process_claimed(upload)
-            upload.status = UploadStatus.DONE
-            upload.stats = {k: v for k, v in stats.items() if k != "new_order_ids"}
-            upload.error = None
-            upload.processed_at = datetime.utcnow()
-            await upload.save()
-            # Processed → the raw export is no longer needed.
-            await _delete(UPLOAD_BUCKET, upload.chat_gridfs_id)
-            await _delete(UPLOAD_BUCKET, upload.media_gridfs_id)
-            return stats
-        except ProcessingPaused as exc:
-            upload.status = UploadStatus.RECEIVED
-            upload.attempts = max(0, upload.attempts - 1)
-            upload.error = f"Waiting: {exc}"[:500]
-            await upload.save()
-            return {"paused": str(exc)}
-        except Exception as exc:
-            logger.exception("pipeline: upload %s (%s) failed: %s", upload_id, upload.group_name, exc)
-            upload.status = UploadStatus.FAILED
-            upload.error = str(exc)[:500]
-            await upload.save()
-            return {"error": upload.error}
+    claimed = await PipelineUpload.get_motor_collection().find_one_and_update(
+        {"_id": ObjectId(upload_id), "status": {"$in": [UploadStatus.RECEIVED.value, UploadStatus.FAILED.value]},
+         "attempts": {"$lt": MAX_ATTEMPTS}},
+        {"$set": {"status": UploadStatus.PROCESSING.value}, "$inc": {"attempts": 1}},
+    )
+    if not claimed:
+        return {"skipped": True}
+    upload = await PipelineUpload.get(ObjectId(upload_id))
+    try:
+        reason = await pause_reason()
+        if reason:
+            raise ProcessingPaused(reason)
+        stats = await _process_claimed(upload)
+        upload.status = UploadStatus.DONE
+        upload.stats = {k: v for k, v in stats.items() if k != "new_order_ids"}
+        upload.error = None
+        upload.processed_at = datetime.utcnow()
+        await upload.save()
+        # Processed → the raw export is no longer needed.
+        await _delete(UPLOAD_BUCKET, upload.chat_gridfs_id)
+        await _delete(UPLOAD_BUCKET, upload.media_gridfs_id)
+        return stats
+    except ProcessingPaused as exc:
+        upload.status = UploadStatus.RECEIVED
+        upload.attempts = max(0, upload.attempts - 1)
+        upload.error = f"Waiting: {exc}"[:500]
+        await upload.save()
+        return {"paused": str(exc)}
+    except Exception as exc:
+        logger.exception("pipeline: upload %s (%s) failed: %s", upload_id, upload.group_name, exc)
+        upload.status = UploadStatus.FAILED
+        upload.error = str(exc)[:500]
+        await upload.save()
+        return {"error": upload.error}
 
 
 def kick_processing() -> None:
     """Start the background worker unless it is already running. It works through
-    every ``received`` upload, oldest first, one at a time."""
+    every ``received`` upload: live exports oldest first, then backfills, up to
+    ``PIPELINE_WORKERS`` groups at a time."""
     global _drain_task
     if _drain_task is None or _drain_task.done():
         _drain_task = asyncio.create_task(_drain_received())
 
 
-async def _drain_received() -> None:
+async def _next_upload(seen: set[str]):
+    """The next waiting upload whose group no other worker is processing."""
     from app.models.pipeline import PipelineUpload, UploadStatus
 
-    seen: set[str] = set()
-    while True:
-        nxt = await PipelineUpload.find(
-            {"status": UploadStatus.RECEIVED.value, "attempts": {"$lt": MAX_ATTEMPTS}}
-        ).sort("+received_at").limit(1).to_list()
-        if not nxt:
-            return
-        upload_id = str(nxt[0].id)
-        if upload_id in seen:  # could not be claimed; never spin on it
-            logger.warning("pipeline: upload %s still received after processing; stopping worker", upload_id)
-            return
-        seen.add(upload_id)
-        try:
-            result = await process_upload(upload_id)
-        except Exception as exc:  # process_upload records failures itself; this is the DB going away
-            logger.exception("pipeline: worker stopped: %s", exc)
-            return
-        if isinstance(result, dict) and result.get("paused"):
-            logger.warning("pipeline: processing paused (%s); trying again in %d min",
-                           result["paused"], PAUSE_RETRY_SECONDS // 60)
-            _schedule_retry()
-            return
+    query: dict[str, Any] = {"status": UploadStatus.RECEIVED.value, "attempts": {"$lt": MAX_ATTEMPTS},
+                             "_id": {"$nin": [ObjectId(i) for i in seen]}}
+    if _active_groups:
+        query["group_name"] = {"$nin": list(_active_groups)}
+    # Missing/false sorts before true: live uploads before backfills.
+    nxt = await PipelineUpload.find(query).sort([("backfill", 1), ("received_at", 1)]).limit(1).to_list()
+    return nxt[0] if nxt else None
+
+
+async def _drain_received() -> None:
+    from app.core.config import settings
+
+    seen: set[str] = set()  # each upload is tried once per drain; never spin on one
+    state = {"paused": None}
+
+    async def worker() -> None:
+        while state["paused"] is None:
+            upload = await _next_upload(seen)
+            if upload is None:
+                return
+            upload_id = str(upload.id)
+            seen.add(upload_id)
+            _active_groups.add(upload.group_name)
+            try:
+                result = await process_upload(upload_id)
+            except Exception as exc:  # process_upload records failures itself; this is the DB going away
+                logger.exception("pipeline: worker stopped: %s", exc)
+                return
+            finally:
+                _active_groups.discard(upload.group_name)
+            if isinstance(result, dict) and result.get("paused"):
+                state["paused"] = result["paused"]
+
+    await asyncio.gather(*(worker() for _ in range(max(1, settings.PIPELINE_WORKERS))))
+    if state["paused"]:
+        logger.warning("pipeline: processing paused (%s); trying again in %d min",
+                       state["paused"], PAUSE_RETRY_SECONDS // 60)
+        _schedule_retry()
+    elif await _waiting_count(seen):
+        # Uploads that arrived while the last workers finished: go again.
+        kick_later()
+
+
+async def _waiting_count(seen: set[str]) -> int:
+    from app.models.pipeline import PipelineUpload, UploadStatus
+
+    return await PipelineUpload.get_motor_collection().count_documents({
+        "status": UploadStatus.RECEIVED.value, "attempts": {"$lt": MAX_ATTEMPTS},
+        "_id": {"$nin": [ObjectId(i) for i in seen]},
+    })
+
+
+def kick_later() -> None:
+    asyncio.get_running_loop().call_soon(kick_processing)
 
 
 def _schedule_retry(delay: float = None) -> None:
@@ -1064,7 +1079,6 @@ async def _recover(PipelineUpload, UploadStatus) -> dict:
     if gave_up.modified_count or requeued.modified_count:
         logger.warning("pipeline: startup recovery: %d upload(s) requeued, %d marked failed",
                        requeued.modified_count, gave_up.modified_count)
-    await supersede_queued()
     kick_processing()
     return {"requeued": requeued.modified_count, "failed": gave_up.modified_count}
 
@@ -1083,8 +1097,10 @@ async def _process_claimed(upload) -> dict:
         await state.insert()
 
     chat_txt = (await _get(UPLOAD_BUCKET, upload.chat_gridfs_id)).decode("utf-8", errors="replace")
-    filtered = await asyncio.to_thread(filter_new_messages, chat_txt, state.last_message_at)
-    upload.processed_from = state.last_message_at
+    # A backfill holds messages behind the watermark that were never processed.
+    after = None if upload.backfill else state.last_message_at
+    filtered = await asyncio.to_thread(filter_new_messages, chat_txt, after)
+    upload.processed_from = after
     upload.processed_to = filtered["last"]
     upload.new_messages = filtered["count"]
     stats: dict[str, Any] = {"new_messages": filtered["count"], "modes": {}}
@@ -1109,8 +1125,9 @@ async def _process_claimed(upload) -> dict:
         new_ids.extend(mode_stats.pop("new_order_ids", []))
         stats["modes"][mode] = mode_stats
 
-    # Watermark only moves after both modes went through.
-    state.last_message_at = filtered["last"] or state.last_message_at
+    # Watermark only moves after both modes went through, and never back.
+    if filtered["last"] and (state.last_message_at is None or filtered["last"] > state.last_message_at):
+        state.last_message_at = filtered["last"]
     state.last_upload_at = datetime.utcnow()
     state.uploads += 1
     await state.save()

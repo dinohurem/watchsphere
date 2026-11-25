@@ -89,8 +89,7 @@ class Settings(BaseSettings):
     # Comma-separated, e.g. "po@example.com, ops@example.com".
     PIPELINE_REPORT_EXTRA_RECIPIENTS: str = ""
     # Processing pauses while the database holds more than this (MiB of data plus
-    # indexes, which is what the Atlas space quota counts). Uploads are still accepted; a newer export of a group
-    # replaces the queued one, so the queue stays one export per group. The Flex
+    # indexes, which is what the Atlas space quota counts). Uploads are still accepted and wait in the queue. The Flex
     # tier blocks every write at 5120 MB. 0 disables the check.
     PIPELINE_PAUSE_DATA_MB: int = 4600
     # Email the admins when exports arrived but no order was created for this many
@@ -98,6 +97,9 @@ class Settings(BaseSettings):
     PIPELINE_STALL_ALERT_HOURS: float = 2
     # While it stays stalled, repeat the email at most this often.
     PIPELINE_STALL_ALERT_REPEAT_HOURS: float = 6
+    # Uploads processed at the same time (never two of the same group). Each run
+    # mostly waits on the AI models; the Mac mini sends ~65 hourly exports.
+    PIPELINE_WORKERS: int = 3
     # Claude API for the needs-review pass (generator spec §1.5). Empty → every
     # needs-review row goes to the approval page's "Unsure" tab.
     ANTHROPIC_API_KEY: str = ""
