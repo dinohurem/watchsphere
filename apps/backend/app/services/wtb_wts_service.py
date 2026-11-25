@@ -886,6 +886,9 @@ async def build_watch_index(jsonl_content: Optional[str] = None) -> dict:
             key = alias.lower()
             if key:
                 by_alias.setdefault(key, []).append(w)
+                # "126508 John Mayer" is also written nickname first: "John Mayer 126508"
+                if ref and key.startswith(ref + " ") and len(key) > len(ref) + 2:
+                    by_alias.setdefault(f"{key[len(ref) + 1:]} {ref}", []).append(w)
 
     if not brands_set:
         brands_set = {
@@ -2104,6 +2107,13 @@ def match_watch_by_ref(ref: str, watch_index: dict, brand_hint: Optional[str] = 
     if ref_lower in watch_index["by_reference"]:
         return _ret(_resolve_family(watch_index["by_reference"][ref_lower], tokens, brand_hint, diag), None)
 
+    # 4a. Reference written with a space before its suffix: "126710 grnr" → 126710GRNR (never fuzzy
+    # to 126710BLRO; test chats Nov 2026). The variants of that reference are resolved as usual.
+    if tokens:
+        joined = ref_lower + str(tokens[0]).lower()
+        if joined in watch_index["by_reference"]:
+            return _ret(_resolve_family(watch_index["by_reference"][joined], tokens[1:], brand_hint, diag), None)
+
     # 4b. Alias / ws_code literal in the reconstructed line ("228238a black").
     if tokens:
         reconstructed_lower = (ref + " " + " ".join(str(t) for t in tokens)).lower()
@@ -2854,6 +2864,9 @@ def _find_condition(text: str, conditions: dict[str, str]) -> Optional[str]:
     return None
 
 
+_N_DATE = re.compile(r"(?<![A-Za-z0-9])N\s?(?:0?[1-9]|1[0-2])(?:\s?[/.\-]\s?(?:20)?\d{2})?(?![0-9])", re.I)
+
+
 def extract_condition(content: str, mode: str, month_year: Optional[str] = None, ref_month: int = 1, ref_year: int = 2026) -> Optional[str]:
     """Extract and normalize condition from message text.
     For WTS: defaults to 'Unworn' when no explicit condition keyword is found."""
@@ -2862,8 +2875,9 @@ def extract_condition(content: str, mode: str, month_year: Optional[str] = None,
     if found:
         return found
 
-    # WTS posts default to Unworn when no explicit condition is stated
-    if mode == "WTS":
+    # WTS: no condition word means no condition, except an "N" card date ("N11", "N10/2026"),
+    # which dealers only write for new pieces ("5164R naked 2019" is not Unworn).
+    if mode == "WTS" and _N_DATE.search(content or ""):
         return "Unworn"
 
     return None
@@ -2882,7 +2896,7 @@ def extract_condition_from_line(line: str, section_condition: Optional[str] = No
         return found
 
     if mode == "WTS":
-        return section_condition or "Unworn"
+        return section_condition or ("Unworn" if _N_DATE.search(line or "") else None)
     return section_condition
 
 
@@ -3309,8 +3323,14 @@ def _apply_wtb_fields(row: dict, wtb: dict) -> None:
     extra = []
     if wtb.get("full_set_required") and not _FULL_SET_RE.search(row.get("Bemerkungen") or ""):
         extra.append("Fullset")
-    if wtb.get("watch_only_ok") and not _WATCH_ONLY_RE.search(row.get("Bemerkungen") or ""):
-        extra.append("Watch only OK")
+    if wtb.get("watch_only_ok"):
+        # "naked ok" / "watch only ok": the request remark replaces the offer remark "only watch"
+        parts = [p.strip() for p in re.split(r"[;,]", row.get("Bemerkungen") or "") if p.strip()]
+        kept = [p for p in parts if p.lower() != "only watch"]
+        if len(kept) != len(parts):
+            row["Bemerkungen"] = ", ".join(kept)
+        if not _WATCH_ONLY_RE.search(row.get("Bemerkungen") or ""):
+            extra.append("Watch only OK")
     if extra:
         row["Bemerkungen"] = "; ".join([p for p in (row.get("Bemerkungen"), *extra) if p])
 
@@ -3561,9 +3581,25 @@ def parse_stock_list(
         lines.append(raw_lines[i])
         i += 1
 
+    # Closing line(s) of the list ("all full set, usdt accepted"): no watch, no price, at the
+    # end - their remarks and condition apply to every watch line above (test chats Nov 2026).
+    footer: list[str] = []
+    for tail in reversed([l.strip() for l in lines if l.strip()]):
+        if (_extract_ref_from_line(tail) or _line_has_price(tail) or detect_brand_header(tail) is not None
+                or len(footer) >= 2):
+            break
+        footer.insert(0, tail)
+    footer_text = "\n".join(footer)
+    footer_remarks = normalize_remarks(footer_text, mode) if footer_text else ""
+    footer_condition = _detect_section_condition(footer_text, mode) if footer_text else None
+    if footer_remarks:
+        msg_location_remarks = "; ".join(x for x in (msg_location_remarks, footer_remarks) if x)
+    if footer_condition and section_condition is None:
+        section_condition = footer_condition
+
     for line in lines:
         stripped = line.strip()
-        if not stripped:
+        if not stripped or stripped in footer:
             continue
 
         brand = detect_brand_header(stripped)

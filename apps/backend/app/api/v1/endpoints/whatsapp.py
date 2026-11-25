@@ -671,7 +671,9 @@ async def import_order_rows(
 
         if create_order:
             order_type = OrderType.SELL if offer_type == OfferType.WTS else OrderType.BUY
-            order_condition = OrderCondition.UNWORN if condition == "Unworn" else OrderCondition.USED
+            # No condition stated: none, not "Used" (test chats Nov 2026)
+            order_condition = (OrderCondition.UNWORN if condition == "Unworn"
+                               else OrderCondition.USED if condition == "Used" else None)
             order_reference = watch_reference or ws_code
 
             # WTB orders must display only WTB-vocabulary conditions ("Only Unworn" / "Can be Used"),

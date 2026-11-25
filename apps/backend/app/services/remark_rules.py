@@ -112,7 +112,7 @@ DEFAULT_REMARK_RULES: list[tuple[str, str, str, list[str]]] = [
     ("Shipped", CAT_PRICE, "BOTH", ["shipped", "shipped in eu", "incl. shipping", "incl. shipment",
                                     "shipping included", "customs & shipping included"]),
     ("Your Label", CAT_PRICE, "BOTH", ["+ label", "+label", "plus label", "+ lbl", "+ lab", "+ lable", "your label",
-                                       "ur label", "+ 🏷", "+🏷", "+ ship", "+ shipping", "+ ✈", "+✈"]),
+                                       "ur label", "+ 🏷", "+🏷", "+ ✈", "+✈"]),
     # "export" alone is deliberately not a trigger.
     ("only export", CAT_PRICE, "BOTH", ["only export", "export only", "need export", "(export)"]),
     ("Wire", CAT_PRICE, "BOTH", ["wire", "wire transfer"]),
