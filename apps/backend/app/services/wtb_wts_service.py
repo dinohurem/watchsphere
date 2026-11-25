@@ -18,6 +18,7 @@ from app.services.vision_matching import (
 )
 from app.services import remark_rules
 from app.services.ws_quality.classify import WTB_WORDS, is_advert, split_sections
+from app.services.ws_quality.discount import find_discount, lone_discount
 from app.services.ws_quality.evidence import names_watch, watch_forms
 from app.services.ws_quality.normalize import clean as _ws_clean
 from app.services.ws_quality.prices import _dollar_currency, message_currency, parse_price
@@ -158,24 +159,6 @@ def _default_currency_for_country(sender_country: Optional[str]) -> str:
         return "CHF"
     return "USD"
 
-COUNTRY_NAMES = {
-    "US": "United States", "UK": "United Kingdom", "DE": "Germany", "IT": "Italy",
-    "FR": "France", "CH": "Switzerland", "AE": "United Arab Emirates", "HK": "Hong Kong",
-    "SG": "Singapore", "JP": "Japan", "AU": "Australia", "CA": "Canada",
-    "NL": "Netherlands", "ES": "Spain", "AT": "Austria", "BE": "Belgium",
-    "PT": "Portugal", "SE": "Sweden", "DK": "Denmark", "NO": "Norway",
-    "PL": "Poland", "CZ": "Czech Republic", "TW": "Taiwan", "KR": "South Korea",
-    "TH": "Thailand", "MY": "Malaysia", "PH": "Philippines", "IN": "India",
-    "BR": "Brazil", "MX": "Mexico", "SA": "Saudi Arabia", "QA": "Qatar",
-    "KW": "Kuwait", "BH": "Bahrain", "OM": "Oman", "CN": "China",
-    "MO": "Macau", "RU": "Russia", "TR": "Turkey", "EG": "Egypt",
-    "ZA": "South Africa", "NZ": "New Zealand", "ID": "Indonesia",
-    "VN": "Vietnam", "IE": "Ireland", "FI": "Finland", "HR": "Croatia",
-    "RS": "Serbia", "UA": "Ukraine", "RO": "Romania", "HU": "Hungary",
-    "GR": "Greece", "IL": "Israel", "JO": "Jordan", "LB": "Lebanon",
-    "NG": "Nigeria", "KE": "Kenya", "GE": "Georgia", "LU": "Luxembourg",
-    "MT": "Malta", "IS": "Iceland",
-}
 
 WTS_LOCATION_PATTERNS = {
     "HK": [r"\bin\s+hk\b", r"\bhk\s+deal\b", r"\bwatch\s+in\s+hk\b", r"\bhong\s+kong\b", r"\blocated?\s+(?:in\s+)?hk\b"],
@@ -758,10 +741,16 @@ def detect_brand_from_content(content: str) -> Optional[str]:
 
 
 
+# Omega reference written without dots: "31030425001002" -> "310.30.42.50.01.002" (discount test, Nov 2026)
+_OMEGA_UNDOTTED_RE = re.compile(r"(?<![\d.+])([1-5]\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{3})(?![\d.])")
+
+
 def _clean_message(content: str) -> str:
     """Line-wise ws_quality.normalize.clean: invisible characters, hyphen look-alikes, full-width forms,
-    apostrophe/space thousands separators (1'480'000), '11.300,-' and '74,500/-' endings."""
-    return "\n".join(_ws_clean(line) for line in content.split("\n"))
+    apostrophe/space thousands separators (1'480'000), '11.300,-' and '74,500/-' endings; Omega
+    references written without dots get their dots back."""
+    text = "\n".join(_ws_clean(line) for line in content.split("\n"))
+    return _OMEGA_UNDOTTED_RE.sub(lambda m: ".".join(m.groups()), text)
 
 
 def message_sections(content: str) -> list[tuple[str, str]]:
@@ -2526,12 +2515,6 @@ _MARKED_RETAIL_RE = re.compile(
     + r'(?:[ \t]*=[ \t]*' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)' + _CUR_OPT + r')?[ \t]*\)?',
     re.IGNORECASE,
 )
-_UNMARKED_DISCOUNT_RE = re.compile(
-    r'(hk\$|us\$|\$|€|£|hkd|usdt|usd|eur|gbp|chf)?[ \t]*(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)[ \t]*'
-    r'(hkd|usdt|usd|eur|gbp|chf|€|£)?[ \t]*[-−][ \t]*(\d{1,2}(?:[.,]\d)?)[ \t]*%'
-    r'(?:[ \t]*=[ \t]*' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?))?',
-    re.IGNORECASE,
-)
 
 
 def _pct(raw: str) -> float:
@@ -2591,24 +2574,24 @@ def price_info(text: str, sender_country: Optional[str] = None, line_level: bool
             return info
         return info
 
-    d = _UNMARKED_DISCOUNT_RE.search(t)
+    d = find_discount(t)
     if d:
-        base = _format_price(d.group(2))
-        if base:
-            cur_tag = (d.group(1) or d.group(3) or "").lower()
-            if cur_tag in ("$", ):
-                cur = _dollar_currency(sender_country, _MESSAGE_CURRENCY.get())
-            elif cur_tag:
-                cur = _canonicalize_currency({"€": "EUR", "£": "GBP", "hk$": "HKD", "us$": "USD"}.get(cur_tag, cur_tag))
-            else:
-                cur = _bare_currency(sender_country)
-            pct = _pct(d.group(4))
-            if d.group(5):
-                info.update(price=_format_price(d.group(5)), currency=cur, discount_pct=pct, base_price=base)
-                return info
-            info.update(price=_apply_discount(_num(base), pct), currency=cur, discount_pct=pct,
-                        base_price=base, needs_list_check=True)
+        tag = d.currency_tag
+        if tag == "$":
+            cur = _dollar_currency(sender_country, _MESSAGE_CURRENCY.get())
+        elif tag:
+            cur = _canonicalize_currency({"€": "EUR", "£": "GBP", "hk$": "HKD", "us$": "USD", "euro": "EUR",
+                                          "euros": "EUR"}.get(tag, tag))
+        else:
+            cur = _bare_currency(sender_country)
+        base = f"{d.base:,}"
+        if d.impossible:
+            info.update(price=None, currency=cur, discount_pct=d.pct, base_price=base,
+                        discount_error=f"Impossible discount -{d.pct:g}% on {d.base:,} {cur}")
             return info
+        info.update(price=f"{d.price:,}", currency=cur, discount_pct=d.pct, base_price=base,
+                    needs_list_check=True)
+        return info
 
     p, c = _base(t)
     info.update(price=p, currency=c)
@@ -2623,6 +2606,8 @@ def apply_list_price_rule(info: dict, watch: Optional[dict], rates: Optional[dic
     ≈ list price − discount → the number already is the dealer price → keep.
     Otherwise (or no list price) → review. Returns (price, currency, review_reason).
     """
+    if info.get("discount_error"):
+        return None, info.get("currency"), info["discount_error"]
     if not info.get("needs_list_check"):
         return info.get("price"), info.get("currency"), None
     base = _num(info.get("base_price"))
@@ -2648,9 +2633,8 @@ def apply_list_price_rule(info: dict, watch: Optional[dict], rates: Optional[dic
                 return info.get("price"), cur, None
             if abs(base_in_lp - lp * (1 - pct / 100)) <= lp * tolerance:
                 return f"{int(round(base)):,}", cur, None
-    reason = (f"Discount -{pct:g}% on {int(base):,} {cur or ''}: unclear whether "
-              f"{int(base):,} is the list price").strip()
-    return info.get("price"), cur, reason
+    # No list price that says otherwise: dealers post list price minus discount (discount test, Nov 2026).
+    return info.get("price"), cur, None
 
 
 def _extract_price_from_line_basic(line: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
@@ -2850,7 +2834,7 @@ def _format_price(raw: str) -> Optional[str]:
 # watch's condition ("New Clasp" on a used watch). Removed before condition
 # keywords are matched.
 _NEW_PART_RE = re.compile(
-    r'(?<![a-z0-9])new\s+(?:clasps?|buckles?|papers?|certificates?|cards?|calibers?|calibres?|straps?|bracelets?|bezels?|dials?|hands|crystals?|movements?)(?![a-z0-9])'
+    r'(?<![a-z0-9])new\s+(?:clasps?|buckles?|papers?|certificates?|cards?|calibers?|calibres?|straps?|bracelets?|bezels?|dials?|hands|crystals?|movements?|styles?|models?)(?![a-z0-9])'
 )
 
 
@@ -2867,37 +2851,96 @@ def _find_condition(text: str, conditions: dict[str, str]) -> Optional[str]:
 _N_DATE = re.compile(r"(?<![A-Za-z0-9])N\s?(?:0?[1-9]|1[0-2])(?:\s?[/.\-]\s?(?:20)?\d{2})?(?![0-9])", re.I)
 
 
-def extract_condition(content: str, mode: str, month_year: Optional[str] = None, ref_month: int = 1, ref_year: int = 2026) -> Optional[str]:
-    """Extract and normalize condition from message text.
-    For WTS: defaults to 'Unworn' when no explicit condition keyword is found."""
-    conditions = WTS_CONDITIONS if mode == "WTS" else WTB_CONDITIONS
-    found = _find_condition(content, conditions)
-    if found:
-        return found
+# --- WTS condition: three states (Unworn / Used / none), first matching rule wins ------------------
+# 1. condition word in the line  2. N-month (card date)  3. section header above  4. the year.
+# "none" (None here, "" in the CSV) = the line does not tell us; such offers stay out of the
+# Unworn and Used prices and only count for "all".
+_WTS_USED_RE = re.compile(
+    r"(?<![a-z])(?:like\s*new|as\s*new|used|pre[\s-]?owned|polished|scratch\w*|worn)(?![a-z])"
+    r"|(?<![\d.,])9\d\s*%(?!\s*(?:off|deposit|discount))|二手"
+)
+_WTS_UNWORN_RE = re.compile(
+    r"(?<![a-z])(?:brand\s*new|bnib|b\.n\.i\.b|unworn|un-worn|nos|fresh|sealed|stickers?|stickered|unsized|new)(?![a-z])"
+    "|\U0001F195"
+)
+_NEW_NOT_CONDITION_RE = re.compile(
+    r"(?<![a-z])new\s+(?:style|model|bracelet|dial|buckle|card|clasp|strap)s?(?![a-z])"
+)
 
-    # WTS: no condition word means no condition, except an "N" card date ("N11", "N10/2026"),
-    # which dealers only write for new pieces ("5164R naked 2019" is not Unworn).
-    if mode == "WTS" and _N_DATE.search(content or ""):
+
+def _wts_word_condition(text: str) -> Optional[str]:
+    """Rule 1. Used words win over Unworn words ("like new", "99% new" are Used)."""
+    low = _NEW_PART_RE.sub(" ", (text or "").lower())
+    low = _NEW_NOT_CONDITION_RE.sub(" ", low).replace("un-worn", "unworn")
+    if _WTS_USED_RE.search(low):
+        return "Used"
+    if _WTS_UNWORN_RE.search(low):
         return "Unworn"
-
     return None
 
 
-def extract_condition_from_line(line: str, section_condition: Optional[str] = None, mode: str = "WTS") -> Optional[str]:
-    """Extract condition from a single watch line, falling back to section condition.
-    section_condition comes from the brand header (e.g., 'Patek Used' -> 'Used').
-    For WTS, defaults to 'Unworn' when no condition is found (stock list items are
-    typically unworn). For WTB, condition vocabulary is different ('Only Unworn' /
-    'Can be Used') and there is no per-line default — fall back to section_condition
-    or None."""
-    conditions = WTS_CONDITIONS if mode == "WTS" else WTB_CONDITIONS
-    found = _find_condition(line, conditions)
+def _wts_year_month(line: str) -> tuple[Optional[int], bool]:
+    """(year, has_month) of the watch in the line. A W-month (wood card) is not a month."""
+    masked = _PRICE_SPAN_RE.sub(lambda m: " " * (m.end() - m.start()), _normalize_hyphens(line or ""))
+    raw = extract_month_year_from_text(masked)
+    if raw:
+        low = raw.lower()
+        m = re.search(r"(\d{1,2})[/\-](\d{2}|\d{4})$", low)
+        if m:
+            yr = int(m.group(2))
+            yr = yr + 2000 if yr < 100 else yr
+            return yr, not low.startswith("w")
+        m = re.fullmatch(r"[a-z]+\s*(\d{2,4})", low)
+        if m and not low.startswith(("n", "w")):
+            yr = int(m.group(1))
+            return (yr + 2000 if yr < 100 else yr), True
+    y = extract_year_from_line(masked)
+    return (int(y) if y else None), False
+
+
+def _wts_year_condition(year: Optional[int], has_month: bool, ref_year: int) -> Optional[str]:
+    """Rule 4. Current year with a month -> Unworn, without -> none; the two years before
+    -> none; ref_year - 3 or older -> Used; no year -> none."""
+    if year is None:
+        return None
+    if year >= ref_year:
+        return "Unworn" if has_month else None
+    if year <= ref_year - 3:
+        return "Used"
+    return None
+
+
+def wts_condition(line: str, section_condition: Optional[str] = None, ref_year: int = 2026) -> Optional[str]:
+    """Condition of a WTS line: "Unworn", "Used" or None (not told)."""
+    found = _wts_word_condition(line)
     if found:
         return found
+    if _N_DATE.search(line or ""):
+        return "Unworn"
+    year, has_month = _wts_year_month(line)
+    if section_condition == "Unworn":
+        return "Unworn"
+    if section_condition == "Used":
+        return None if (year is not None and year >= ref_year) else "Used"
+    return _wts_year_condition(year, has_month, ref_year)
 
+
+def extract_condition(content: str, mode: str, month_year: Optional[str] = None, ref_month: int = 1, ref_year: int = 2026) -> Optional[str]:
+    """Extract and normalize condition from message text. WTS: see wts_condition (three states)."""
     if mode == "WTS":
-        return section_condition or ("Unworn" if _N_DATE.search(line or "") else None)
-    return section_condition
+        return wts_condition(content, None, ref_year)
+    return _find_condition(content, WTB_CONDITIONS)
+
+
+def extract_condition_from_line(line: str, section_condition: Optional[str] = None, mode: str = "WTS",
+                                ref_year: int = 2026) -> Optional[str]:
+    """Extract condition from a single watch line, falling back to section condition.
+    section_condition comes from the section header ('Patek Used' -> 'Used').
+    WTS: three states, see wts_condition. WTB: vocabulary is 'Only Unworn' / 'Can be Used';
+    no per-line default, fall back to section_condition or None."""
+    if mode == "WTS":
+        return wts_condition(line, section_condition, ref_year)
+    return _find_condition(line, WTB_CONDITIONS) or section_condition
 
 
 def extract_location(content: str, sender_country: Optional[str], mode: str) -> Optional[str]:
@@ -2969,10 +3012,15 @@ def _detect_section_condition(line: str, mode: str = "WTS") -> Optional[str]:
     """Detect condition from a brand section header line.
     WTS vocabulary: 'Unworn' / 'Used'. WTB vocabulary: 'Only Unworn' / 'Can be Used'.
     E.g., 'Patek Used ✨✨' -> 'Used' (WTS) or 'Can be Used' (WTB)."""
+    raw_lower = (line or "").lower()
     cleaned = _clean_text(line).lower().strip()
     is_wtb = mode == "WTB"
     used_label = "Can be Used" if is_wtb else "Used"
     unworn_label = "Only Unworn" if is_wtb else "Unworn"
+    if "\u4e8c\u624b" in raw_lower or re.search(r"(?<![\d.,])9\d\s*%", raw_lower):
+        return used_label
+    if "\U0001F195" in raw_lower:
+        return unworn_label
 
     def has(*words: str) -> bool:
         return any(re.search(r'(?<![a-z0-9])' + re.escape(w) + r'(?![a-z0-9])', cleaned) for w in words)
@@ -2981,9 +3029,9 @@ def _detect_section_condition(line: str, mode: str = "WTS") -> Optional[str]:
         return used_label
     if re.match(r'^like\s*$', cleaned):
         return used_label
-    if has('unworn', 'brand new', 'bnib', 'nos', 'stickered', 'sealed', 'new'):
+    if has('unworn', 'brand new', 'bnib', 'nos', 'stickered', 'sticker', 'stickers', 'sealed', 'fresh', 'new'):
         return unworn_label
-    if has('used', 'pre-owned', 'preowned'):
+    if has('used', 'pre-owned', 'preowned', 'polished'):
         return used_label
     return None
 
@@ -3167,6 +3215,52 @@ def _strip_ref_tokens(text: str, refs: list[str]) -> str:
         text = re.sub(re.escape(r), " ", text, flags=re.I)
     return text
 
+# A token on a priced line that looks like a reference the catalogue does not know ("Q357842J", "5277BR/12/9V6").
+_REFLIKE_RE = re.compile(
+    r"(?<![\w$])(?=[\w./\-]*\d[\w./\-]*\d[\w./\-]*\d)(?=[\w./\-]*[A-Za-z])[A-Za-z0-9][\w./\-]{4,}|(?<![\d.+])\d{8,}(?![\d.])")
+_NOT_REF_TOKEN_RE = re.compile(
+    r"^(?:(?:hk\$?|hkd|usdt?|usd|eur|aed|chf|sgd|rmb|cny)?[\d.,]+(?:k|m)?(?:hkd|usdt?|usd|eur|aed|rmb|cny|u)?"
+    r"|[nw]\d{1,2}(?:[/.\-]\d{2,4})?|\d{2,4}(?:y|yr|yrs)|\d{1,2}[/.\-]\d{2,4})$", re.I)
+
+
+def _has_reflike_token(line: str) -> bool:
+    return any(not _NOT_REF_TOKEN_RE.match(m.group(0).strip("./-"))
+               for m in _REFLIKE_RE.finditer(_normalize_hyphens(_clean_text(line))))
+
+
+def _line_priced(line: str) -> bool:
+    return _line_has_price(line) or bool(find_discount(line)) or bool(extract_price_from_line(line)[0])
+
+
+def own_listing_lines(text: str, watch_index: dict) -> str:
+    """Price and remarks belong to their own line only (discount test, Nov 2026). A message with ONE known
+    reference and other priced lines whose reference the catalogue does not know
+    ('5277BR/12/9V6 N11 175,700 -38%' / '35800-0001 N9 11,000'): the listing is the known reference's line,
+    the price lines it needs below it and the unpriced header lines directly above it - never the other lines."""
+    lines = [l for l in text.split("\n") if l.strip()]
+    if len(lines) < 2:
+        return text
+    priced = {i for i, l in enumerate(lines) if _line_priced(l)}
+    if len(priced) < 2:
+        return text
+    ref_idx = [i for i, l in enumerate(lines) if not detect_brand_header(l) and find_references(l, watch_index)]
+    if len(ref_idx) != 1:
+        return text
+    r = ref_idx[0]
+    end = r
+    if r not in priced:
+        below = sorted(i for i in priced if i > r)
+        if not below:
+            return text
+        end = below[0]
+    start = r
+    while start > 0 and (start - 1) not in priced:
+        start -= 1
+    others = [i for i in priced if not start <= i <= end]
+    if not any(_has_reflike_token(lines[i]) for i in others):
+        return text
+    return "\n".join(lines[start:end + 1])
+
 
 def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, list[str]]:
     """Decide how a message splits into listings (§3).
@@ -3189,7 +3283,8 @@ def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, l
         if refs:
             ref_lines[i] = refs
             for r in refs:
-                st = ref_stem(r)
+                # dotted references (Omega 310.30.42.50.01.002 / 310.60.42.50.01.001) share a stem but are different watches
+                st = r.lower() if r.count(".") >= 3 else ref_stem(r)
                 if st not in distinct:
                     distinct.append(st)
     if len(distinct) == 1:
@@ -3197,7 +3292,7 @@ def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, l
         if segs:
             return "blocks", segs
     if len(distinct) <= 1:
-        return "single", [content]
+        return "single", [own_listing_lines(content, watch_index)]
     if all(_line_has_price(lines[i]) for i in ref_lines):
         return "list", [content]
 
@@ -3425,9 +3520,9 @@ def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, lin
     row["Standort"] = (extract_location(location_text or scope, ctx["sender_country"], mode)
                        if not line_level else (ctx["sender_country"] or "")) or ""
     if line_level:
-        row["Zustand"] = extract_condition_from_line(scope, section_condition, mode) or ""
+        row["Zustand"] = extract_condition_from_line(scope, section_condition, mode, ctx["ref_year"]) or ""
     else:
-        row["Zustand"] = extract_condition(scope, mode) or ""
+        row["Zustand"] = extract_condition(scope, mode, ref_year=ctx["ref_year"]) or ""
 
     remarks = normalize_remarks(scope, mode)
     loc = extract_location_remarks(location_text or scope, mode)
@@ -3452,8 +3547,9 @@ def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, lin
     row["_currency_unknown"] = bool(unknown)
     if unknown:
         reasons.append(f"Unknown currency {unknown}")
-    if mode == "WTS" and not price and not unknown:
-        reasons.append("No price found for WTS post")
+    if mode == "WTS" and not price and not unknown and not rule_reason:
+        lone = lone_discount(scope)
+        reasons.append(f"Discount -{lone:g}% without a price" if lone else "No price found for WTS post")
     if price and watch:
         ok, why = validate_price(price, watch.get("brand"))
         if not ok:
@@ -3645,6 +3741,9 @@ def parse_stock_list(
                     if _extract_ref_from_line(nxt) or detect_brand_header(nxt):
                         break
                     price_nxt, _ = extract_price_from_line(nxt, sender_country)
+                    if price_nxt and _has_reflike_token(nxt):
+                        break           # another watch's line (reference not in the catalogue): keeps its own price
+
                     year_nxt = extract_year_from_line(nxt) or extract_month_year_from_text(nxt)
                     merged += " " + nxt
                     consumed = look
@@ -3689,6 +3788,9 @@ def parse_stock_list(
             cond = _detect_section_condition(stripped, mode)
             if cond:
                 section_condition = cond
+            elif re.search(r"[A-Za-z0-9\u4e00-\u9fff]", _clean_text(stripped)):
+                # Another header (not just decoration) ends the one above it
+                section_condition = None
             continue
 
         ref = _extract_ref_from_line(stripped)

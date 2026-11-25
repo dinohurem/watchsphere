@@ -434,3 +434,20 @@ async def test_cheap_second_line_of_the_same_year_is_held(pdb):
                  year=2024, condition="Used", source_text=text) for p in (536_000, 380_000)]
     held = await pf.check_new_orders(new)
     assert held == [new[1]] and new[1].status == OrderStatus.HELD and new[0].status != OrderStatus.HELD
+
+async def test_approved_held_offer_goes_to_the_alerts_rejected_does_not(pdb, monkeypatch):
+    """Kenan's alert test (25 Nov 2026): held offers that were approved later never reached an alert."""
+    import app.api.v1.endpoints.whatsapp as wa
+
+    sent = []
+
+    async def fake_dispatch(ids, orders=None):
+        sent.append(list(ids))
+        return len(ids)
+
+    monkeypatch.setattr(wa, "dispatch_new_listings_safe", fake_dispatch)
+    o = await build_queue(pdb)
+    await pdb.post("/approval/suspicious-prices/decide", json={"decision": "approve", "ids": [str(o["plain"].id)]})
+    assert sent == [[str(o["plain"].id)]]
+    await pdb.post("/approval/suspicious-prices/decide", json={"decision": "reject", "ids": [str(o["exp"].id)]})
+    assert sent == [[str(o["plain"].id)]]

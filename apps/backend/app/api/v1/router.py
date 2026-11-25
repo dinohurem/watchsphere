@@ -59,6 +59,8 @@ api_router.include_router(whatsapp_bridge.router, prefix="/whatsapp-bridge", tag
 api_router.include_router(catalog_admin.router, prefix="/catalog-admin", tags=["catalog-admin"])
 
 api_router.include_router(remarks_admin.router, prefix="/admin/remarks", tags=["remarks-admin"])
+from app.api.v1.endpoints import condition_recalc
+api_router.include_router(condition_recalc.router, prefix="/admin/wts-condition", tags=["condition-recalc"])
 
 api_router.include_router(fx.router, prefix="/fx", tags=["fx"])
 api_router.include_router(pipeline.router, prefix="/pipeline", tags=["pipeline"])

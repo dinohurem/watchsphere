@@ -43,8 +43,8 @@ router = APIRouter()
 # Countries offered by the report/check pickers (name, ISO 3166 alpha-2, dial code).
 COUNTRIES = [
     ("Hong Kong", "HK", "+852"), ("Switzerland", "CH", "+41"), ("Germany", "DE", "+49"),
-    ("United Arab Emirates", "AE", "+971"), ("United States", "US", "+1"),
-    ("United Kingdom", "GB", "+44"), ("China", "CN", "+86"), ("Italy", "IT", "+39"),
+    ("UAE", "AE", "+971"), ("United States", "US", "+1"),
+    ("UK", "GB", "+44"), ("China", "CN", "+86"), ("Italy", "IT", "+39"),
     ("Spain", "ES", "+34"), ("Austria", "AT", "+43"), ("France", "FR", "+33"),
     ("Japan", "JP", "+81"), ("Singapore", "SG", "+65"), ("Thailand", "TH", "+66"),
     ("Taiwan", "TW", "+886"), ("Malaysia", "MY", "+60"), ("Belgium", "BE", "+32"),

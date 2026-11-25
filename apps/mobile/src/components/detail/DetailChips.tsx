@@ -132,7 +132,23 @@ export function ChipMenu<T extends string>({
   );
 }
 
-/** Mini line of the price trend inside the trend chip. Grey dashed when there is no data. */
+/** Small line-chart glyph (axes + rising polyline) shown in the trend chip when there is no data. */
+function TrendChartIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M3 3v18h18" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M7 15l4-4 3 3 6-7"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Mini line of the price trend inside the trend chip. Line-chart icon when there is no data. */
 export function MiniTrendLine({
   points,
   change,
@@ -146,17 +162,8 @@ export function MiniTrendLine({
 }) {
   const trend = trendOf(change);
   if (trend === 'none' || !points) {
-    return (
-      <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-        <Path
-          d={`M1 ${height / 2} L${width - 1} ${height / 2}`}
-          stroke={C.greyLight}
-          strokeWidth={1.6}
-          strokeDasharray="3,3"
-          strokeLinecap="round"
-        />
-      </Svg>
-    );
+    // No data: a small line-chart icon instead of a dashed placeholder.
+    return <TrendChartIcon size={sp(16)} color={C.grey} />;
   }
   const color = trend === 'up' ? C.green : trend === 'down' ? C.red : C.greyLight;
   let values = points.filter((v) => Number.isFinite(v));

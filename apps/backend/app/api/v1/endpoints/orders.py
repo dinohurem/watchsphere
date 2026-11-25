@@ -1254,6 +1254,10 @@ class OrderDetailResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     whatsapp_phone: Optional[str] = None
+    # Used by clients to prefill the WhatsApp message ("Hi, is the {ws_code} {year} ...").
+    ws_code: Optional[str] = None
+    year: Optional[int] = None
+    year_raw: Optional[str] = None
     watch_details: Optional[WatchDetailsResponse] = None
     price_change: Optional[float] = None
 
@@ -1356,6 +1360,9 @@ async def get_order(
         has_papers=order.has_papers,
         notes=order.notes,
         whatsapp_phone=whatsapp_phone,
+        ws_code=order.ws_code,
+        year=order.year,
+        year_raw=getattr(order, 'year_raw', None),
         created_at=order.created_at,
         updated_at=order.updated_at,
         watch_details=watch_details,
@@ -1786,6 +1793,21 @@ async def admin_delete_orders_by_ws_code(
     await _refresh_stats(ws_code)
     count = result.deleted_count if result else 0
     return {"message": f"Deleted {count} orders for ws_code '{ws_code}'"}
+
+
+@router.post("/admin/maintenance/fix-country-names")
+async def admin_fix_country_names(
+    dry_run: bool = Query(True),
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Fill ``country_name`` with the full name where it is empty, a country code, or not the
+    canonical name of the order's country code (UAE and UK are the only short forms).
+
+    Run with ``dry_run=true`` first (counts per code and before -> after, nothing changes),
+    then ``dry_run=false``. Idempotent; codes that are not known countries are only reported."""
+    from app.services.country_backfill import fix_order_country_names
+
+    return await fix_order_country_names(dry_run=dry_run)
 
 
 @router.get("/admin/stats")

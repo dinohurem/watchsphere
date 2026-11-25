@@ -467,12 +467,17 @@ async def _split_current(tab: str, group: List[ApprovalFileItem]) -> tuple[list,
     return fine, states
 
 
+def _status(order) -> str:
+    return getattr(order.status, "value", order.status)
+
+
 async def apply_price_decisions(oids: list, decision: str, value: str, admin: User, snap: Snapper,
                                 touched: set) -> tuple[list, dict]:
     """Suspicious-price decisions on orders (same code for a file row, a bulk action and a click).
     Snapshots first, so a rejected order is archived and everything can be undone.
     -> (ids done, {id: reason})."""
     done: list = []
+    released: list = []
     failed: dict = {}
     await snap.before("orders", oids)
     rates = await fx.load_rates()
@@ -482,6 +487,7 @@ async def apply_price_decisions(oids: list, decision: str, value: str, admin: Us
             failed[str(oid)] = "Order disappeared"
             continue
         ws = order.ws_code
+        was_held = _status(order) == OrderStatus.HELD.value
         try:
             if decision == "reject":
                 await order.delete()
@@ -492,6 +498,13 @@ async def apply_price_decisions(oids: list, decision: str, value: str, admin: Us
             continue
         touched.add(ws)
         done.append(str(oid))
+        if was_held:
+            released.append(str(oid))
+    # A held offer that is approved / fixed goes live now: alerts (Activity entry + push) as for any
+    # new offer - before, these never reached an alert ("+1 more" where four offers matched).
+    if decision != "reject" and released:
+        from app.api.v1.endpoints.whatsapp import dispatch_new_listings_safe
+        await dispatch_new_listings_safe(released)
     return done, failed
 
 

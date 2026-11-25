@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import Svg, { Path } from 'react-native-svg';
 import { api } from '@/services/api';
 import { wp, hp, sp, fp } from '@/utils/responsive';
+import { buildWhatsAppOrderMessage, buildWhatsAppUrl } from '@watchsphere/shared/utils/whatsappMessage';
 
 // Country flag component using flag CDN
 function CountryFlag({ countryCode, size = 20 }: { countryCode: string; size?: number }) {
@@ -77,6 +78,9 @@ interface OrderBookEntry {
   user_id: string;
   user_name?: string;
   whatsapp_phone?: string;
+  ws_code?: string | null;
+  year?: number | null;
+  year_raw?: string | null;
 }
 
 interface OrderBookData {
@@ -112,7 +116,7 @@ const MOCK_ORDER_BOOK: OrderBookData = {
     { id: '6', date: '12.01.25', condition: 'Unworn', price: 104500, currency: 'EUR', country_code: 'US', country_name: 'United States', has_box: true, has_papers: true, user_id: '6', user_name: 'Mike S.', whatsapp_phone: '+1234567890' },
     { id: '7', date: '11.28.25', condition: 'Unworn', price: 103500, currency: 'EUR', country_code: 'IT', country_name: 'Italy', has_box: true, has_papers: true, user_id: '7', user_name: 'Luigi P.', whatsapp_phone: '+3901234567' },
     { id: '8', date: '11.25.25', condition: 'Used', price: 98200, currency: 'EUR', country_code: 'AE', country_name: 'UAE', has_box: true, has_papers: false, user_id: '8', user_name: 'Saeed A.' },
-    { id: '9', date: '11.22.25', condition: 'Unworn', price: 106000, currency: 'EUR', country_code: 'GB', country_name: 'United Kingdom', has_box: true, has_papers: true, user_id: '9', user_name: 'James W.', whatsapp_phone: '+4407123456' },
+    { id: '9', date: '11.22.25', condition: 'Unworn', price: 106000, currency: 'EUR', country_code: 'GB', country_name: 'UK', has_box: true, has_papers: true, user_id: '9', user_name: 'James W.', whatsapp_phone: '+4407123456' },
     { id: '10', date: '11.18.25', condition: 'Used', price: 99800, currency: 'EUR', country_code: 'CH', country_name: 'Switzerland', has_box: false, has_papers: true, user_id: '10', user_name: 'Felix B.' },
   ],
   lowest_ask: 104500,
@@ -247,13 +251,15 @@ export default function OrderBookScreen() {
 
   const handleWhatsAppChat = (order: OrderBookEntry) => {
     if (!order.whatsapp_phone) return;
-    const watchName = `${orderBook?.brand || ''} ${orderBook?.model || ''}`.trim();
-    const watchCode = orderBook?.reference || '';
-    const priceText = order.price != null
-      ? `\n${order.currency} ${order.price.toLocaleString('de-DE')} - thank you very much!`
-      : '';
-    const message = `Hi, is ${watchName} ${watchCode} available?${priceText}`;
-    const url = `https://wa.me/${order.whatsapp_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
+    const message = buildWhatsAppOrderMessage({
+      orderType: selectedTab === 'Buy' ? 'buy' : 'sell',
+      wsCode: order.ws_code,
+      reference: orderBook?.reference,
+      year: order.year ?? order.year_raw,
+      price: order.price,
+      currency: order.currency,
+    });
+    const url = buildWhatsAppUrl(order.whatsapp_phone, message);
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open WhatsApp. Make sure it is installed.');
     });

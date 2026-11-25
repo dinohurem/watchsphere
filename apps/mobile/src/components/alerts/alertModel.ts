@@ -106,8 +106,8 @@ export function conditionValueLabel(condition: AlertCondition): string {
 export const LOCATION_NAMES: Record<string, string> = {
   EU: 'EU',
   HK: 'Hong Kong',
-  AE: 'United Arab Emirates',
-  GB: 'United Kingdom',
+  AE: 'UAE',
+  GB: 'UK',
   US: 'United States',
   CH: 'Switzerland',
   CN: 'China',

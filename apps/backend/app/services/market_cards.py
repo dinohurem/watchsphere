@@ -33,7 +33,7 @@ def watch_image(watch: Watch) -> tuple[Optional[str], Optional[str]]:
 
 
 def empty_stats() -> dict:
-    return {"change_1m_pct": None, "wts_count": 0, "wtb_count": 0, "retail_pct": None}
+    return {"change_1m_pct": None, "change_1w_pct": None, "wts_count": 0, "wtb_count": 0, "retail_pct": None}
 
 
 async def _fallback_counts(ws_codes: list[str]) -> dict[str, dict]:
@@ -106,7 +106,10 @@ def build_card(watch: Watch, stats: Optional[dict]) -> dict:
         "collection": watch.collection,
         "image": image,
         "thumbnail": thumb,
-        "change_1m_pct": s.get("change_1m_pct"),
+        # Weekly change. change_1m_pct keeps its legacy name so existing app builds show the
+        # weekly value; change_1w_pct is the honest name for new clients.
+        "change_1m_pct": s.get("change_1w_pct"),
+        "change_1w_pct": s.get("change_1w_pct"),
         "wts_count": int(s.get("wts_count") or 0),
         "wtb_count": int(s.get("wtb_count") or 0),
         "retail_pct": s.get("retail_pct"),

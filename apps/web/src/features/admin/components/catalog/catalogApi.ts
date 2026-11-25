@@ -49,7 +49,7 @@ export const FALLBACK_LIST_PRICE_COUNTRIES: ListPriceCountry[] = [
   { code: 'DE', name: 'Germany', currency: 'EUR', tax_label: 'incl. 19% VAT', vat_pct: 19 },
   { code: 'AE', name: 'UAE', currency: 'AED', tax_label: 'incl. 5% VAT', vat_pct: 5 },
   { code: 'US', name: 'United States', currency: 'USD', tax_label: 'excl. sales tax', vat_pct: null },
-  { code: 'GB', name: 'United Kingdom', currency: 'GBP', tax_label: 'incl. 20% VAT', vat_pct: 20 },
+  { code: 'GB', name: 'UK', currency: 'GBP', tax_label: 'incl. 20% VAT', vat_pct: 20 },
   { code: 'CN', name: 'China', currency: 'CNY', tax_label: 'incl. 13% VAT', vat_pct: 13 },
   { code: 'CH', name: 'Switzerland', currency: 'CHF', tax_label: 'incl. 8.1% VAT', vat_pct: 8.1 },
   { code: 'IT', name: 'Italy', currency: 'EUR', tax_label: 'incl. 22% VAT', vat_pct: 22 },
