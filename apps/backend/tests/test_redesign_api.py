@@ -88,7 +88,7 @@ def test_recently_viewed(env):
     cards = c.get("/api/v1/profile/recently-viewed", headers=h).json()
     assert cards[0]["ws_code"] == "126518LN Pikachu" and cards[0]["image"] == "img.webp"
     assert set(cards[0]) == {"id", "ws_code", "brand", "model", "reference", "collection", "image",
-                             "thumbnail", "change_1m_pct", "wts_count", "wtb_count", "retail_pct"}
+                             "thumbnail", "change_1m_pct", "change_1w_pct", "wts_count", "wtb_count", "retail_pct"}
 
 
 def test_alert_crud_and_validation(env):

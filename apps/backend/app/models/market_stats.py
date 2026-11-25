@@ -20,9 +20,10 @@ class WatchMarketStats(Document):
     wts_count: int = 0
     wtb_count: int = 0
 
-    # WTS median change for the % chip on cards and Rising/Falling: 1M, else 1W
-    # (market_stats.trend_pct).
+    # Monthly WTS median change (1M, else 1W; market_stats.trend_pct).
     change_1m_pct: Optional[float] = None
+    # Weekly WTS median change: the % chip on cards and Rising/Falling.
+    change_1w_pct: Optional[float] = None
     # Average market-vs-retail % over countries with a list price.
     retail_pct: Optional[float] = None
     retail_status: str = "no_data"  # ok | discontinued | no_data
@@ -48,6 +49,7 @@ class WatchMarketStats(Document):
             "ws_code",
             "brand",
             "change_1m_pct",
+            "change_1w_pct",
             "retail_pct",
             "activity_change_pct",
             "wtb_1m",

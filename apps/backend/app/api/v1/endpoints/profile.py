@@ -42,6 +42,7 @@ class WatchlistItemResponse(BaseModel):
     collection: Optional[str] = None
     thumbnail: Optional[str] = None
     change_1m_pct: Optional[float] = None
+    change_1w_pct: Optional[float] = None
     retail_pct: Optional[float] = None
 
 
@@ -350,7 +351,8 @@ async def get_my_watchlist(
             "watch_id": str(watch.id) if watch else None,
             "collection": watch.collection if watch else None,
             "thumbnail": thumb,
-            "change_1m_pct": st.get("change_1m_pct"),
+            "change_1m_pct": st.get("change_1w_pct"),  # weekly; legacy key name
+            "change_1w_pct": st.get("change_1w_pct"),
             "retail_pct": st.get("retail_pct"),
         }
 

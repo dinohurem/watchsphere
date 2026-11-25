@@ -8,7 +8,7 @@ export interface MarketCardData {
   collection: string | null;
   image: string | null;
   thumbnail: string | null;
-  change_1m_pct: number | null;
+  change_1m_pct: number | null; // weekly change (legacy key name)
   wts_count: number;
   wtb_count: number;
   retail_pct: number | null;

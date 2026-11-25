@@ -432,11 +432,25 @@ async def _watch_info(ws_codes: list[str]) -> dict[str, dict]:
 
 
 def trend_pct(periods: dict) -> Optional[float]:
+    """Monthly WTS change (1M, else 1W while a watch has under two months of history)."""
     for p in ("1M", "1W"):
         value = (periods.get(p) or {}).get("wts_change_pct")
         if value is not None:
             return value
     return None
+
+
+def weekly_trend_pct(periods: dict) -> Optional[float]:
+    """Weekly WTS change: what the card chip and Rising/Falling show."""
+    return (periods.get("1W") or {}).get("wts_change_pct")
+
+
+def card_change_pct(stats) -> Optional[float]:
+    """Weekly change of a stats doc/dict (empty for docs not yet recomputed after the 1W field
+    was added; the recompute runs after every FX refresh)."""
+    if isinstance(stats, dict):
+        return stats.get("change_1w_pct")
+    return getattr(stats, "change_1w_pct", None)
 
 
 def compute_stats(ws_code: str, listings: list[Listing], watch: Optional[dict],
@@ -467,10 +481,11 @@ def compute_stats(ws_code: str, listings: list[Listing], watch: Optional[dict],
         # All-time counts on the cards: active and expired offers.
         "wts_count": sum(1 for l in listings if (l.active or l.expired) and l.order_type == "sell"),
         "wtb_count": sum(1 for l in listings if (l.active or l.expired) and l.order_type == "buy"),
-        # Card chip and Rising/Falling: the 1M change, else the 1W one. The 1M change
+        # change_1m_pct: monthly (1M, else 1W) change; kept for history. The 1M change
         # needs listings in the month before last; until a watch has two months of
         # history it is always empty, and Rising/Falling showed nothing.
         "change_1m_pct": trend_pct(periods),
+        "change_1w_pct": weekly_trend_pct(periods),
         "retail_pct": retail["avg_vs_retail_pct"],
         "retail_status": retail["status"],
         "fresh_median_usd": fresh_median_usd,
@@ -599,7 +614,10 @@ async def card_stats(ws_codes: list[str]) -> dict[str, dict]:
     for c in codes:
         d = found.get(c)
         out[c] = {
-            "change_1m_pct": d.change_1m_pct if d else None,
+            # Weekly change. The key keeps its legacy name so app builds that read
+            # change_1m_pct show the weekly value without an update.
+            "change_1m_pct": card_change_pct(d) if d else None,
+            "change_1w_pct": card_change_pct(d) if d else None,
             "wts_count": d.wts_count if d else 0,
             "wtb_count": d.wtb_count if d else 0,
             "retail_pct": d.retail_pct if d else None,
@@ -620,11 +638,11 @@ async def show_signal(signal: str, brand: Optional[str] = None, direction: Optio
         query["wtb_1m"] = {"$gt": 0}
         sort = [("wtb_1m", -1), ("wtb_count", -1)]
     elif signal == "rising":
-        query["change_1m_pct"] = {"$gt": 0}
-        sort = [("change_1m_pct", -1)]
+        query["change_1w_pct"] = {"$gt": 0}
+        sort = [("change_1w_pct", -1)]
     elif signal == "falling":
-        query["change_1m_pct"] = {"$lt": 0}
-        sort = [("change_1m_pct", 1)]
+        query["change_1w_pct"] = {"$lt": 0}
+        sort = [("change_1w_pct", 1)]
     elif signal == "above_retail":
         query["retail_pct"] = {"$gt": 0}
         sort = [("retail_pct", -1 if direction != "least" else 1)]
