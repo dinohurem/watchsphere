@@ -375,6 +375,14 @@ async def startup():
         _asyncio.create_task(recover_interrupted_uploads())
     except Exception as e:
         logger.warning(f"Startup: pipeline recovery not scheduled: {e}")
+    # Pipeline files out of MongoDB (Firebase Storage) and a cleanup every few hours, so the
+    # 5 GB database never fills up and pauses processing again.
+    try:
+        import asyncio as _asyncio
+        from app.services.pipeline import storage_loop
+        _asyncio.create_task(storage_loop())
+    except Exception as e:
+        logger.warning(f"Startup: pipeline storage loop not scheduled: {e}")
     # Imported offers expire 10 (WTS) / 14 (WTB) days after the dealer's last
     # post: hourly sweep, first run now.
     try:

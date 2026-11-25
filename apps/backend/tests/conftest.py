@@ -21,6 +21,8 @@ if str(BACKEND_ROOT) not in sys.path:
 # Keep tests off any real service before app modules read settings.
 os.environ.setdefault("OPENAI_API_KEY", "")
 os.environ.setdefault("WHATSAPP_BRIDGE_TOKEN", "test-bridge-token")
+# Pipeline files stay in the in-memory GridFS; never Firebase Storage from a test.
+os.environ["PIPELINE_FILES_IN_FIREBASE"] = "false"
 
 
 @pytest.fixture(scope="session")
