@@ -179,6 +179,8 @@ FIREBASE_PREFIX = "fb:"
 
 
 def _firebase_bucket():
+    from app.core.config import settings
+
     if not settings.PIPELINE_FILES_IN_FIREBASE:
         return None
     try:

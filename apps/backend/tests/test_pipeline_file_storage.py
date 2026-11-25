@@ -150,3 +150,19 @@ async def test_storage_cleanup_deletes_only_old_unreferenced_files(fdb):
     names = {d["filename"] async for d in db[f"{pipeline.IMAGE_BUCKET}.files"].find()}
     assert names == {"used.jpg"}
     assert "fb:" + next(iter(fdb.store)) == waiting and orphan[3:] not in fdb.store
+
+
+def test_real_firebase_lookup_respects_the_setting(monkeypatch):
+    """The unpatched lookup runs (it failed in production with a NameError on deploy)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PIPELINE_FILES_IN_FIREBASE", False)
+    assert pipeline._firebase_bucket() is None
+    monkeypatch.setattr(settings, "PIPELINE_FILES_IN_FIREBASE", True)
+
+    def broken():
+        raise ValueError("no credentials")
+
+    import app.core.firebase as fbmod
+    monkeypatch.setattr(fbmod, "get_storage_bucket", broken)
+    assert pipeline._firebase_bucket() is None   # falls back to MongoDB, never raises
