@@ -24,14 +24,18 @@ async def upload_export(
     group_name: str = Form(..., description="Group name = export folder name"),
     chat: UploadFile = File(..., description="_chat.txt"),
     media: Optional[UploadFile] = File(None, description="<group>_Medien.zip"),
+    backfill: bool = Form(False, description="Re-sent export of older messages: process all of them, "
+                                            "even those before the group's watermark"),
     _key: str = Depends(require_pipeline_key),
 ) -> Any:
     """Receive one group's export.
 
     Answers only after both files are stored in GridFS. ``stored: true`` is the
     Mac mini's signal that it may delete its local copy. Processing (generator,
-    AI review, import) runs afterwards in a background worker, one upload at a
-    time; uploads a stopped instance left behind are requeued at startup.
+    AI review, import) runs afterwards in a background worker, a few groups at a
+    time; uploads a stopped instance left behind are requeued at startup. A
+    duplicate is a file already queued or processed; a re-sent file that was
+    dropped unprocessed is accepted (``backfill: true`` in the answer).
     """
     group = (group_name or "").strip()
     if not group:
@@ -42,19 +46,20 @@ async def upload_export(
     media_bytes = await media.read() if media is not None else None
 
     try:
-        upload, duplicate = await pipeline_service.store_upload(group, chat_bytes, media_bytes)
+        upload, duplicate = await pipeline_service.store_upload(group, chat_bytes, media_bytes, backfill)
     except Exception as exc:
         logger.exception("pipeline upload store failed for %s: %s", group, exc)
         # Not stored → the Mac mini must keep its files and retry.
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Upload could not be stored")
 
     if not duplicate:
-        # Queued, not started here: one upload is processed at a time.
+        # Queued, not started here: the worker takes it when a slot is free.
         pipeline_service.kick_processing()
     return {
         "stored": True,
         "upload_id": str(upload.id),
         "duplicate": duplicate,
+        "backfill": bool(getattr(upload, "backfill", False)),
         "group_name": group,
         "chat_bytes": len(chat_bytes),
         "media_bytes": len(media_bytes or b""),
@@ -93,6 +98,9 @@ async def list_uploads(
             "attempts": u.attempts,
             "error": u.error,
             "new_messages": u.new_messages,
+            "backfill": u.backfill,
+            "processed_from": u.processed_from,
+            "processed_to": u.processed_to,
             "run_ids": u.run_ids,
             "stats": u.stats,
             "received_at": u.received_at,

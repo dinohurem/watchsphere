@@ -195,11 +195,21 @@ def _wtb_header(line: str):
     weak = _WTB_WEAK_HDR.search(before[:24])                      # at the start of the line: "Need patek 3900", not "... if you need other models"
     if weak and (not priced or _STRICT_BUDGET.search(line)):      # "SOLD ORDER ... 127234 ... can buy AED 63,000"
         return weak
+    if priced:
+        # One request in one line: a request word, exactly one watch and at most one price - the price is
+        # the target ("5164R wtb 1.08m", "Sold order!! 15510ST blue 2026 new, pay 500k hkd",
+        # "126710GRNR jub wanted, EU stock, 2026, unworn, 18.900€"; test chats 25 Nov 2026).
+        word = _WTB_HDR.search(line)
+        if word and len({m.group(0).lower() for m in refs}) == 1 and len(_STRONG_PRICE.findall(line)) <= 1:
+            return word
     return None
 
 
 def _has_ref(line: str) -> bool:
     return bool(_refs(line))
+
+
+_HAVE_SPLIT = re.compile(r"[,;]\s*(?:i\s+|we\s+)?(?:have|got|selling|can\s+offer)\s+(?=\S*\d)", re.I)
 
 
 def split_sections(message: str) -> List[Tuple[str, str]]:
@@ -212,10 +222,23 @@ def split_sections(message: str) -> List[Tuple[str, str]]:
     Returns [] for adverts, system messages and chatter.
     """
     text = "\n".join(_not_prices(l) for l in clean(message).split("\n"))
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    lines = []
+    offers: set = set()  # indexes of lines split off as an offer: always their own WTS section
+    for l in (x.strip() for x in text.split("\n")):
+        if not l:
+            continue
+        # "Looking for 126508 green 2026, have 126508 white N10 620k hkd": a request and an offer in one line
+        m = _HAVE_SPLIT.search(l)
+        if m and _wtb_header(l[:m.start()]) and _priced_ref_line(l[m.end():]):
+            lines.append(l[:m.start()].strip())
+            offers.add(len(lines))
+            lines.append(l[m.end():].strip())
+        else:
+            lines.append(l)
     if is_advert(text):
         # an advert never carries priced reference lines; a real list with a promo line keeps its watch lines
         lines = [l for l in lines if not is_advert(l)]
+        offers = set()
         if not (any(_has_ref(l) for l in lines) and any(_STRONG_PRICE.search(l) for l in lines)):
             return []
     if not lines:
@@ -223,7 +246,13 @@ def split_sections(message: str) -> List[Tuple[str, str]]:
     sections: List[List] = []
     cur_mode: Optional[str] = None
     cur: List[str] = []
-    for l in lines:
+    for i_line, l in enumerate(lines):
+        if i_line in offers:
+            if cur:
+                sections.append([cur_mode, cur])
+            sections.append(["WTS", [l]])
+            cur_mode, cur = None, []
+            continue
         head = re.sub(r"^[^A-Za-z0-9一-鿿]+", "", l)[:40]
         wtb = _wtb_header(l)
         wts = _WTS_HDR.search(head)
@@ -242,6 +271,9 @@ def split_sections(message: str) -> List[Tuple[str, str]]:
                     continue
             if cur_mode == "WTB" and new_mode == "WTS" and not _WTS_STRONG_HDR.search(head):
                 cur.append(l)            # "payment ready", "best offer" inside a buy request do not start a sale section
+                continue
+            if cur_mode and cur and not _has_ref(l) and not _STRONG_PRICE.search(l) and any(_has_ref(x) for x in cur):
+                cur.append(l)            # closing line of a list: "All new 2026 full set, HK stock" belongs to the list above
                 continue
             if cur:
                 sections.append([cur_mode, cur])

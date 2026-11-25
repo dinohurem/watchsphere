@@ -20,7 +20,8 @@ class WatchMarketStats(Document):
     wts_count: int = 0
     wtb_count: int = 0
 
-    # 1M WTS median change — the % chip on cards / detail page.
+    # WTS median change for the % chip on cards and Rising/Falling: 1M, else 1W
+    # (market_stats.trend_pct).
     change_1m_pct: Optional[float] = None
     # Average market-vs-retail % over countries with a list price.
     retail_pct: Optional[float] = None

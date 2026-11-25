@@ -183,7 +183,9 @@ export function WatchDetailsPage() {
     const fetchPriceHistory = async () => {
       try {
         const lookupKey = watchDetails.ws_code || watchDetails.reference;
-        const response = await api.get(`/orders/price-history/${encodeURIComponent(lookupKey)}?days=365`);
+        const response = await api.get(`/orders/price-history/${encodeURIComponent(lookupKey)}`, {
+          params: { days: 365, currency: watchDetails.currency || 'USD' },
+        });
         if (response.data?.points) {
           setFullPriceHistory(response.data.points);
         }
@@ -193,7 +195,7 @@ export function WatchDetailsPage() {
     };
 
     fetchPriceHistory();
-  }, [watchDetails?.reference, watchDetails?.ws_code]);
+  }, [watchDetails?.reference, watchDetails?.ws_code, watchDetails?.currency]);
 
   // Slice the appropriate portion based on selected period (like zooming in/out)
   useEffect(() => {

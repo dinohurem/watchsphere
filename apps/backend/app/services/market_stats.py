@@ -307,7 +307,7 @@ def outlier_check(target: Listing, peers: list[Listing]) -> Optional[dict]:
 
     Same year needs ≥2 other listings (±25 %); otherwise the nearest year with
     ≥2 listings is used (±35 %). Returns {"median_usd", "deviation_pct",
-    "basis_year", "tolerance_pct", "is_outlier"} or None when there is no basis.
+    "basis_year", "basis_count" (offers the median rests on), "tolerance_pct", "is_outlier"} or None when there is no basis.
     Mirrors the generator's price guardrail so the two never disagree.
     """
     if target.price_usd is None:
@@ -343,6 +343,7 @@ def outlier_check(target: Listing, peers: list[Listing]) -> Optional[dict]:
         "median_usd": med,
         "deviation_pct": round(deviation, 1),
         "basis_year": basis,
+        "basis_count": len(values),
         "tolerance_pct": int(tolerance * 100),
         "is_outlier": abs(deviation) > tolerance * 100,
     }
@@ -417,6 +418,14 @@ async def _watch_info(ws_codes: list[str]) -> dict[str, dict]:
     return info
 
 
+def trend_pct(periods: dict) -> Optional[float]:
+    for p in ("1M", "1W"):
+        value = (periods.get(p) or {}).get("wts_change_pct")
+        if value is not None:
+            return value
+    return None
+
+
 def compute_stats(ws_code: str, listings: list[Listing], watch: Optional[dict],
                   rates: dict[str, float], now: datetime) -> dict:
     """Everything stored on WatchMarketStats for one ws_code (pure)."""
@@ -445,7 +454,10 @@ def compute_stats(ws_code: str, listings: list[Listing], watch: Optional[dict],
         # All-time counts on the cards: active and expired offers.
         "wts_count": sum(1 for l in listings if (l.active or l.expired) and l.order_type == "sell"),
         "wtb_count": sum(1 for l in listings if (l.active or l.expired) and l.order_type == "buy"),
-        "change_1m_pct": periods["1M"]["wts_change_pct"],
+        # Card chip and Rising/Falling: the 1M change, else the 1W one. The 1M change
+        # needs listings in the month before last; until a watch has two months of
+        # history it is always empty, and Rising/Falling showed nothing.
+        "change_1m_pct": trend_pct(periods),
         "retail_pct": retail["avg_vs_retail_pct"],
         "retail_status": retail["status"],
         "fresh_median_usd": fresh_median_usd,
