@@ -45,6 +45,7 @@ MODES = ("WTS", "WTB")
 UPLOAD_BUCKET = "pipeline_uploads"
 IMAGE_BUCKET = "pipeline_images"
 MAX_ATTEMPTS = 3
+FIRST_RUN_DAYS = 4  # a group without a watermark starts this far back, not at its whole history
 
 # Uploads are processed a few at a time (``PIPELINE_WORKERS``), never two of the
 # same group at once: a group's watermark and its reposts must be handled in order.
@@ -1203,6 +1204,11 @@ async def _process_claimed(upload) -> dict:
     chat_txt = (await _get(UPLOAD_BUCKET, upload.chat_gridfs_id)).decode("utf-8", errors="replace")
     # A backfill holds messages behind the watermark that were never processed.
     after = None if upload.backfill else state.last_message_at
+    if after is None and not upload.backfill:
+        # A group's first export holds its whole chat history (months, tens of thousands of
+        # lines): one such run held a worker for hours and stalled every other group. Start
+        # with the last FIRST_RUN_DAYS; older messages come in only as an explicit backfill.
+        after = datetime.utcnow() - timedelta(days=FIRST_RUN_DAYS)
     filtered = await asyncio.to_thread(filter_new_messages, chat_txt, after)
     upload.processed_from = after
     upload.processed_to = filtered["last"]

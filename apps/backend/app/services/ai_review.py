@@ -9,6 +9,7 @@ everything that is not an explicit, valid "sure" counts as unsure.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 15
+REVIEW_CONCURRENCY = 8      # batches in flight at once
+MAX_REVIEW_ROWS = 450       # per export; the rest goes to Unsure
 MAX_CANDIDATES = 3
 
 SYSTEM_PROMPT = """You review watch listings from WhatsApp dealer groups for WatchSphere, a \
@@ -168,8 +171,21 @@ async def review_rows(items: list[dict]) -> dict[str, ReviewDecision]:
 
     import anthropic
 
+    # One export can hold thousands of review rows (a group's first run, a catch-up after an
+    # outage). Reviewing them one batch after another held a worker for hours and stalled the
+    # whole queue (Nov 2026): batches run in parallel, and past MAX_REVIEW_ROWS the rest goes
+    # to "Unsure" for a human instead of blocking every other group.
+    for item in reviewable[MAX_REVIEW_ROWS:]:
+        results[item["id"]] = ReviewDecision(False, None, "Not reviewed by the AI: too many rows in one export")
+    reviewable = reviewable[:MAX_REVIEW_ROWS]
     client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=300.0)
-    for i in range(0, len(reviewable), BATCH_SIZE):
-        batch = reviewable[i:i + BATCH_SIZE]
-        results.update(await _review_batch(client, batch))
+    gate = asyncio.Semaphore(REVIEW_CONCURRENCY)
+
+    async def run(batch):
+        async with gate:
+            return await _review_batch(client, batch)
+
+    for part in await asyncio.gather(*(run(reviewable[i:i + BATCH_SIZE])
+                                       for i in range(0, len(reviewable), BATCH_SIZE))):
+        results.update(part)
     return results
