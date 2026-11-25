@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
+import { buildWhatsAppOrderMessage, buildWhatsAppUrl } from '@watchsphere/shared/utils/whatsappMessage';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { useV2 } from '@/contexts/V2Context';
 
@@ -64,6 +65,9 @@ interface OrderBookEntry {
   price: number | null;
   order_type: 'buy' | 'sell';
   whatsapp_phone?: string;
+  ws_code?: string | null;
+  year?: number | null;
+  year_raw?: string | null;
   currency?: string;
   remarks?: string;
   country_name?: string;
@@ -272,6 +276,9 @@ export function WatchDetailsPage() {
               price: o.price ?? null,
               order_type: 'buy' as const,
               whatsapp_phone: o.whatsapp_phone,
+              ws_code: o.ws_code,
+              year: o.year,
+              year_raw: o.year_raw,
               currency: o.price != null ? o.currency || 'EUR' : undefined,
               remarks: o.remarks,
               country_name: o.country_name,
@@ -300,6 +307,9 @@ export function WatchDetailsPage() {
               price: o.price,
               order_type: 'sell' as const,
               whatsapp_phone: o.whatsapp_phone,
+              ws_code: o.ws_code,
+              year: o.year,
+              year_raw: o.year_raw,
               currency: o.currency || 'EUR',
               remarks: o.remarks,
               country_name: o.country_name,
@@ -464,15 +474,15 @@ export function WatchDetailsPage() {
 
   const handleWhatsAppChat = (entry: OrderBookEntry) => {
     if (!entry.whatsapp_phone) return;
-    const watchName = watchDetails ? `${watchDetails.brand} ${watchDetails.model}` : '';
-    const watchCode = watchDetails?.reference || '';
-    const currency = entry.currency || 'EUR';
-    const priceText = entry.price != null
-      ? `\n${currency} ${entry.price.toLocaleString('de-DE')} - thank you very much!`
-      : '';
-    const message = `Hi, is ${watchName} ${watchCode} available?${priceText}`;
-    const phone = entry.whatsapp_phone.replace(/[^0-9]/g, '');
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    const message = buildWhatsAppOrderMessage({
+      orderType: entry.order_type,
+      wsCode: entry.ws_code || watchDetails?.ws_code,
+      reference: watchDetails?.reference,
+      year: entry.year ?? entry.year_raw,
+      price: entry.price,
+      currency: entry.currency,
+    });
+    window.open(buildWhatsAppUrl(entry.whatsapp_phone, message), '_blank');
   };
 
   // Apply filters to order book
