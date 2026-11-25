@@ -17,13 +17,12 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = Path(__file__).parent
 FONT = HERE.parent / "assets" / "fonts" / "hankengrotesk.ttf"
 
-CAPTIONS = [
+CAPTIONS = [  # in the order of raw/01..05
     ("Every reference.\nLive prices.", "Sell and buy offers from dealers worldwide"),
+    ("Know what\nit's worth", "Offers, retail price and market trend"),
+    ("The full\norder book", "Every offer, sorted by price"),
+    ("Check before\nyou buy", "Serial numbers, dealer numbers, bracelets"),
     ("Your watchlist,\nalways current", "Follow references and see the market move"),
-    ("The full order book", "Lowest ask, highest bid and every offer"),
-    ("Price history", "See where a reference is heading"),
-    ("Check before you buy", "Serial numbers, dealer numbers, bracelets"),
-    ("Trade with dealers", "Post what you sell or want to buy"),
 ]
 
 SIZES = {
