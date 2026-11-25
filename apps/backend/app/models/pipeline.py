@@ -26,12 +26,17 @@ class PipelineUpload(Document):
     status: UploadStatus = UploadStatus.RECEIVED
     attempts: int = 0
     error: Optional[str] = None
-    # Messages newer than this watermark were processed by this upload.
+    # Messages newer than this watermark were processed by this upload (backfill:
+    # every message in the file).
     processed_from: Optional[datetime] = None
     processed_to: Optional[datetime] = None
     new_messages: int = 0
     run_ids: Dict[str, str] = Field(default_factory=dict)  # {"WTS": run_id, "WTB": run_id}
     stats: Dict[str, Any] = Field(default_factory=dict)
+    # Re-sent export of messages the watermark already passed (an upload that was
+    # dropped before it was processed): all its messages are processed, the
+    # watermark never moves back, and it waits behind live uploads.
+    backfill: bool = False
     received_at: datetime = Field(default_factory=datetime.utcnow)
     processed_at: Optional[datetime] = None
 

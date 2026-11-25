@@ -350,13 +350,6 @@ async def startup():
         logger.info("Startup: deleted %d stale generator row file(s)", removed)
     except Exception as e:
         logger.warning(f"Startup: stale generator row files not deleted: {e}")
-    # Also deletes only: files of queued uploads a newer export of the same group
-    # replaces (and of uploads a stopped instance left "processing").
-    try:
-        from app.services.pipeline import supersede_queued
-        await supersede_queued(delete_only=True, statuses=("received", "processing"))
-    except Exception as e:
-        logger.warning(f"Startup: superseded upload files not deleted: {e}")
     # Clean up any expired GridFS files from previous runs
     try:
         from app.api.v1.endpoints.wtb_wts import _cleanup_all_expired
