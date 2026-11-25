@@ -11,6 +11,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from pymongo import UpdateOne
 
 from app.api.v1.endpoints.price_check import suspicious_listings, watch_summary
 from app.core.deps import get_current_admin_user
@@ -84,6 +85,27 @@ async def _items(ids: List[str], kind: Optional[ReviewKind] = None) -> list[Pipe
     return items
 
 
+def _rx(value: str, exact: bool = False) -> dict:
+    pat = re.escape(value.strip())
+    return {"$regex": f"^{pat}$" if exact else pat, "$options": "i"}
+
+
+def review_filter(brand: Optional[str] = None, group: Optional[str] = None,
+                  reason: Optional[str] = None, ai: bool = False) -> dict:
+    """Mongo clauses for the brand / chat group / reason filters of the AI and Unsure tabs.
+
+    Brand is the generator's ``Marke``; the reason is the AI's reason on the AI tab and the
+    unsure reason on the Unsure tab (substring, case-insensitive)."""
+    q: dict = {}
+    if brand and brand.strip():
+        q["row.Marke"] = _rx(brand, exact=True)
+    if group and group.strip():
+        q["group_name"] = group.strip()
+    if reason and reason.strip():
+        q["ai_reason" if ai else "reason"] = _rx(reason)
+    return q
+
+
 def _resolve(item: PipelineItem, admin: User, resolution: str, ws_code: Optional[str] = None) -> None:
     item.status = ReviewStatus.RESOLVED
     item.resolution = resolution
@@ -92,6 +114,34 @@ def _resolve(item: PipelineItem, admin: User, resolution: str, ws_code: Optional
     item.resolved_at = datetime.utcnow()
     if item.kind == ReviewKind.NOT_IN_DATABASE:
         item.expires_at = None  # only waiting suggestions expire; decisions are kept
+
+
+_RESOLVE_FIELDS = ("status", "resolution", "resolved_ws_code", "resolved_by", "resolved_at", "expires_at")
+_NOT_IN_CATALOG_FIELDS = ("kind", "guessed_reference", "guessed_brand", "expires_at")
+_DISCARD_FIELDS = ("kind", "reason") + _RESOLVE_FIELDS
+
+
+def _plain(value: Any) -> Any:
+    return getattr(value, "value", value)
+
+
+async def save_fields(items: list[PipelineItem], fields: tuple, chunk: int = 1000) -> None:
+    """Write the given fields of many in-memory items with a few bulk writes (an item per round
+    trip does not scale to tens of thousands of rows)."""
+    coll = PipelineItem.get_motor_collection()
+    for n in range(0, len(items), chunk):
+        ops = [UpdateOne({"_id": i.id}, {"$set": {f: _plain(getattr(i, f)) for f in fields}})
+               for i in items[n:n + chunk]]
+        if ops:
+            await coll.bulk_write(ops, ordered=False)
+
+
+async def apply_ai_confirm_many(items: list[PipelineItem], admin: User) -> int:
+    """Confirm AI decisions in bulk: the orders already carry the AI's watch, only the items change."""
+    for i in items:
+        _resolve(i, admin, "confirmed", i.ai_ws_code)
+    await save_fields(items, _RESOLVE_FIELDS)
+    return len(items)
 
 
 async def _import_items_as(
@@ -202,11 +252,14 @@ async def watch_search(
 @router.get("/ai-decisions")
 async def ai_decisions(
     status_filter: str = Query("pending", alias="status"),
+    brand: Optional[str] = None,
+    group: Optional[str] = None,
+    reason: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    query: dict = {"kind": ReviewKind.AI_DECISION.value}
+    query: dict = {"kind": ReviewKind.AI_DECISION.value, **review_filter(brand, group, reason, ai=True)}
     if status_filter in ("pending", "resolved"):
         query["status"] = status_filter
     items = await PipelineItem.find(query).sort("-created_at").skip(offset).limit(limit).to_list()
@@ -220,14 +273,15 @@ class AiCorrectRequest(BaseModel):
     ws_code: Optional[str] = None
 
 
-@router.post("/ai-decisions/{item_id}")
-async def ai_decision_action(
-    item_id: str,
-    payload: AiCorrectRequest,
-    current_admin: User = Depends(get_current_admin_user),
-) -> Any:
-    """One-click correction: the listing in the app changes immediately."""
-    item = (await _items([item_id], ReviewKind.AI_DECISION))[0]
+async def apply_ai_action(
+    item: PipelineItem, admin: User, action: str, ws_code: Optional[str] = None,
+    touched: Optional[set] = None,
+) -> dict:
+    """One AI decision: the listing in the app changes immediately.
+
+    Used by the click, the bulk endpoint and the decision file, so all three do exactly the
+    same. ``touched``: collect the WS codes whose stats need a refresh instead of recomputing
+    straight away (bulk callers recompute once at the end). Returns the ids of created items."""
     order = None
     if item.order_id:
         try:
@@ -235,28 +289,34 @@ async def ai_decision_action(
         except Exception:
             order = None
     old_ws = order.ws_code if order else item.ai_ws_code
-    action = payload.action
+    created: list[str] = []
+
+    async def refresh(codes: list) -> None:
+        codes = [c for c in codes if c]
+        if touched is not None:
+            touched.update(codes)
+        elif codes:
+            await ms.recompute_for(codes)
 
     if action == "confirm":
-        _resolve(item, current_admin, "confirmed", item.ai_ws_code)
+        _resolve(item, admin, "confirmed", item.ai_ws_code)
     elif action == "correct":
-        if not payload.ws_code:
+        if not ws_code:
             raise HTTPException(status_code=400, detail="ws_code is required")
-        watch = await _get_watch(payload.ws_code)
+        watch = await _get_watch(ws_code)
         if order:
             _apply_watch(order, watch)
             order.match_method = "manual"
             await order.save()
-        _resolve(item, current_admin, "corrected", watch.ws_code)
-        await ms.recompute_for([c for c in (old_ws, watch.ws_code) if c])
+        _resolve(item, admin, "corrected", watch.ws_code)
+        await refresh([old_ws, watch.ws_code])
     elif action in ("not_in_catalog", "discard"):
         if order:
             await order.delete()
-        if old_ws:
-            await ms.recompute_for([old_ws])
-        _resolve(item, current_admin, action)
+        await refresh([old_ws])
+        _resolve(item, admin, action)
         if action == "not_in_catalog":
-            await PipelineItem(
+            new_item = PipelineItem(
                 kind=ReviewKind.NOT_IN_DATABASE, mode=item.mode, group_name=item.group_name,
                 upload_id=item.upload_id, run_id=item.run_id, source_text=item.source_text,
                 text_key=item.text_key, image_id=item.image_id, sender_phone=item.sender_phone,
@@ -264,69 +324,164 @@ async def ai_decision_action(
                 guessed_reference=(item.row or {}).get("Referenz") or (item.row or {}).get("WS-Code"),
                 guessed_brand=(item.row or {}).get("Marke"),
                 expires_at=pipeline_service.not_in_database_expiry(),
-            ).insert()
+            )
+            await new_item.insert()
+            created.append(str(new_item.id))
     else:
         raise HTTPException(status_code=400, detail="Unknown action")
     await item.save()
+    return {"created_items": created}
+
+
+@router.post("/ai-decisions/{item_id}")
+async def ai_decision_action(
+    item_id: str,
+    payload: AiCorrectRequest,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    item = (await _items([item_id], ReviewKind.AI_DECISION))[0]
+    await apply_ai_action(item, current_admin, payload.action, payload.ws_code)
     return {"ok": True, "item": _item_payload(item)}
 
 
 # --- Tab 2: Unsure ----------------------------------------------------------
 
+def unsure_group_pipeline(match: dict) -> list[dict]:
+    """Pending unsure items grouped by identical text, in the database (31k rows do not fit a
+    request). An item without text stays alone (its own id is the group key)."""
+    blank = {"$eq": [{"$ifNull": ["$text_key", ""]}, ""]}
+    return [
+        {"$match": match},
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id": {"k": {"$ifNull": ["$text_key", ""]}, "i": {"$cond": [blank, "$_id", None]}},
+            "item_ids": {"$push": "$_id"},
+            "count": {"$sum": {"$ifNull": ["$occurrences", 1]}},
+            "source_text": {"$first": "$source_text"},
+            "image_id": {"$max": "$image_id"},
+            "candidates": {"$first": "$candidates"},
+            "reason": {"$first": "$reason"},
+            "mode": {"$first": "$mode"},
+            "row": {"$first": "$row"},
+            "groups": {"$addToSet": "$group_name"},
+            "phones": {"$addToSet": "$sender_phone"},
+            "latest_at": {"$first": "$created_at"},
+            "message_at": {"$max": "$message_at"},
+        }},
+    ]
+
+
+def unsure_group_key(g: dict) -> str:
+    return g["_id"]["k"] or str(g["_id"]["i"])
+
+
 @router.get("/unsure")
 async def unsure(
+    brand: Optional[str] = None,
+    group: Optional[str] = None,
+    reason: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """Pending rows grouped by identical text (one decision for all)."""
-    items = await PipelineItem.find(
-        {"kind": ReviewKind.UNSURE.value, "status": ReviewStatus.PENDING.value}
-    ).sort("-created_at").to_list()
-    groups: dict[str, dict] = {}
-    for item in items:
-        key = item.text_key or str(item.id)
-        g = groups.get(key)
-        if g is None:
-            g = groups[key] = {
-                "key": key,
-                "item_ids": [],
-                "count": 0,
-                "source_text": item.source_text,
-                "image_url": None,
-                "candidates": item.candidates,
-                "reason": item.reason,
-                "mode": item.mode,
-                "groups": [],
-                "phones": [],
-                "row": item.row,
-                "latest_at": item.created_at,
-            }
-        g["item_ids"].append(str(item.id))
-        g["count"] += item.occurrences or 1
-        if not g["image_url"] and item.image_id:
-            g["image_url"] = pipeline_service.image_url(item.image_id)
-        if item.group_name and item.group_name not in g["groups"]:
-            g["groups"].append(item.group_name)
-        if item.sender_phone and item.sender_phone not in g["phones"]:
-            g["phones"].append(item.sender_phone)
-        if not g["candidates"] and item.candidates:
-            g["candidates"] = item.candidates
-    ordered = sorted(groups.values(), key=lambda g: (-g["count"], g["latest_at"]), reverse=False)
-    # Enrich candidate watches with images for the UI.
+    """Pending rows grouped by identical text (one decision for all). ``total`` counts groups,
+    ``item_total`` the items behind them (what "select all" will decide)."""
+    match = {"kind": ReviewKind.UNSURE.value, "status": ReviewStatus.PENDING.value,
+             **review_filter(brand, group, reason)}
+    coll = PipelineItem.get_motor_collection()
+    page = [{"$sort": {"count": -1, "latest_at": 1}}, {"$skip": offset}, {"$limit": limit}]
+    rows = await coll.aggregate(unsure_group_pipeline(match) + page).to_list(length=limit)
+    counted = await coll.aggregate(unsure_group_pipeline(match)[:2] + [
+        {"$group": {"_id": {"k": {"$ifNull": ["$text_key", ""]},
+                            "i": {"$cond": [{"$eq": [{"$ifNull": ["$text_key", ""]}, ""]}, "$_id", None]}}}},
+        {"$count": "n"},
+    ]).to_list(length=1)
+    total = counted[0]["n"] if counted else 0
+    ordered = []
+    for g in rows:
+        ordered.append({
+            "key": unsure_group_key(g),
+            "item_ids": [str(i) for i in g["item_ids"]],
+            "count": g["count"],
+            "source_text": g["source_text"],
+            "image_url": pipeline_service.image_url(g["image_id"]) if g.get("image_id") else None,
+            "candidates": g.get("candidates") or [],
+            "reason": g.get("reason"),
+            "mode": g.get("mode"),
+            "groups": sorted(x for x in g["groups"] if x),
+            "phones": sorted(x for x in g["phones"] if x),
+            "row": g.get("row"),
+            "latest_at": g.get("latest_at"),
+        })
     codes = [c.get("ws_code") for g in ordered for c in (g["candidates"] or []) if c.get("ws_code")]
     watches = await _watches_by_code(codes)
     for g in ordered:
         g["candidates"] = [
             {**c, "watch": watch_summary(watches.get(c.get("ws_code")))} for c in (g["candidates"] or [])[:3]
         ]
-    return {"groups": ordered[offset:offset + limit], "total": len(ordered)}
+    item_total = await PipelineItem.find(match).count()
+    return {"groups": ordered, "total": total, "item_total": item_total}
 
 
 class DecideRequest(BaseModel):
     item_ids: List[str]
     action: str = Field(..., description="pick | not_in_catalog | discard")
     ws_code: Optional[str] = None
+
+
+def discard_fields() -> dict:
+    return {
+        "kind": ReviewKind.DISCARDED.value,
+        "reason": "Discarded on the approval page",
+        "expires_at": datetime.utcnow() + timedelta(days=pipeline_service.DISCARD_TTL_DAYS),
+    }
+
+
+def not_in_catalog_fields(item: PipelineItem) -> dict:
+    row = item.row or {}
+    return {
+        "kind": ReviewKind.NOT_IN_DATABASE.value,
+        "guessed_reference": item.guessed_reference or row.get("Referenz") or row.get("WS-Code"),
+        "guessed_brand": item.guessed_brand or row.get("Marke"),
+        "expires_at": pipeline_service.not_in_database_expiry(),
+    }
+
+
+async def apply_unsure_action(
+    items: list[PipelineItem], admin: User, action: str, ws_code: Optional[str] = None,
+    fast: bool = False,
+) -> tuple[list[str], dict[str, str]]:
+    """Decide pending unsure items (any texts). Returns (new order ids, {item id: reason}).
+    ``fast``: write not-in-catalogue / discard with bulk writes (bulk callers)."""
+    new_ids: list[str] = []
+    failed: dict[str, str] = {}
+    if action == "pick":
+        if not ws_code:
+            raise HTTPException(status_code=400, detail="ws_code is required")
+        watch = await _get_watch(ws_code)
+        new_ids, done, failed = await _import_items_as(items, watch, admin)
+        for i in done:
+            _resolve(i, admin, "picked", watch.ws_code)
+        for i in items:
+            if str(i.id) in failed:
+                i.reason = failed[str(i.id)]
+    elif action == "not_in_catalog":
+        for i in items:
+            for k, v in not_in_catalog_fields(i).items():
+                setattr(i, k, ReviewKind(v) if k == "kind" else v)
+    elif action == "discard":
+        for i in items:
+            for k, v in discard_fields().items():
+                setattr(i, k, ReviewKind(v) if k == "kind" else v)
+            _resolve(i, admin, "discarded")
+    else:
+        raise HTTPException(status_code=400, detail="Unknown action")
+    if fast and action in ("not_in_catalog", "discard"):
+        await save_fields(items, _NOT_IN_CATALOG_FIELDS if action == "not_in_catalog" else _DISCARD_FIELDS)
+    else:
+        for i in items:
+            await i.save()
+    return new_ids, failed
 
 
 @router.post("/unsure/decide")
@@ -338,34 +493,7 @@ async def unsure_decide(
     items = [i for i in items if i.status == ReviewStatus.PENDING]
     if not items:
         raise HTTPException(status_code=409, detail="Already decided")
-    new_ids: list[str] = []
-    failed: dict[str, str] = {}
-    if payload.action == "pick":
-        if not payload.ws_code:
-            raise HTTPException(status_code=400, detail="ws_code is required")
-        watch = await _get_watch(payload.ws_code)
-        new_ids, done, failed = await _import_items_as(items, watch, current_admin)
-        for i in done:
-            _resolve(i, current_admin, "picked", watch.ws_code)
-        for i in items:
-            if str(i.id) in failed:
-                i.reason = failed[str(i.id)]
-    elif payload.action == "not_in_catalog":
-        for i in items:
-            i.kind = ReviewKind.NOT_IN_DATABASE
-            i.guessed_reference = i.guessed_reference or (i.row or {}).get("Referenz") or (i.row or {}).get("WS-Code")
-            i.guessed_brand = i.guessed_brand or (i.row or {}).get("Marke")
-            i.expires_at = pipeline_service.not_in_database_expiry()
-    elif payload.action == "discard":
-        for i in items:
-            i.kind = ReviewKind.DISCARDED
-            i.reason = "Discarded on the approval page"
-            i.expires_at = datetime.utcnow() + timedelta(days=pipeline_service.DISCARD_TTL_DAYS)
-            _resolve(i, current_admin, "discarded")
-    else:
-        raise HTTPException(status_code=400, detail="Unknown action")
-    for i in items:
-        await i.save()
+    new_ids, failed = await apply_unsure_action(items, current_admin, payload.action, payload.ws_code)
     return {"ok": not failed, "updated": len(items), "new_order_ids": new_ids, "failed": failed}
 
 
@@ -400,28 +528,21 @@ class AliasDecision(BaseModel):
     ws_code: Optional[str] = None
 
 
-@router.post("/aliases/decide")
-async def aliases_decide(
-    payload: AliasDecision,
-    current_admin: User = Depends(get_current_admin_user),
-) -> Any:
-    """Multi-select. An alias is only ever added to a watch here (spec §2.3)."""
-    try:
-        oids = [PydanticObjectId(i) for i in payload.ids]
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid id")
-    items = await AliasSuggestion.find({"_id": {"$in": oids}}).to_list()
+async def apply_alias_action(
+    items: list[AliasSuggestion], admin: User, action: str, ws_code: Optional[str] = None
+) -> int:
+    """An alias is only ever added to a watch here (spec §2.3). Returns how many were decided."""
     target = None
-    if payload.action == "assign":
-        if not payload.ws_code:
+    if action == "assign":
+        if not ws_code:
             raise HTTPException(status_code=400, detail="ws_code is required")
-        target = await _get_watch(payload.ws_code)
-    elif payload.action not in ("approve", "reject"):
+        target = await _get_watch(ws_code)
+    elif action not in ("approve", "reject"):
         raise HTTPException(status_code=400, detail="Unknown action")
 
     updated = 0
     for a in items:
-        if payload.action == "reject":
+        if action == "reject":
             a.status = AliasStatus.REJECTED
         else:
             watch = target or await Watch.find_one({"ws_code": a.ws_code})
@@ -438,10 +559,25 @@ async def aliases_decide(
                     await clash.delete()
                 a.ws_code = target.ws_code
             a.status = AliasStatus.APPROVED
-        a.resolved_by = str(current_admin.id)
+        a.resolved_by = str(admin.id)
         a.resolved_at = datetime.utcnow()
         await a.save()
         updated += 1
+    return updated
+
+
+@router.post("/aliases/decide")
+async def aliases_decide(
+    payload: AliasDecision,
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Multi-select."""
+    try:
+        oids = [PydanticObjectId(i) for i in payload.ids]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
+    items = await AliasSuggestion.find({"_id": {"$in": oids}}).to_list()
+    updated = await apply_alias_action(items, current_admin, payload.action, payload.ws_code)
     return {"ok": True, "updated": updated}
 
 
@@ -486,35 +622,42 @@ class NewWatchAction(BaseModel):
     ws_code: Optional[str] = None
 
 
+async def apply_new_watch_action(
+    items: list[PipelineItem], admin: User, action: str, ws_code: Optional[str] = None
+) -> tuple[list[str], dict[str, str]]:
+    """dismiss → archived; import → the watch now exists, create the listings."""
+    new_ids: list[str] = []
+    failed: dict[str, str] = {}
+    if action == "import":
+        if not ws_code:
+            raise HTTPException(status_code=400, detail="ws_code is required")
+        watch = await _get_watch(ws_code)
+        new_ids, done, failed = (
+            await _import_items_as(items, watch, admin) if items else ([], [], {})
+        )
+        for i in done:
+            _resolve(i, admin, "picked", watch.ws_code)
+        for i in items:
+            if str(i.id) in failed:
+                i.reason = failed[str(i.id)]
+    elif action == "dismiss":
+        for i in items:
+            _resolve(i, admin, "dismissed")
+    else:
+        raise HTTPException(status_code=400, detail="Unknown action")
+    for i in items:
+        await i.save()
+    return new_ids, failed
+
+
 @router.post("/new-watches/decide")
 async def new_watches_decide(
     payload: NewWatchAction,
     current_admin: User = Depends(get_current_admin_user),
 ) -> Any:
-    """dismiss → archived; import → the watch now exists, create the listings."""
     items = [i for i in await _items(payload.item_ids, ReviewKind.NOT_IN_DATABASE)
              if i.status == ReviewStatus.PENDING]
-    new_ids: list[str] = []
-    failed: dict[str, str] = {}
-    if payload.action == "import":
-        if not payload.ws_code:
-            raise HTTPException(status_code=400, detail="ws_code is required")
-        watch = await _get_watch(payload.ws_code)
-        new_ids, done, failed = (
-            await _import_items_as(items, watch, current_admin) if items else ([], [], {})
-        )
-        for i in done:
-            _resolve(i, current_admin, "picked", watch.ws_code)
-        for i in items:
-            if str(i.id) in failed:
-                i.reason = failed[str(i.id)]
-    elif payload.action == "dismiss":
-        for i in items:
-            _resolve(i, current_admin, "dismissed")
-    else:
-        raise HTTPException(status_code=400, detail="Unknown action")
-    for i in items:
-        await i.save()
+    new_ids, failed = await apply_new_watch_action(items, current_admin, payload.action, payload.ws_code)
     return {"ok": not failed, "updated": len(items), "new_order_ids": new_ids, "failed": failed}
 
 

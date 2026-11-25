@@ -134,6 +134,8 @@ class Order(Document):
     last_seen_at: Optional[datetime] = None
     # Admin price check: listing stays in the app but is ignored for medians.
     excluded_from_median: bool = False
+    # An admin looked at the price and said it is right: never flagged as suspicious again.
+    price_approved: bool = False
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
