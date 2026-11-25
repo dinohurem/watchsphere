@@ -170,12 +170,52 @@ def _bucket(name: str) -> AsyncIOMotorGridFSBucket:
     return AsyncIOMotorGridFSBucket(Order.get_motor_collection().database, bucket_name=name)
 
 
+# Files live in Firebase Storage (private objects, id "fb:<path>"), not in MongoDB: the hourly
+# exports' media zips (~5 MB each, ~65 an hour) filled the 5 GB Atlas plan, which paused
+# processing and left whole groups (all of WDG) unprocessed (Nov 2026). Ids without the prefix
+# are GridFS files from before; they are still read and deleted. Without Firebase (tests, local
+# development) files go to GridFS as before.
+FIREBASE_PREFIX = "fb:"
+
+
+def _firebase_bucket():
+    if not settings.PIPELINE_FILES_IN_FIREBASE:
+        return None
+    try:
+        from app.core.firebase import get_storage_bucket
+        return get_storage_bucket()
+    except Exception as exc:
+        logger.warning("pipeline: Firebase Storage unavailable, files stay in MongoDB: %s", exc)
+        return None
+
+
+async def _fb_put(fb, path: str, data: bytes, content_type: str) -> str:
+    def up():
+        fb.blob(path).upload_from_string(data, content_type=content_type)
+    await asyncio.to_thread(up)
+    return FIREBASE_PREFIX + path
+
+
 async def _put(bucket: str, data: bytes, filename: str, metadata: Optional[dict] = None) -> str:
+    fb = _firebase_bucket()
+    if fb is not None:
+        safe = re.sub(r"[^\w.\-]+", "_", filename)[-120:]
+        path = f"pipeline/{bucket}/{datetime.utcnow():%Y-%m-%d}/{ObjectId()}-{safe}"
+        try:
+            return await _fb_put(fb, path, data, _content_type(filename))
+        except Exception as exc:
+            logger.error("pipeline: Firebase upload of %s failed, stored in MongoDB: %s", filename, exc)
     file_id = await _bucket(bucket).upload_from_stream(filename, data, metadata=metadata or {})
     return str(file_id)
 
 
 async def _get(bucket: str, file_id: str) -> bytes:
+    if str(file_id).startswith(FIREBASE_PREFIX):
+        fb = _firebase_bucket()
+        if fb is None:
+            raise RuntimeError("Firebase Storage is not configured")
+        path = file_id[len(FIREBASE_PREFIX):]
+        return await asyncio.to_thread(lambda: fb.blob(path).download_as_bytes())
     stream = await _bucket(bucket).open_download_stream(ObjectId(file_id))
     return await stream.read()
 
@@ -184,17 +224,79 @@ async def _delete(bucket: str, file_id: Optional[str]) -> None:
     if not file_id:
         return
     try:
+        if str(file_id).startswith(FIREBASE_PREFIX):
+            fb = _firebase_bucket()
+            if fb is not None:
+                path = file_id[len(FIREBASE_PREFIX):]
+                await asyncio.to_thread(lambda: fb.blob(path).delete())
+            return
         await _bucket(bucket).delete(ObjectId(file_id))
     except Exception as exc:
-        logger.debug("pipeline: gridfs delete %s/%s failed: %s", bucket, file_id, exc)
+        logger.debug("pipeline: delete %s/%s failed: %s", bucket, file_id, exc)
+
+
+def _content_type(name: str) -> str:
+    n = (name or "").lower()
+    if n.endswith(".png"):
+        return "image/png"
+    if n.endswith(".webp"):
+        return "image/webp"
+    if n.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if n.endswith(".zip"):
+        return "application/zip"
+    if n.endswith(".txt"):
+        return "text/plain; charset=utf-8"
+    return "application/octet-stream"
 
 
 async def get_image(image_id: str) -> tuple[bytes, str]:
+    if str(image_id).startswith(FIREBASE_PREFIX):
+        return await _get(IMAGE_BUCKET, image_id), _content_type(image_id)
     stream = await _bucket(IMAGE_BUCKET).open_download_stream(ObjectId(image_id))
     data = await stream.read()
-    name = (stream.filename or "").lower()
-    ctype = "image/png" if name.endswith(".png") else "image/webp" if name.endswith(".webp") else "image/jpeg"
-    return data, ctype
+    return data, _content_type(stream.filename or "")
+
+
+async def move_queued_files_to_storage() -> dict:
+    """Move the files of uploads still waiting (received / failed) from MongoDB to
+    Firebase Storage. A GridFS file is deleted only after its copy is stored. Safe to run again."""
+    from app.models.pipeline import PipelineUpload, UploadStatus
+
+    moved = failed = freed = 0
+    fb = _firebase_bucket()
+    if fb is None:
+        return {"moved": 0, "failed": 0, "freed_mb": 0, "skipped": "Firebase Storage not configured"}
+    waiting = [UploadStatus.RECEIVED.value, UploadStatus.FAILED.value]  # never one a worker is reading
+    async for up in PipelineUpload.find({"status": {"$in": waiting}}):
+        changed = {}
+        for field, name in (("chat_gridfs_id", "_chat.txt"), ("media_gridfs_id", "_Medien.zip")):
+            fid = getattr(up, field)
+            if not fid or str(fid).startswith(FIREBASE_PREFIX):
+                continue
+            try:
+                data = await _get(UPLOAD_BUCKET, fid)
+                safe = re.sub(r"[^\w.\-]+", "_", f"{up.group_name}{name}")[-120:]
+                path = f"pipeline/{UPLOAD_BUCKET}/moved/{ObjectId()}-{safe}"
+                changed[field] = await _fb_put(fb, path, data, _content_type(name))
+                freed += len(data)
+            except Exception as exc:
+                failed += 1
+                logger.error("pipeline: moving %s of upload %s failed: %s", field, up.id, exc)
+        if changed:
+            old = {f: getattr(up, f) for f in changed}
+            # only switch an upload nobody has picked up meanwhile; the GridFS copy goes after the switch
+            res = await PipelineUpload.get_motor_collection().update_one(
+                {"_id": up.id, **{f: old[f] for f in changed}}, {"$set": changed})
+            if res.modified_count:
+                for f in changed:
+                    await _delete(UPLOAD_BUCKET, old[f])
+                moved += 1
+            else:
+                for f, new_id in changed.items():
+                    await _delete(UPLOAD_BUCKET, new_id)
+    logger.info("pipeline: moved files of %d waiting uploads to Firebase Storage (%.0f MiB)", moved, freed / 2**20)
+    return {"moved": moved, "failed": failed, "freed_mb": round(freed / 2**20)}
 
 
 async def store_upload(group_name: str, chat_bytes: bytes, media_bytes: Optional[bytes],
@@ -1219,3 +1321,87 @@ async def send_daily_report() -> dict:
     state.last_sent_at = now
     await state.save()
     return {**report, "sent_to": sent, "link": link}
+
+
+# --------------------------------------------------------------------------- #
+# Storage cleanup (every few hours): the database must never fill up again
+# --------------------------------------------------------------------------- #
+
+STORAGE_CLEANUP_HOURS = 6
+GENERATOR_FILE_DAYS = 1      # generator CSV / rows files: read within minutes of a run
+UNUSED_IMAGE_HOURS = 6       # an approval image no item / order points to
+
+
+async def storage_cleanup() -> dict:
+    """Deletes only: old generator output files, approval images nothing references, upload files
+    in Firebase that no waiting upload points to (left by a crash). Never orders, items or the
+    files of uploads still waiting."""
+    from app.models.order import Order
+    from app.models.pipeline import PipelineItem, PipelineUpload, UploadStatus
+
+    db = Order.get_motor_collection().database
+    now = datetime.utcnow()
+    out = {"generator_files": 0, "images": 0, "upload_files": 0}
+
+    gen = _bucket("wtb_wts_files")
+    async for f in db["wtb_wts_files.files"].find(
+            {"uploadDate": {"$lt": now - timedelta(days=GENERATOR_FILE_DAYS)}}, {"_id": 1}):
+        try:
+            await gen.delete(f["_id"])
+            out["generator_files"] += 1
+        except Exception:
+            pass
+
+    ref: set[str] = set()
+    async for d in PipelineItem.get_motor_collection().find({"image_id": {"$nin": [None, ""]}}, {"image_id": 1}):
+        ref.add(str(d["image_id"]))
+    async for d in Order.get_motor_collection().find({"source_image": {"$nin": [None, ""]}}, {"source_image": 1}):
+        ref.update(re.findall(r"[0-9a-f]{24}", str(d["source_image"])))
+        if FIREBASE_PREFIX in str(d["source_image"]):
+            ref.add(str(d["source_image"]).split("/images/", 1)[-1])
+    async for f in db[f"{IMAGE_BUCKET}.files"].find(
+            {"uploadDate": {"$lt": now - timedelta(hours=UNUSED_IMAGE_HOURS)}}, {"_id": 1}):
+        if str(f["_id"]) not in ref:
+            await _delete(IMAGE_BUCKET, str(f["_id"]))
+            out["images"] += 1
+
+    fb = _firebase_bucket()
+    if fb is not None:
+        waiting = set()
+        async for u in PipelineUpload.find({"status": {"$in": [UploadStatus.RECEIVED.value,
+                                                               UploadStatus.PROCESSING.value,
+                                                               UploadStatus.FAILED.value]}}):
+            waiting.update(x for x in (u.chat_gridfs_id, u.media_gridfs_id) if x)
+        cutoff = now - timedelta(days=2)
+
+        def sweep(prefix: str, keep: set) -> int:
+            n = 0
+            for blob in fb.list_blobs(prefix=prefix):
+                if FIREBASE_PREFIX + blob.name in keep:
+                    continue
+                if blob.time_created and blob.time_created.replace(tzinfo=None) < cutoff:
+                    blob.delete()
+                    n += 1
+            return n
+
+        try:
+            out["upload_files"] = await asyncio.to_thread(sweep, f"pipeline/{UPLOAD_BUCKET}/", waiting)
+            out["images"] += await asyncio.to_thread(sweep, f"pipeline/{IMAGE_BUCKET}/", ref)
+        except Exception as exc:
+            logger.warning("pipeline: Firebase cleanup failed: %s", exc)
+    logger.info("pipeline: storage cleanup %s", out)
+    return out
+
+
+async def storage_loop() -> None:
+    """At startup: move waiting uploads' files out of MongoDB, then clean up every few hours."""
+    try:
+        await move_queued_files_to_storage()
+    except Exception as exc:
+        logger.error("pipeline: moving queued files failed: %s", exc)
+    while True:
+        try:
+            await storage_cleanup()
+        except Exception as exc:
+            logger.error("pipeline: storage cleanup failed: %s", exc)
+        await asyncio.sleep(STORAGE_CLEANUP_HOURS * 3600)

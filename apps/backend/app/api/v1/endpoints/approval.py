@@ -227,7 +227,7 @@ async def summary(current_admin: User = Depends(get_current_admin_user)) -> Any:
     }
 
 
-@router.get("/images/{image_id}")
+@router.get("/images/{image_id:path}")
 async def get_image(image_id: str, current_admin: User = Depends(get_current_admin_user)) -> Any:
     try:
         data, ctype = await pipeline_service.get_image(image_id)

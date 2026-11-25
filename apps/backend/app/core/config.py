@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     # Uploads processed at the same time (never two of the same group). Each run
     # mostly waits on the AI models; the Mac mini sends ~65 hourly exports.
     PIPELINE_WORKERS: int = 3
+    # Uploaded exports and approval images go to Firebase Storage instead of MongoDB (the media
+    # zips filled the 5 GB Atlas plan and paused processing). False keeps them in GridFS.
+    PIPELINE_FILES_IN_FIREBASE: bool = True
     # Claude API for the needs-review pass (generator spec §1.5). Empty → every
     # needs-review row goes to the approval page's "Unsure" tab.
     ANTHROPIC_API_KEY: str = ""
