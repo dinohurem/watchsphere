@@ -90,6 +90,10 @@ interface OrderBookData {
   lowest_ask?: number;
   highest_bid?: number;
   spread?: number;
+  /** Best ask / bid / spread in EUR (lowest_ask etc. are in the offer's own currency). */
+  lowest_ask_eur?: number | null;
+  highest_bid_eur?: number | null;
+  spread_eur?: number | null;
 }
 
 // Mock data for when API is unavailable
@@ -374,26 +378,26 @@ export default function OrderBookScreen() {
       </View>
 
       {/* Summary Footer */}
-      {orderBook && (orderBook.lowest_ask || orderBook.highest_bid) && (
+      {orderBook && (orderBook.lowest_ask_eur || orderBook.highest_bid_eur) && (
         <View style={styles.summaryFooter}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>{t('orderBook.bestBid')}</Text>
             <Text style={styles.summaryValue}>
-              {orderBook.highest_bid ? formatPrice(orderBook.highest_bid) : '-'}
+              {orderBook.highest_bid_eur ? formatPrice(orderBook.highest_bid_eur) : '-'}
             </Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>{t('orderBook.bestAsk')}</Text>
             <Text style={styles.summaryValue}>
-              {orderBook.lowest_ask ? formatPrice(orderBook.lowest_ask) : '-'}
+              {orderBook.lowest_ask_eur ? formatPrice(orderBook.lowest_ask_eur) : '-'}
             </Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>{t('orderBook.spread')}</Text>
             <Text style={styles.summaryValue}>
-              {orderBook.spread ? formatPrice(orderBook.spread) : '-'}
+              {orderBook.spread_eur ? formatPrice(orderBook.spread_eur) : '-'}
             </Text>
           </View>
         </View>
