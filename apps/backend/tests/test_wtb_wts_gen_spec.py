@@ -624,7 +624,7 @@ def test_marked_retail_with_discount_is_calculated():
 
 
 def test_unmarked_discount_compared_with_list_price(index):
-    # "$32700 -9%": ≈ list price → calculate; ≈ list − discount → keep; else review
+    # "$32700 -9%": ≈ list − discount → keep; otherwise list price minus discount (discount test, Nov 2026)
     lp = index["by_ws_code"]["5167a"]          # US list price 32,700
     info = svc.price_info("5167A $32700 -9%", "US")
     assert svc.apply_list_price_rule(info, lp) == ("29,757", "USD", None)
@@ -632,13 +632,12 @@ def test_unmarked_discount_compared_with_list_price(index):
     info = svc.price_info("5711/1A $32700 -9%", "US")
     assert svc.apply_list_price_rule(info, lp2) == ("32,700", "USD", None)
     nolp = index["by_ws_code"]["5168g"]
-    price, cur, reason = svc.apply_list_price_rule(svc.price_info("5168G $32700 -9%", "US"), nolp)
-    assert reason and "unclear" in reason
+    assert svc.apply_list_price_rule(svc.price_info("5168G $32700 -9%", "US"), nolp) == ("29,757", "USD", None)
 
 
-def test_unmarked_discount_without_list_price_goes_to_review():
+def test_unmarked_discount_without_list_price_is_calculated():
     r = gen(chat(("+1 305 555 0100", "WTS 5168G $32700 -9%")))
-    assert r["matched_count"] == 0 and r["needs_review_count"] == 1
+    assert r["matched_count"] == 1 and r["needs_review_count"] == 0
 
 
 def test_discount_remark_only_when_written():
