@@ -61,7 +61,7 @@ export default function MyAlertsScreen() {
     alerts.forEach((alert) => {
       const key = alert.ws_code;
       if (!map.has(key)) {
-        const name = [alert.brand, alert.reference || alert.ws_code].filter(Boolean).join(' ');
+        const name = [alert.brand, alert.ws_code || alert.reference].filter(Boolean).join(' ');
         map.set(key, { header: name.toUpperCase(), items: [] });
       }
       map.get(key)!.items.push(alert);

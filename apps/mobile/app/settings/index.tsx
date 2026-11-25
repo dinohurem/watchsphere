@@ -23,6 +23,7 @@ import { clearResourceCache } from '@/hooks/useCachedResource';
 import { api } from '@/services/api';
 import { AppCurrency, CURRENCY_NAMES, SUPPORTED_CURRENCIES } from '@/utils/marketFormat';
 import { fp, hp, sp, wp } from '@/utils/responsive';
+import { unregisterPushToken } from '@/services/pushToken';
 
 const CURRENCY_OPTIONS = SUPPORTED_CURRENCIES.map((code) => ({
   value: code,
@@ -62,6 +63,7 @@ export default function ProfileScreen() {
         text: 'Log out',
         style: 'destructive',
         onPress: async () => {
+          await unregisterPushToken();
           await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth-storage']);
           await clearResourceCache();
           queryClient.clear();

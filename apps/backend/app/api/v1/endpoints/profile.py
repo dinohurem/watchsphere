@@ -240,7 +240,13 @@ async def register_fcm_token(
     data: FCMTokenRequest,
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
-    """Register FCM token for push notifications"""
+    """Register this device's push token for the signed-in account.
+
+    A device belongs to one account at a time: the token is removed from every other account,
+    otherwise a phone keeps receiving the alert pushes of an account that was signed in on it
+    before (and none of its own)."""
+    await User.find({"fcm_tokens": data.token, "_id": {"$ne": current_user.id}}).update(
+        {"$pull": {"fcm_tokens": data.token}})
     if data.token not in current_user.fcm_tokens:
         current_user.fcm_tokens.append(data.token)
         current_user.updated_at = datetime.utcnow()
