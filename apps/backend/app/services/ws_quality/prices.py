@@ -220,10 +220,15 @@ def parse_price(
 
 
 def _dollar_currency(sender_country, context_currency):
-    """'$' is HKD in a Hong Kong context, USD everywhere else. It is never GBP, EUR or CHF."""
+    """'$' is HKD from a Hong Kong / Macau / China number (+852/+853/+86), whatever
+    the message context says; elsewhere the context, else USD. Never GBP, EUR or CHF.
+    The generator's price check re-reads it with the app median when only the other
+    one fits."""
+    if (sender_country or "").upper() in HK_COUNTRIES:
+        return "HKD"
     if context_currency in ("HKD", "USD"):
         return context_currency
-    return "HKD" if (sender_country or "").upper() in HK_COUNTRIES else "USD"
+    return "USD"
 
 
 def _default(sender_country):

@@ -39,6 +39,10 @@ def _own_header(line: str, message: str) -> str:
     lines = [x.strip() for x in message.split("\n") if x.strip()]
     key = line.strip()
     idx = next((i for i, x in enumerate(lines) if x == key), None)
+    if idx is None and "\n" in key:
+        # the scope of the first watch can include the header ("Looking for 👀\n126508 green")
+        last = [x.strip() for x in key.split("\n") if x.strip()][-1]
+        idx = next((i for i, x in enumerate(lines) if x == last), None)
     if idx is None:
         return "\n".join(lines[:3])
     i = idx - 1
@@ -149,7 +153,7 @@ def parse_wtb_line(line: str, message: str = "", sender_country: Optional[str] =
             year_from = min(hy)
             year_to = max(hy) if len(set(hy)) > 1 else None
     text_all = l + " " + (hdr or "")
-    full_set = bool(re.search(r"\b(?:full\s*set|fullset|complete\s+set|box\s*(?:&|and|\+)\s*papers?|b\s?&\s?p|keep\s+card|both\s+tags?|white\s+tag|with\s+(?:card|papers?))\b", text_all, re.I))
+    full_set = bool(re.search(r"\b(?:full\s*set|fullset|complete\s+set|box\s*(?:&|and|\+)\s*papers?|b\s?&\s?p|keep\s+card|with\s+(?:card|papers?))\b", text_all, re.I))
     watch_only_ok = bool(re.search(r"\b(?:naked|watch\s+only|only\s+watch|no\s+papers?)\b", text_all, re.I))
 
     # price: only with a budget word, a currency or k/m
