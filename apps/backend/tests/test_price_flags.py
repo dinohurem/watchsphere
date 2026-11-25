@@ -421,6 +421,20 @@ async def test_minority_right_case_is_listed_without_a_currency_suggestion(pdb):
 
 
 @pytest.mark.asyncio
+async def test_cheap_second_line_of_the_same_year_is_held(pdb):
+    """Kenan, 25 Nov 2026: '228238 a black 2024 hkd536k' and '... 2024 hkd380k' in one message, other
+    2024 offers 515k-553k. One offer per line now - the 380k line must be held, the 536k one goes live."""
+    from app.models.order import Order, OrderStatus
+
+    for p in (515_000, 530_000, 553_000):
+        await make_order(p, "HKD", ws="5711/1A", year=2024, cond="Used", brand="Patek")
+    text = "5711/1A 2024 hkd536k\n5711/1A 2024 hkd380k"
+    new = [Order(order_type="sell", brand="Patek", model="M", reference="5711", ws_code="5711/1A", price=p,
+                 currency="HKD", usd_price=p / RATES["HKD"], country_code="CN", user_id="u", whatsapp_phone="+8617700",
+                 year=2024, condition="Used", source_text=text) for p in (536_000, 380_000)]
+    held = await pf.check_new_orders(new)
+    assert held == [new[1]] and new[1].status == OrderStatus.HELD and new[0].status != OrderStatus.HELD
+
 async def test_approved_held_offer_goes_to_the_alerts_rejected_does_not(pdb, monkeypatch):
     """Kenan's alert test (25 Nov 2026): held offers that were approved later never reached an alert."""
     import app.api.v1.endpoints.whatsapp as wa

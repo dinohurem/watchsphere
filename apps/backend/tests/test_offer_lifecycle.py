@@ -219,3 +219,51 @@ async def test_repost_marks_buy_request_as_sold_order(odb):
     row["Sold Order"] = "Yes"
     await _run([row])
     assert (await Order.find_one({"order_type": "buy"})).firm_order is True
+
+
+# --- one offer per line (Kenan, 25 Nov 2026) -----------------------------------------------
+
+@pytest.mark.asyncio
+async def test_year_only_lines_of_one_message_are_separate_offers(odb):
+    from app.models.order import Order
+
+    msg = "Rolex used full set\n126610LN 2019 hkd359k\n126610LN 2022 hkd397k\n126610LN 2024 hkd422k"
+    rows = [_row(price=p, month_year=y, cond="Used", posted="25.11.26 10:39:00", text=msg)
+            for y, p in (("2019", "359.000 HKD"), ("2022", "397.000 HKD"), ("2024", "422.000 HKD"))]
+    res = await _run(rows, guard=False)
+    assert len(res["new_order_ids"]) == 3
+    assert sorted((o.year, o.price) for o in await Order.find_all().to_list()) == [
+        (2019, 359000), (2022, 397000), (2024, 422000)]
+    # the same message again (next hourly export): refreshes, nothing new, nothing overwritten
+    res = await _run(rows, guard=False)
+    assert res["new_order_ids"] == [] and await Order.count() == 3
+    assert sorted((o.year, o.price) for o in await Order.find_all().to_list()) == [
+        (2019, 359000), (2022, 397000), (2024, 422000)]
+
+
+@pytest.mark.asyncio
+async def test_same_year_twice_in_one_message_with_other_price_is_two_offers(odb):
+    from app.models.order import Order
+
+    msg = "126610LN 2024 hkd536k\n126610LN 2024 hkd380k"
+    rows = [_row(price=p, month_year="2024", cond="Used", posted="25.11.26 10:39:00", text=msg)
+            for p in ("536.000 HKD", "380.000 HKD")]
+    res = await _run(rows, guard=False)
+    assert len(res["new_order_ids"]) == 2
+    assert sorted(o.price for o in await Order.find_all().to_list()) == [380000, 536000]
+    res = await _run(rows, guard=False)  # repost of both lines: two refreshes, no third offer
+    assert res["new_order_ids"] == [] and await Order.count() == 2
+    assert sorted(o.price for o in await Order.find_all().to_list()) == [380000, 536000]
+
+
+@pytest.mark.asyncio
+async def test_other_year_in_a_repost_does_not_overwrite_the_existing_offer(odb):
+    from app.models.order import Order
+
+    await _run([_row(price="510.000 HKD", month_year="2024", cond="Used", posted="17.11.26 09:00:00")], guard=False)
+    res = await _run([
+        _row(price="510.000 HKD", month_year="2024", cond="Used", posted="25.11.26 12:37:00"),
+        _row(price="425.000 HKD", month_year="2020", cond="Used", posted="25.11.26 12:37:00"),
+    ], guard=False)
+    assert len(res["new_order_ids"]) == 1
+    assert sorted((o.year, o.price) for o in await Order.find_all().to_list()) == [(2020, 425000), (2024, 510000)]
