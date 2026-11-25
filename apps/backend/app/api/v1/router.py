@@ -18,6 +18,7 @@ from app.api.v1.endpoints import market_browse
 from app.api.v1.endpoints import checks, checks_admin
 
 from app.api.v1.endpoints import orders_bulk_fix
+from app.api.v1.endpoints import approval_bulk, approval_file
 
 api_router = APIRouter()
 
@@ -61,6 +62,8 @@ api_router.include_router(remarks_admin.router, prefix="/admin/remarks", tags=["
 
 api_router.include_router(fx.router, prefix="/fx", tags=["fx"])
 api_router.include_router(pipeline.router, prefix="/pipeline", tags=["pipeline"])
+api_router.include_router(approval_bulk.router, prefix="/approval", tags=["approval"])
+api_router.include_router(approval_file.router, prefix="/approval/file", tags=["approval"])
 api_router.include_router(approval.router, prefix="/approval", tags=["approval"])
 api_router.include_router(price_check.router, prefix="/price-check", tags=["price-check"])
 

@@ -306,7 +306,7 @@ def outlier_check(target: Listing, peers: list[Listing]) -> Optional[dict]:
 
     Same year needs ≥2 other listings (±25 %); otherwise the nearest year with
     ≥2 listings is used (±35 %). Returns {"median_usd", "deviation_pct",
-    "basis_year", "tolerance_pct", "is_outlier"} or None when there is no basis.
+    "basis_year", "basis_count" (offers the median rests on), "tolerance_pct", "is_outlier"} or None when there is no basis.
     Mirrors the generator's price guardrail so the two never disagree.
     """
     if target.price_usd is None:
@@ -342,6 +342,7 @@ def outlier_check(target: Listing, peers: list[Listing]) -> Optional[dict]:
         "median_usd": med,
         "deviation_pct": round(deviation, 1),
         "basis_year": basis,
+        "basis_count": len(values),
         "tolerance_pct": int(tolerance * 100),
         "is_outlier": abs(deviation) > tolerance * 100,
     }

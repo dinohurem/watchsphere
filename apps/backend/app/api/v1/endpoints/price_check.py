@@ -57,6 +57,7 @@ def listing_payload(l: ms.Listing, currency: str, rates: dict, outlier: Optional
         "source_text": getattr(o, "source_text", None) or getattr(o, "notes", None),
         "source_group": getattr(o, "source_group", None),
         "remarks": getattr(o, "remarks", None),
+        "price_approved": bool(getattr(o, "price_approved", False)),
         "match_method": getattr(o, "match_method", None),
         "excluded": l.excluded,
         "active": l.active,
@@ -64,6 +65,7 @@ def listing_payload(l: ms.Listing, currency: str, rates: dict, outlier: Optional
             {
                 **outlier,
                 "median": round(fx.convert(outlier["median_usd"], "USD", currency, rates), 2),
+                "offer_count": outlier.get("basis_count"),
             }
             if outlier else None
         ),
@@ -88,6 +90,8 @@ async def suspicious_listings(currency: str, period: str = "1M", limit: int = 20
     for ws, items in by_ws.items():
         pool = ms.median_eligible(items)
         for l in pool:
+            if getattr(l.extra.get("order"), "price_approved", False):
+                continue  # an admin approved this price: never flagged again
             res = ms.outlier_check(l, pool)
             if res and res["is_outlier"]:
                 flagged.append(listing_payload(l, currency, rates, res))
