@@ -137,6 +137,12 @@ class OrderBookResponse(BaseModel):
     lowest_ask: Optional[float] = None
     highest_bid: Optional[float] = None
     spread: Optional[float] = None
+    # The same three numbers in EUR. lowest_ask/highest_bid above are raw prices in
+    # the offer's own currency (HKD, USD, ...); these are comparable and safe to
+    # label with a euro sign.
+    lowest_ask_eur: Optional[float] = None
+    highest_bid_eur: Optional[float] = None
+    spread_eur: Optional[float] = None
     # All-time active listing counts (redesign v3 §0.4) – same numbers as the cards
     wts_count_all_time: int = 0
     wtb_count_all_time: int = 0
@@ -372,6 +378,30 @@ async def get_price_history(
     )
 
 
+def _first_priced_usd(orders) -> Optional[float]:
+    """USD price of the first order in the (already price-sorted) list that has one."""
+    for o in orders:
+        if o.usd_price:
+            return o.usd_price
+    return None
+
+
+async def _summary_in_eur(sell_orders, buy_orders):
+    """Best ask, best bid and spread in EUR, from the stored USD prices."""
+    from app.services import fx
+
+    try:
+        rates = await fx.load_rates()
+    except Exception as e:
+        logger.warning("order book summary: FX rates unavailable: %s", e)
+        return None, None, None
+    ask = fx.convert(_first_priced_usd(sell_orders), "USD", "EUR", rates)
+    bid = fx.convert(_first_priced_usd(buy_orders), "USD", "EUR", rates)
+    ask = round(ask) if ask else None
+    bid = round(bid) if bid else None
+    return ask, bid, (ask - bid if ask and bid else None)
+
+
 @router.get("/book/{reference:path}", response_model=OrderBookResponse)
 async def get_order_book(
     reference: str,
@@ -515,6 +545,7 @@ async def get_order_book(
     spread = None
     if lowest_ask and highest_bid:
         spread = lowest_ask - highest_bid
+    lowest_ask_eur, highest_bid_eur, spread_eur = await _summary_in_eur(sell_orders, buy_orders)
 
     wts_all_time, wtb_all_time = total_sell_count, total_buy_count
     if watch and watch.ws_code:
@@ -538,6 +569,9 @@ async def get_order_book(
         lowest_ask=lowest_ask,
         highest_bid=highest_bid,
         spread=spread,
+        lowest_ask_eur=lowest_ask_eur,
+        highest_bid_eur=highest_bid_eur,
+        spread_eur=spread_eur,
         wts_count_all_time=wts_all_time,
         wtb_count_all_time=wtb_all_time,
     )
