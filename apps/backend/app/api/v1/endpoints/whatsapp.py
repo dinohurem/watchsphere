@@ -466,6 +466,9 @@ async def import_order_rows(
     # it must not create a second copy. They are no peers of anything (not in existing_orders).
     held_orders = await Order.find(Order.status == OrderStatus.HELD).to_list()
     existing_order_map: dict[tuple, Any] = {}
+    # existing offer id -> (phone, post time) of the line of this import that refreshed it
+    touched_this_import: dict[str, tuple] = {}
+    existing_by_key: dict[tuple, list] = {}  # every stored offer per key (one dealer can list a year twice)
     for eo in sorted(revivable + held_orders, key=lambda o: o.created_at or now) + sorted(
         existing_orders, key=lambda o: o.created_at or now
     ):
@@ -478,10 +481,13 @@ async def import_order_rows(
             eo_month_year = f"{eo.watch_month:02d}/{eo.year % 100:02d}"
         elif eo.year_raw:
             eo_month_year = eo.year_raw.strip().lower()
+        elif eo.year:
+            eo_month_year = str(eo.year)  # a year without a month is part of the identity too
         eo_condition = eo.condition.value if eo.condition else ""
         if eo_ws and eo_phone:
             key = lifecycle.offer_key(eo.order_type.value, eo_ws, eo_phone, eo_month_year, eo_condition)
             existing_order_map[key] = eo
+            existing_by_key.setdefault(key, []).append(eo)
 
     use_guard = guard and lifecycle.guard_enabled()
     reference_prices = lifecycle.reference_prices(existing_orders) if use_guard else {}
@@ -694,6 +700,10 @@ async def import_order_rows(
                 dup_month_year = f"{watch_month:02d}/{watch_year % 100:02d}"
             elif year_raw:
                 dup_month_year = year_raw.strip().lower()
+            elif watch_year:
+                # "228238a champ 2019 hkd359k" / "... 2022 hkd397k": a year alone tells two pieces apart.
+                # Without it every year-only line of a dealer's watch was one offer (Kenan, 25 Nov 2026).
+                dup_month_year = str(watch_year)
             dup_key = lifecycle.offer_key(
                 order_type.value, dup_ws, dup_phone, dup_month_year,
                 order_condition.value if order_condition else "",
@@ -701,7 +711,20 @@ async def import_order_rows(
             posted = message_timestamp or now
 
             existing_order = existing_order_map.get(dup_key)
+            same_price = lambda other: bool(price) and round(price) == round(other.price or 0) and \
+                (currency or "").upper() == (other.currency or "").upper()
             if isinstance(existing_order, Order):
+                # Several stored offers can share a key (a dealer lists "2024 hkd536k" and "2024 hkd380k"):
+                # the one with this price first, else one no other line of this message refreshed yet. A
+                # second line of the SAME message with another price is its own offer, never an overwrite.
+                free = [o for o in existing_by_key.get(dup_key, [existing_order])
+                        if touched_this_import.get(str(o.id)) != (dup_phone, posted)]
+                existing_order = next((o for o in free if same_price(o)), None) or (free[-1] if free else None)
+            if isinstance(existing_order, int) and not same_price(order_docs[existing_order]) \
+                    and (order_docs[existing_order].created_at or posted) == posted:
+                existing_order = None
+            if isinstance(existing_order, Order):
+                touched_this_import[str(existing_order.id)] = (dup_phone, posted)
                 if existing_order.created_at and posted < existing_order.created_at:
                     # An older export processed late must not overwrite a newer post.
                     skipped_duplicates += 1
