@@ -114,6 +114,8 @@ class OrderBookEntry(BaseModel):
     firm_order: bool = False
     usd_price: Optional[float] = None
     first_seen_at: Optional[datetime] = None
+    # Expired offers are listed (with ?range=) but not in lowest ask / median.
+    expired: bool = False
 
     @field_serializer("created_at", "first_seen_at")
     def _iso_utc(self, v: Optional[datetime]) -> Optional[str]:
@@ -146,6 +148,8 @@ class OrderBookResponse(BaseModel):
     # All-time active listing counts (redesign v3 §0.4) – same numbers as the cards
     wts_count_all_time: int = 0
     wtb_count_all_time: int = 0
+    # The ?range= the rows cover (None: active offers only, the old behaviour).
+    range: Optional[str] = None
 
 
 class MarketPriceInfo(BaseModel):
@@ -402,15 +406,23 @@ async def _summary_in_eur(sell_orders, buy_orders):
     return ask, bid, (ask - bid if ask and bid else None)
 
 
+BOOK_RANGE_DAYS = {"1W": 7, "1M": 30, "3M": 90, "1Y": 365, "ALL": None}
+
+
 @router.get("/book/{reference:path}", response_model=OrderBookResponse)
 async def get_order_book(
     reference: str,
     limit: int = Query(default=20, le=5000),
     skip: int = Query(default=0, ge=0),
+    range: Optional[str] = Query(default=None, description="1W | 1M | 3M | 1Y | ALL"),
 ) -> Any:
     """
     Get order book for a specific watch reference or ws_code.
     Returns both buy and sell orders sorted by price.
+
+    Without ``range`` only active offers (as before). With ``range`` also the expired
+    offers posted inside it, marked ``expired``: expired does not mean hidden. Lowest
+    ask, highest bid and spread always come from active offers only.
     """
     import re as re_mod
 
@@ -424,30 +436,21 @@ async def get_order_book(
     buy_sort = [("usd_price", -1), ("price", -1)]
     sell_sort = [("usd_price", 1), ("price", 1)]
 
-    if watch and watch.ws_code:
-        buy_query = Order.find(
-            Order.ws_code == watch.ws_code,
-            Order.order_type == OrderType.BUY,
-            Order.status == OrderStatus.ACTIVE,
-        )
-        sell_query = Order.find(
-            Order.ws_code == watch.ws_code,
-            Order.order_type == OrderType.SELL,
-            Order.status == OrderStatus.ACTIVE,
-        )
-    else:
-        # No Watch found by ws_code — return empty order book. Do NOT fall back
-        # to reference matching (would collapse distinct variants together).
-        buy_query = Order.find(
-            Order.ws_code == reference,
-            Order.order_type == OrderType.BUY,
-            Order.status == OrderStatus.ACTIVE,
-        )
-        sell_query = Order.find(
-            Order.ws_code == reference,
-            Order.order_type == OrderType.SELL,
-            Order.status == OrderStatus.ACTIVE,
-        )
+    # No Watch found by ws_code: match the given code only. Do NOT fall back to
+    # reference matching (would collapse distinct variants together).
+    ws_code = watch.ws_code if watch and watch.ws_code else reference
+    rng = (range or "").upper() or None
+    if rng and rng not in BOOK_RANGE_DAYS:
+        raise HTTPException(status_code=422, detail=f"range must be one of {', '.join(BOOK_RANGE_DAYS)}")
+    status_filter: dict = {"status": OrderStatus.ACTIVE.value}
+    if rng:
+        expired: dict = {"status": OrderStatus.EXPIRED.value}
+        days = BOOK_RANGE_DAYS[rng]
+        if days is not None:
+            expired["created_at"] = {"$gte": datetime.utcnow() - timedelta(days=days)}
+        status_filter = {"$or": [{"status": OrderStatus.ACTIVE.value}, expired]}
+    buy_query = Order.find({"ws_code": ws_code, "order_type": OrderType.BUY.value, **status_filter})
+    sell_query = Order.find({"ws_code": ws_code, "order_type": OrderType.SELL.value, **status_filter})
 
     total_buy_count = await buy_query.count()
     total_sell_count = await sell_query.count()
@@ -534,18 +537,24 @@ async def get_order_book(
             firm_order=bool(getattr(order, 'firm_order', False)),
             usd_price=order.usd_price,
             first_seen_at=order.first_seen_at,
+            expired=order.status == OrderStatus.EXPIRED,
         )
 
     formatted_buy = [format_order(o) for o in buy_orders]
     formatted_sell = [format_order(o) for o in sell_orders]
 
-    # Calculate spread
-    lowest_ask = sell_orders[0].price if sell_orders else None
-    highest_bid = buy_orders[0].price if buy_orders else None
+    # Calculate spread: active offers only (the page may be a later one, or hold
+    # expired rows with ?range=).
+    best_sell = await Order.find({"ws_code": ws_code, "order_type": OrderType.SELL.value,
+                                  "status": OrderStatus.ACTIVE.value}).sort(sell_sort).limit(10).to_list()
+    best_buy = await Order.find({"ws_code": ws_code, "order_type": OrderType.BUY.value,
+                                 "status": OrderStatus.ACTIVE.value}).sort(buy_sort).limit(10).to_list()
+    lowest_ask = best_sell[0].price if best_sell else None
+    highest_bid = best_buy[0].price if best_buy else None
     spread = None
     if lowest_ask and highest_bid:
         spread = lowest_ask - highest_bid
-    lowest_ask_eur, highest_bid_eur, spread_eur = await _summary_in_eur(sell_orders, buy_orders)
+    lowest_ask_eur, highest_bid_eur, spread_eur = await _summary_in_eur(best_sell, best_buy)
 
     wts_all_time, wtb_all_time = total_sell_count, total_buy_count
     if watch and watch.ws_code:
@@ -574,6 +583,7 @@ async def get_order_book(
         spread_eur=spread_eur,
         wts_count_all_time=wts_all_time,
         wtb_count_all_time=wtb_all_time,
+        range=rng,
     )
 
 

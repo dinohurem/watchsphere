@@ -166,7 +166,7 @@ def summarize(items: List[Item], total_active_orders: int, sample: int = 20) -> 
     share = removed / total_active_orders if total_active_orders else 0.0
     warnings = []
     if share > 0.5:
-        warnings.append(f"This file deletes {share:.0%} of all active orders")
+        warnings.append(f"This file deletes {share:.0%} of all active and expired orders")
     if skipped.get("changed", 0) + skipped.get("not_found", 0) > 0.2 * max(1, len(items)):
         warnings.append(
             "More than 20 % of the rows no longer match the app - the file is stale, build a new one"

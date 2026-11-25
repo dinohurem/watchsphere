@@ -61,6 +61,7 @@ class Listing:
     created_at: datetime
     excluded: bool = False
     active: bool = True
+    expired: bool = False
     extra: dict = field(default_factory=dict)
 
 
@@ -381,6 +382,7 @@ def listing_from_order(o, rates: dict[str, float]) -> Listing:
         created_at=get("created_at") or datetime.utcnow(),
         excluded=bool(get("excluded_from_median")),
         active=(status or "active") == "active",
+        expired=status == "expired",
     )
 
 
@@ -440,8 +442,9 @@ def compute_stats(ws_code: str, listings: list[Listing], watch: Optional[dict],
     return {
         "ws_code": ws_code,
         "brand": (watch or {}).get("brand"),
-        "wts_count": sum(1 for l in active if l.order_type == "sell"),
-        "wtb_count": sum(1 for l in active if l.order_type == "buy"),
+        # All-time counts on the cards: active and expired offers.
+        "wts_count": sum(1 for l in listings if (l.active or l.expired) and l.order_type == "sell"),
+        "wtb_count": sum(1 for l in listings if (l.active or l.expired) and l.order_type == "buy"),
         "change_1m_pct": periods["1M"]["wts_change_pct"],
         "retail_pct": retail["avg_vs_retail_pct"],
         "retail_status": retail["status"],

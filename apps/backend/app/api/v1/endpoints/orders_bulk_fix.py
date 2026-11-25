@@ -52,6 +52,11 @@ def _oid(s: str) -> Optional[PydanticObjectId]:
         return None
 
 
+# Expired offers are fixed too: they stay visible in the order book history, and
+# wrong orders that only expired (never deleted) must still be correctable.
+FIXABLE = [OrderStatus.ACTIVE.value, OrderStatus.EXPIRED.value]
+
+
 async def _batch_or_404(batch_id: str) -> OrderFixBatch:
     oid = _oid(batch_id)
     batch = await OrderFixBatch.get(oid) if oid else None
@@ -76,7 +81,7 @@ async def _orders_by_id(ids: List[str]) -> Dict[str, dict]:
     col = Order.get_motor_collection()
     projection = {k: 1 for k in plan.SNAPSHOT_FIELDS + ("order_type",)}
     for i in range(0, len(oids), CHUNK):
-        cur = col.find({"_id": {"$in": oids[i:i + CHUNK]}, "status": OrderStatus.ACTIVE.value}, projection)
+        cur = col.find({"_id": {"$in": oids[i:i + CHUNK]}, "status": {"$in": FIXABLE}}, projection)
         async for d in cur:
             out[str(d["_id"])] = d
     return out
@@ -171,7 +176,7 @@ async def preview_bulk_fix(
     known = set((await _watches_by_ws_code(targets)).keys())
     currencies = set((await fx.load_rates()).keys())
     items = plan.build_plan(rows, orders, known, currencies)
-    total = await Order.find(Order.status == OrderStatus.ACTIVE).count()
+    total = await Order.find({"status": {"$in": FIXABLE}}).count()
     summary = plan.summarize(items, total)
 
     batch = OrderFixBatch(
@@ -226,7 +231,7 @@ async def commit_bulk_fix(
             part = dels[i:i + CHUNK]
             expect = {it.order_id: it.before for it in part}
             oids = [PydanticObjectId(it.order_id) for it in part]
-            found = [d async for d in col.find({"_id": {"$in": oids}, "status": OrderStatus.ACTIVE.value})]
+            found = [d async for d in col.find({"_id": {"$in": oids}, "status": {"$in": FIXABLE}})]
             # An order that changed between preview and commit is left alone.
             found = [
                 d for d in found
@@ -259,7 +264,7 @@ async def commit_bulk_fix(
         now = datetime.utcnow()
         for it in edits:
             b = it.before
-            flt = {"_id": PydanticObjectId(it.order_id), "status": OrderStatus.ACTIVE.value,
+            flt = {"_id": PydanticObjectId(it.order_id), "status": {"$in": FIXABLE},
                    "ws_code": b.get("ws_code"), "price": b.get("price"), "currency": b.get("currency")}
             upd: Dict[str, Any]
             if it.action == "move":
