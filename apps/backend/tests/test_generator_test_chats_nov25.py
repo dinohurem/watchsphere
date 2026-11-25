@@ -100,8 +100,11 @@ def test_nickname_before_the_reference_picks_the_variant():
 # --- 6. condition not stated ------------------------------------------------------------
 
 def test_condition_stays_empty_when_not_stated():
-    m = gen("5164R naked 2019 HKD 880,000", "WTS", "110")["matched"]
+    m = gen("5164R naked 2024 HKD 880,000", "WTS", "110")["matched"]
     assert [r["Zustand"] for r in m] == [""]
+    # 2023 or older without a word is Used (WTS condition rule 4)
+    m = gen("5164R naked 2019 HKD 880,000", "WTS", "110")["matched"]
+    assert [r["Zustand"] for r in m] == ["Used"]
     m = gen("126500LN white N11/2026 276k hkd", "WTS", "101")["matched"]
     assert [r["Zustand"] for r in m] == ["Unworn"]  # an N card date is new
 
