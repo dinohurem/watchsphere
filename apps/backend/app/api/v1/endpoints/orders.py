@@ -417,7 +417,10 @@ async def _summary_in_eur(sell_orders, buy_orders):
     return ask, bid, (ask - bid if ask and bid else None)
 
 
-BOOK_RANGE_DAYS = {"1W": 7, "1M": 30, "3M": 90, "1Y": 365, "ALL": None}
+# "1W" stays accepted for app builds that still send it; 10D is the default.
+BOOK_RANGE_DAYS = {"10D": 10, "1W": 7, "1M": 30, "3M": 90, "1Y": 365, "ALL": None}
+
+BOOK_DEFAULT_RANGE = "10D"
 
 
 @router.get("/book/{reference:path}", response_model=OrderBookResponse)
@@ -425,14 +428,14 @@ async def get_order_book(
     reference: str,
     limit: int = Query(default=20, le=5000),
     skip: int = Query(default=0, ge=0),
-    range: Optional[str] = Query(default=None, description="1W | 1M | 3M | 1Y | ALL"),
+    range: Optional[str] = Query(default=None, description="10D | 1M | 3M | 1Y | ALL (1W kept for older apps); default 10D"),
 ) -> Any:
     """
     Get order book for a specific watch reference or ws_code.
     Returns both buy and sell orders sorted by price.
 
-    Without ``range`` only active offers (as before). With ``range`` also the expired
-    offers posted inside it, marked ``expired``: expired does not mean hidden. Lowest
+    Also lists the expired offers posted inside ``range`` (default 10D; ``ACTIVE`` = none), marked ``expired``:
+    expired does not mean hidden. Lowest
     ask, highest bid and spread always come from active offers only.
     """
     import re as re_mod
@@ -450,10 +453,13 @@ async def get_order_book(
     # No Watch found by ws_code: match the given code only. Do NOT fall back to
     # reference matching (would collapse distinct variants together).
     ws_code = watch.ws_code if watch and watch.ws_code else reference
-    rng = (range or "").upper() or None
-    if rng and rng not in BOOK_RANGE_DAYS:
-        raise HTTPException(status_code=422, detail=f"range must be one of {', '.join(BOOK_RANGE_DAYS)}")
+    rng = (range or "").upper() or BOOK_DEFAULT_RANGE
+    # ACTIVE: no expired offers, for screens that do not render the expired state.
+    if rng and rng != "ACTIVE" and rng not in BOOK_RANGE_DAYS:
+        raise HTTPException(status_code=422, detail=f"range must be one of {', '.join(BOOK_RANGE_DAYS)}, ACTIVE")
     status_filter: dict = {"status": OrderStatus.ACTIVE.value}
+    if rng == "ACTIVE":
+        rng = None
     if rng:
         expired: dict = {"status": OrderStatus.EXPIRED.value}
         days = BOOK_RANGE_DAYS[rng]

@@ -22,8 +22,33 @@ export const PERIOD_DAYS: Record<DetailPeriod, number | null> = {
   ALL: null,
 };
 
-export function periodLabel(period: DetailPeriod): string {
-  return DETAIL_PERIODS.find((p) => p.value === period)?.label ?? period;
+/** Order-book table period (the clock chip next to Cheapest). Defaults to 10D. */
+export type TablePeriod = '10D' | '1M' | '3M' | '1Y' | 'ALL';
+export const DEFAULT_TABLE_PERIOD: TablePeriod = '10D';
+
+export const TABLE_PERIODS: { value: TablePeriod; label: string; long: string }[] = [
+  { value: '10D', label: '10D', long: '10 days' },
+  { value: '1M', label: '1M', long: '1 month' },
+  { value: '3M', label: '3M', long: '3 months' },
+  { value: '1Y', label: '1Y', long: '1 year' },
+  { value: 'ALL', label: 'All', long: 'All time' },
+];
+
+export const TABLE_PERIOD_DAYS: Record<TablePeriod, number | null> = {
+  '10D': 10,
+  '1M': 30,
+  '3M': 90,
+  '1Y': 365,
+  ALL: null,
+};
+
+export function periodLabel(period: TablePeriod): string {
+  return TABLE_PERIODS.find((p) => p.value === period)?.label ?? period;
+}
+
+/** The trend stats are precomputed per DetailPeriod (no 10D): the table's 10D shows the 1W trend. */
+export function toTrendPeriod(period: TablePeriod): DetailPeriod {
+  return period === '10D' ? '1W' : period;
 }
 
 export type SortMode = 'cheapest' | 'newest';
