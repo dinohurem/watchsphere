@@ -1,5 +1,5 @@
 from beanie import Document
-from pydantic import Field
+from pydantic import Field, model_validator
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
@@ -151,6 +151,18 @@ class Order(Document):
     expires_at: Optional[datetime] = None
     # Earlier prices of this offer, newest last: [{"price", "currency", "until"}]
     price_history: List[dict] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _canonical_country_name(self):
+        """Every order carries the full country name (UAE/UK short forms), never the code.
+
+        Applies to every creation path (import, admin, user); an unknown code keeps what was given."""
+        from app.core.countries import country_display_name
+
+        name = country_display_name(self.country_code)
+        if name and self.country_name != name:
+            self.__dict__["country_name"] = name
+        return self
 
     class Settings:
         name = "orders"

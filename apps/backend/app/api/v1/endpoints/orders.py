@@ -1788,6 +1788,21 @@ async def admin_delete_orders_by_ws_code(
     return {"message": f"Deleted {count} orders for ws_code '{ws_code}'"}
 
 
+@router.post("/admin/maintenance/fix-country-names")
+async def admin_fix_country_names(
+    dry_run: bool = Query(True),
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Fill ``country_name`` with the full name where it is empty, a country code, or not the
+    canonical name of the order's country code (UAE and UK are the only short forms).
+
+    Run with ``dry_run=true`` first (counts per code and before -> after, nothing changes),
+    then ``dry_run=false``. Idempotent; codes that are not known countries are only reported."""
+    from app.services.country_backfill import fix_order_country_names
+
+    return await fix_order_country_names(dry_run=dry_run)
+
+
 @router.get("/admin/stats")
 async def admin_order_stats(
     current_admin: User = Depends(get_current_admin_user),

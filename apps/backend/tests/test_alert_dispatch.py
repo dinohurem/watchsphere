@@ -231,7 +231,7 @@ def test_push_wtb_no_target_no_year_no_condition():
               price=None, country_code="UK", country_name=None)
     data = ad.build_activity_data("wtb", "5712/1R", [o])
     _, body = ad.push_texts(data)
-    assert body == "🇬🇧 United Kingdom\nTarget: /"
+    assert body == "🇬🇧 UK\nTarget: /"
     assert data["condition"] is None and data["year"] is None and data["price"] is None
 
 

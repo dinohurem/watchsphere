@@ -370,7 +370,7 @@ export const GUIDE_MOCK_SELL_ORDERS = [
   {
     id: 'guide-sell-4',
     country_code: 'gb',
-    country_name: 'United Kingdom',
+    country_name: 'UK',
     date: '02/07',
     condition: 'Used' as const,
     price: 13200,

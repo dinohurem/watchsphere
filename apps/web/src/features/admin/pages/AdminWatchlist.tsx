@@ -107,7 +107,7 @@ const emptyOrderBookForm: OrderBookFormData = {
 
 const COUNTRY_OPTIONS = [
   { code: 'US', name: 'United States' },
-  { code: 'GB', name: 'United Kingdom' },
+  { code: 'GB', name: 'UK' },
   { code: 'IT', name: 'Italy' },
   { code: 'DE', name: 'Germany' },
   { code: 'FR', name: 'France' },

@@ -21,6 +21,8 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Iterable, Optional
 
+from app.core.countries import country_display_name
+
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------------
@@ -34,19 +36,6 @@ EU_COUNTRIES: frozenset[str] = frozenset({
 
 # Orders use "UK" (generator) while the app/ISO uses "GB"; "UAE" appears in old data.
 _COUNTRY_CANONICAL = {"GB": "UK", "UAE": "AE", "USA": "US", "EL": "GR"}
-
-COUNTRY_NAMES = {
-    "US": "United States", "UK": "United Kingdom", "DE": "Germany", "IT": "Italy",
-    "FR": "France", "CH": "Switzerland", "AE": "United Arab Emirates", "HK": "Hong Kong",
-    "SG": "Singapore", "JP": "Japan", "AU": "Australia", "CA": "Canada",
-    "NL": "Netherlands", "ES": "Spain", "AT": "Austria", "BE": "Belgium",
-    "PT": "Portugal", "SE": "Sweden", "DK": "Denmark", "NO": "Norway",
-    "PL": "Poland", "CZ": "Czech Republic", "TW": "Taiwan", "KR": "South Korea",
-    "TH": "Thailand", "MY": "Malaysia", "PH": "Philippines", "IN": "India",
-    "CN": "China", "MO": "Macau", "TR": "Turkey", "SA": "Saudi Arabia", "QA": "Qatar",
-    "KW": "Kuwait", "BH": "Bahrain", "OM": "Oman", "IE": "Ireland", "LU": "Luxembourg",
-    "MC": "Monaco", "GR": "Greece", "HU": "Hungary", "RO": "Romania", "HR": "Croatia",
-}
 
 
 def canonical_country(code: Optional[str]) -> str:
@@ -86,10 +75,8 @@ def flag_emoji(code: Optional[str]) -> str:
 
 
 def country_name(code: Optional[str], fallback: Optional[str] = None) -> Optional[str]:
-    if fallback:
-        return fallback
-    c = canonical_country(code)
-    return COUNTRY_NAMES.get(c, c or None)
+    """Full country name from the code (UAE/UK short forms); the stored name only if the code is unknown."""
+    return country_display_name(code) or fallback or canonical_country(code) or None
 
 
 # --------------------------------------------------------------------------------------------
