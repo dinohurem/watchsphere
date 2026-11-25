@@ -16,7 +16,7 @@
     ],
     "ios": {
       "buildNumber": "42",
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.watchsphere.watchsphere",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "WatchSphere needs access to your photo library to share images in messages and set your profile picture.",
