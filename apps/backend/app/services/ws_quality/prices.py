@@ -12,6 +12,7 @@ Fixes over the current extractor (each one seen in production data):
 """
 import re
 from typing import Optional, NamedTuple, Iterable
+from .discount import find_discount
 from .normalize import clean
 
 HK_COUNTRIES = {"HK", "CN", "MO"}
@@ -143,16 +144,15 @@ def parse_price(
     s = clean(line)
     s = _LIST_PRICE_RE.sub(" ", s)
 
-    # discount notation: "$565000-25%"  "HKD261,000-20%"
-    dm = re.search(rf"(?P<pre>hk\$|hkd|usdt?|€|\$)?\s*(?P<num>{_NUM})\s?(?P<suf>k|m)?\s?-\s?(?P<pct>\d{{1,2}})\s?%", s, re.I)
-    if dm:
-        base, _ = _value(dm.group("num"), dm.group("suf"), True)
-        if base and base >= 1000:
-            pre = (dm.group("pre") or "").lower()
-            cur = "HKD" if pre in ("hk$", "hkd") else "USD" if pre.startswith("usd") else "EUR" if pre == "€" else None
-            if cur is None:
-                cur = _dollar_currency(sender_country, context_currency) if pre == "$" else (context_currency or _default(sender_country))
-            return Price(int(base * (1 - int(dm.group("pct")) / 100)), cur, "discount", dm.group(0))
+    # discount notation (list price minus discount): "$565000-25%", "HKD:63,000 (-17%)", "// HKD54900 // -21%"
+    dm = find_discount(s)
+    if dm and not dm.impossible:
+        tag = dm.currency_tag
+        cur = ("HKD" if tag in ("hk$", "hkd") else "USD" if tag.startswith("us") else "EUR" if tag in ("€", "eur", "euro", "euros")
+               else "GBP" if tag in ("£", "gbp") else tag.upper() if tag in ("chf", "aed", "sgd") else None)
+        if cur is None:
+            cur = _dollar_currency(sender_country, context_currency) if tag == "$" else (context_currency or _default(sender_country))
+        return Price(dm.price, cur, "discount", s[dm.span[0]:dm.span[1]])
 
     # Chinese notation: "97w人民币" = 970,000 CNY, "84w5 rmb" = 845,000 CNY
     wm = re.search(r"(?<![A-Za-z0-9])(\d+(?:[.,]\d+)?)\s?[w万萬]\s?(\d)?\s?(?:人民币|rmb|cny)", s, re.I)

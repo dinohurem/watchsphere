@@ -17,6 +17,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
+from app.services.ws_quality.discount import find_discount
+
 logger = logging.getLogger(__name__)
 
 
@@ -400,6 +402,11 @@ def numeric_remarks(text: str) -> list[str]:
         add(f"Serviced {m.group(1)}")
     for m in _LC_RE.finditer(t):
         add(f"LC{m.group(1)}")
+    # list price minus discount without a % sign ("$63000 -15 9/2026"), full-width ％, brackets ...
+    for line in text.split("\n"):
+        d = find_discount(line)
+        if d and not d.impossible:
+            add(d.remark)
     for rx in _DISCOUNT_RES:
         for m in rx.finditer(t):
             n = _fmt_number(m.group("num") if "num" in rx.groupindex else m.group(1))
