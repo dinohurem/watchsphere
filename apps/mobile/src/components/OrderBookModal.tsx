@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { X } from './icons';
 import Svg, { Path } from 'react-native-svg';
+import { buildWhatsAppOrderMessage, buildWhatsAppUrl } from '@watchsphere/shared/utils/whatsappMessage';
 
 function WhatsAppIcon({ size = 18 }: { size?: number }) {
   return (
@@ -29,6 +30,9 @@ interface OrderBookEntry {
   whatsapp_phone?: string;
   currency?: string;
   numericPrice?: number;
+  ws_code?: string | null;
+  year?: number | null;
+  year_raw?: string | null;
 }
 
 const countryData: Record<string, { emoji: string; abbr: string }> = {
@@ -56,10 +60,15 @@ export function OrderBookModal({ visible, onClose, buyOrders = [], sellOrders = 
 
   const handleWhatsAppChat = (order: OrderBookEntry) => {
     if (!order.whatsapp_phone) return;
-    const currency = order.currency || 'EUR';
-    const price = order.numericPrice ? order.numericPrice.toLocaleString('de-DE') : order.price;
-    const message = `Hi, is ${watchName} ${reference} available?\n${currency} ${price} - thank you very much!`;
-    const url = `https://wa.me/${order.whatsapp_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
+    const message = buildWhatsAppOrderMessage({
+      orderType: activeTab === 'buy' ? 'buy' : 'sell',
+      wsCode: order.ws_code,
+      reference,
+      year: order.year ?? order.year_raw,
+      price: order.numericPrice ?? (typeof order.price === 'number' ? order.price : null),
+      currency: order.currency || 'EUR',
+    });
+    const url = buildWhatsAppUrl(order.whatsapp_phone, message);
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open WhatsApp. Make sure it is installed.');
     });

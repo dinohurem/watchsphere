@@ -1254,6 +1254,10 @@ class OrderDetailResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     whatsapp_phone: Optional[str] = None
+    # Used by clients to prefill the WhatsApp message ("Hi, is the {ws_code} {year} ...").
+    ws_code: Optional[str] = None
+    year: Optional[int] = None
+    year_raw: Optional[str] = None
     watch_details: Optional[WatchDetailsResponse] = None
     price_change: Optional[float] = None
 
@@ -1356,6 +1360,9 @@ async def get_order(
         has_papers=order.has_papers,
         notes=order.notes,
         whatsapp_phone=whatsapp_phone,
+        ws_code=order.ws_code,
+        year=order.year,
+        year_raw=getattr(order, 'year_raw', None),
         created_at=order.created_at,
         updated_at=order.updated_at,
         watch_details=watch_details,
