@@ -854,7 +854,9 @@ export default function WatchDetailsScreen() {
     if (!watchReference) return;
     try {
       const encodedRef = encodeURIComponent(watchReference);
-      const response = await api.get(`/orders/price-history/${encodedRef}?days=365`);
+      const response = await api.get(`/orders/price-history/${encodedRef}`, {
+        params: { days: 365, currency },
+      });
       if (!alive.current) return;
       if (response.data?.points) {
         setFullPriceHistory(response.data.points);
@@ -875,7 +877,7 @@ export default function WatchDetailsScreen() {
     if (!v2Enabled) return;
     const task = InteractionManager.runAfterInteractions(() => loadPriceHistory());
     return () => task.cancel();
-  }, [id, reference, v2Enabled]);
+  }, [id, reference, v2Enabled, currency]);
 
   // Reload when the screen comes BACK into focus (e.g. after creating an order). The first focus
   // is skipped: it fires on mount too, which loaded everything (incl. the full order book) twice.
