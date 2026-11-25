@@ -36,6 +36,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, onAccountPendingApproval } from '@/services/api';
 import { useAlertPushHandling } from '@/hooks/useAlertPushHandling';
+import { syncPushToken } from '@/services/pushToken';
 
 // Keep splash screen visible while fonts load
 SplashScreen.preventAutoHideAsync();
@@ -296,6 +297,13 @@ function RootLayoutNav({ onSessionRestoreDone }: { onSessionRestoreDone: () => v
 
   // Alert-match push: iOS categories, tap / "View listing(s)" → detail page, Activity badge.
   useAlertPushHandling(hasHydrated && !isRestoringSession && isAuthenticated && !isPending);
+
+  // This phone's push token belongs to the account signed in now (re-sent on every start and
+  // after a login as another account), so it never keeps receiving another account's alerts.
+  const userId = useAuthStore((state) => state.user?.id);
+  useEffect(() => {
+    if (hasHydrated && !isRestoringSession && isAuthenticated && userId) syncPushToken();
+  }, [hasHydrated, isRestoringSession, isAuthenticated, userId]);
 
   return (
     <>
