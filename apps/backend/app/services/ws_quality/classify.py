@@ -108,6 +108,8 @@ PARTS_PATTERNS = re.compile(
 
 _CARAT = re.compile(r"(?<![A-Za-z0-9.,])(9|10|14|18|22|24)\s?k(?:t)?(?=\s+(?:yellow|rose|white|pink|red|gold|yg|rg|wg|everose|solid)\b)", re.I)
 _SIZE_M = re.compile(rf"(?<![A-Za-z0-9.,$€£])(2[4-9]|3\d|4[0-8])\s?m(?![A-Za-z0-9])(?!\s?(?:{_CUR}))", re.I)
+# a discount with no price in front ("WSSA0061 N10 less 16"): still a sale offer, it goes to review
+_LONE_DISCOUNT = re.compile(r"(?<![A-Za-z0-9])less\s+\d{1,2}(?:[.,]\d)?(?![\d%k])|(?<![\w.,])-\s?\d{1,2}(?:[.,]\d)?\s?%", re.I)
 _DISCOUNT = re.compile(r"(?<![A-Za-z0-9/.,])\d{4,7}\s?-\s?\d{1,2}(?:\.\d)?\s?%")
 _BARE_PRICE_START = re.compile(r"^\W{0,3}\d{1,3}(?:[.,]\d{3})+(?![\d/])|^\W{0,3}\d{5,7}(?![A-Za-z0-9/.,\-])")
 _CUR_BEFORE = re.compile(rf"(?:{_CUR})\s*[:=]?\s*$", re.I)
@@ -334,7 +336,8 @@ def split_sections(message: str) -> List[Tuple[str, str]]:
         priced = [l for l in ref_lines if _priced_ref_line(l)]
         if mode is None:
             # no header: a sale offer needs a price; model-name-only posts ("F.P.Journe Elegante 40mm / 1.6m hkd") count too
-            if priced or (ref_lines and any(_PRICE_SIGNAL.search(l) for l in ls)) or any(_STRONG_PRICE.search(l) for l in ls):
+            if (priced or (ref_lines and any(_PRICE_SIGNAL.search(l) or _LONE_DISCOUNT.search(l) for l in ls))
+                    or any(_STRONG_PRICE.search(l) for l in ls)):
                 mode = "WTS"
             else:
                 continue

@@ -18,6 +18,7 @@ from app.services.vision_matching import (
 )
 from app.services import remark_rules
 from app.services.ws_quality.classify import WTB_WORDS, is_advert, split_sections
+from app.services.ws_quality.discount import find_discount, lone_discount
 from app.services.ws_quality.evidence import names_watch, watch_forms
 from app.services.ws_quality.normalize import clean as _ws_clean
 from app.services.ws_quality.prices import _dollar_currency, message_currency, parse_price
@@ -758,10 +759,16 @@ def detect_brand_from_content(content: str) -> Optional[str]:
 
 
 
+# Omega reference written without dots: "31030425001002" -> "310.30.42.50.01.002" (discount test, Nov 2026)
+_OMEGA_UNDOTTED_RE = re.compile(r"(?<![\d.+])([1-5]\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{3})(?![\d.])")
+
+
 def _clean_message(content: str) -> str:
     """Line-wise ws_quality.normalize.clean: invisible characters, hyphen look-alikes, full-width forms,
-    apostrophe/space thousands separators (1'480'000), '11.300,-' and '74,500/-' endings."""
-    return "\n".join(_ws_clean(line) for line in content.split("\n"))
+    apostrophe/space thousands separators (1'480'000), '11.300,-' and '74,500/-' endings; Omega
+    references written without dots get their dots back."""
+    text = "\n".join(_ws_clean(line) for line in content.split("\n"))
+    return _OMEGA_UNDOTTED_RE.sub(lambda m: ".".join(m.groups()), text)
 
 
 def message_sections(content: str) -> list[tuple[str, str]]:
@@ -2526,12 +2533,6 @@ _MARKED_RETAIL_RE = re.compile(
     + r'(?:[ \t]*=[ \t]*' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)' + _CUR_OPT + r')?[ \t]*\)?',
     re.IGNORECASE,
 )
-_UNMARKED_DISCOUNT_RE = re.compile(
-    r'(hk\$|us\$|\$|€|£|hkd|usdt|usd|eur|gbp|chf)?[ \t]*(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)[ \t]*'
-    r'(hkd|usdt|usd|eur|gbp|chf|€|£)?[ \t]*[-−][ \t]*(\d{1,2}(?:[.,]\d)?)[ \t]*%'
-    r'(?:[ \t]*=[ \t]*' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?))?',
-    re.IGNORECASE,
-)
 
 
 def _pct(raw: str) -> float:
@@ -2591,24 +2592,24 @@ def price_info(text: str, sender_country: Optional[str] = None, line_level: bool
             return info
         return info
 
-    d = _UNMARKED_DISCOUNT_RE.search(t)
+    d = find_discount(t)
     if d:
-        base = _format_price(d.group(2))
-        if base:
-            cur_tag = (d.group(1) or d.group(3) or "").lower()
-            if cur_tag in ("$", ):
-                cur = _dollar_currency(sender_country, _MESSAGE_CURRENCY.get())
-            elif cur_tag:
-                cur = _canonicalize_currency({"€": "EUR", "£": "GBP", "hk$": "HKD", "us$": "USD"}.get(cur_tag, cur_tag))
-            else:
-                cur = _bare_currency(sender_country)
-            pct = _pct(d.group(4))
-            if d.group(5):
-                info.update(price=_format_price(d.group(5)), currency=cur, discount_pct=pct, base_price=base)
-                return info
-            info.update(price=_apply_discount(_num(base), pct), currency=cur, discount_pct=pct,
-                        base_price=base, needs_list_check=True)
+        tag = d.currency_tag
+        if tag == "$":
+            cur = _dollar_currency(sender_country, _MESSAGE_CURRENCY.get())
+        elif tag:
+            cur = _canonicalize_currency({"€": "EUR", "£": "GBP", "hk$": "HKD", "us$": "USD", "euro": "EUR",
+                                          "euros": "EUR"}.get(tag, tag))
+        else:
+            cur = _bare_currency(sender_country)
+        base = f"{d.base:,}"
+        if d.impossible:
+            info.update(price=None, currency=cur, discount_pct=d.pct, base_price=base,
+                        discount_error=f"Impossible discount -{d.pct:g}% on {d.base:,} {cur}")
             return info
+        info.update(price=f"{d.price:,}", currency=cur, discount_pct=d.pct, base_price=base,
+                    needs_list_check=True)
+        return info
 
     p, c = _base(t)
     info.update(price=p, currency=c)
@@ -2623,6 +2624,8 @@ def apply_list_price_rule(info: dict, watch: Optional[dict], rates: Optional[dic
     ≈ list price − discount → the number already is the dealer price → keep.
     Otherwise (or no list price) → review. Returns (price, currency, review_reason).
     """
+    if info.get("discount_error"):
+        return None, info.get("currency"), info["discount_error"]
     if not info.get("needs_list_check"):
         return info.get("price"), info.get("currency"), None
     base = _num(info.get("base_price"))
@@ -2648,9 +2651,8 @@ def apply_list_price_rule(info: dict, watch: Optional[dict], rates: Optional[dic
                 return info.get("price"), cur, None
             if abs(base_in_lp - lp * (1 - pct / 100)) <= lp * tolerance:
                 return f"{int(round(base)):,}", cur, None
-    reason = (f"Discount -{pct:g}% on {int(base):,} {cur or ''}: unclear whether "
-              f"{int(base):,} is the list price").strip()
-    return info.get("price"), cur, reason
+    # No list price that says otherwise: dealers post list price minus discount (discount test, Nov 2026).
+    return info.get("price"), cur, None
 
 
 def _extract_price_from_line_basic(line: str, sender_country: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
@@ -3158,6 +3160,53 @@ def _line_has_price(line: str) -> bool:
     return bool(re.search(r'(?<![\w.,/\-])\d+(?:[.,]\d+)?\s?[kKmM](?![a-z])', t))
 
 
+# A token on a priced line that looks like a reference the catalogue does not know ("Q357842J", "5277BR/12/9V6").
+_REFLIKE_RE = re.compile(
+    r"(?<![\w$])(?=[\w./\-]*\d[\w./\-]*\d[\w./\-]*\d)(?=[\w./\-]*[A-Za-z])[A-Za-z0-9][\w./\-]{4,}|(?<![\d.+])\d{8,}(?![\d.])")
+_NOT_REF_TOKEN_RE = re.compile(
+    r"^(?:(?:hk\$?|hkd|usdt?|usd|eur|aed|chf|sgd|rmb|cny)?[\d.,]+(?:k|m)?(?:hkd|usdt?|usd|eur|aed|rmb|cny|u)?"
+    r"|[nw]\d{1,2}(?:[/.\-]\d{2,4})?|\d{2,4}(?:y|yr|yrs)|\d{1,2}[/.\-]\d{2,4})$", re.I)
+
+
+def _has_reflike_token(line: str) -> bool:
+    return any(not _NOT_REF_TOKEN_RE.match(m.group(0).strip("./-"))
+               for m in _REFLIKE_RE.finditer(_normalize_hyphens(_clean_text(line))))
+
+
+def _line_priced(line: str) -> bool:
+    return _line_has_price(line) or bool(find_discount(line)) or bool(extract_price_from_line(line)[0])
+
+
+def own_listing_lines(text: str, watch_index: dict) -> str:
+    """Price and remarks belong to their own line only (discount test, Nov 2026). A message with ONE known
+    reference and other priced lines whose reference the catalogue does not know
+    ('5277BR/12/9V6 N11 175,700 -38%' / '35800-0001 N9 11,000'): the listing is the known reference's line,
+    the price lines it needs below it and the unpriced header lines directly above it - never the other lines."""
+    lines = [l for l in text.split("\n") if l.strip()]
+    if len(lines) < 2:
+        return text
+    priced = {i for i, l in enumerate(lines) if _line_priced(l)}
+    if len(priced) < 2:
+        return text
+    ref_idx = [i for i, l in enumerate(lines) if not detect_brand_header(l) and find_references(l, watch_index)]
+    if len(ref_idx) != 1:
+        return text
+    r = ref_idx[0]
+    end = r
+    if r not in priced:
+        below = sorted(i for i in priced if i > r)
+        if not below:
+            return text
+        end = below[0]
+    start = r
+    while start > 0 and (start - 1) not in priced:
+        start -= 1
+    others = [i for i in priced if not start <= i <= end]
+    if not any(_has_reflike_token(lines[i]) for i in others):
+        return text
+    return "\n".join(lines[start:end + 1])
+
+
 def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, list[str]]:
     """Decide how a message splits into listings (§3).
 
@@ -3179,11 +3228,12 @@ def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, l
         if refs:
             ref_lines[i] = refs
             for r in refs:
-                st = ref_stem(r)
+                # dotted references (Omega 310.30.42.50.01.002 / 310.60.42.50.01.001) share a stem but are different watches
+                st = r.lower() if r.count(".") >= 3 else ref_stem(r)
                 if st not in distinct:
                     distinct.append(st)
     if len(distinct) <= 1:
-        return "single", [content]
+        return "single", [own_listing_lines(content, watch_index)]
     if all(_line_has_price(lines[i]) for i in ref_lines):
         return "list", [content]
 
@@ -3438,8 +3488,9 @@ def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, lin
     row["_currency_unknown"] = bool(unknown)
     if unknown:
         reasons.append(f"Unknown currency {unknown}")
-    if mode == "WTS" and not price and not unknown:
-        reasons.append("No price found for WTS post")
+    if mode == "WTS" and not price and not unknown and not rule_reason:
+        lone = lone_discount(scope)
+        reasons.append(f"Discount -{lone:g}% without a price" if lone else "No price found for WTS post")
     if price and watch:
         ok, why = validate_price(price, watch.get("brand"))
         if not ok:
@@ -3631,6 +3682,9 @@ def parse_stock_list(
                     if _extract_ref_from_line(nxt) or detect_brand_header(nxt):
                         break
                     price_nxt, _ = extract_price_from_line(nxt, sender_country)
+                    if price_nxt and _has_reflike_token(nxt):
+                        break           # another watch's line (reference not in the catalogue): keeps its own price
+
                     year_nxt = extract_year_from_line(nxt) or extract_month_year_from_text(nxt)
                     merged += " " + nxt
                     consumed = look
