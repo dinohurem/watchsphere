@@ -4,7 +4,8 @@
   "description": "Shared code between WatchSphere web and mobile apps",
   "main": "index.ts",
   "scripts": {
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "node --test utils/*.test.ts"
   },
   "dependencies": {
     "zustand": "^4.5.0"

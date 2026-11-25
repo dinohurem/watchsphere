@@ -12,6 +12,7 @@ import {
 import { api } from '@/services/api';
 import { useAuthStore } from '@watchsphere/shared/stores';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { buildWhatsAppOrderMessage, buildWhatsAppUrl } from '@watchsphere/shared/utils/whatsappMessage';
 import { useConfig, type FieldCategory } from '@/hooks/useConfig';
 import { configKeyToOrderKey, MANUALLY_HANDLED_FIELDS } from '@/utils/fieldKeyMap';
 
@@ -109,6 +110,9 @@ interface OrderDetail {
   status: string;
   notes?: string;
   whatsapp_phone?: string;
+  ws_code?: string | null;
+  year?: number | null;
+  year_raw?: string | null;
   has_box: boolean;
   has_papers: boolean;
   created_at: string;
@@ -635,12 +639,18 @@ export function OrderDetailPage() {
                 <MessageCircle className="w-5 h-5" />
                 {t('orderDetails.contact')}
               </button>
-              {order.order_type === 'sell' && order.whatsapp_phone && order.price != null && (
+              {order.whatsapp_phone && (
                 <button
                   onClick={() => {
-                    const phone = order.whatsapp_phone!.replace(/[^0-9]/g, '');
-                    const message = `Hi, I'm interested in your ${order.brand} ${order.model} ${order.reference} listed at ${order.currency} ${order.price?.toLocaleString()} on WatchSphere.`;
-                    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+                    const message = buildWhatsAppOrderMessage({
+                      orderType: order.order_type,
+                      wsCode: order.ws_code,
+                      reference: order.reference,
+                      year: order.year ?? order.year_raw,
+                      price: order.price,
+                      currency: order.currency,
+                    });
+                    window.open(buildWhatsAppUrl(order.whatsapp_phone!, message), '_blank');
                   }}
                   className="h-[48px] w-[48px] shrink-0 bg-[#212121] text-white rounded-full hover:bg-black transition-colors flex items-center justify-center"
                   title="Chat on WhatsApp"

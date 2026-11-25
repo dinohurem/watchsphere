@@ -54,6 +54,7 @@ import { PriceTrendSheet } from '@/components/detail/PriceTrendSheet';
 import { RetailPricesSheet } from '@/components/detail/RetailPricesSheet';
 import { AlertsSheet, AlertsSheetStart } from '@/components/alerts/AlertsSheet';
 import { WatchAlert, fetchAlertsForWatch } from '@/components/alerts/alertModel';
+import { buildWhatsAppOrderMessage, buildWhatsAppUrl } from '@watchsphere/shared/utils/whatsappMessage';
 
 // Country flag as emoji; flagEmoji maps the server code "UK" to the ISO code GB.
 
@@ -495,6 +496,9 @@ interface OrderBookItem {
   user_id?: string;
   user_name?: string;
   whatsapp_phone?: string;
+  ws_code?: string | null;
+  year?: number | null;
+  year_raw?: string | null;
   remarks?: string;
   created_at?: string;
   usd_price?: number | null;
@@ -811,18 +815,19 @@ export default function WatchDetailsScreen() {
 
   const handleWhatsAppChat = useCallback((order: OrderBookItem) => {
     if (!order.whatsapp_phone) return;
-    const watchName = `${watch?.brand || ''} ${watch?.model || ''}`.trim();
-    const watchRef = watch?.reference || '';
-    const orderCurrency = order.currency || watch.currency || 'EUR';
-    const priceText = order.price != null
-      ? `\n${orderCurrency} ${order.price.toLocaleString('de-DE')} - thank you very much!`
-      : '';
-    const message = `Hi, is ${watchName} ${watchRef} available?${priceText}`;
-    const url = `https://wa.me/${order.whatsapp_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
+    const message = buildWhatsAppOrderMessage({
+      orderType: selectedTab === 'Buy' ? 'buy' : 'sell',
+      wsCode: order.ws_code || watch?.ws_code || wsCodeParam,
+      reference: watch?.reference,
+      year: order.year ?? order.year_raw,
+      price: order.price,
+      currency: order.currency || watch?.currency || 'EUR',
+    });
+    const url = buildWhatsAppUrl(order.whatsapp_phone, message);
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open WhatsApp. Make sure it is installed.');
     });
-  }, [watch]);
+  }, [watch, selectedTab, wsCodeParam]);
 
   // Real price history from sell orders (fetched from backend)
   const [fullPriceHistory, setFullPriceHistory] = useState<{ date: string; price: number }[]>([]);
