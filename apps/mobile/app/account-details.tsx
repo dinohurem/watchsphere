@@ -15,6 +15,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { clearResourceCache } from '@/hooks/useCachedResource';
 import { api } from '@/services/api';
 import { fp, hp, sp, wp } from '@/utils/responsive';
+import { unregisterPushToken } from '@/services/pushToken';
 
 export default function AccountDetailsScreen() {
   const { fonts } = useTheme();
@@ -54,6 +55,7 @@ export default function AccountDetailsScreen() {
             setDeleting(true);
             try {
               await api.post('/profile/deactivate');
+              await unregisterPushToken();
               await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth-storage']);
               await clearResourceCache();
               logout();
