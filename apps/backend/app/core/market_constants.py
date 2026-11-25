@@ -20,7 +20,7 @@ LIST_PRICE_COUNTRIES: list[ListPriceCountry] = [
     {"code": "DE", "name": "Germany", "currency": "EUR", "tax_label": "incl. 19% VAT", "vat_pct": 19.0},
     {"code": "AE", "name": "UAE", "currency": "AED", "tax_label": "incl. 5% VAT", "vat_pct": 5.0},
     {"code": "US", "name": "United States", "currency": "USD", "tax_label": "excl. sales tax", "vat_pct": None},
-    {"code": "GB", "name": "United Kingdom", "currency": "GBP", "tax_label": "incl. 20% VAT", "vat_pct": 20.0},
+    {"code": "GB", "name": "UK", "currency": "GBP", "tax_label": "incl. 20% VAT", "vat_pct": 20.0},
     {"code": "CN", "name": "China", "currency": "CNY", "tax_label": "incl. 13% VAT", "vat_pct": 13.0},
     {"code": "CH", "name": "Switzerland", "currency": "CHF", "tax_label": "incl. 8.1% VAT", "vat_pct": 8.1},
     {"code": "IT", "name": "Italy", "currency": "EUR", "tax_label": "incl. 22% VAT", "vat_pct": 22.0},

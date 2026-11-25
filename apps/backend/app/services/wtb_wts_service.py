@@ -159,24 +159,6 @@ def _default_currency_for_country(sender_country: Optional[str]) -> str:
         return "CHF"
     return "USD"
 
-COUNTRY_NAMES = {
-    "US": "United States", "UK": "United Kingdom", "DE": "Germany", "IT": "Italy",
-    "FR": "France", "CH": "Switzerland", "AE": "United Arab Emirates", "HK": "Hong Kong",
-    "SG": "Singapore", "JP": "Japan", "AU": "Australia", "CA": "Canada",
-    "NL": "Netherlands", "ES": "Spain", "AT": "Austria", "BE": "Belgium",
-    "PT": "Portugal", "SE": "Sweden", "DK": "Denmark", "NO": "Norway",
-    "PL": "Poland", "CZ": "Czech Republic", "TW": "Taiwan", "KR": "South Korea",
-    "TH": "Thailand", "MY": "Malaysia", "PH": "Philippines", "IN": "India",
-    "BR": "Brazil", "MX": "Mexico", "SA": "Saudi Arabia", "QA": "Qatar",
-    "KW": "Kuwait", "BH": "Bahrain", "OM": "Oman", "CN": "China",
-    "MO": "Macau", "RU": "Russia", "TR": "Turkey", "EG": "Egypt",
-    "ZA": "South Africa", "NZ": "New Zealand", "ID": "Indonesia",
-    "VN": "Vietnam", "IE": "Ireland", "FI": "Finland", "HR": "Croatia",
-    "RS": "Serbia", "UA": "Ukraine", "RO": "Romania", "HU": "Hungary",
-    "GR": "Greece", "IL": "Israel", "JO": "Jordan", "LB": "Lebanon",
-    "NG": "Nigeria", "KE": "Kenya", "GE": "Georgia", "LU": "Luxembourg",
-    "MT": "Malta", "IS": "Iceland",
-}
 
 WTS_LOCATION_PATTERNS = {
     "HK": [r"\bin\s+hk\b", r"\bhk\s+deal\b", r"\bwatch\s+in\s+hk\b", r"\bhong\s+kong\b", r"\blocated?\s+(?:in\s+)?hk\b"],

@@ -717,8 +717,8 @@ export default function WatchDetailsScreen() {
     { code: 'ZA', name: 'South Africa' }, { code: 'KR', name: 'South Korea' }, { code: 'ES', name: 'Spain' },
     { code: 'LK', name: 'Sri Lanka' }, { code: 'SE', name: 'Sweden' }, { code: 'CH', name: 'Switzerland' },
     { code: 'TW', name: 'Taiwan' }, { code: 'TH', name: 'Thailand' }, { code: 'TR', name: 'Turkey' },
-    { code: 'UA', name: 'Ukraine' }, { code: 'AE', name: 'United Arab Emirates' },
-    { code: 'GB', name: 'United Kingdom' }, { code: 'US', name: 'United States' },
+    { code: 'UA', name: 'Ukraine' }, { code: 'AE', name: 'UAE' },
+    { code: 'GB', name: 'UK' }, { code: 'US', name: 'United States' },
     { code: 'UY', name: 'Uruguay' }, { code: 'UZ', name: 'Uzbekistan' }, { code: 'VN', name: 'Vietnam' },
   ], []);
 
@@ -2301,8 +2301,8 @@ export default function WatchDetailsScreen() {
                   { code: '', name: 'Worldwide', icon: '🌐' },
                   { code: 'EU', name: 'EU', icon: '🇪🇺' },
                   { code: 'HK', name: 'Hong Kong' },
-                  { code: 'AE', name: 'United Arab Emirates' },
-                  { code: 'GB', name: 'United Kingdom' },
+                  { code: 'AE', name: 'UAE' },
+                  { code: 'GB', name: 'UK' },
                   { code: 'US', name: 'United States' },
                   { code: 'CH', name: 'Switzerland' },
                   { code: 'CN', name: 'China' },

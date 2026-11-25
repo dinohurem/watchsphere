@@ -11,6 +11,7 @@ import zipfile
 import csv
 import io
 
+from app.core.countries import country_display_name
 from app.core.deps import get_current_admin_user, get_current_user
 from app.models.user import User
 from app.models.watch import Watch, WatchStatus
@@ -258,7 +259,7 @@ def extract_watch_data(content: str) -> Optional[dict]:
         for pattern in patterns:
             if pattern in content_lower:
                 country_code = code
-                country_name = patterns[0].title() if patterns else code
+                country_name = country_display_name(code) or code
                 break
         if country_code:
             break
@@ -275,18 +276,6 @@ def extract_watch_data(content: str) -> Optional[dict]:
         "raw_text": content,
     }
 
-
-COUNTRY_NAMES = {
-    "US": "United States", "UK": "United Kingdom", "DE": "Germany", "IT": "Italy",
-    "FR": "France", "CH": "Switzerland", "AE": "United Arab Emirates", "HK": "Hong Kong",
-    "SG": "Singapore", "JP": "Japan", "AU": "Australia", "CA": "Canada",
-    "NL": "Netherlands", "ES": "Spain", "AT": "Austria", "BE": "Belgium",
-    "PT": "Portugal", "SE": "Sweden", "DK": "Denmark", "NO": "Norway",
-    "PL": "Poland", "CZ": "Czech Republic", "TW": "Taiwan", "KR": "South Korea",
-    "TH": "Thailand", "MY": "Malaysia", "PH": "Philippines", "IN": "India",
-    "BR": "Brazil", "MX": "Mexico", "SA": "Saudi Arabia", "QA": "Qatar",
-    "KW": "Kuwait", "BH": "Bahrain", "OM": "Oman",
-}
 
 
 def parse_csv_price(price_str: str) -> tuple[Optional[float], Optional[str]]:
@@ -584,7 +573,7 @@ async def import_order_rows(
 
         # Resolve country
         country_code = location if location else None
-        country_name = COUNTRY_NAMES.get(country_code, country_code) if country_code else None
+        country_name = (country_display_name(country_code) or country_code) if country_code else None
 
         # Resolve condition — store raw text for non-standard conditions
         condition = None
@@ -787,7 +776,7 @@ async def import_order_rows(
                 usd_price=usd_price,
                 condition=order_condition,
                 country_code=country_code or "CH",
-                country_name=country_name,
+                country_name=country_name if country_code else country_display_name("CH"),
                 user_id=admin_id,
                 user_name=phone,
                 whatsapp_phone=phone,

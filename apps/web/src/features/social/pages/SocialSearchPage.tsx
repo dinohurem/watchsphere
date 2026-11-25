@@ -165,7 +165,7 @@ export function SocialSearchPage() {
     // Fallback if config not loaded yet
     return [
       { code: 'US', name: 'United States' },
-      { code: 'UK', name: 'United Kingdom' },
+      { code: 'UK', name: 'UK' },
       { code: 'DE', name: 'Germany' },
       { code: 'CH', name: 'Switzerland' },
       { code: 'IT', name: 'Italy' },
