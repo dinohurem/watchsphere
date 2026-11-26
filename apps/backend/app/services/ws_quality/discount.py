@@ -104,6 +104,8 @@ def find_discount(line: str) -> Optional[Discount]:
             continue
         if not (m.group("pre") or m.group("post") or m.group("suf")) and 1990 <= base <= 2035:
             continue                                  # a year, not a price ("2024 -15%")
+        if not pc and not m.group("suf") and 1990 <= base <= 2035:
+            continue                                  # "hkd 2026-9": a year and its month, not a price and a discount
         if pct > MAX_DISCOUNT:
             return Discount(int(base), pct, None, m.group("pre"), m.group("post"), True, m.span())
         price = int(base * (1 - pct / 100) + 0.5)

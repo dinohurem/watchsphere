@@ -274,7 +274,8 @@ def split_sections(message: str) -> List[Tuple[str, str]]:
             if cur_mode == "WTB" and new_mode == "WTS" and not _WTS_STRONG_HDR.search(head):
                 cur.append(l)            # "payment ready", "best offer" inside a buy request do not start a sale section
                 continue
-            if cur_mode and cur and not _has_ref(l) and not _STRONG_PRICE.search(l) and any(_has_ref(x) for x in cur):
+            if (cur_mode and cur and not _has_ref(l) and not _STRONG_PRICE.search(l) and any(_has_ref(x) for x in cur)
+                    and not any(_has_ref(x) or _STRONG_PRICE.search(x) for x in lines[i_line + 1:])):
                 cur.append(l)            # closing line of a list: "All new 2026 full set, HK stock" belongs to the list above
                 continue
             if cur:

@@ -18,6 +18,7 @@ from app.services.vision_matching import (
 )
 from app.services import remark_rules
 from app.services.ws_quality.classify import WTB_WORDS, is_advert, split_sections
+from app.services.ws_quality.dates import DateRead, format_month_year, read_date
 from app.services.ws_quality.discount import find_discount, lone_discount
 from app.services.ws_quality.evidence import names_watch, watch_forms
 from app.services.ws_quality.normalize import clean as _ws_clean
@@ -2511,7 +2512,7 @@ _RETAIL_MARKER = r'(?<![a-z])(?:hk\s?retail|hkr|retail|rrp|msrp|lp|list\s?price|
 _CUR_OPT = r'(?:[ \t]*(?:hk\$|us\$|\$|€|£|hkd|usdt|usd|eur|gbp|chf|aed|sgd|cny|rmb|jpy)[ \t]*)?'
 _MARKED_RETAIL_RE = re.compile(
     r'\(?[ \t]*' + _RETAIL_MARKER + r'[ \t]*[:\-]?' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)' + _CUR_OPT
-    + r'(?:[ \t]*[-−][ \t]*(\d{1,2}(?:[.,]\d)?)[ \t]*%)?'
+    + r'(?:[ \t]*[-−]?[ \t]*(?<![\d.,])(\d{1,2}(?:[.,]\d)?)[ \t]*%(?![ \t]*new))?'
     + r'(?:[ \t]*=[ \t]*' + _CUR_OPT + r'(\d[\d,.]*(?:[ \t]?[kKmM](?![a-z]))?)' + _CUR_OPT + r')?[ \t]*\)?',
     re.IGNORECASE,
 )
@@ -2881,21 +2882,8 @@ def _wts_word_condition(text: str) -> Optional[str]:
 
 def _wts_year_month(line: str) -> tuple[Optional[int], bool]:
     """(year, has_month) of the watch in the line. A W-month (wood card) is not a month."""
-    masked = _PRICE_SPAN_RE.sub(lambda m: " " * (m.end() - m.start()), _normalize_hyphens(line or ""))
-    raw = extract_month_year_from_text(masked)
-    if raw:
-        low = raw.lower()
-        m = re.search(r"(\d{1,2})[/\-](\d{2}|\d{4})$", low)
-        if m:
-            yr = int(m.group(2))
-            yr = yr + 2000 if yr < 100 else yr
-            return yr, not low.startswith("w")
-        m = re.fullmatch(r"[a-z]+\s*(\d{2,4})", low)
-        if m and not low.startswith(("n", "w")):
-            yr = int(m.group(1))
-            return (yr + 2000 if yr < 100 else yr), True
-    y = extract_year_from_line(masked)
-    return (int(y) if y else None), False
+    d = _read_line_date(line)
+    return (d.year if d.year_written else None), d.has_month
 
 
 def _wts_year_condition(year: Optional[int], has_month: bool, ref_year: int) -> Optional[str]:
@@ -2915,7 +2903,7 @@ def wts_condition(line: str, section_condition: Optional[str] = None, ref_year: 
     found = _wts_word_condition(line)
     if found:
         return found
-    if _N_DATE.search(line or ""):
+    if _N_DATE.search(line or "") or _read_line_date(line).n_month:
         return "Unworn"
     year, has_month = _wts_year_month(line)
     if section_condition == "Unworn":
@@ -3034,6 +3022,13 @@ def _detect_section_condition(line: str, mode: str = "WTS") -> Optional[str]:
     if has('used', 'pre-owned', 'preowned', 'polished'):
         return used_label
     return None
+
+
+def _is_condition_header(line: str, mode: str, watch_index: dict) -> bool:
+    """A line without watch and price that names a condition ("Sell new", "Like New conditions")
+    is a section header for the lines below it."""
+    return (bool(_detect_section_condition(line, mode)) and not _line_has_price(line)
+            and not find_references(line, watch_index) and not _extract_ref_from_line(line))
 
 
 def _is_stock_list_message(content: str) -> bool:
@@ -3262,6 +3257,25 @@ def own_listing_lines(text: str, watch_index: dict) -> str:
     return "\n".join(lines[start:end + 1])
 
 
+def _watch_price_pairs(lines: list[str], ref_lines: dict) -> Optional[list[str]]:
+    """Two-line format: the watch (reference, dial, month) on one line and its price on the line BELOW,
+    two or more times ('126508 green W11 / Hk$640k / 126508 YML W9 / Hk$495k'; the same reference with
+    two dials). One listing per pair - the price of the line below, never the line above."""
+    pairs: list[list[str]] = []
+    used: set[int] = set()
+    for i, line in enumerate(lines[:-1]):
+        nxt = lines[i + 1]
+        if (i in ref_lines and not _line_has_price(line) and (i + 1) not in ref_lines
+                and _line_has_price(nxt) and not _has_reflike_token(nxt)):
+            pairs.append([line, nxt])
+            used.update((i, i + 1))
+    if len(pairs) < 2 or any(i not in used for i in ref_lines):
+        return None
+    first = min(i for i in used)
+    context = [l for i, l in enumerate(lines[:first]) if not _line_has_price(l)]
+    return ["\n".join(context + p) for p in pairs]
+
+
 def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, list[str]]:
     """Decide how a message splits into listings (§3).
 
@@ -3287,6 +3301,9 @@ def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, l
                 st = r.lower() if r.count(".") >= 3 else ref_stem(r)
                 if st not in distinct:
                     distinct.append(st)
+    pairs = _watch_price_pairs(lines, ref_lines)
+    if pairs:
+        return "blocks", pairs
     if len(distinct) == 1:
         segs = _same_watch_segments(lines, ref_lines, watch_index)
         if segs:
@@ -3440,23 +3457,38 @@ def shortlist_candidates(text: str, watch_index: dict, brand_hint: Optional[str]
     return found[:limit]
 
 
+def _read_line_date(text: str, ref_month: int = 12, ref_year: int = 2099) -> DateRead:
+    text = _normalize_hyphens(text or "")
+
+    def blank(m):
+        g, after = m.group(0), text[m.end():]
+        # "hkd 11/2026": the price pattern must not eat the month of a date behind the price
+        if re.search(r"(?<![\d.,])(?:\d{1,2}|20[0-2]\d)$", g) and re.match(r"[/.\-]\d", after):
+            return g
+        # "hkd 2024new": a year glued to a word; "2022 HKD $1,930,000": a year, then the price
+        if re.search(r"(?<![\d.,])20[0-2]\d$", g) and re.match(r"[a-z]", after, re.I):
+            return g
+        if re.fullmatch(r"20[0-2]\d[ \t]*[a-z]{3,4}", g, re.I) and re.match(r"[ \t]*[$€£]?[ \t]*\d", after):
+            return g
+        # "$121000 W10": the W is a wood-card month, not ten thousand
+        if re.search(r"[ \t]?[wW]$", g) and after[:1].isdigit():
+            return " " * len(re.sub(r"[ \t]?[wW]$", "", g)) + g[len(re.sub(r"[ \t]?[wW]$", "", g)):]
+        return " " * (m.end() - m.start())
+
+    return read_date(_PRICE_SPAN_RE.sub(blank, text), ref_month, ref_year)
+
+
 def _resolve_month_year(content: str, mode: str, ref_month: int, ref_year: int) -> tuple[Optional[str], str]:
     """Resolve month/year for a listing. Returns (raw_month_year, normalized).
 
-    Never fabricates a warranty date from the message timestamp. W-month codes
-    (wood card) count like N-month codes. Future dates are rejected.
+    A written year always wins; an N-month / W-month only gives the month (and the year when none
+    is written). Never fabricates a warranty date from the message timestamp. Future dates are
+    rejected.
     """
-    raw_month_year = extract_month_year_from_text(content)
-    if raw_month_year:
-        normalized = normalize_month_year(raw_month_year, ref_month, ref_year, mode)
-        if normalized:
-            return raw_month_year, normalized
-
-    year = extract_year_from_line(content)
-    if year and int(year) <= ref_year:
-        suffix = "+" if mode == "WTB" else ""
-        return None, f"{year}{suffix}"
-    return None, ""
+    d = _read_line_date(content, ref_month, ref_year)
+    suffix = "+" if mode == "WTB" else ""
+    out = format_month_year(d, ref_month, ref_year, suffix)
+    return (out or None), out
 
 
 def _ctx_base_row(ctx: dict, watch: Optional[dict], brand: str = "") -> dict:
@@ -3508,6 +3540,44 @@ def _apply_wtb_fields(row: dict, wtb: dict) -> None:
         row["Bemerkungen"] = "; ".join([p for p in (row.get("Bemerkungen"), *extra) if p])
 
 
+def _join_remarks(*parts: str) -> str:
+    """Remark segments joined with '; ', every remark once ('Ready Stock; Ready Stock' -> 'Ready Stock')."""
+    seen: set[str] = set()
+    segments: list[str] = []
+    for part in parts:
+        for seg in (part or "").split("; "):
+            items = []
+            for item in seg.split(", "):
+                key = item.strip().lower()
+                if key and key not in seen:
+                    seen.add(key)
+                    items.append(item.strip())
+            if items:
+                segments.append(", ".join(items))
+    return "; ".join(segments)
+
+
+def _listing_header_condition(scope: str, mode: str, ctx: dict) -> tuple[Optional[str], str]:
+    """(condition of the header directly above the watch, the watch lines) of a multi-line listing.
+    A header is a line without watch and price that names a condition ("Sell new", "Like New
+    conditions"); it counts until the next header. The condition rules then read the watch lines
+    only, so the header word never counts as a word "in the line"."""
+    lines = [l for l in scope.split("\n") if l.strip()]
+    watch_index = ctx.get("watch_index") or {}
+    first = next((i for i, l in enumerate(lines)
+                  if _line_has_price(l) or _extract_ref_from_line(l) or find_references(l, watch_index)), None)
+    if not first:
+        return None, scope
+    cond = None
+    for l in lines[:first]:
+        c = _detect_section_condition(l, mode)
+        if c:
+            cond = c
+        elif _is_section_header(l) or re.search(r"[A-Za-z0-9\u4e00-\u9fff]", _clean_text(l)):
+            cond = None
+    return cond, "\n".join(lines[first:])
+
+
 def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, line_level: bool,
                  section_condition: Optional[str] = None, location_text: Optional[str] = None,
                  extra_remarks: str = "") -> list[str]:
@@ -3521,13 +3591,15 @@ def _fill_fields(row: dict, scope: str, ctx: dict, watch: Optional[dict], *, lin
                        if not line_level else (ctx["sender_country"] or "")) or ""
     if line_level:
         row["Zustand"] = extract_condition_from_line(scope, section_condition, mode, ctx["ref_year"]) or ""
+    elif mode == "WTS" and "\n" in scope:
+        header_cond, body = _listing_header_condition(scope, mode, ctx)
+        row["Zustand"] = wts_condition(body, header_cond, ctx["ref_year"]) or ""
     else:
         row["Zustand"] = extract_condition(scope, mode, ref_year=ctx["ref_year"]) or ""
 
     remarks = normalize_remarks(scope, mode)
     loc = extract_location_remarks(location_text or scope, mode)
-    parts = [p for p in (remarks, loc, extra_remarks) if p]
-    row["Bemerkungen"] = "; ".join(parts)
+    row["Bemerkungen"] = _join_remarks(remarks, loc, extra_remarks)
 
     if mode == "WTB":
         # A buy request has a price only when the dealer states a target; no fallback to a bare number
@@ -3784,7 +3856,7 @@ def parse_stock_list(
             current_brand = brand
             section_condition = _detect_section_condition(stripped, mode)
             continue
-        if _is_section_header(stripped):
+        if _is_section_header(stripped) or _is_condition_header(stripped, mode, watch_index):
             cond = _detect_section_condition(stripped, mode)
             if cond:
                 section_condition = cond

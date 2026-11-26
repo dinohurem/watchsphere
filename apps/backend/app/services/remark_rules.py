@@ -37,7 +37,9 @@ DEFAULT_CATEGORIES = [CAT_SET, CAT_ORIGIN, CAT_BRACELET, CAT_CONDITION, CAT_PRIC
 DEFAULT_REMARK_RULES: list[tuple[str, str, str, list[str]]] = [
     # Set and papers
     ("fullset", CAT_SET, "BOTH", ["full set", "fullset", "complete set", "box+paper", "box & paper", "box and papers"]),
-    ("only watch", CAT_SET, "BOTH", ["only watch", "watch only", "single watch", "naked", "nake", "no paper", "no papers"]),
+    ("only watch", CAT_SET, "BOTH", ["only watch", "watch only", "single watch", "naked", "nake", "no paper", "no papers",
+                                     "paper lost", "papers lost", "lost paper", "lost papers", "no card", "no cards",
+                                     "card lost", "lost card"]),
     ("Watch + Card", CAT_SET, "BOTH", ["w+c", "w&c", "w & c", "watch and card", "watch & card", "watch & card only",
                                        "card only", "only card", "only certificate"]),
     ("Watch + Papers", CAT_SET, "BOTH", ["w+p", "w&p", "watch and papers", "watch & paper", "watch & papers",
@@ -92,6 +94,9 @@ DEFAULT_REMARK_RULES: list[tuple[str, str, str, list[str]]] = [
     ("Uncut Strap", CAT_BRACELET, "BOTH", ["uncut strap", "strap uncut"]),
     ("New Clasp", CAT_BRACELET, "BOTH", ["new clasp"]),
     ("New Buckle", CAT_BRACELET, "BOTH", ["new buckle"]),
+    # a worn clasp lowers the price ("old kou" = old clasp, Cantonese 扣)
+    ("Old Buckle", CAT_BRACELET, "BOTH", ["old buckle", "old clasp", "old kou"]),
+    ("China Set", CAT_SET, "BOTH", ["china set"]),
     # Condition and service (Serviced + year is numeric, built in code)
     ("polished", CAT_CONDITION, "BOTH", ["polished", "already polished"]),
     ("Unpolished", CAT_CONDITION, "BOTH", ["unpolished", "never polished", "not polished", "never polish", "no polish"]),
@@ -292,6 +297,31 @@ async def seed_defaults(replace: bool = False) -> None:
             await RemarkPlace(**d).insert()
 
 
+# Triggers added to existing remarks after the first seed (Nov 2026). The rules live in the database
+# and are only seeded when empty, so these are merged in memory on every load: a remark that is
+# missing gets its default rule, an existing one gets the trigger when it lacks it.
+_ADDED_TRIGGERS: dict[str, list[str]] = {
+    "only watch": ["paper lost", "papers lost", "lost paper", "lost papers", "no card", "no cards", "card lost",
+                   "lost card"],
+}
+_ADDED_REMARKS = ("Old Buckle", "China Set")
+
+
+def merge_added_defaults(rules: list[dict]) -> list[dict]:
+    have = {(r.get("remark") or "").strip().lower(): r for r in rules if r.get("kind", "remark") == "remark"}
+    top = max((r.get("order", 0) for r in rules), default=0)
+    for d in default_rule_dicts():
+        if d["remark"] in _ADDED_REMARKS and d["remark"].lower() not in have:
+            top += 10
+            rules.append({**d, "order": top})
+    for remark, triggers in _ADDED_TRIGGERS.items():
+        r = have.get(remark.lower())
+        if r is not None:
+            cur = {t.lower() for t in r.get("triggers") or []}
+            r["triggers"] = list(r.get("triggers") or []) + [t for t in triggers if t.lower() not in cur]
+    return rules
+
+
 async def load_remark_config() -> RemarkConfig:
     """Load the editable rules from the database (seeding them on first use).
 
@@ -304,7 +334,7 @@ async def load_remark_config() -> RemarkConfig:
         await seed_defaults()
         rules = [r.model_dump() for r in await RemarkRule.find_all().to_list()]
         places = [p.model_dump() for p in await RemarkPlace.find_all().to_list()]
-        return build_config(rules, places)
+        return build_config(merge_added_defaults(rules), places)
     except Exception as exc:
         logger.debug("remark rules: database unavailable, using defaults (%s)", exc)
         return default_config()
@@ -417,8 +447,32 @@ def numeric_remarks(text: str) -> list[str]:
             if 1 <= val <= 60:
                 sign = "+" if "sign" in rx.groupindex and m.group("sign") == "+" else "-"
                 add(f"{sign}{n}% Retail")
+    for r in defect_remarks(t):
+        add(r)
     if wood_card_month(t):
         add("Wood Card")
+    return out
+
+
+_DEFECT_RE = re.compile(
+    r"(?<![a-z0-9])(?:(?P<part>bezel|case|dial|crystal|glass|lug|lugs|bracelet|band|strap|clasp|crown|caseback|"
+    r"minor|light|small|tiny|deep|slight|few)\s+)?(?P<defect>scratch(?:es|ed)?|dent(?:s|ed)?|crack(?:s|ed)?)(?![a-z])"
+)
+_NOT_A_DEFECT_BEFORE = re.compile(r"(?:no|without|zero|free\s+of|not)\s*$")
+
+
+def defect_remarks(text: str) -> list[str]:
+    """Defects as the dealer wrote them: 'Bezel Scratch', 'Dent', 'Crack' ('no scratches' is none)."""
+    t = fold(text)
+    out: list[str] = []
+    for m in _DEFECT_RE.finditer(t):
+        if _NOT_A_DEFECT_BEFORE.search(t[:m.start()]):
+            continue
+        word = m.group("defect")
+        base = "scratch" if word.startswith("scratch") else "dent" if word.startswith("dent") else "crack"
+        r = (f"{m.group('part').capitalize()} " if m.group("part") else "") + base.capitalize()
+        if r not in out:
+            out.append(r)
     return out
 
 
