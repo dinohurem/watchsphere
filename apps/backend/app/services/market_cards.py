@@ -140,3 +140,74 @@ async def cards_for_ws_codes(ws_codes: list[str], active_only: bool = True) -> l
     by_code = await watches_by_ws_codes(ws_codes, active_only=active_only)
     ordered = [by_code[c] for c in dict.fromkeys(ws_codes) if c in by_code]
     return await cards_for_watches(ordered)
+
+
+# --------------------------------------------------------------------------- #
+# Lowest ask per watch variant (used by /market/aggregated)
+# --------------------------------------------------------------------------- #
+
+async def lowest_asks(watches: list[Watch]) -> dict[str, dict]:
+    """Cheapest ACTIVE sell offer per watch, keyed by ``str(watch.id)``.
+
+    Offers are matched on the watch's own ws_code (variant level; the reference only for a watch
+    without a ws_code). Prices are compared in USD at the current rates and the winner is returned
+    in ITS OWN currency: ``{"price", "currency", "price_usd"}``. Offers whose currency has no rate
+    are skipped rather than guessed. A watch with no active offer is absent from the result.
+    """
+    from app.services.fx import convert, load_rates
+
+    codes = list({w.ws_code for w in watches if w.ws_code})
+    refs = list({w.reference for w in watches if not w.ws_code and w.reference})
+    if not codes and not refs:
+        return {}
+    ors = []
+    if codes:
+        ors.append({"ws_code": {"$in": codes}})
+    if refs:
+        ors.append({"reference": {"$in": refs}, "ws_code": {"$in": [None, ""]}})
+    query = {"order_type": OrderType.SELL.value, "status": OrderStatus.ACTIVE.value,
+             "price": {"$gt": 0}, "$or": ors}
+    rates = await load_rates()
+    best_ws: dict[str, dict] = {}
+    best_ref: dict[str, dict] = {}
+    cursor = Order.get_motor_collection().find(
+        query, {"ws_code": 1, "reference": 1, "price": 1, "currency": 1})
+    async for o in cursor:
+        usd = convert(o.get("price"), o.get("currency") or "USD", "USD", rates)
+        if usd is None:
+            continue
+        row = {"price": o["price"], "currency": o.get("currency") or "USD", "price_usd": usd}
+        ws = (o.get("ws_code") or "").strip()
+        bucket, key = (best_ws, ws) if ws else (best_ref, o.get("reference"))
+        if key and (key not in bucket or usd < bucket[key]["price_usd"]):
+            bucket[key] = row
+    out: dict[str, dict] = {}
+    for w in watches:
+        row = best_ws.get(w.ws_code) if w.ws_code else best_ref.get(w.reference)
+        if row:
+            out[str(w.id)] = row
+    return out
+
+
+async def real_price_history(currency_by_code: dict[str, str]) -> dict[str, list[float]]:
+    """Recorded median series (1M, else 1W) per ws_code, in the given currency. Never invented:
+    a code with no recorded series is absent."""
+    from app.models.market_stats import WatchMarketStats
+    from app.services.fx import convert, load_rates
+
+    codes = [c for c in currency_by_code if c]
+    if not codes:
+        return {}
+    rates = await load_rates()
+    out: dict[str, list[float]] = {}
+    for doc in await WatchMarketStats.find({"ws_code": {"$in": codes}}).to_list():
+        for period in ("1M", "1W"):
+            p = (doc.periods or {}).get(period) or {}
+            series = (p.get("fresh") or {}).get("series") or (p.get("used") or {}).get("series") or []
+            vals = [convert(pt.get("median_usd"), "USD", currency_by_code.get(doc.ws_code, "USD"), rates)
+                    for pt in series]
+            vals = [round(v, 2) for v in vals if v is not None]
+            if vals:
+                out[doc.ws_code] = vals
+                break
+    return out
