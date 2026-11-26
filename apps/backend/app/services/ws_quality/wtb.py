@@ -174,6 +174,13 @@ def parse_wtb_line(line: str, message: str = "", sender_country: Optional[str] =
     amount, currency = price.amount, price.currency
     if amount and reference and re.sub(r"\D", "", reference) == str(amount):
         amount = currency = None
+    if amount and not re.search(r"\d\s?[km]\b|hk|usd|eur|aed|[$€£]", price.raw or "", re.I):
+        # a bare number that is the first reference of the line ("WTB 126718 can confirm") is the watch,
+        # not a budget (dealers write the reference first, the price after it)
+        from .classify import _refs
+        refs_in_line = _refs(l)
+        if refs_in_line and re.sub(r"\D", "", refs_in_line[0].group(0)) == str(amount):
+            amount = currency = None
 
     firm_order = bool(_FIRM.search(l) or (hdr and _FIRM.search(hdr)))     # "sold order", "confirm order", "strong call": the buyer has a customer
 
