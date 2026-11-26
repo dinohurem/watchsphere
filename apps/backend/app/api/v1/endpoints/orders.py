@@ -1723,6 +1723,24 @@ async def admin_collapse_duplicate_offers(
     return await collapse_duplicates(dry_run=dry_run)
 
 
+@router.post("/admin/maintenance/reread-offers")
+async def admin_reread_offers(
+    dry_run: bool = Query(True),
+    limit: Optional[int] = Query(None, ge=1, description="Only look at the first N active imported offers"),
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """Re-read the active imported sell offers with the CURRENT generator rules and correct the stored
+    reading where it differs: condition, price after discount, year / month, remarks.
+
+    The dealer's own line is read again (in a whole message: the offer's own line, with the section
+    header above it); a line that cannot be told apart is skipped. ws_code, phone and currency never
+    change. Run with ``dry_run=true`` first (counts per field, skips by reason, before/after samples),
+    then ``dry_run=false``; market stats are recomputed for the watches touched. Idempotent."""
+    from app.services.offer_reread import reread_offers
+
+    return await reread_offers(dry_run=dry_run, limit=limit)
+
+
 @router.get("/admin/stats")
 async def admin_order_stats(
     current_admin: User = Depends(get_current_admin_user),

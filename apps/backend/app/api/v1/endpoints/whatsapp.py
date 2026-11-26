@@ -355,6 +355,33 @@ async def process_csv_import(
     return await import_order_rows(list(reader), fieldnames, import_record, admin, guard=guard)
 
 
+def parse_month_year(month_year: str) -> tuple[Optional[int], Optional[int], Optional[str]]:
+    """Generator "Monat/Jahr" text ("09/25", "2024", "2022+", "2022-2024") -> (year, month, year_raw).
+    Shared by the import and the offer re-read so both read a date the same way."""
+    watch_year = None
+    watch_month = None
+    year_raw = None
+    # Non-standard formats like "2022+" keep the raw text for display
+    if month_year and ('+' in month_year or not month_year.replace('/', '').replace(' ', '').isdigit()):
+        year_raw = month_year
+    if month_year:
+        clean_my = month_year.replace('+', '').strip()
+        if '/' in clean_my:
+            try:
+                parts = clean_my.split('/')
+                watch_month = int(parts[0])
+                yr_part = parts[1]
+                watch_year = 2000 + int(yr_part) if len(yr_part) == 2 else int(yr_part)
+            except (ValueError, IndexError):
+                pass
+        else:
+            try:
+                watch_year = int(clean_my)
+            except ValueError:
+                pass
+    return watch_year, watch_month, year_raw
+
+
 def _row_import_meta(row: dict) -> dict:
     """Per-row extras set by the pipeline (match method, source text, ...)."""
     meta = row.get("_import")
@@ -554,28 +581,7 @@ async def import_order_rows(
         price, currency = parse_csv_price(price_str)
 
         # Parse month/year (e.g., "09/25", "02/26", "2024", "2022+")
-        watch_year = None
-        watch_month = None
-        year_raw = None
-        # Check for non-standard year formats like "2022+" before parsing
-        if month_year and ('+' in month_year or not month_year.replace('/', '').replace(' ', '').isdigit()):
-            year_raw = month_year  # Store raw text for display
-        if month_year:
-            # Still try to parse numeric year even if year_raw is set
-            clean_my = month_year.replace('+', '').strip()
-            if '/' in clean_my:
-                try:
-                    parts = clean_my.split('/')
-                    watch_month = int(parts[0])
-                    yr_part = parts[1]
-                    watch_year = 2000 + int(yr_part) if len(yr_part) == 2 else int(yr_part)
-                except (ValueError, IndexError):
-                    pass
-            else:
-                try:
-                    watch_year = int(clean_my)
-                except ValueError:
-                    pass
+        watch_year, watch_month, year_raw = parse_month_year(month_year)
 
         # Parse posted timestamp
         message_timestamp = None
