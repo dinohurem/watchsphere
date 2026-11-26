@@ -17,6 +17,7 @@ Both are switched by ``OFFER_GUARD_ENABLED`` / ``OFFER_EXPIRY_ENABLED`` (env).
 import asyncio
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from statistics import median
@@ -70,6 +71,63 @@ def offer_key(order_type: str, ws_code: str, phone: str, month_year: str, condit
         (month_year or "").strip().lower(),
         (condition or "").strip().lower(),
     )
+
+
+_INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+
+
+def line_key(text: Optional[str]) -> str:
+    """The dealer's line, compared as written: case, spacing and invisible characters ignored.
+
+    This is the identity of an offer: the same dealer posting the same line again (in the same
+    group, another group, or an hourly repost) is the same offer."""
+    t = _INVISIBLE.sub("", text or "").lower()
+    return re.sub(r"[\s\xa0]+", " ", t).strip()
+
+
+_NUM_RE = re.compile(r"(\d[\d.,]*)\s*([kKmM\u4e07]?)(?![\d])")
+_YEAR4_RE = re.compile(r"(?<![\d.,])((?:19|20)\d{2})(?![\d])")
+_YEAR2_RE = re.compile(r"(?<![\d.,])(\d{2})\s*[yY](?![a-zA-Z])|\d{1,2}\s*/\s*(\d{2})(?!\d)")
+
+
+def _number_values(token: str, suffix: str) -> List[float]:
+    mult = {"k": 1e3, "m": 1e6, "\u4e07": 1e4}.get(suffix.lower(), 1.0)
+    out: List[float] = []
+    for variant in (token, token.replace(",", ""), token.replace(".", "").replace(",", ""),
+                    token.replace(",", ".")):
+        try:
+            out.append(float(variant) * mult)
+        except ValueError:
+            continue
+    return out
+
+
+def reading_matches_line(price: Optional[float], year: Optional[int], text: Optional[str]) -> bool:
+    """Does a stored offer's price and year still follow from its dealer line?
+
+    Used before a repost refreshes an old offer: a line with another price, or another written
+    year, does not support the offer, so the offer must not be kept alive by it. Lenient on
+    purpose: a year is only checked when the line writes one, a price must show up in some
+    notation (192k, 1.86m, 105.000, 126,500)."""
+    t = text or ""
+    if price:
+        found = False
+        for m in _NUM_RE.finditer(t):
+            if any(abs(v - price) <= max(1.0, price * 0.005) for v in _number_values(m.group(1), m.group(2))):
+                found = True
+                break
+        if not found:
+            return False
+    if year:
+        years = {int(m.group(1)) for m in _YEAR4_RE.finditer(t)}
+        for m in _YEAR2_RE.finditer(t):
+            yy = m.group(1) or m.group(2)
+            if yy:
+                years.add(2000 + int(yy))
+        written = {y for y in years if 1990 <= y <= 2035}
+        if written and year not in written:
+            return False
+    return True
 
 
 def _imported_filter() -> dict:

@@ -1259,8 +1259,14 @@ async def _process_claimed(upload) -> dict:
     seen = await _seen_keys([k for k in (message_key(m["sender"], m["body"]) for m in messages) if k])
     fresh = [m for m in messages if message_key(m["sender"], m["body"]) not in seen]
     reposts = [m for m in messages if message_key(m["sender"], m["body"]) in seen]
+    stats["reposts_refreshed_offers"], reparse = await _refresh_reposts(reposts)
+    if reparse:
+        # An old offer these lines no longer support: read the message again instead of keeping it alive.
+        again = {id(m) for m in reparse}
+        reposts = [m for m in reposts if id(m) not in again]
+        fresh = sorted(fresh + reparse, key=lambda m: m["ts"])
     stats["reposts_skipped"] = len(reposts)
-    stats["reposts_refreshed_offers"] = await _refresh_reposts(reposts)
+    stats["reposts_reparsed"] = len(reparse)
     if not fresh:
         await _remember(reposts)
         await _advance_watermark(state, filtered["last"])
@@ -1342,9 +1348,14 @@ def _line_keys(text: Optional[str]) -> set[str]:
     return {raw, text_key(_clean_message(text or ""))} - {""}
 
 
-async def _refresh_reposts(reposts: list[dict]) -> int:
+async def _refresh_reposts(reposts: list[dict]) -> tuple[int, list[dict]]:
     """A reposted message refreshes the dealer's offers that came from its lines: post time,
-    expiry, an expired offer comes back (same as the import does for a repost)."""
+    expiry, an expired offer comes back (same as the import does for a repost).
+
+    Only an offer the line really supports is refreshed: its price (and a year the line writes)
+    must still follow from the line. Otherwise the offer holds an old or wrong reading, the repost
+    must not keep it alive, and the message goes back to the generator to be read again (the import
+    then overwrites the offer with the new reading). Returns (refreshed offers, messages to re-parse)."""
     from app.models.order import Order, OrderStatus
     from app.services import offer_lifecycle as lifecycle
     from app.services.wtb_wts_service import extract_phone_number
@@ -1356,18 +1367,27 @@ async def _refresh_reposts(reposts: list[dict]) -> int:
             by_phone.setdefault(phone, []).append(m)
     now = datetime.utcnow()
     ops = []
+    reparse: dict[int, dict] = {}
     for phone, msgs in by_phone.items():
-        wanted: dict[str, datetime] = {}
+        wanted: dict[str, tuple[datetime, dict]] = {}
         for m in msgs:
             for part in [m["body"], *m["body"].split("\n")]:
                 for k in _line_keys(part):
-                    wanted[k] = max(wanted.get(k, m["ts"]), m["ts"])
+                    if k not in wanted or m["ts"] >= wanted[k][0]:
+                        wanted[k] = (m["ts"], m)
         cur = Order.get_motor_collection().find(
-            {"whatsapp_phone": phone, "status": {"$in": [OrderStatus.ACTIVE.value, OrderStatus.EXPIRED.value]}},
-            {"source_text": 1, "order_type": 1, "created_at": 1, "status": 1})
+            {"whatsapp_phone": phone, "status": {"$in": [OrderStatus.ACTIVE.value, OrderStatus.EXPIRED.value]},
+             "superseded_by": None},
+            {"source_text": 1, "order_type": 1, "created_at": 1, "status": 1, "price": 1, "year": 1})
         async for o in cur:
-            ts = max((wanted[k] for k in _line_keys(o.get("source_text")) if k in wanted), default=None)
-            if ts is None or (o.get("created_at") and ts <= o["created_at"]):
+            hits = [wanted[k] for k in _line_keys(o.get("source_text")) if k in wanted]
+            if not hits:
+                continue
+            ts, msg = max(hits, key=lambda h: h[0])
+            if not lifecycle.reading_matches_line(o.get("price"), o.get("year"), o.get("source_text")):
+                reparse[id(msg)] = msg
+                continue
+            if o.get("created_at") and ts <= o["created_at"]:
                 continue
             ops.append(UpdateOne({"_id": o["_id"]}, {"$set": {
                 "created_at": ts, "updated_at": now, "last_seen_at": now,
@@ -1375,7 +1395,7 @@ async def _refresh_reposts(reposts: list[dict]) -> int:
                 "status": OrderStatus.ACTIVE.value}}))
     if ops:
         await Order.get_motor_collection().bulk_write(ops, ordered=False)
-    return len(ops)
+    return len(ops), sorted(reparse.values(), key=lambda m: m["ts"])
 
 
 # --------------------------------------------------------------------------- #

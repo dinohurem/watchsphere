@@ -1708,6 +1708,21 @@ async def admin_fix_country_names(
     return await fix_order_country_names(dry_run=dry_run)
 
 
+@router.post("/admin/maintenance/collapse-duplicate-offers")
+async def admin_collapse_duplicate_offers(
+    dry_run: bool = Query(True),
+    current_admin: User = Depends(get_current_admin_user),
+) -> Any:
+    """One offer per dealer line: for each dealer + watch + source line keep the newest reading and
+    expire the older versions and exact copies (set ``superseded_by``, nothing is deleted).
+
+    Run with ``dry_run=true`` first (counts per reason plus samples, nothing changes), then
+    ``dry_run=false``. Idempotent: a second run finds nothing."""
+    from app.services.offer_dedupe import collapse_duplicates
+
+    return await collapse_duplicates(dry_run=dry_run)
+
+
 @router.get("/admin/stats")
 async def admin_order_stats(
     current_admin: User = Depends(get_current_admin_user),
