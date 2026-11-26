@@ -373,6 +373,28 @@ def _row_texts(row: dict) -> tuple[str, str]:
     return str(line), str(message)
 
 
+def _apply_reading(order: Order, reading: dict, side: str, now: datetime) -> None:
+    """Overwrite an offer with a new reading of the dealer's line: price, currency, year, month,
+    condition, remarks, source text and times, all of it. ``reading["posted"]`` is the message time."""
+    from app.core.countries import country_display_name as _cdn
+    from app.services import offer_lifecycle as lifecycle
+
+    posted = reading["posted"]
+    for key, value in reading.items():
+        if key in ("posted", "country_code", "country_name"):
+            continue
+        setattr(order, key, value)
+    if reading.get("country_code"):
+        order.country_code = reading["country_code"]
+        order.country_name = _cdn(reading["country_code"]) or reading.get("country_name")
+    order.created_at = posted
+    order.updated_at = now
+    order.last_seen_at = now
+    order.expires_at = lifecycle.expires_at(side, posted)
+    if not order.first_seen_at:
+        order.first_seen_at = posted
+
+
 async def import_order_rows(
     reader: list[dict],
     fieldnames: list[str],
@@ -390,10 +412,13 @@ async def import_order_rows(
     ``_import`` dict with ``match_method``, ``ai_reason``, ``source_text``,
     ``source_image``, ``source_group`` and ``source_run_id``.
 
-    One offer per dealer + side + WS code + card date + condition (the price is
-    not part of it). A repost of that offer only refreshes it — it is not new and
-    triggers no alert; a repost with a new price replaces the price (the old one
-    goes to ``price_history``), and a repost of an expired offer reactivates it.
+    One offer per dealer LINE: dealer + side + WS code + the dealer's source line. The
+    same line again (any message or group) is the same offer and its new reading
+    overwrites the old one completely (price, year, month, condition, remarks, source
+    text, times); a changed price goes to ``price_history``. A new line for a watch the
+    dealer offers from an earlier message, which no line of this message claims, is the
+    new reading of that offer. Different lines of one message stay separate offers.
+    A repost is not new and triggers no alert; it reactivates an expired offer.
     Every offer expires 10 days (WTS) / 14 days (WTB) after its last post.
 
     With ``guard`` every row is checked against the dealer's own text before it
@@ -454,29 +479,37 @@ async def import_order_rows(
     # Held offers (suspicious price, waiting on the Approval page): a repost refreshes them,
     # it must not create a second copy. They are no peers of anything (not in existing_orders).
     held_orders = await Order.find(Order.status == OrderStatus.HELD).to_list()
-    existing_order_map: dict[tuple, Any] = {}
-    # existing offer id -> (phone, post time) of the line of this import that refreshed it
-    touched_this_import: dict[str, tuple] = {}
-    existing_by_key: dict[tuple, list] = {}  # every stored offer per key (one dealer can list a year twice)
+    # Offers by dealer slot (side, WS code, phone), oldest first, active ones last. Offers an
+    # earlier clean-up superseded are never matched. Pending (new, not yet inserted) offers of this
+    # import join their slot, so a line twice in one import is one offer.
+    existing_by_slot: dict[tuple, list] = {}
+    pending_row_index: dict[int, int] = {}  # id(pending Order) -> index in order_docs
+    # id(offer) -> (phone, post time) of the message of this import that last wrote it
+    touched_this_import: dict[int, tuple] = {}
     for eo in sorted(revivable + held_orders, key=lambda o: o.created_at or now) + sorted(
         existing_orders, key=lambda o: o.created_at or now
     ):
-        # Active after expired, newest last: when the old key put several offers
-        # on one dealer + watch, the newest active one is the offer from now on.
+        if eo.superseded_by:
+            continue
         eo_ws = (eo.ws_code or "").strip().upper()
         eo_phone = (eo.whatsapp_phone or eo.user_name or "").strip()
-        eo_month_year = ""
-        if eo.watch_month and eo.year:
-            eo_month_year = f"{eo.watch_month:02d}/{eo.year % 100:02d}"
-        elif eo.year_raw:
-            eo_month_year = eo.year_raw.strip().lower()
-        elif eo.year:
-            eo_month_year = str(eo.year)  # a year without a month is part of the identity too
-        eo_condition = eo.condition.value if eo.condition else ""
         if eo_ws and eo_phone:
-            key = lifecycle.offer_key(eo.order_type.value, eo_ws, eo_phone, eo_month_year, eo_condition)
-            existing_order_map[key] = eo
-            existing_by_key.setdefault(key, []).append(eo)
+            existing_by_slot.setdefault((eo.order_type.value, eo_ws, eo_phone), []).append(eo)
+
+    # The dealer lines of each message of this import, per watch: an old offer whose line is
+    # written again in the same message belongs to that line and is not up for another one.
+    claimed_lines: dict[tuple, dict] = {}  # (side, WS code, phone, post time) -> {line key: rows}
+    for r in reader:
+        t = (r.get("Nachrichten Art") or r.get("nachrichten art") or "").strip().upper()
+        side = "sell" if t == "WTS" else "buy" if t == "WTB" else None
+        lk = lifecycle.line_key(_row_texts(r)[0])
+        if side and lk:
+            per_msg = claimed_lines.setdefault((
+                side, (r.get("WS-Code") or r.get("ws-code") or r.get("WS-code") or "").strip().upper(),
+                (r.get("Nummer") or r.get("nummer") or "").strip(),
+                (r.get("Nachricht gepostet am") or r.get("nachricht gepostet am") or "").strip(),
+            ), {})
+            per_msg[lk] = per_msg.get(lk, 0) + 1
 
     use_guard = guard and lifecycle.guard_enabled()
     reference_prices = lifecycle.reference_prices(existing_orders) if use_guard else {}
@@ -681,7 +714,8 @@ async def import_order_rows(
                 if not condition:
                     order_condition = None
 
-            # One offer per dealer + side + watch + card date + condition.
+            # Identity: the dealer's LINE. Same dealer + side + watch + same line = same offer, whatever
+            # group or message it came in; a new reading of it overwrites the old one completely.
             dup_ws = (matched_watch.ws_code or ws_code or "").strip().upper()
             dup_phone = phone.strip() if phone else ""
             dup_month_year = ""
@@ -690,103 +724,150 @@ async def import_order_rows(
             elif year_raw:
                 dup_month_year = year_raw.strip().lower()
             elif watch_year:
-                # "228238a champ 2019 hkd359k" / "... 2022 hkd397k": a year alone tells two pieces apart.
-                # Without it every year-only line of a dealer's watch was one offer (Kenan, 25 Nov 2026).
                 dup_month_year = str(watch_year)
-            dup_key = lifecycle.offer_key(
+            my_key = lifecycle.offer_key(
                 order_type.value, dup_ws, dup_phone, dup_month_year,
                 order_condition.value if order_condition else "",
             )
             posted = message_timestamp or now
+            line_text, _msg = _row_texts(row)
+            lk = lifecycle.line_key(line_text)
+            slot = (order_type.value, dup_ws, dup_phone)
 
-            existing_order = existing_order_map.get(dup_key)
-            same_price = lambda other: bool(price) and round(price) == round(other.price or 0) and \
-                (currency or "").upper() == (other.currency or "").upper()
-            if isinstance(existing_order, Order):
-                # Several stored offers can share a key (a dealer lists "2024 hkd536k" and "2024 hkd380k"):
-                # the one with this price first, else one no other line of this message refreshed yet. A
-                # second line of the SAME message with another price is its own offer, never an overwrite.
-                free = [o for o in existing_by_key.get(dup_key, [existing_order])
-                        if touched_this_import.get(str(o.id)) != (dup_phone, posted)]
-                existing_order = next((o for o in free if same_price(o)), None) or (free[-1] if free else None)
-            if isinstance(existing_order, int) and not same_price(order_docs[existing_order]) \
-                    and (order_docs[existing_order].created_at or posted) == posted:
-                existing_order = None
-            if isinstance(existing_order, Order):
-                touched_this_import[str(existing_order.id)] = (dup_phone, posted)
-                if existing_order.created_at and posted < existing_order.created_at:
-                    # An older export processed late must not overwrite a newer post.
-                    skipped_duplicates += 1
-                    continue
-                new_price = price if price else None
-                price_changed = bool(new_price) and (
-                    round(new_price) != round(existing_order.price or 0)
-                    or (currency or "").upper() != (existing_order.currency or "").upper()
-                )
-                if price_changed:
-                    usd_value = fx_service.convert(new_price, currency, "USD", fx_rates)
-                    price_updates.append((existing_order, {
-                        "price": new_price,
-                        "currency": currency,
-                        "usd_price": round(usd_value, 2) if usd_value is not None else None,
-                        "posted": posted,
-                        "remarks": remarks or None,
-                    }, row))
-                    continue
-                # Same offer reposted: not new, no alert (spec §1.11). Bump the
-                # post time so "28d" becomes "1d", move the expiry forward, bring
-                # an expired offer back, backfill remarks older imports dropped.
-                existing_order.created_at = posted
-                existing_order.updated_at = now
-                existing_order.last_seen_at = now
-                existing_order.expires_at = lifecycle.expires_at(order_type.value, posted)
-                if existing_order.status != OrderStatus.HELD:  # a held offer waits for its decision
-                    existing_order.status = OrderStatus.ACTIVE
-                if not existing_order.first_seen_at:
-                    existing_order.first_seen_at = existing_order.created_at
-                if remarks and not existing_order.remarks:
-                    existing_order.remarks = remarks
-                if firm_order and offer_type == OfferType.WTB:
-                    existing_order.firm_order = True  # the repost now says "sold order"
-                await existing_order.save()
-                refreshed_count += 1
-                refreshed_ids.append(str(existing_order.id))
-                continue
-            elif isinstance(existing_order, int):
-                # Same offer twice in this import: the newer post decides the price.
-                pending = order_docs[existing_order]
-                if posted >= (pending.created_at or posted) and price and round(price) != round(pending.price or 0):
-                    usd_value = fx_service.convert(price, currency, "USD", fx_rates)
-                    pending.price = price
-                    pending.currency = currency
-                    pending.usd_price = round(usd_value, 2) if usd_value is not None else None
-                    pending.created_at = posted
-                    pending.expires_at = lifecycle.expires_at(order_type.value, posted)
-                    order_source_rows[existing_order] = row
-                skipped_duplicates += 1
-                continue
-
-            # Validate price against brand minimums (only when we have a price)
             if price:
                 price_valid, price_reason = validate_price(str(int(price)), watch_brand)
                 if not price_valid:
-                    flagged_price_count += 1
-                    if remarks:
-                        remarks = f"{remarks} | PRICE FLAG: {price_reason}"
-                    else:
-                        remarks = f"PRICE FLAG: {price_reason}"
-
-            matched_count += 1
-
-            # usd_price from the central FX table (None if no price — valid for
-            # WTB — or an unknown currency; never assume USD).
+                    remarks = f"{remarks} | PRICE FLAG: {price_reason}" if remarks else f"PRICE FLAG: {price_reason}"
             usd_price = None
             if price:
                 usd_value = fx_service.convert(price, currency, "USD", fx_rates)
                 usd_price = round(usd_value, 2) if usd_value is not None else None
+            # Everything one reading of the line says; overwrites an older reading as a whole.
+            reading = {
+                "price": price, "currency": currency, "usd_price": usd_price,
+                "condition": order_condition, "condition_raw": condition_raw,
+                "year": watch_year, "watch_month": watch_month, "year_raw": year_raw,
+                "remarks": remarks or None,
+                "notes": f"Imported from {group or 'CSV'}. {remarks}".strip() if remarks else f"Imported from {group or 'CSV'}",
+                "firm_order": firm_order and offer_type == OfferType.WTB,
+                "source_text": row_meta.get("source_text"),
+                "source_image": row_meta.get("source_image"),
+                "source_group": row_meta.get("source_group") or group or None,
+                "source_run_id": row_meta.get("source_run_id"),
+                "match_method": row_meta.get("match_method"),
+                "ai_reason": row_meta.get("ai_reason"),
+                "description": ws_code if ws_code != order_reference else None,
+                "country_code": country_code, "country_name": country_name if country_code else None,
+            }
+            claimed = claimed_lines.get((slot[0], dup_ws, dup_phone, posted_at_str), {})
 
-            if dup_ws and dup_phone:
-                existing_order_map[dup_key] = len(order_docs)  # index of the pending new order
+            def _key_of(o) -> tuple:
+                my = ""
+                if o.watch_month and o.year:
+                    my = f"{o.watch_month:02d}/{o.year % 100:02d}"
+                elif o.year_raw:
+                    my = o.year_raw.strip().lower()
+                elif o.year:
+                    my = str(o.year)
+                return lifecycle.offer_key(o.order_type.value, dup_ws, dup_phone, my,
+                                           o.condition.value if o.condition else "")
+
+            def _same_price(o) -> bool:
+                return bool(price) and round(price) == round(o.price or 0) and \
+                    (currency or "").upper() == (o.currency or "").upper()
+
+            existing_order = None
+            cands = existing_by_slot.get(slot, [])
+            if lk:
+                same_line = [o for o in cands if lifecycle.line_key(o.source_text) == lk]
+                # The source text can be a whole message several offers came from (a year per
+                # offer): then the line alone does not tell them apart, the reading does.
+                shared = claimed.get(lk, 1) > 1 or len(same_line) > 1
+                rank = lambda o: (o.status == OrderStatus.ACTIVE, o.created_at or datetime.min)
+                untouched = [o for o in same_line if touched_this_import.get(id(o)) != (dup_phone, posted)]
+                if untouched and not shared:
+                    existing_order = max(untouched, key=rank)
+                elif untouched:
+                    exact = [o for o in untouched if _same_price(o) and _key_of(o) == my_key]
+                    same_p = [o for o in untouched if _same_price(o)]
+                    same_k = [o for o in untouched if _key_of(o) == my_key]
+                    for group in (exact, same_p, same_k):
+                        if group:
+                            existing_order = max(group, key=rank)
+                            break
+                    if existing_order is None and claimed.get(lk, 1) <= 1:
+                        existing_order = max(untouched, key=rank)  # old copies of one line
+                if existing_order is None:
+                    # The same line and reading again in this message (another group): one offer.
+                    dup_of = [o for o in same_line if touched_this_import.get(id(o)) == (dup_phone, posted)
+                              and _same_price(o) and _key_of(o) == my_key]
+                    if dup_of:
+                        existing_order = dup_of[0]
+            if existing_order is None:
+                # A new reading of a line we have not seen: it replaces the one offer this dealer
+                # has for the watch from an EARLIER message that no line of this message claims.
+                # Lines of one message never overwrite each other.
+                free = [o for o in cands
+                        if touched_this_import.get(id(o)) != (dup_phone, posted)
+                        and (not lk or not o.source_text or lifecycle.line_key(o.source_text) not in claimed)]
+                free = [o for o in free if o.status != OrderStatus.EXPIRED] or free
+                if not lk:
+                    # A row without the dealer's text (hand-made CSV): same card date + condition.
+                    same_key = [o for o in free if _key_of(o) == my_key]
+                    existing_order = next((o for o in same_key if _same_price(o)), None) or \
+                        (same_key[-1] if same_key else None)
+                elif len(free) == 1:
+                    existing_order = free[0]
+                elif len(free) > 1:
+                    existing_order = next((o for o in free if _same_price(o)), None) or \
+                        next((o for o in free if _key_of(o) == my_key), None)
+
+            if existing_order is not None:
+                if existing_order.created_at and posted < existing_order.created_at:
+                    # An older export processed late must not overwrite a newer post.
+                    skipped_duplicates += 1
+                    continue
+                if touched_this_import.get(id(existing_order)) == (dup_phone, posted) and lk and \
+                        lifecycle.line_key(existing_order.source_text) == lk:
+                    skipped_duplicates += 1  # the same line again in another group of the same message
+                    continue
+                touched_this_import[id(existing_order)] = (dup_phone, posted)
+                reading_now = dict(reading, posted=posted)
+                if existing_order.id is None:
+                    # Pending offer of this import: the newer reading wins as a whole.
+                    _apply_reading(existing_order, reading_now, order_type.value, now)
+                    idx = pending_row_index.get(id(existing_order))
+                    if idx is not None:
+                        order_source_rows[idx] = row
+                    skipped_duplicates += 1
+                    continue
+                price_changed = bool(price) and (
+                    round(price) != round(existing_order.price or 0)
+                    or (currency or "").upper() != (existing_order.currency or "").upper()
+                )
+                if price_changed:
+                    # Applied after the cross-record price check; an outlier keeps the old offer.
+                    price_updates.append((existing_order, {
+                        "price": price, "currency": currency, "usd_price": usd_price,
+                        "posted": posted, "reading": reading_now,
+                    }, row))
+                    continue
+                # Same offer reposted: not new, no alert (spec §1.11). Overwrite it with this reading
+                # and bring an expired offer back.
+                _apply_reading(existing_order, reading_now, order_type.value, now)
+                if existing_order.status != OrderStatus.HELD:  # a held offer waits for its decision
+                    existing_order.status = OrderStatus.ACTIVE
+                if not existing_order.first_seen_at:
+                    existing_order.first_seen_at = existing_order.created_at
+                await existing_order.save()
+                refreshed_count += 1
+                refreshed_ids.append(str(existing_order.id))
+                continue
+
+            if "PRICE FLAG" in (remarks or ""):
+                flagged_price_count += 1
+            matched_count += 1
+
             order_source_rows.append(row)
             order_docs.append(Order(
                 order_type=order_type,
@@ -825,6 +906,11 @@ async def import_order_rows(
                 source_group=row_meta.get("source_group") or group or None,
                 source_run_id=row_meta.get("source_run_id"),
             ))
+            if dup_ws and dup_phone:
+                new_doc = order_docs[-1]
+                existing_by_slot.setdefault(slot, []).append(new_doc)
+                pending_row_index[id(new_doc)] = len(order_docs) - 1
+                touched_this_import[id(new_doc)] = (dup_phone, posted)
 
     # Cross-record price sanity. validate_price above only knows brand minimums,
     # so a row like "HKD 103.000" among "HKD 942.000" peers, or an HKD amount
@@ -884,15 +970,7 @@ async def import_order_rows(
         eo.price_history = list(eo.price_history or []) + [
             {"price": eo.price, "currency": eo.currency, "until": posted}
         ]
-        eo.price = upd["price"]
-        eo.currency = upd["currency"]
-        eo.usd_price = upd["usd_price"]
-        if upd.get("remarks"):
-            eo.remarks = upd["remarks"]
-        eo.created_at = posted
-        eo.updated_at = now
-        eo.last_seen_at = now
-        eo.expires_at = lifecycle.expires_at(eo.order_type.value, posted)
+        _apply_reading(eo, upd["reading"], eo.order_type.value, now)
         was_held = eo.status == OrderStatus.HELD
         if not was_held:
             eo.status = OrderStatus.ACTIVE

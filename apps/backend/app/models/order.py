@@ -145,6 +145,10 @@ class Order(Document):
     # "flagged_at", "price", "currency"}. See app/services/price_flags.py.
     price_flag: Optional[dict] = None
 
+    # Set by the duplicate clean-up: this offer is an older reading of the same dealer line; the
+    # offer with this id replaced it. Never matched by an import again.
+    superseded_by: Optional[str] = None
+
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
