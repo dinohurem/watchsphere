@@ -68,7 +68,7 @@ def _section_candidates(text: str) -> list[tuple[str, Optional[str], str]]:
     another header ends it, a closing line ("all full set") applies to all."""
     from app.services import wtb_wts_service as g
 
-    lines = text.split("\n")
+    lines = _merge_split_lines(text.split("\n"), None)
     msg_remarks = g.extract_location_remarks(text, "WTS") or ""
     footer: list[str] = []
     for tail in reversed([l.strip() for l in lines if l.strip()]):
@@ -103,6 +103,70 @@ def _section_candidates(text: str) -> list[tuple[str, Optional[str], str]]:
         if g._extract_ref_from_line(s) or g._line_has_price(s):
             out.append((s, section, msg_remarks))
     return out
+
+
+def _merge_split_lines(raw_lines: list[str], country: Optional[str]) -> list[str]:
+    """Reference on one line, price / year on the next 1-3 lines: one listing, as ``parse_stock_list`` merges it."""
+    from app.services import wtb_wts_service as g
+
+    lines: list[str] = []
+    i = 0
+    while i < len(raw_lines):
+        cur = raw_lines[i].strip()
+        if cur:
+            ref = g._extract_ref_from_line(cur)
+            price = g.extract_price_from_line(cur, country)[0] if ref else None
+            if ref and not price:
+                merged, consumed = cur, 0
+                for look in range(1, 4):
+                    if i + look >= len(raw_lines):
+                        break
+                    nxt = raw_lines[i + look].strip()
+                    if not nxt:
+                        continue
+                    if g._extract_ref_from_line(nxt) or g.detect_brand_header(nxt):
+                        break
+                    price_nxt = g.extract_price_from_line(nxt, country)[0]
+                    if price_nxt and g._has_reflike_token(nxt):
+                        break
+                    year_nxt = g.extract_year_from_line(nxt) or g.extract_month_year_from_text(nxt)
+                    merged += " " + nxt
+                    consumed = look
+                    if price_nxt:
+                        break
+                    if not year_nxt and not re.search(r"\b(?:used|new|unworn|nos|bnib|full\s*set|brand\s*new)\b", nxt, re.I):
+                        break
+                if consumed > 0:
+                    lines.append(merged)
+                    i += consumed + 1
+                    continue
+        lines.append(raw_lines[i])
+        i += 1
+    return lines
+
+
+def merge_remarks(old: str, new: str) -> str:
+    """Existing remarks are never removed: every old remark stays, the current rules add theirs, each once
+    ("Ready Stock; Ready Stock" -> "Ready Stock"), and the old discount format "17% Retail" becomes
+    "-17% Retail"."""
+    def fix(item: str) -> str:
+        m = re.fullmatch(r"\s*(\d+(?:[.,]\d+)?)\s*%\s*retail\s*", item, re.I)
+        return f"-{m.group(1)}% Retail" if m else item.strip()
+
+    seen: set[str] = set()
+    segments: list[str] = []
+    for text in (old, new):
+        for seg in (text or "").split("; "):
+            items = []
+            for item in seg.split(", "):
+                item = fix(item)
+                key = _norm(item)
+                if key and key not in seen:
+                    seen.add(key)
+                    items.append(item)
+            if items:
+                segments.append(", ".join(items))
+    return "; ".join(segments)
 
 
 def locate_line(doc: dict, watch: Optional[dict], country: Optional[str]) -> tuple[Optional[dict], str]:
@@ -222,7 +286,7 @@ def reread(doc: dict, watch: Optional[dict] = None, rates: Optional[dict] = None
     if _PRICE_FLAG_SEP in stored_remarks:
         stored_remarks, flag = stored_remarks.split(_PRICE_FLAG_SEP, 1)
         stored_remarks, flag = stored_remarks.strip(), _PRICE_FLAG_SEP + flag
-    new_remarks = (row.get("Bemerkungen") or "").strip()
+    new_remarks = merge_remarks(stored_remarks, (row.get("Bemerkungen") or "").strip())
     if new_remarks != stored_remarks:
         if "price" in changed:  # the old flag judged the old amount
             flag = ""

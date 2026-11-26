@@ -68,6 +68,33 @@ def test_correct_offer_is_unchanged():
     assert res["changed"] == [] and res["set"] == {}
 
 
+def test_remark_from_message_context_is_kept():
+    res = rr.reread(_doc("5738/51g 01/2025 HKD555k", price=555000.0, remarks="Ready Stock"))
+    assert "remarks" not in res["changed"] and res["new"]["remarks"] == "Ready Stock"
+
+
+def test_full_set_on_the_price_line_of_a_split_listing():
+    text = "Ap 37mm 15551BC.ZZ.D405CR.01\n2026 full set 86,000$"
+    res = rr.reread(_doc(text, price=86000.0, remarks="fullset", reference="15551BC.ZZ.D405CR.01"))
+    assert res["new"]["remarks"] == "fullset" and res["new"]["year"] == 2026
+
+
+def test_discount_on_the_line_below_and_remark_format():
+    text = "*Cartier*\nWSSA0082 11/2026\n$51,000 -17%"
+    res = rr.reread(_doc(text, ws_code="WSSA0082", price=51000.0, remarks="17% Retail"))
+    assert res["set"]["price"] == 42330.0
+    assert res["new"]["remarks"] == "-17% Retail"
+
+
+def test_duplicate_remark_is_deduplicated_not_dropped():
+    res = rr.reread(_doc("🔹 5968G Blue N10-2026 hkd1.14M", price=1140000.0, remarks="Ready Stock; Ready Stock"))
+    assert res["set"]["remarks"] == "Ready Stock"
+
+
+def test_merge_remarks_keeps_old_and_adds_new():
+    assert rr.merge_remarks("Ready Stock, Box", "Fullset; ready stock") == "Ready Stock, Box; Fullset"
+
+
 def test_buy_offer_is_skipped():
     assert rr.reread(_doc("wtb 5712/1A", order_type="buy")) == {"skip": "not_sell"}
 
