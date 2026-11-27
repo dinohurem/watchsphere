@@ -302,7 +302,7 @@ async def seed_defaults(replace: bool = False) -> None:
 # missing gets its default rule, an existing one gets the trigger when it lacks it.
 _ADDED_TRIGGERS: dict[str, list[str]] = {
     "only watch": ["paper lost", "papers lost", "lost paper", "lost papers", "no card", "no cards", "card lost",
-                   "lost card"],
+                   "lost card", "only wacth"],
 }
 _ADDED_REMARKS = ("Old Buckle", "China Set")
 
