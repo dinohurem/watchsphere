@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     # needs-review row goes to the approval page's "Unsure" tab.
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_REVIEW_MODEL: str = "claude-opus-5-5"
+    # Which provider reviews the needs-review rows: "openai" (default) or "anthropic". When the
+    # chosen one is out of credit and the other has a key, the other takes over for that batch.
+    AI_REVIEW_PROVIDER: str = "openai"
+    OPENAI_REVIEW_MODEL: str = "gpt-6-sol"
+    # Independent review passes per batch; a row counts as sure only when every pass agrees.
+    AI_REVIEW_PASSES: int = 2
     # Public web app URL, used for links in admin emails (approval page).
     WEB_APP_URL: str = "https://watchsphere.io"
 

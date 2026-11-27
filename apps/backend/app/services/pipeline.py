@@ -966,10 +966,10 @@ async def database_size_mib() -> float:
 async def pause_reason() -> Optional[str]:
     """Why uploads must not be processed right now, or None."""
     from app.core.config import settings
-    from app.services import ai_credit
 
-    if ai_credit.is_exhausted():
-        return f"AI provider {ai_credit.provider()} is out of credit"
+    blocked = ai_blocked_provider()
+    if blocked:
+        return f"AI provider {blocked} is out of credit"
     limit = settings.PIPELINE_PAUSE_DATA_MB
     if limit:
         try:
@@ -984,11 +984,21 @@ async def pause_reason() -> Optional[str]:
     return None
 
 
-def _raise_if_ai_exhausted() -> None:
-    from app.services import ai_credit
+def ai_blocked_provider() -> Optional[str]:
+    """The provider that blocks processing, or None. OpenAI-only steps (matching, verification)
+    need OpenAI; the review runs on any configured provider, so one exhausted provider only
+    blocks when no other can review."""
+    from app.services import ai_credit, ai_review
 
-    if ai_credit.is_exhausted():
-        raise ProcessingPaused(f"AI provider {ai_credit.provider()} is out of credit")
+    if ai_credit.is_exhausted("openai"):
+        return "openai"
+    return ai_review.blocked_provider()
+
+
+def _raise_if_ai_exhausted() -> None:
+    blocked = ai_blocked_provider()
+    if blocked:
+        raise ProcessingPaused(f"AI provider {blocked} is out of credit")
 
 
 async def queue_pending(limit: int = 20) -> int:

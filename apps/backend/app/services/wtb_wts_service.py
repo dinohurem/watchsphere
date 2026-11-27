@@ -1551,7 +1551,7 @@ async def _request_json_array(client, prompt: str, label: str) -> tuple[list[dic
     from app.core.config import settings
     from app.services import ai_credit
 
-    if ai_credit.is_exhausted():
+    if ai_credit.is_exhausted("openai"):
         return [], False  # the pipeline discards this run and waits for credit
 
     for attempt in (1, 2):

@@ -70,6 +70,7 @@ def test_parse_decisions_missing_rows_are_unsure():
 @pytest.mark.asyncio
 async def test_review_without_api_key_leaves_everything_unsure(monkeypatch):
     monkeypatch.setattr(ai_review.settings, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(ai_review.settings, "OPENAI_API_KEY", "")
     out = await ai_review.review_rows(ITEMS)
     assert all(not d.sure for d in out.values())
 

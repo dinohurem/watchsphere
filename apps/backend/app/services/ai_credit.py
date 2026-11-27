@@ -22,8 +22,9 @@ _CREDIT_MARKERS = (
     "you have no credits remaining",
 )
 
-_exhausted_until: float = 0.0
-_provider: str | None = None
+# Exhaustion is tracked per provider: one provider being out of credit must not pause
+# the pipeline while another one can still do the work (the AI review falls back).
+_exhausted_until: dict[str, float] = {}
 
 
 def is_credit_error(exc: BaseException) -> bool:
@@ -32,12 +33,10 @@ def is_credit_error(exc: BaseException) -> bool:
 
 
 def mark_exhausted(provider: str, exc: BaseException | None = None) -> None:
-    global _exhausted_until, _provider
-    if not is_exhausted():
-        logger.error("AI provider %s is out of credit; pipeline processing pauses: %s",
-                     provider, str(exc or "")[:200])
-    _exhausted_until = time.monotonic() + PAUSE_SECONDS
-    _provider = provider
+    if not is_exhausted(provider):
+        logger.error("AI provider %s is out of credit; it is skipped for %d min: %s",
+                     provider, PAUSE_SECONDS // 60, str(exc or "")[:200])
+    _exhausted_until[provider] = time.monotonic() + PAUSE_SECONDS
 
 
 def check(provider: str, exc: BaseException) -> bool:
@@ -48,15 +47,20 @@ def check(provider: str, exc: BaseException) -> bool:
     return False
 
 
-def is_exhausted() -> bool:
-    return time.monotonic() < _exhausted_until
+def is_exhausted(provider: str | None = None) -> bool:
+    """One provider, or (no argument) whether any provider is out of credit."""
+    now = time.monotonic()
+    if provider is not None:
+        return now < _exhausted_until.get(provider, 0.0)
+    return any(now < until for until in _exhausted_until.values())
 
 
 def provider() -> str | None:
-    return _provider if is_exhausted() else None
+    """The provider that is out of credit (the one whose pause ends last), or None."""
+    now = time.monotonic()
+    live = {p: u for p, u in _exhausted_until.items() if now < u}
+    return max(live, key=live.get) if live else None
 
 
 def reset() -> None:
-    global _exhausted_until, _provider
-    _exhausted_until = 0.0
-    _provider = None
+    _exhausted_until.clear()
