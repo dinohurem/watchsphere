@@ -3276,6 +3276,47 @@ def _watch_price_pairs(lines: list[str], ref_lines: dict) -> Optional[list[str]]
     return ["\n".join(context + p) for p in pairs]
 
 
+def _block_list_offers(content: str, watch_index: dict) -> Optional[list[str]]:
+    """Block lists (Kenan, 26 Nov 2026): the watch on one line (no price), below it one line per piece:
+        5968G-001 (Blue)
+        Naked   HKD 950,000
+        2023y   HKD 995,000
+    A line without a reference belongs to the watch line ABOVE it, up to the next watch line or an empty
+    line - never to the watch below. Every priced line is its own offer (watch line + that one line), so year,
+    price and remark come only from that line. Only used when a watch has two or more such lines (one line
+    per watch is the two-line format of _watch_price_pairs)."""
+    raw = content.split("\n")
+    blocks: list[tuple[str, list[str], list[str]]] = []   # (watch line, unpriced lines under it, priced lines)
+    cur = None
+    context: list[str] = []
+    for line in raw:
+        if not line.strip():
+            cur = None
+            continue
+        is_ref = not detect_brand_header(line) and bool(find_references(line, watch_index))
+        if is_ref:
+            if _line_has_price(line):
+                return None                    # a priced reference line: an ordinary list, not block lists
+            cur = (line, [], [])
+            blocks.append(cur)
+        elif cur is None:
+            if not blocks and not _line_has_price(line):
+                context.append(line)           # header above the first watch
+        elif _line_has_price(line):
+            cur[2].append(line)
+        elif not cur[2]:
+            cur[1].append(line)                # remark line between watch and its first price line
+        else:
+            cur[2][-1] += "\n" + line          # unpriced line under a price line: part of that piece
+    if len(blocks) < 2 or not all(b[2] for b in blocks) or max(len(b[2]) for b in blocks) < 2:
+        return None
+    out = []
+    for watch, pre, items in blocks:
+        for item in items:
+            out.append("\n".join(context + [watch] + pre + [item]))
+    return out
+
+
 def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, list[str]]:
     """Decide how a message splits into listings (§3).
 
@@ -3301,6 +3342,9 @@ def split_message_into_listings(content: str, watch_index: dict) -> tuple[str, l
                 st = r.lower() if r.count(".") >= 3 else ref_stem(r)
                 if st not in distinct:
                     distinct.append(st)
+    block_offers = _block_list_offers(content, watch_index)
+    if block_offers:
+        return "blocks", block_offers
     pairs = _watch_price_pairs(lines, ref_lines)
     if pairs:
         return "blocks", pairs

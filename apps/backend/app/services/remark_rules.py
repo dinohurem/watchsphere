@@ -37,7 +37,7 @@ DEFAULT_CATEGORIES = [CAT_SET, CAT_ORIGIN, CAT_BRACELET, CAT_CONDITION, CAT_PRIC
 DEFAULT_REMARK_RULES: list[tuple[str, str, str, list[str]]] = [
     # Set and papers
     ("fullset", CAT_SET, "BOTH", ["full set", "fullset", "complete set", "box+paper", "box & paper", "box and papers"]),
-    ("only watch", CAT_SET, "BOTH", ["only watch", "watch only", "single watch", "naked", "nake", "no paper", "no papers",
+    ("only watch", CAT_SET, "BOTH", ["only watch", "watch only", "single watch", "naked", "nake", "only wacth", "no paper", "no papers",
                                      "paper lost", "papers lost", "lost paper", "lost papers", "no card", "no cards",
                                      "card lost", "lost card"]),
     ("Watch + Card", CAT_SET, "BOTH", ["w+c", "w&c", "w & c", "watch and card", "watch & card", "watch & card only",
@@ -302,7 +302,7 @@ async def seed_defaults(replace: bool = False) -> None:
 # missing gets its default rule, an existing one gets the trigger when it lacks it.
 _ADDED_TRIGGERS: dict[str, list[str]] = {
     "only watch": ["paper lost", "papers lost", "lost paper", "lost papers", "no card", "no cards", "card lost",
-                   "lost card"],
+                   "lost card", "only wacth"],
 }
 _ADDED_REMARKS = ("Old Buckle", "China Set")
 

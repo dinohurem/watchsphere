@@ -28,7 +28,7 @@ _PRICE = (rf"(?:(?P<pre>{_CUR})[ \t]*:?[ \t]*|(?<![A-Za-z0-9.,/\-]))(?P<num>{_NU
 # between price and discount: spaces, "//", "|", ",", "(", "=" never; at most one short word ("GRN", "net")
 _GAP = r"(?:[ \t]*(?://+|\||,|\())*[ \t]*(?:(?<=[\s/|,(])(?P<word>[a-z]{1,4})[ \t]*(?:(?://+|\||,|\()[ \t]*)*)?"
 _DISC = (r"(?P<minus>-|−|less[ \t]+|minus[ \t]+|off[ \t]+)?[ \t]*\(?[ \t]*(?P<minus2>-)?[ \t]*(?P<pct>\d{1,3}(?:[.,]\d{1,2})?)"
-         r"(?![\d/]|[.,]\d|[ \t]?[km](?![a-z])|[ \t]*(?:pcs|pieces?|days?|mm|x)\b)[ \t]*(?P<pc>%)?(?P<new>[ \t]*new)?[ \t]*\)?"
+         r"(?![\d/]|[.,]\d|[ \t]?[km](?![a-z])|[ \t]*(?:pcs|pieces?|days?|mm|x|links?)\b)[ \t]*(?P<pc>%)?(?P<new>[ \t]*new)?[ \t]*\)?"
          rf"(?:[ \t]*=[ \t]*(?:{_CUR})?[ \t]*(?P<res>{_NUM})[ \t]?(?P<ressuf>[km](?![a-z]))?)?")
 _RX = re.compile(_PRICE + _GAP + _DISC, re.I)
 # "less 16" / "-16%" with no price in front: a discount without a price
