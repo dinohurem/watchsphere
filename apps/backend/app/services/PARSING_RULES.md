@@ -1333,8 +1333,11 @@ uploads one group's `_chat.txt` and `<group>_Medien.zip` to `POST /pipeline/uplo
 
 ### 15.1 Claude review of needs-review rows
 
-`app/services/ai_review.py`, model `ANTHROPIC_REVIEW_MODEL` (default `claude-opus-5-5`).
-It is skipped when `ANTHROPIC_API_KEY` is unset.
+`app/services/ai_review.py`. Provider `AI_REVIEW_PROVIDER` (`openai` default, model
+`OPENAI_REVIEW_MODEL` = `gpt-6-sol`; or `anthropic`, model `ANTHROPIC_REVIEW_MODEL`). Each batch
+runs `AI_REVIEW_PASSES` (default 2) times with shuffled candidates; a row is sure only when every
+pass is sure and all picked the same candidate. A provider that is out of credit is skipped in
+favour of the other one. Skipped when neither provider has an API key.
 
 - Only the row's original text and its 2–3 catalog candidates are sent, never the whole
   catalog. Batches of 15 rows.

@@ -209,6 +209,9 @@ async def test_credit_running_out_mid_upload_keeps_it_queued(item_db, monkeypatc
     from app.models.pipeline import PipelineUpload
 
     monkeypatch.setattr(settings, "PIPELINE_PAUSE_DATA_MB", 0)
+    monkeypatch.setattr(settings, "AI_REVIEW_PROVIDER", "anthropic")
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "k")
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "")
 
     async def generator_hits_credit_error(upload):
         ai_credit.check("anthropic", Exception("Your credit balance is too low"))

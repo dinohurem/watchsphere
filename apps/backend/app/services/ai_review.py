@@ -1,4 +1,4 @@
-"""AI review of needs-review rows with the Claude API (generator spec §1.5).
+"""AI review of needs-review rows (generator spec §1.5), on OpenAI (default) or Claude.
 
 Only the row's original text and its 2–3 catalog candidates are sent — never the
 whole catalog. The model must pick one of the given candidates and say whether it
@@ -6,12 +6,17 @@ is sure. Sure → the pipeline imports the listing with ``match_method="ai"`` an
 short reason; unsure (or any error, or no API key) → the row waits on the approval
 page's "Unsure" tab. A wrong automatic match is worse than a manual decision, so
 everything that is not an explicit, valid "sure" counts as unsure.
+
+Every batch is reviewed ``AI_REVIEW_PASSES`` times independently (candidate order shuffled
+per pass). A row is sure only when every pass is sure and all picked the same candidate.
+A provider that is out of credit is skipped; the other one (if it has a key) takes the batch.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import random
 from dataclasses import dataclass
 from typing import Optional
 
@@ -71,8 +76,44 @@ class ReviewDecision:
     alias: Optional[str] = None
 
 
+def providers() -> list[str]:
+    """Providers that can review, in order of preference (the configured one first)."""
+    have = {
+        "openai": bool((settings.OPENAI_API_KEY or "").strip()),
+        "anthropic": bool((settings.ANTHROPIC_API_KEY or "").strip()),
+    }
+    primary = "anthropic" if (settings.AI_REVIEW_PROVIDER or "").strip().lower() == "anthropic" else "openai"
+    order = [primary, "anthropic" if primary == "openai" else "openai"]
+    return [p for p in order if have[p]]
+
+
 def is_enabled() -> bool:
-    return bool((settings.ANTHROPIC_API_KEY or "").strip())
+    return bool(providers())
+
+
+def blocked_provider() -> Optional[str]:
+    """A provider name when every provider that could review is out of credit, else None."""
+    from app.services import ai_credit
+
+    usable = providers()
+    if usable and all(ai_credit.is_exhausted(p) for p in usable):
+        return ai_credit.provider() or usable[0]
+    return None
+
+
+def review_passes() -> int:
+    return max(1, int(settings.AI_REVIEW_PASSES or 1))
+
+
+# Token usage reported by the APIs, summed per "provider:model" (read by scripts/eval_ai_review.py).
+USAGE: dict[str, dict[str, int]] = {}
+
+
+def _add_usage(provider: str, model: str, input_tokens, output_tokens) -> None:
+    u = USAGE.setdefault(f"{provider}:{model}", {"input": 0, "output": 0, "calls": 0})
+    u["input"] += int(input_tokens or 0)
+    u["output"] += int(output_tokens or 0)
+    u["calls"] += 1
 
 
 def _candidate_line(c: dict) -> str:
@@ -118,7 +159,30 @@ def parse_decisions(payload: dict, items: list[dict]) -> dict[str, ReviewDecisio
     return out
 
 
-async def _review_batch(client, items: list[dict]) -> dict[str, ReviewDecision]:
+class _CreditError(Exception):
+    """The provider refused the call for lack of credit."""
+
+
+def shuffled_for_pass(items: list[dict], pass_no: int) -> list[dict]:
+    """Copy of items with each row's candidates in a per-pass, per-row deterministic order."""
+    out = []
+    for item in items:
+        cands = list(item["candidates"][:MAX_CANDIDATES])
+        random.Random(f"ai-review:{pass_no}:{item['id']}").shuffle(cands)
+        out.append({**item, "candidates": cands})
+    return out
+
+
+def _parse_json(text: str) -> Optional[dict]:
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("ai_review: response was not JSON")
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+async def _request_anthropic(client, items: list[dict]) -> Optional[dict]:
     import anthropic
 
     try:
@@ -135,24 +199,136 @@ async def _review_batch(client, items: list[dict]) -> dict[str, ReviewDecision]:
             fallbacks="default",
         )
     except anthropic.APIStatusError as exc:
-        logger.warning("ai_review: API error %s: %s", exc.status_code, exc.message)
+        logger.warning("ai_review: Anthropic API error %s: %s", exc.status_code, exc.message)
         from app.services import ai_credit
-        ai_credit.check("anthropic", exc)
-        return {}
+        if ai_credit.check("anthropic", exc):
+            raise _CreditError from exc
+        return None
     except anthropic.APIConnectionError as exc:
-        logger.warning("ai_review: connection error: %s", exc)
-        return {}
+        logger.warning("ai_review: Anthropic connection error: %s", exc)
+        return None
 
+    usage = getattr(response, "usage", None)
+    _add_usage("anthropic", settings.ANTHROPIC_REVIEW_MODEL,
+               getattr(usage, "input_tokens", 0), getattr(usage, "output_tokens", 0))
     if response.stop_reason in ("refusal", "max_tokens"):
         logger.warning("ai_review: stop_reason=%s, rows left unsure", response.stop_reason)
-        return {}
+        return None
     text = next((b.text for b in response.content if b.type == "text"), "")
-    try:
-        payload = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        logger.warning("ai_review: response was not JSON")
-        return {}
-    return parse_decisions(payload, items)
+    return _parse_json(text)
+
+
+async def _request_openai(client, items: list[dict]) -> Optional[dict]:
+    """Chat Completions, the call surface batch_ai_verify uses for OPENAI_TEXT_MODEL (model,
+    messages, max_completion_tokens) plus a strict json_schema response_format. If the model
+    rejects response_format, the call is repeated once with the schema in the prompt."""
+    from app.services import ai_credit
+
+    model = settings.OPENAI_REVIEW_MODEL
+    user = build_prompt(items)
+    structured = True
+    for _ in range(2):
+        kwargs: dict = {}
+        content = user
+        if structured:
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "review_decisions", "strict": True, "schema": OUTPUT_SCHEMA},
+            }
+        else:
+            content = (user + "\n\nAnswer with only a JSON object matching this JSON schema:\n"
+                       + json.dumps(OUTPUT_SCHEMA))
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "system", "content": SYSTEM_PROMPT},
+                          {"role": "user", "content": content}],
+                max_completion_tokens=16000,
+                **kwargs,
+            )
+        except Exception as exc:
+            logger.warning("ai_review: OpenAI call failed: %s: %s", type(exc).__name__, exc)
+            if ai_credit.check("openai", exc):
+                raise _CreditError from exc
+            msg = str(exc).lower()
+            if structured and ("response_format" in msg or "json_schema" in msg):
+                structured = False
+                continue
+            return None
+        usage = getattr(response, "usage", None)
+        _add_usage("openai", model, getattr(usage, "prompt_tokens", 0), getattr(usage, "completion_tokens", 0))
+        choice = response.choices[0]
+        if choice.finish_reason in ("length", "content_filter"):
+            logger.warning("ai_review: finish_reason=%s, rows left unsure", choice.finish_reason)
+            return None
+        return _parse_json(choice.message.content or "")
+    return None
+
+
+def combine_passes(passes: list[Optional[dict[str, ReviewDecision]]],
+                   items: list[dict]) -> dict[str, ReviewDecision]:
+    """Merge independent passes: sure only if every pass is sure and all chose the same candidate
+    (a pass that failed counts as unsure); the alias is kept only when the passes agree on it."""
+    out: dict[str, ReviewDecision] = {}
+    for item in items:
+        rid = item["id"]
+        ds = [p.get(rid) if p else None for p in passes]
+        if any(d is None for d in ds):
+            out[rid] = ReviewDecision(False, None, "AI review incomplete: a pass failed")
+        elif len({d.ws_code for d in ds if d.sure}) > 1:
+            out[rid] = ReviewDecision(False, None, "AI passes disagreed on the watch")
+        elif not all(d.sure for d in ds):
+            reason = next((d.reason for d in ds if not d.sure), "") or "AI was not sure"
+            out[rid] = ReviewDecision(False, None, reason)
+        else:
+            aliases = {(d.alias or "").strip().lower() for d in ds}
+            alias = ds[0].alias if len(aliases) == 1 else None
+            out[rid] = ReviewDecision(True, ds[0].ws_code, ds[0].reason, alias or None)
+    return out
+
+
+async def _review_with(provider: str, client, items: list[dict]) -> dict[str, ReviewDecision]:
+    request = _request_openai if provider == "openai" else _request_anthropic
+
+    async def one_pass(n: int) -> Optional[dict[str, ReviewDecision]]:
+        view = shuffled_for_pass(items, n)
+        payload = await request(client, view)
+        return parse_decisions(payload, view) if payload is not None else None
+
+    results = await asyncio.gather(*(one_pass(n) for n in range(review_passes())), return_exceptions=True)
+    if any(isinstance(r, _CreditError) for r in results):
+        raise _CreditError
+    for r in results:
+        if isinstance(r, BaseException):
+            raise r
+    return combine_passes(list(results), items)
+
+
+async def _review_batch(clients: dict, items: list[dict]) -> dict[str, ReviewDecision]:
+    """One batch: all passes on the preferred provider; when it is out of credit, the whole batch
+    goes to the next provider. Returns {} when no provider could review it."""
+    from app.services import ai_credit
+
+    for provider in providers():
+        if provider not in clients or ai_credit.is_exhausted(provider):
+            continue
+        try:
+            return await _review_with(provider, clients[provider], items)
+        except _CreditError:
+            logger.warning("ai_review: %s is out of credit, trying the other provider", provider)
+    return {}
+
+
+def make_clients() -> dict:
+    clients: dict = {}
+    for provider in providers():
+        if provider == "openai":
+            from openai import AsyncOpenAI
+            clients[provider] = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=300.0)
+        else:
+            import anthropic
+            clients[provider] = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=300.0)
+    return clients
 
 
 async def review_rows(items: list[dict]) -> dict[str, ReviewDecision]:
@@ -169,8 +345,6 @@ async def review_rows(items: list[dict]) -> dict[str, ReviewDecision]:
     if not reviewable or not is_enabled():
         return results
 
-    import anthropic
-
     # One export can hold thousands of review rows (a group's first run, a catch-up after an
     # outage). Reviewing them one batch after another held a worker for hours and stalled the
     # whole queue (Nov 2026): batches run in parallel, and past MAX_REVIEW_ROWS the rest goes
@@ -178,12 +352,12 @@ async def review_rows(items: list[dict]) -> dict[str, ReviewDecision]:
     for item in reviewable[MAX_REVIEW_ROWS:]:
         results[item["id"]] = ReviewDecision(False, None, "Not reviewed by the AI: too many rows in one export")
     reviewable = reviewable[:MAX_REVIEW_ROWS]
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=300.0)
+    clients = make_clients()
     gate = asyncio.Semaphore(REVIEW_CONCURRENCY)
 
     async def run(batch):
         async with gate:
-            return await _review_batch(client, batch)
+            return await _review_batch(clients, batch)
 
     for part in await asyncio.gather(*(run(reviewable[i:i + BATCH_SIZE])
                                        for i in range(0, len(reviewable), BATCH_SIZE))):
