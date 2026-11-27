@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     # Uploads processed at the same time (never two of the same group). Each run
     # mostly waits on the AI models; the Mac mini sends ~65 hourly exports.
     PIPELINE_WORKERS: int = 3
+    # Daily audit of the imported offers against their dealer lines (app/services/parser_audit.py)
+    PARSER_AUDIT_ENABLED: bool = True
+    PARSER_AUDIT_HOUR_UTC: int = 6
+    PARSER_AUDIT_HOURS: float = 24
     # Uploaded exports and approval images go to Firebase Storage instead of MongoDB (the media
     # zips filled the 5 GB Atlas plan and paused processing). False keeps them in GridFS.
     PIPELINE_FILES_IN_FIREBASE: bool = True
