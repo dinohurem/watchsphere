@@ -398,6 +398,13 @@ async def startup():
         _asyncio.create_task(stall_alert_loop())
     except Exception as e:
         logger.warning(f"Startup: pipeline stall alert not scheduled: {e}")
+    # Daily audit of the imported offers against their own dealer lines (06:00 UTC, once a day).
+    try:
+        import asyncio as _asyncio
+        from app.services.parser_audit import parser_audit_loop
+        _asyncio.create_task(parser_audit_loop())
+    except Exception as e:
+        logger.warning(f"Startup: parser audit not scheduled: {e}")
 
 app = Starlette(
     routes=[
