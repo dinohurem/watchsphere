@@ -28,8 +28,10 @@ logger = logging.getLogger(__name__)
 CODES = [
     "PRICE_NOT_IN_LINE", "YEAR_NOT_IN_LINE", "YEAR_MISSING", "WRONG_BLOCK",
     "DISCOUNT_WITHOUT_PERCENT", "DISCOUNT_FROM_LINKS", "CONDITION_INVALID", "DUPLICATE_LINE",
-    "WTB_FROM_SALE_LINE",
+    "WTB_FROM_SALE_LINE", "DISCOUNT_BARE_MINUS", "SOURCE_WITHOUT_PRICE",
 ]
+# Counted and stored, but not emailed: too ambiguous or too many to be a daily alert.
+LOW_PRIORITY = {"SOURCE_WITHOUT_PRICE", "DISCOUNT_BARE_MINUS", "DUPLICATE_LINE"}
 EXAMPLES_PER_CODE = 50
 STATE_KEY = "parser_audit"
 CHECK_INTERVAL_SECONDS = 15 * 60
@@ -126,6 +128,12 @@ _NOT_REF = re.compile(
     r"^(?:(?:19|20)\d{2}[A-Za-z]{0,4}|\d{2}[yY]|[nNwW]\d{1,2}(?:/\d{2,4})?|\d{1,2}/\d{2,4})$")
 
 
+# '250k', 'hkd250k', '1.86m', '570000usdt', 'hkd2.018M': a price, never a reference
+_PRICE_TOKEN = re.compile(
+    r"^(?:(?:hk\$|hkd|usdt|usd|eur|aed|chf|gbp|cny|rmb)\d[\d.]*[kKmM]{0,2}|\d[\d.]*[kKmM]{1,2}|\d[\d.]*(?:hkd|usdt|usd|eur|aed|chf|gbp))$",
+    re.I)
+
+
 def split_lines(text: str) -> list[str]:
     return (text or "").replace("\r", "").split("\n")
 
@@ -137,11 +145,12 @@ def _norm(s: str) -> str:
 def ref_tokens(line: str) -> list[str]:
     """Reference-like tokens of a line (not prices, years, N-months)."""
     out = []
-    for raw in re.split(r"[\s|,;:()\[\]*]+", line or ""):
+    line = _LABELLED_ID.sub(" ", line or "")
+    for raw in re.split(r"[\s|,;:()\[\]*]+", line):
         tok = re.sub(r"^[^\w]+|[^\w]+$", "", raw)
         if len(tok) < 4 or not re.search(r"\d", tok) or _NOT_REF.match(tok):
             continue
-        if re.fullmatch(r"\d+[kKmM]", tok) or "," in tok:
+        if "," in tok or _PRICE_TOKEN.match(tok):
             continue
         if not _REF_TOKEN.match(tok):
             continue
@@ -217,16 +226,36 @@ def _ref_year(order: dict) -> int:
     return d.year
 
 
-def deductions(text: str) -> list[tuple[float, bool]]:
-    """[(number, followed by link(s))] for every deduction-looking number: '-25', '-4links', '4 links', '3 off'."""
+def deductions(text: str) -> list[tuple[float, str]]:
+    """[(number, kind)] for deduction-looking numbers; kind is 'links' ('-4links', '4 links'), 'off' ('3 off')
+    or 'minus' ('-25' after something else on the line: a bare minus number, ambiguous)."""
     out = []
-    for m in _DEDUCT.finditer(text or ""):
+    src = text or ""
+    for m in _DEDUCT.finditer(src):
         if m.group(1):
-            links = bool(_LINKS.match((text or "")[m.end():]))
-            out.append((float(m.group(1)), links))
+            line_start = src.rfind("\n", 0, m.start()) + 1
+            if not src[line_start:m.start()].strip():
+                continue  # a bullet or list dash at the start of the line
+            kind = "links" if _LINKS.match(src[m.end():]) else "minus"
+            out.append((float(m.group(1)), kind))
         else:
-            out.append((float(m.group(2)), (m.group(3) or "").lower().startswith("link")))
+            out.append((float(m.group(2)), "links" if (m.group(3) or "").lower().startswith("link") else "off"))
     return out
+
+
+_LABELLED_ID = re.compile(r"(?:\b(?:sku|id|stock|item|serial|invoice)\b|#)\W{0,3}[A-Za-z0-9][A-Za-z0-9\-/]*", re.I)
+
+
+def has_price_like(text: str) -> bool:
+    """Is there any number in the text that could be a price (not a reference, year or N-month)?"""
+    cleaned = _LABELLED_ID.sub(" ", text or "")
+    for tok in ref_tokens(cleaned):
+        cleaned = cleaned.replace(tok, " ")
+    cleaned = _YEAR4.sub(" ", cleaned)
+    cleaned = _YEAR2_Y.sub(" ", cleaned)
+    cleaned = _MONTH_YEAR.sub(" ", cleaned)
+    cleaned = _NMONTH.sub(" ", cleaned)
+    return any(v >= 1000 or (marked and v >= 100) for _t, v, marked in line_numbers(cleaned))
 
 
 def check_price(order: dict, text: str, lines: list[str]) -> list[dict]:
@@ -237,12 +266,16 @@ def check_price(order: dict, text: str, lines: list[str]) -> list[dict]:
         return []
     # after a discount written in the line: listed price minus a percent
     # (written with a % sign, or bare as "-4 links" / "-25": the discount checks judge which)
-    pcts = percents_in(text) + [p for p, _links in deductions(text)]
+    pcts = percents_in(text) + [p for p, _kind in deductions(text)]
     for _tok, v, _m in line_numbers(text):
         if v >= 1000:
             for p in pcts:
                 if 0 < p <= 60 and _close(v * (1 - p / 100.0), price):
                     return []
+    if not has_price_like(text):
+        # the price was on another line of the message and source_text does not hold it: nothing to compare
+        return [_finding("SOURCE_WITHOUT_PRICE", order,
+                         f"stored price {price:,.0f} {order.get('currency') or ''}, the stored text has no price", _best_line(order, lines))]
     return [_finding("PRICE_NOT_IN_LINE", order,
                      f"stored price {price:,.0f} {order.get('currency') or ''} is not written in the line", _best_line(order, lines))]
 
@@ -351,43 +384,43 @@ def check_block(order: dict, text: str, lines: list[str]) -> list[dict]:
     return []
 
 
+def _discount_code(kind: str) -> str:
+    return {"links": "DISCOUNT_FROM_LINKS", "off": "DISCOUNT_WITHOUT_PERCENT"}.get(kind, "DISCOUNT_BARE_MINUS")
+
+
 def check_discount(order: dict, text: str, lines: list[str]) -> list[dict]:
-    """A deduction the dealer wrote without a percent sign ('-25', '-4links') that the offer treats as a
-    percent: a '-x% Retail' remark, or a price lowered by x%. A remark whose number is nowhere in the line
-    is a retail comparison the system computed, not a deduction: not flagged."""
+    """A deduction the dealer wrote without a percent sign ('-4links', '10 off', bare '-25') that the offer
+    treats as a percent: a 'x% Retail' remark, or a price lowered by x%. Only the offer's own line counts. A
+    remark whose number is not in that line is a retail comparison the system computed: not flagged."""
     price = order.get("price")
-    out: list[dict] = []
-    remarks = order.get("remarks") or ""
-    pcts = percents_in(text)
-    deds = deductions(text)
+    idx = own_lines(order, lines)
+    own = "\n".join(lines[i] for i in idx) if len([ln for ln in lines if ln.strip()]) > 1 and idx else text
+    pcts = percents_in(own)
+    deds = deductions(own)
+    if not deds:
+        return []
     shown = _best_line(order, lines)
+    remarks = order.get("remarks") or ""
     for m in _REMARK_PCT.finditer(remarks):
         p = float(m.group(1).replace(",", "."))
         if any(abs(q - p) < 0.01 for q in pcts):
             continue
-        for q, links in deds:
+        for q, kind in deds:
             if abs(q - p) < 0.01:
-                if links:
-                    out.append(_finding("DISCOUNT_FROM_LINKS", order,
-                                        f"remark '{m.group(0)}' but the line writes '{m.group(1)} link(s)', not a percent", shown))
-                else:
-                    out.append(_finding("DISCOUNT_WITHOUT_PERCENT", order,
-                                        f"remark '{m.group(0)}' but the line has no '{m.group(1)}%'", shown))
-                return out
-    if not price or out:
-        return out
+                return [_finding(_discount_code(kind), order,
+                                 f"remark '{m.group(0)}' but the line writes '{m.group(1)}' ({kind}), not '{m.group(1)}%'", shown)]
+    if not price:
+        return []
     # a deducted price: a listed number x (1 - p/100), where p is not written as a percent
-    nums = [v for _t, v, _m in line_numbers(text) if v >= 1000]
+    nums = [v for _t, v, _m in line_numbers(own) if v >= 1000]
     if not nums or any(_close(v, price) for v in nums):
-        return out
+        return []
     for v in nums:
-        for p, links in deds:
+        for p, kind in deds:
             if 1 <= p <= 60 and not any(abs(q - p) < 0.01 for q in pcts) and _close(v * (1 - p / 100.0), price):
-                code = "DISCOUNT_FROM_LINKS" if links else "DISCOUNT_WITHOUT_PERCENT"
-                what = "link(s)" if links else "no percent sign"
-                return [_finding(code, order,
-                                 f"price is {v:,.0f} less {p:g}%, but the line writes {p:g} with {what}", shown)]
-    return out
+                return [_finding(_discount_code(kind), order,
+                                 f"price is {v:,.0f} less {p:g}%, but the line writes {p:g} ({kind}), not a percent", shown)]
+    return []
 
 
 def check_condition(order: dict, text: str, lines: list[str]) -> list[dict]:
@@ -528,11 +561,12 @@ async def store_report(result: dict[str, Any], trigger: str, emailed: int = 0):
 # Email
 
 def email_lines(result: dict[str, Any], per_code: int = 3) -> list[str]:
-    lines = [f"{result['checked']} offers checked (last {result['hours']:g} h), "
-             f"{result['total_findings']} finding(s)."]
+    important = sum(n for c, n in result["counts"].items() if c not in LOW_PRIORITY)
+    lines = [f"{result['checked']} offers checked (last {result['hours']:g} h), {important} finding(s) "
+             f"(plus {result['total_findings'] - important} low-priority ones in the full report)."]
     for code in CODES:
         n = result["counts"].get(code)
-        if not n:
+        if not n or code in LOW_PRIORITY:
             continue
         lines.append(f"{code}: {n}")
         for ex in result["examples"].get(code, [])[:per_code]:
@@ -591,7 +625,7 @@ async def run_scheduled(now: Optional[datetime] = None) -> Optional[dict[str, An
     await state.save()
     result = await run_audit(settings.PARSER_AUDIT_HOURS, now)
     sent = 0
-    if result["total_findings"]:
+    if any(c not in LOW_PRIORITY for c in result["counts"]):
         try:
             sent = await send_email(result)
         except Exception as exc:

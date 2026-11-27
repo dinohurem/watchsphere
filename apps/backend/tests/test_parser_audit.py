@@ -124,10 +124,39 @@ def test_discount_from_links():
     assert codes(o) == ["DISCOUNT_FROM_LINKS"]
 
 
-def test_discount_without_percent():
+def test_bare_minus_is_its_own_low_priority_code():
     o = offer("131.12.41.21.06.001 HK$50400 -25", ws_code="131.12.41.21.06.001", reference="131.12.41.21.06.001",
               price=37800, remarks="25% Retail")
+    assert codes(o) == ["DISCOUNT_BARE_MINUS"]
+    assert "DISCOUNT_BARE_MINUS" in pa.LOW_PRIORITY
+
+
+def test_discount_without_percent_off():
+    o = offer("116500LN HK$50400 25 off", price=37800, remarks="25% Retail")
     assert codes(o) == ["DISCOUNT_WITHOUT_PERCENT"]
+
+
+def test_computed_retail_remark_is_not_a_discount():
+    # the remark is the system's retail comparison; the line has no such number
+    assert codes(offer("5160/500R 2026new $1.35M", ws_code="5160/500R", reference="5160/500R", price=1350000,
+                       year=2026, remarks="40% Retail")) == []
+    assert codes(offer("85180/000R-H116 HK$300,000", ws_code="85180/000R-H116", reference="85180/000R-H116",
+                       price=300000, remarks="22% Retail")) == []
+
+
+def test_source_without_price_is_split_out():
+    found = pa.audit_order(offer("Patek Philippe 5712/1a", ws_code="5712/1A", reference="5712/1A",
+                                 price=200000, currency="USD"))
+    assert [f["code"] for f in found] == ["SOURCE_WITHOUT_PRICE"]
+    assert "SOURCE_WITHOUT_PRICE" in pa.LOW_PRIORITY
+    # a price is written but it is another one: still a real finding
+    assert codes(offer("116500LN 570000usdt", price=252000, currency="USD")) == ["PRICE_NOT_IN_LINE"]
+
+
+def test_sku_line_is_not_a_watch_line():
+    text = "\n".join(["5968G-010 Green", "2023 HKD 909,000", "🔖 SKU: 17897", "2026 HKD 1,010,000"])
+    o = offer(text, ws_code="5968G-010 Green", reference="5968G-010", price=1010000, year=2026)
+    assert codes(o) == []
 
 
 def test_discount_with_percent_is_fine():
