@@ -264,7 +264,7 @@ def test_is_due():
 
 @pytest.mark.asyncio
 async def test_scheduled_run_happens_once_a_day_even_after_restart(adb, monkeypatch):
-    await _insert(adb, "116500LN black 2023 hkd250k")
+    await _insert(adb, "116500LN black hkd204k")  # year 2023 stored, none in the line (emailed code)
     sent = []
 
     async def fake_send(result):
@@ -297,7 +297,7 @@ async def test_no_email_without_findings(adb, monkeypatch):
 
 
 def test_email_lists_counts_and_examples():
-    result = {"checked": 5, "hours": 24, "total_findings": 1, "counts": {"PRICE_NOT_IN_LINE": 1},
-              "examples": {"PRICE_NOT_IN_LINE": [{"ws_code": "X", "dealer": "+1", "line": "ln", "why": "w"}]}}
+    result = {"checked": 5, "hours": 24, "total_findings": 1, "counts": {"YEAR_NOT_IN_LINE": 1},
+              "examples": {"YEAR_NOT_IN_LINE": [{"ws_code": "X", "dealer": "+1", "line": "ln", "why": "w"}]}}
     lines = pa.email_lines(result)
-    assert lines[1] == "PRICE_NOT_IN_LINE: 1" and "ln" in lines[2]
+    assert lines[1] == "YEAR_NOT_IN_LINE: 1" and "ln" in lines[2]

@@ -31,7 +31,10 @@ CODES = [
     "WTB_FROM_SALE_LINE", "DISCOUNT_BARE_MINUS", "SOURCE_WITHOUT_PRICE",
 ]
 # Counted and stored, but not emailed: too ambiguous or too many to be a daily alert.
-LOW_PRIORITY = {"SOURCE_WITHOUT_PRICE", "DISCOUNT_BARE_MINUS", "DUPLICATE_LINE"}
+# Stored in the report but not emailed. PRICE_NOT_IN_LINE and WRONG_BLOCK stay here until their
+# false positives on production are down (27 Nov dry run: 9,012 and 16 findings, many of them
+# prices on another line of the message, or "SERI 739XX" / "Naked 74prefix" taken for watch lines).
+LOW_PRIORITY = {"SOURCE_WITHOUT_PRICE", "DISCOUNT_BARE_MINUS", "DUPLICATE_LINE", "PRICE_NOT_IN_LINE", "WRONG_BLOCK"}
 EXAMPLES_PER_CODE = 50
 STATE_KEY = "parser_audit"
 CHECK_INTERVAL_SECONDS = 15 * 60
