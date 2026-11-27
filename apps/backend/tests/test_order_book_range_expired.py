@@ -48,7 +48,7 @@ async def test_without_range_defaults_to_10d(db):
     await _o(12_000, 5, status="expired")     # inside 10D
     await _o(11_000, 20, status="expired")    # outside 10D
     book = await get_order_book("126610LN", limit=50, skip=0, range=None)
-    assert [(e.price, e.expired) for e in book.sell_orders] == [(12_000, True), (14_000, False)]
+    assert [(e.price, e.expired) for e in book.sell_orders] == [(14_000, False), (12_000, True)]
     assert book.range == "10D"
 
 
@@ -85,13 +85,13 @@ async def test_range_lists_expired_inside_it_marked_but_not_in_the_summary(db):
     await _o(13_000, 1, side="buy")
 
     book = await get_order_book("126610LN", limit=50, skip=0, range="1m")
-    assert [(e.price, e.expired) for e in book.sell_orders] == [(12_000, True), (14_000, False)]
+    assert [(e.price, e.expired) for e in book.sell_orders] == [(14_000, False), (12_000, True)]
     assert book.lowest_ask == 14_000          # expired 12,000 is not the current low
     assert book.spread == 1_000
     assert book.range == "1M"
 
     book = await get_order_book("126610LN", limit=50, skip=0, range="ALL")
-    assert [e.price for e in book.sell_orders] == [11_000, 12_000, 14_000]
+    assert [e.price for e in book.sell_orders] == [14_000, 11_000, 12_000]
     assert book.wts_count_all_time == 3       # all-time count includes expired
 
     with pytest.raises(Exception):
@@ -122,3 +122,19 @@ async def test_bulk_fix_loads_expired_orders(db):
     c = await _o(10_000, 20, status="completed")
     got = await _orders_by_id([str(a.id), str(e.id), str(c.id)])
     assert set(got) == {str(a.id), str(e.id)}
+
+
+@pytest.mark.asyncio
+async def test_expired_below_active_and_superseded_copies_hidden(db):
+    """26 Nov: expired offers sat between the active ones by price, and the older copies closed
+    by the duplicate clean-up showed up as expired rows."""
+    from app.api.v1.endpoints.orders import get_order_book
+
+    keep = await _o(14_000, 1)
+    await _o(15_000, 2)
+    await _o(12_000, 3, status="expired")
+    old = await _o(13_000, 3, status="expired")
+    old.superseded_by = str(keep.id)
+    await old.save()
+    book = await get_order_book("126610LN", limit=50, skip=0, range="10D")
+    assert [(e.price, e.expired) for e in book.sell_orders] == [(14_000, False), (15_000, False), (12_000, True)]

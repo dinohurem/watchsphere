@@ -404,8 +404,9 @@ async def get_order_book(
 
     # Sort by usd_price if available, fall back to price
     # usd_price allows correct cross-currency sorting
-    buy_sort = [("usd_price", -1), ("price", -1)]
-    sell_sort = [("usd_price", 1), ("price", 1)]
+    # Active offers first ("active" < "expired"), the expired ones of the period below them.
+    buy_sort = [("status", 1), ("usd_price", -1), ("price", -1)]
+    sell_sort = [("status", 1), ("usd_price", 1), ("price", 1)]
 
     # No Watch found by ws_code: match the given code only. Do NOT fall back to
     # reference matching (would collapse distinct variants together).
@@ -418,7 +419,8 @@ async def get_order_book(
     if rng == "ACTIVE":
         rng = None
     if rng:
-        expired: dict = {"status": OrderStatus.EXPIRED.value}
+        # A superseded offer is an older copy of a live offer (duplicate clean-up), not history.
+        expired: dict = {"status": OrderStatus.EXPIRED.value, "superseded_by": None}
         days = BOOK_RANGE_DAYS[rng]
         if days is not None:
             expired["created_at"] = {"$gte": datetime.utcnow() - timedelta(days=days)}

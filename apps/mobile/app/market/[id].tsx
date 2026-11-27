@@ -1019,14 +1019,18 @@ export default function WatchDetailsScreen() {
               return !Number.isFinite(t) || now - t <= days * 86400000;
             });
       const sorted = [...inPeriod];
+      // Expired offers always below the active ones (Kenan, 26 Nov), each part sorted as chosen.
+      const byStatus = (a: OrderBookItem, b: OrderBookItem) => Number(!!a.expired) - Number(!!b.expired);
       if (sortMode === 'newest') {
         sorted.sort((a, b) => {
+          if (a.expired !== b.expired) return byStatus(a, b);
           const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
           const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
           return tb - ta;
         });
       } else {
         sorted.sort((a, b) => {
+          if (a.expired !== b.expired) return byStatus(a, b);
           const pa = convertedPrice(a);
           const pb = convertedPrice(b);
           if (pa === null && pb === null) return 0;
